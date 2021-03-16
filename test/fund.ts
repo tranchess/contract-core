@@ -166,7 +166,9 @@ describe("Fund", function () {
         it("Should return the activity window without conversion", async function () {
             expect(await fund.activityStartTime()).to.equal(startDay - DAY);
             expect(await fund.currentDay()).to.equal(startDay);
-            expect(await fund.isActive(primaryMarket.address, startDay - POST_CONVERSION_DELAY_TIME)).to.equal(true);
+            expect(
+                await fund.isActive(primaryMarket.address, startDay - POST_CONVERSION_DELAY_TIME)
+            ).to.equal(true);
 
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
@@ -180,8 +182,10 @@ describe("Fund", function () {
         it("Should return the activity window with conversion", async function () {
             expect(await fund.activityStartTime()).to.equal(startDay - DAY);
             expect(await fund.currentDay()).to.equal(startDay);
-            expect(await fund.isActive(primaryMarket.address, startDay - POST_CONVERSION_DELAY_TIME)).to.equal(true);
-            
+            expect(
+                await fund.isActive(primaryMarket.address, startDay - POST_CONVERSION_DELAY_TIME)
+            ).to.equal(true);
+
             await primaryMarket.call(
                 wbtc,
                 "approve",
@@ -196,7 +200,9 @@ describe("Fund", function () {
 
             expect(await fund.activityStartTime()).to.equal(startDay + POST_CONVERSION_DELAY_TIME);
             expect(await fund.currentDay()).to.equal(startDay + DAY);
-            expect(await fund.isActive(primaryMarket.address, startDay + 3600 * 11)).to.equal(false);
+            expect(await fund.isActive(primaryMarket.address, startDay + 3600 * 11)).to.equal(
+                false
+            );
             expect(await fund.isActive(primaryMarket.address, startDay + 3600 * 13)).to.equal(true);
         });
     });
@@ -236,13 +242,13 @@ describe("Fund", function () {
             });
 
             it("Should reject if PrimaryMarket has already been added or removed", async function () {
-                await expect(fund.connect(owner).addNewPrimaryMarket(primaryMarket.address)).to.be.revertedWith(
-                    "The address is already a primary market"
-                );
+                await expect(
+                    fund.connect(owner).addNewPrimaryMarket(primaryMarket.address)
+                ).to.be.revertedWith("The address is already a primary market");
 
-                await expect(fund.connect(owner).addObsoletePrimaryMarket(addr1)).to.be.revertedWith(
-                    "The address is not a primary market"
-                );
+                await expect(
+                    fund.connect(owner).addObsoletePrimaryMarket(addr1)
+                ).to.be.revertedWith("The address is not a primary market");
             });
 
             it("Should reject changing PrimaryMarket from non-admin address", async function () {

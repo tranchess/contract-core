@@ -204,7 +204,12 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     }
 
     // ---------------------------------
-    function isActive(address primaryMarket, uint256 timestamp) public view override returns (bool) {
+    function isActive(address primaryMarket, uint256 timestamp)
+        public
+        view
+        override
+        returns (bool)
+    {
         return (isPrimaryMarket(primaryMarket) &&
             timestamp >= activityStartTime &&
             timestamp < currentDay);
