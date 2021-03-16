@@ -167,9 +167,9 @@ describe("Fund", function () {
         it("Should return inactive for non-primaryMarket contracts", async function () {
             expect(await fund.activityStartTime()).to.equal(startDay - DAY);
             expect(await fund.currentDay()).to.equal(startDay);
-            expect(
-                await fund.isActive(addr1, startDay - POST_CONVERSION_DELAY_TIME)
-            ).to.equal(false);
+            expect(await fund.isActive(addr1, startDay - POST_CONVERSION_DELAY_TIME)).to.equal(
+                false
+            );
         });
 
         it("Should return the activity window without conversion", async function () {
@@ -186,7 +186,9 @@ describe("Fund", function () {
 
             expect(await fund.activityStartTime()).to.equal(startDay);
             expect(await fund.currentDay()).to.equal(startDay + DAY);
-            expect(await fund.isActive(primaryMarket.address, startDay + POST_CONVERSION_DELAY_TIME)).to.equal(true);
+            expect(
+                await fund.isActive(primaryMarket.address, startDay + POST_CONVERSION_DELAY_TIME)
+            ).to.equal(true);
         });
 
         it("Should return the activity window with conversion", async function () {
@@ -204,10 +206,15 @@ describe("Fund", function () {
 
             expect(await fund.activityStartTime()).to.equal(startDay + POST_CONVERSION_DELAY_TIME);
             expect(await fund.currentDay()).to.equal(startDay + DAY);
-            expect(await fund.isActive(primaryMarket.address, startDay + POST_CONVERSION_DELAY_TIME - 1)).to.equal(
-                false
-            );
-            expect(await fund.isActive(primaryMarket.address, startDay + POST_CONVERSION_DELAY_TIME)).to.equal(true);
+            expect(
+                await fund.isActive(
+                    primaryMarket.address,
+                    startDay + POST_CONVERSION_DELAY_TIME - 1
+                )
+            ).to.equal(false);
+            expect(
+                await fund.isActive(primaryMarket.address, startDay + POST_CONVERSION_DELAY_TIME)
+            ).to.equal(true);
         });
     });
 
@@ -228,9 +235,7 @@ describe("Fund", function () {
                 await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
                 await advanceBlockAtTime((await fund.currentDay()).toNumber());
 
-                await expect(fund.settle())
-                    .to.emit(fund, "PrimaryMarketAdded")
-                    .withArgs(addr1);
+                await expect(fund.settle()).to.emit(fund, "PrimaryMarketAdded").withArgs(addr1);
 
                 expect(await fund.isPrimaryMarket(addr1)).to.equal(true);
                 expect(await fund.getPrimaryMarketCount()).to.equal(2);
