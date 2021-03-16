@@ -2,16 +2,16 @@
 
 pragma solidity ^0.6.0;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 
-contract FundRoles is AccessControl {
-    bytes32 public constant PRIMARY_MARKET_ROLE = keccak256("primaryMarket");
+contract FundRoles {
+    using EnumerableSet for EnumerableSet.AddressSet;
 
+    EnumerableSet.AddressSet private _primaryMarketMembers;
     mapping(address => bool) private _shareMembers;
 
-    constructor() internal {
-        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
-    }
+    event PrimaryMarketAdded(address indexed account, address indexed sender);
+    event PrimaryMarketRemoved(address indexed account, address indexed sender);
 
     function _initializeRoles(
         address tokenP_,
@@ -23,41 +23,36 @@ contract FundRoles is AccessControl {
         _shareMembers[tokenA_] = true;
         _shareMembers[tokenB_] = true;
 
-        _setupRole(PRIMARY_MARKET_ROLE, primaryMarket_);
-    }
-
-    modifier onlyAdmin() {
-        require(isAdmin(msg.sender), "FundRoles: only admin");
-        _;
-    }
-
-    function isAdmin(address account) public view returns (bool) {
-        return hasRole(DEFAULT_ADMIN_ROLE, account);
-    }
-
-    function addAdmin(address account) public {
-        grantRole(DEFAULT_ADMIN_ROLE, account);
-    }
-
-    function renounceAdmin() public {
-        renounceRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _addPrimaryMarket(primaryMarket_);
     }
 
     modifier onlyPrimaryMarket() {
-        require(isPrimaryMarket(msg.sender), "FundRoles: only primary market");
+        require(isPrimaryMarket(msg.sender), "Only primary market");
         _;
     }
 
     function isPrimaryMarket(address account) public view returns (bool) {
-        return hasRole(PRIMARY_MARKET_ROLE, account);
+        return _primaryMarketMembers.contains(account);
     }
 
-    function addPrimaryMarket(address account) public {
-        grantRole(PRIMARY_MARKET_ROLE, account);
+    function getPrimaryMarketMember(uint256 index) public view returns (address) {
+        return _primaryMarketMembers.at(index);
     }
 
-    function removePrimaryMarket(address account) public {
-        revokeRole(PRIMARY_MARKET_ROLE, account);
+    function getPrimaryMarketCount() public view returns (uint256) {
+        return _primaryMarketMembers.length();
+    }
+
+    function _addPrimaryMarket(address primaryMarket) internal {
+        if (_primaryMarketMembers.add(primaryMarket)) {
+            emit PrimaryMarketAdded(primaryMarket, msg.sender);
+        }
+    }
+
+    function _removePrimaryMarket(address primaryMarket) internal {
+        if (_primaryMarketMembers.remove(primaryMarket)) {
+            emit PrimaryMarketRemoved(primaryMarket, msg.sender);
+        }
     }
 
     modifier onlyShare() {

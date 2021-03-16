@@ -68,7 +68,7 @@ interface IFund {
 
     function activityStartTime() external view returns (uint256);
 
-    function isActive(uint256 timestamp) external view returns (bool);
+    function isActive(address primaryMarket, uint256 timestamp) external view returns (bool);
 
     function getTotalShares() external view returns (uint256);
 
