@@ -10,8 +10,8 @@ contract FundRoles {
     EnumerableSet.AddressSet private _primaryMarketMembers;
     mapping(address => bool) private _shareMembers;
 
-    event PrimaryMarketAdded(address indexed account, address indexed sender);
-    event PrimaryMarketRemoved(address indexed account, address indexed sender);
+    event PrimaryMarketAdded(address indexed primaryMarket);
+    event PrimaryMarketRemoved(address indexed primaryMarket);
 
     function _initializeRoles(
         address tokenP_,
@@ -45,13 +45,13 @@ contract FundRoles {
 
     function _addPrimaryMarket(address primaryMarket) internal {
         if (_primaryMarketMembers.add(primaryMarket)) {
-            emit PrimaryMarketAdded(primaryMarket, msg.sender);
+            emit PrimaryMarketAdded(primaryMarket);
         }
     }
 
     function _removePrimaryMarket(address primaryMarket) internal {
         if (_primaryMarketMembers.remove(primaryMarket)) {
-            emit PrimaryMarketRemoved(primaryMarket, msg.sender);
+            emit PrimaryMarketRemoved(primaryMarket);
         }
     }
 
