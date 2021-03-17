@@ -78,6 +78,11 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     ///         and ends at the same time of the next day (exclusive).
     uint256 public override currentDay;
 
+    /// @notice End timestamp of the current trading week.
+    ///         A settlement wekk starts at UTC time `SETTLEMENT_TIME` of the first day of a week (inclusive)
+    ///         and ends at the same time of the last day (exclusive).
+    uint256 public override currentWeek;
+
     uint256 public override activityStartTime;
 
     uint256 public override currentInterestRate;
@@ -147,6 +152,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         fixedConversionThreshold = fixedConversionThreshold_;
         twapOracle = ITwapOracle(twapOracle_);
         currentDay = endOfDay(block.timestamp);
+        currentWeek = endOfWeek(block.timestamp);
         activityStartTime = endOfDay(block.timestamp) - 1 days;
     }
 
@@ -183,7 +189,8 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         _historyNavs[lastDay][TRANCHE_A] = UNIT;
         _historyNavs[lastDay][TRANCHE_B] = UNIT;
 
-        ballot.initialize(currentDay);
+        ballot.initialize(currentWeek);
+        currentInterestRate = MAX_INTEREST_RATE.min(aprOracle.capture());
     }
 
     /// @notice Return weights of Share A and B when splitting Share P.
@@ -201,6 +208,13 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     /// @return End timestamp of the trading day.
     function endOfDay(uint256 timestamp) public pure override returns (uint256) {
         return ((timestamp.add(1 days) - SETTLEMENT_TIME) / 1 days) * 1 days + SETTLEMENT_TIME;
+    }
+
+    /// @notice Return end timestamp of the trading week containing a given timestamp.
+    /// @param timestamp The given timestamp
+    /// @return End timestamp of the trading week.
+    function endOfWeek(uint256 timestamp) public pure override returns (uint256) {
+        return ((timestamp.add(1 weeks) - SETTLEMENT_TIME) / 1 weeks) * 1 weeks + SETTLEMENT_TIME;
     }
 
     // ---------------------------------
@@ -376,13 +390,15 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
                 return navA;
             }
         }
+
+        uint256 previousWeek = endOfWeek(previousDay);
         uint256 newNavA =
             navA
                 .multiplyDecimal(
                 UNIT.sub(dailyManagementFeeRate.mul(timestamp - previousDay).div(1 days))
             )
                 .multiplyDecimal(
-                historyInterestRate[previousDay].mul(timestamp - previousDay).div(1 days).add(UNIT)
+                historyInterestRate[previousWeek].mul(timestamp - previousDay).div(1 days).add(UNIT)
             );
         return newNavA > navA ? newNavA : navA;
     }
@@ -676,6 +692,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     ///         4. Capture new interest rate for Share A.
     function settle() external {
         uint256 day = currentDay;
+        uint256 week = currentWeek;
         require(block.timestamp >= day, "The current trading day does not end yet");
         uint256 price = twapOracle.getTwap(day);
         require(price != 0, "Underlying price for settlement is not ready yet");
@@ -714,11 +731,14 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
             activityStartTime = day;
         }
 
-        uint256 interestRate = _updateInterestRate();
+        if (week <= day) {
+            week += 1 weeks;
+            historyInterestRate[week] = _updateInterestRate(week);
+            currentWeek = week;
+        }
 
         historyTotalShares[day] = totalShares;
         historyUnderlying[day] = underlying;
-        historyInterestRate[day] = interestRate;
         _historyNavs[day][TRANCHE_P] = navP;
         _historyNavs[day][TRANCHE_A] = navA;
         _historyNavs[day][TRANCHE_B] = navB;
@@ -900,10 +920,10 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
             });
     }
 
-    function _updateInterestRate() private returns (uint256) {
+    function _updateInterestRate(uint256 newWeek) private returns (uint256) {
         // TODO update every day or every week?
         uint256 baseInterestRate = MAX_INTEREST_RATE.min(aprOracle.capture());
-        uint256 floatingInterestRate = ballot.countAndUpdate(currentDay - 1 days).div(YEAR);
+        uint256 floatingInterestRate = ballot.countAndUpdate(newWeek).div(YEAR);
         uint256 rate = baseInterestRate.add(floatingInterestRate);
         currentInterestRate = rate;
         return rate;
