@@ -167,16 +167,19 @@ describe("Fund", function () {
         it("Should return inactive for non-primaryMarket contracts", async function () {
             expect(await fund.activityStartTime()).to.equal(startDay - DAY);
             expect(await fund.currentDay()).to.equal(startDay);
-            expect(await fund.isActive(addr1, startDay - DAY + POST_CONVERSION_DELAY_TIME)).to.equal(
-                false
-            );
+            expect(
+                await fund.isActive(addr1, startDay - DAY + POST_CONVERSION_DELAY_TIME)
+            ).to.equal(false);
         });
 
         it("Should return the activity window without conversion", async function () {
             expect(await fund.activityStartTime()).to.equal(startDay - DAY);
             expect(await fund.currentDay()).to.equal(startDay);
             expect(
-                await fund.isActive(primaryMarket.address, startDay - DAY + POST_CONVERSION_DELAY_TIME)
+                await fund.isActive(
+                    primaryMarket.address,
+                    startDay - DAY + POST_CONVERSION_DELAY_TIME
+                )
             ).to.equal(true);
 
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
