@@ -131,6 +131,9 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     ///         trading day.
     mapping(uint256 => uint256) public historyInterestRate;
 
+    address[] private obsoletePrimaryMarkets;
+    address[] private newPrimaryMarkets;
+
     constructor(
         uint256 dailyManagementFeeRate_,
         uint256 upperConversionThreshold_,
@@ -201,8 +204,15 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     }
 
     // ---------------------------------
-    function isActive(uint256 timestamp) public view override returns (bool) {
-        return (timestamp >= activityStartTime && timestamp < currentDay);
+    function isActive(address primaryMarket, uint256 timestamp)
+        public
+        view
+        override
+        returns (bool)
+    {
+        return (isPrimaryMarket(primaryMarket) &&
+            timestamp >= activityStartTime &&
+            timestamp < currentDay);
     }
 
     /// @notice Total shares of the fund, as if all A and B shares are merged.
@@ -714,7 +724,31 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         _historyNavs[day][TRANCHE_B] = navB;
         currentDay = day + 1 days;
 
+        if (obsoletePrimaryMarkets.length > 0) {
+            for (uint256 i = 0; i < obsoletePrimaryMarkets.length; i++) {
+                _removePrimaryMarket(obsoletePrimaryMarkets[i]);
+            }
+            delete obsoletePrimaryMarkets;
+        }
+
+        if (newPrimaryMarkets.length > 0) {
+            for (uint256 i = 0; i < newPrimaryMarkets.length; i++) {
+                _addPrimaryMarket(newPrimaryMarkets[i]);
+            }
+            delete newPrimaryMarkets;
+        }
+
         emit Settled(day, navP, navA, navB);
+    }
+
+    function addObsoletePrimaryMarket(address obsoletePrimaryMarket) external onlyOwner {
+        require(isPrimaryMarket(obsoletePrimaryMarket), "The address is not a primary market");
+        obsoletePrimaryMarkets.push(obsoletePrimaryMarket);
+    }
+
+    function addNewPrimaryMarket(address newPrimaryMarket) external onlyOwner {
+        require(!isPrimaryMarket(newPrimaryMarket), "The address is already a primary market");
+        newPrimaryMarkets.push(newPrimaryMarket);
     }
 
     /// @dev Transfer management fee of the current trading day to the governance address.
@@ -733,10 +767,10 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         uint256 totalShares = getTotalShares();
         uint256 underlying = IERC20(tokenUnderlying).balanceOf(address(this));
         uint256 prevNavP = _historyNavs[day - 1 days][TRANCHE_P];
-        uint256 primaryMarketCount = getRoleMemberCount(PRIMARY_MARKET_ROLE);
+        uint256 primaryMarketCount = getPrimaryMarketCount();
         for (uint256 i = 0; i < primaryMarketCount; i++) {
             uint256 price_ = price; // Fix the "stack too deep" error
-            IPrimaryMarket pm = IPrimaryMarket(getRoleMember(PRIMARY_MARKET_ROLE, i));
+            IPrimaryMarket pm = IPrimaryMarket(getPrimaryMarketMember(i));
             (
                 uint256 sharesToMint,
                 uint256 sharesToBurn,

@@ -156,6 +156,7 @@ describe("Fund", function () {
             expect(await fund.endOfDay(startTimestamp)).to.equal(startDay);
             expect(await fund.endOfDay(startTimestamp + DAY * 10)).to.equal(startDay + DAY * 10);
         });
+
         it("Should return the next day if given a settlement timestamp", async function () {
             expect(await fund.endOfDay(startDay)).to.equal(startDay + DAY);
             expect(await fund.endOfDay(startDay + DAY * 10)).to.equal(startDay + DAY * 11);
@@ -163,58 +164,122 @@ describe("Fund", function () {
     });
 
     describe("isActive()", function () {
-        it("Should return the activity window", async function () {
+        it("Should return inactive for non-primaryMarket contracts", async function () {
             expect(await fund.activityStartTime()).to.equal(startDay - DAY);
             expect(await fund.currentDay()).to.equal(startDay);
-            expect(await fund.isActive(startDay - DAY * 2)).to.equal(false);
-            expect(await fund.isActive(startDay - POST_CONVERSION_DELAY_TIME)).to.equal(true);
-            expect(await fund.isActive(startDay + DAY)).to.equal(false);
+            expect(
+                await fund.isActive(addr1, startDay - DAY + POST_CONVERSION_DELAY_TIME)
+            ).to.equal(false);
+        });
+
+        it("Should return the activity window without conversion", async function () {
+            expect(await fund.activityStartTime()).to.equal(startDay - DAY);
+            expect(await fund.currentDay()).to.equal(startDay);
+            expect(
+                await fund.isActive(
+                    primaryMarket.address,
+                    startDay - DAY + POST_CONVERSION_DELAY_TIME
+                )
+            ).to.equal(true);
+
+            await twapOracle.mock.getTwap.returns(parseEther("1000"));
+            await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
+            await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
+            await advanceOneDayAndSettle();
+
+            expect(await fund.activityStartTime()).to.equal(startDay);
+            expect(await fund.currentDay()).to.equal(startDay + DAY);
+            expect(
+                await fund.isActive(primaryMarket.address, startDay + POST_CONVERSION_DELAY_TIME)
+            ).to.equal(true);
+        });
+
+        it("Should return the activity window with conversion", async function () {
+            await primaryMarket.call(
+                wbtc,
+                "approve",
+                fund.address,
+                BigNumber.from("2").pow(256).sub(1)
+            );
+            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
+            await twapOracle.mock.getTwap.returns(parseEther("1510"));
+            await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
+            await primaryMarket.mock.settle.returns(parseEther("500"), 0, parseWbtc("1"), 0, 0);
+            await advanceOneDayAndSettle();
+
+            expect(await fund.activityStartTime()).to.equal(startDay + POST_CONVERSION_DELAY_TIME);
+            expect(await fund.currentDay()).to.equal(startDay + DAY);
+            expect(
+                await fund.isActive(
+                    primaryMarket.address,
+                    startDay + POST_CONVERSION_DELAY_TIME - 1
+                )
+            ).to.equal(false);
+            expect(
+                await fund.isActive(primaryMarket.address, startDay + POST_CONVERSION_DELAY_TIME)
+            ).to.equal(true);
         });
     });
 
     describe("FundRoles", function () {
-        describe("Admin", function () {
-            it("Should initialize owner as the only admin", async function () {
-                expect(await fund.isAdmin(owner.address)).to.equal(true);
-                expect(await fund.getRoleMemberCount(await fund.DEFAULT_ADMIN_ROLE())).to.equal(1);
-            });
-
-            it("Should be able to change admin", async function () {
-                await fund.connect(owner).addAdmin(addr1);
-                expect(await fund.isAdmin(owner.address)).to.equal(true);
-                expect(await fund.isAdmin(addr1)).to.equal(true);
-                expect(await fund.getRoleMemberCount(await fund.DEFAULT_ADMIN_ROLE())).to.equal(2);
-                await fund.connect(owner).renounceAdmin();
-                expect(await fund.isAdmin(owner.address)).to.equal(false);
-                expect(await fund.getRoleMemberCount(await fund.DEFAULT_ADMIN_ROLE())).to.equal(1);
-            });
-
-            it("Should reject changing admin from non-admin address", async function () {
-                await expect(fund.addAdmin(addr1)).to.be.revertedWith(
-                    "AccessControl: sender must be an admin to grant"
-                );
-            });
-        });
-
         describe("PrimaryMarket", function () {
             it("Should initialize the only PrimaryMarket address", async function () {
                 expect(await fund.isPrimaryMarket(primaryMarket.address)).to.equal(true);
-                expect(await fund.getRoleMemberCount(await fund.PRIMARY_MARKET_ROLE())).to.equal(1);
+                expect(await fund.getPrimaryMarketCount()).to.equal(1);
             });
 
-            it("Should be able to change PrimaryMarket", async function () {
-                await fund.connect(owner).addPrimaryMarket(addr1);
+            it("Should be able to add PrimaryMarket", async function () {
+                await fund.connect(owner).addNewPrimaryMarket(addr1);
+                await fund.connect(owner).addNewPrimaryMarket(addr1);
                 expect(await fund.isPrimaryMarket(primaryMarket.address)).to.equal(true);
+
+                await twapOracle.mock.getTwap.returns(parseEther("1000"));
+                await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
+                await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
+                await advanceBlockAtTime((await fund.currentDay()).toNumber());
+
+                await expect(fund.settle()).to.emit(fund, "PrimaryMarketAdded").withArgs(addr1);
+
                 expect(await fund.isPrimaryMarket(addr1)).to.equal(true);
-                expect(await fund.getRoleMemberCount(await fund.PRIMARY_MARKET_ROLE())).to.equal(2);
-                await fund.connect(owner).removePrimaryMarket(primaryMarket.address);
+                expect(await fund.getPrimaryMarketCount()).to.equal(2);
+                await fund.connect(owner).addObsoletePrimaryMarket(primaryMarket.address);
+            });
+
+            it("Should be able to remove PrimaryMarket", async function () {
+                await fund.connect(owner).addObsoletePrimaryMarket(primaryMarket.address);
+                await fund.connect(owner).addObsoletePrimaryMarket(primaryMarket.address);
+                expect(await fund.isPrimaryMarket(primaryMarket.address)).to.equal(true);
+
+                await twapOracle.mock.getTwap.returns(parseEther("1000"));
+                await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
+                await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
+                await advanceBlockAtTime((await fund.currentDay()).toNumber());
+
+                await expect(fund.settle())
+                    .to.emit(fund, "PrimaryMarketRemoved")
+                    .withArgs(primaryMarket.address);
+
                 expect(await fund.isPrimaryMarket(primaryMarket.address)).to.equal(false);
-                expect(await fund.getRoleMemberCount(await fund.PRIMARY_MARKET_ROLE())).to.equal(1);
+                expect(await fund.getPrimaryMarketCount()).to.equal(0);
+            });
+
+            it("Should reject if PrimaryMarket has already been added or removed", async function () {
+                await expect(
+                    fund.connect(owner).addNewPrimaryMarket(primaryMarket.address)
+                ).to.be.revertedWith("The address is already a primary market");
+
+                await expect(
+                    fund.connect(owner).addObsoletePrimaryMarket(addr1)
+                ).to.be.revertedWith("The address is not a primary market");
             });
 
             it("Should reject changing PrimaryMarket from non-admin address", async function () {
-                await expect(fund.addPrimaryMarket(addr1)).to.be.revertedWith(
-                    "AccessControl: sender must be an admin to grant"
+                await expect(fund.addNewPrimaryMarket(addr1)).to.be.revertedWith(
+                    "Ownable: caller is not the owner"
+                );
+
+                await expect(fund.addObsoletePrimaryMarket(addr1)).to.be.revertedWith(
+                    "Ownable: caller is not the owner"
                 );
             });
         });
@@ -239,7 +304,13 @@ describe("Fund", function () {
             // Initiating transactions from a Waffle mock contract doesn't work well
             // in Hardhat and may fail with gas estimating errors. We grant the role
             // to an EOA to make test development easier.
-            await f.fund.connect(f.wallets.owner).addPrimaryMarket(f.wallets.user2.address);
+            await f.fund.connect(f.wallets.owner).addNewPrimaryMarket(f.wallets.user2.address);
+            await f.twapOracle.mock.getTwap.returns(parseEther("1000"));
+            await f.aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
+            await f.primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
+            await advanceBlockAtTime((await fund.currentDay()).toNumber());
+            await f.fund.settle();
+
             f.fund = f.fund.connect(f.wallets.user2);
             // Mint some shares to user2
             await f.fund.mint(TRANCHE_P, f.wallets.user2.address, 10000);
@@ -270,7 +341,7 @@ describe("Fund", function () {
         describe("mint()", function () {
             it("Should revert if not called from PrimaryMarket", async function () {
                 await expect(fund.connect(user1).mint(TRANCHE_P, addr1, 1)).to.be.revertedWith(
-                    "only primary market"
+                    "Only primary market"
                 );
             });
 
@@ -307,7 +378,7 @@ describe("Fund", function () {
         describe("burn()", function () {
             it("Should revert if not called from PrimaryMarket", async function () {
                 await expect(fund.connect(user1).burn(TRANCHE_P, addr1, 1)).to.be.revertedWith(
-                    "only primary market"
+                    "Only primary market"
                 );
             });
 
@@ -478,10 +549,6 @@ describe("Fund", function () {
         });
 
         it("Should keep previous NAV when nothing happened", async function () {
-            expect(await fund.activityStartTime()).to.equal(startDay - DAY);
-            expect(await fund.currentDay()).to.equal(startDay);
-            expect(await fund.isActive(startDay - POST_CONVERSION_DELAY_TIME)).to.equal(true);
-
             await primaryMarketSettle.returns(0, 0, 0, 0, 0);
             await expect(fund.settle())
                 .to.emit(fund, "Settled")
@@ -492,10 +559,6 @@ describe("Fund", function () {
             expect(navs[TRANCHE_P]).to.equal(parseEther("1"));
             expect(navs[TRANCHE_A]).to.equal(parseEther("1"));
             expect(navs[TRANCHE_B]).to.equal(parseEther("1"));
-
-            expect(await fund.activityStartTime()).to.equal(startDay);
-            expect(await fund.currentDay()).to.equal(startDay + DAY);
-            expect(await fund.isActive(startDay + 3600 * 11)).to.equal(true);
         });
 
         it("Should transfer no fee to governance", async function () {
@@ -537,10 +600,6 @@ describe("Fund", function () {
         });
 
         it("Should trigger upper conversion on abnormal creation", async function () {
-            expect(await fund.activityStartTime()).to.equal(startDay - DAY);
-            expect(await fund.currentDay()).to.equal(startDay);
-            expect(await fund.isActive(startDay - POST_CONVERSION_DELAY_TIME)).to.equal(true);
-
             // Received 1 WBTC (1010 USD) and minted 500 shares.
             // NAV of Share P increases to 1010 / 500 = 2.02 and triggers conversion.
             await wbtc.mint(primaryMarket.address, parseWbtc("1"));
@@ -555,11 +614,6 @@ describe("Fund", function () {
             expect(await fund.shareBalanceOf(TRANCHE_P, primaryMarket.address)).to.equal(
                 parseEther("1010")
             );
-
-            expect(await fund.activityStartTime()).to.equal(startDay + POST_CONVERSION_DELAY_TIME);
-            expect(await fund.currentDay()).to.equal(startDay + DAY);
-            expect(await fund.isActive(startDay + 3600 * 11)).to.equal(false);
-            expect(await fund.isActive(startDay + 3600 * 13)).to.equal(true);
         });
     });
 
