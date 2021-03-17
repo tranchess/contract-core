@@ -692,13 +692,19 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         uint256 navP;
         if (totalShares > 0) {
             navP = price.mul(underlying.mul(underlyingDecimalMultiplier)).div(totalShares);
-            uint256 newNavA =
-                navA.multiplyDecimal(UNIT.sub(dailyManagementFeeRate)).multiplyDecimal(
-                    currentInterestRate.add(UNIT)
-                );
-            navA = newNavA > navA ? newNavA : navA;
+            if (historyTotalShares[day - 1 days] > 0) {
+                // Update NAV of Share A only when the fund is non-empty both before and after
+                // this settlement
+                uint256 newNavA =
+                    navA.multiplyDecimal(UNIT.sub(dailyManagementFeeRate)).multiplyDecimal(
+                        currentInterestRate.add(UNIT)
+                    );
+                if (navA < newNavA) {
+                    navA = newNavA;
+                }
+            }
         } else {
-            // If the fund is empty, use NAV in the last day and do not charge interest in Share A
+            // If the fund is empty, use NAV of Share P in the last day
             navP = _historyNavs[day - 1 days][TRANCHE_P];
         }
         uint256 navB = calculateNavB(navP, navA);
