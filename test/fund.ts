@@ -30,7 +30,6 @@ describe("Fund", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly startDay: number;
-        readonly startWeek: number;
         readonly startTimestamp: number;
         readonly twapOracle: MockContract;
         readonly wbtc: Contract;
@@ -44,7 +43,6 @@ describe("Fund", function () {
     let fixtureData: FixtureData;
 
     let startDay: number;
-    let startWeek: number;
     let startTimestamp: number;
     let user1: Wallet;
     let user2: Wallet;
@@ -73,7 +71,6 @@ describe("Fund", function () {
         let startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
         const lastDay = Math.ceil(startTimestamp / DAY / 7) * DAY * 7 + SETTLEMENT_TIME;
         const startDay = lastDay + DAY;
-        const startWeek = lastDay + DAY * 7;
         startTimestamp = lastDay + 3600 * 12;
         await advanceBlockAtTime(startTimestamp);
 
@@ -106,7 +103,6 @@ describe("Fund", function () {
             BigNumber.from("2").pow(256).sub(1)
         );
 
-        await aprOracle.mock.capture.returns(parseEther("0.001"));
         await fund.initialize(
             wbtc.address,
             8,
@@ -122,7 +118,6 @@ describe("Fund", function () {
         return {
             wallets: { user1, user2, owner, shareP, shareA, shareB, governance },
             startDay,
-            startWeek,
             startTimestamp,
             twapOracle,
             wbtc,
@@ -154,7 +149,6 @@ describe("Fund", function () {
         addr1 = user1.address;
         addr2 = user2.address;
         startDay = fixtureData.startDay;
-        startWeek = fixtureData.startWeek;
         startTimestamp = fixtureData.startTimestamp;
         twapOracle = fixtureData.twapOracle;
         wbtc = fixtureData.wbtc;

@@ -152,7 +152,6 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         fixedConversionThreshold = fixedConversionThreshold_;
         twapOracle = ITwapOracle(twapOracle_);
         currentDay = endOfDay(block.timestamp);
-        currentWeek = endOfWeek(block.timestamp);
         activityStartTime = endOfDay(block.timestamp) - 1 days;
     }
 
@@ -189,8 +188,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         _historyNavs[lastDay][TRANCHE_A] = UNIT;
         _historyNavs[lastDay][TRANCHE_B] = UNIT;
 
-        ballot.initialize(currentWeek);
-        currentInterestRate = MAX_INTEREST_RATE.min(aprOracle.capture());
+        ballot.initialize(endOfWeek(block.timestamp));
     }
 
     /// @notice Return weights of Share A and B when splitting Share P.
@@ -738,6 +736,10 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         }
 
         if (week <= day) {
+            if (week == 0) {
+                week = endOfWeek(block.timestamp);
+                historyInterestRate[week] = MAX_INTEREST_RATE.min(aprOracle.capture());
+            }
             week += 1 weeks;
             historyInterestRate[week] = _updateInterestRate(week);
             currentWeek = week;
