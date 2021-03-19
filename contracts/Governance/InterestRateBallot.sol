@@ -116,9 +116,12 @@ contract InterestRateBallot is IBallot {
     }
 
     function _totalSupplyAtTimestamp(uint256 timestamp) private view returns (uint256) {
-        uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
         uint256 total = 0;
-        for (; weekCursor <= timestamp + MAX_TIME; weekCursor += 1 weeks) {
+        for (
+            uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
+            weekCursor <= timestamp + MAX_TIME;
+            weekCursor += 1 weeks
+        ) {
             total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / MAX_TIME;
         }
 
@@ -126,9 +129,12 @@ contract InterestRateBallot is IBallot {
     }
 
     function _sumAtTimestamp(uint256 timestamp) private view returns (uint256) {
-        uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
         uint256 sum = 0;
-        for (; weekCursor <= timestamp + MAX_TIME; weekCursor += 1 weeks) {
+        for (
+            uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
+            weekCursor <= timestamp + MAX_TIME;
+            weekCursor += 1 weeks
+        ) {
             sum += (scheduledWeightedUnlock[weekCursor] * (weekCursor - timestamp)) / MAX_TIME;
         }
 
@@ -136,10 +142,13 @@ contract InterestRateBallot is IBallot {
     }
 
     function _averageAtTimestamp(uint256 timestamp) private view returns (uint256) {
-        uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
         uint256 sum = 0;
         uint256 total = 0;
-        for (; weekCursor <= timestamp + MAX_TIME; weekCursor += 1 weeks) {
+        for (
+            uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
+            weekCursor <= timestamp + MAX_TIME;
+            weekCursor += 1 weeks
+        ) {
             sum += (scheduledWeightedUnlock[weekCursor] * (weekCursor - timestamp)) / MAX_TIME;
             total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / MAX_TIME;
         }
