@@ -83,8 +83,7 @@ describe("Fund", function () {
         const aprOracle = await deployMockForName(owner, "IAprOracle");
 
         const interestRateBallot = await deployMockForName(owner, "IBallot");
-        await interestRateBallot.mock.initialize.returns();
-        await interestRateBallot.mock.countAndUpdate.returns(0);
+        await interestRateBallot.mock.count.returns(0);
 
         const primaryMarket = await deployMockForName(owner, "IPrimaryMarket");
 

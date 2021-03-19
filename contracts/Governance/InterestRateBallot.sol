@@ -3,16 +3,11 @@ pragma experimental ABIEncoderV2;
 pragma solidity 0.6.9;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
+import "../interfaces/IBallot.sol";
 import "../interfaces/IVotingEscrow.sol";
 
-contract InterestRateBallot {
+contract InterestRateBallot is IBallot {
     using SafeMath for uint256;
-
-    struct Voter {
-        uint256 amount;
-        uint256 unlockTime;
-        uint256 weight;
-    }
 
     uint256 public constant MAX_TIME = 4 * 365 days;
 
@@ -28,13 +23,6 @@ contract InterestRateBallot {
     mapping(uint256 => uint256) public scheduledUnlock;
     mapping(uint256 => uint256) public scheduledWeightedUnlock;
 
-    event Locked(
-        address indexed account,
-        uint256 amount,
-        uint256 indexed unlockTime,
-        uint256 blockTimestamp
-    );
-
     constructor(address _votingEscrow) public {
         votingEscrow = IVotingEscrow(_votingEscrow);
     }
@@ -42,6 +30,10 @@ contract InterestRateBallot {
     function getWeight(uint256 index) public view returns (uint256) {
         uint256 delta = stepSize.mul(index);
         return minRange.add(delta);
+    }
+
+    function getReceipt(address account) public view returns (Voter memory) {
+        return voters[account];
     }
 
     function balanceOf(address account) external view returns (uint256) {
@@ -68,13 +60,13 @@ contract InterestRateBallot {
         return _sumAtTimestamp(timestamp);
     }
 
-    function count(uint256 timestamp) external view returns (uint256) {
+    function count(uint256 timestamp) external view override returns (uint256) {
         return _averageAtTimestamp(timestamp);
     }
 
     // -------------------------------------------------------------------------
     function cast(uint256 option) public {
-        require(option < maxOption, "exceed max option");
+        require(option < maxOption, "invalid option");
 
         IVotingEscrow.LockedBalance memory lockedBalance =
             votingEscrow.getLockedBalance(msg.sender);
@@ -96,7 +88,7 @@ contract InterestRateBallot {
             weight: weight
         });
 
-        emit Locked(msg.sender, lockedBalance.amount, lockedBalance.unlockTime, block.timestamp);
+        emit Voted(msg.sender, lockedBalance.amount, lockedBalance.unlockTime, block.timestamp);
     }
 
     function updateBallotParameters(
@@ -152,6 +144,9 @@ contract InterestRateBallot {
             total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / MAX_TIME;
         }
 
-        return sum.div(total);
+        if (total == 0) {
+            return 0;
+        }
+        return sum / total;
     }
 }

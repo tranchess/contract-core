@@ -186,8 +186,6 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         _historyNavs[lastDay][TRANCHE_P] = UNIT;
         _historyNavs[lastDay][TRANCHE_A] = UNIT;
         _historyNavs[lastDay][TRANCHE_B] = UNIT;
-
-        ballot.initialize(endOfWeek(block.timestamp));
     }
 
     /// @notice Return weights of Share A and B when splitting Share P.
@@ -734,12 +732,8 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
             activityStartTime = day;
         }
 
-        if (week <= day) {
-            if (week == 0) {
-                week = endOfWeek(block.timestamp);
-                historyInterestRate[week] = MAX_INTEREST_RATE.min(aprOracle.capture());
-            }
-            week += 1 weeks;
+        if (week <= block.timestamp) {
+            week = endOfWeek(block.timestamp);
             historyInterestRate[week] = _updateInterestRate(week);
             currentWeek = week;
         }
@@ -927,9 +921,9 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
             });
     }
 
-    function _updateInterestRate(uint256 newWeek) private returns (uint256) {
+    function _updateInterestRate(uint256 week) private returns (uint256) {
         uint256 baseInterestRate = MAX_INTEREST_RATE.min(aprOracle.capture());
-        uint256 floatingInterestRate = ballot.countAndUpdate(newWeek).div(YEAR);
+        uint256 floatingInterestRate = ballot.count(week).div(YEAR);
         uint256 rate = baseInterestRate.add(floatingInterestRate);
         currentInterestRate = rate;
         return rate;
