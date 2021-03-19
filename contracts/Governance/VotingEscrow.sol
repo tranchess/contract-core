@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+pragma experimental ABIEncoderV2;
 pragma solidity 0.6.9;
 
 import "@openzeppelin/contracts/utils/Address.sol";
@@ -57,6 +58,15 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
 
     function totalSupply() external view override returns (uint256) {
         return _totalSupplyAtTimestamp(block.timestamp);
+    }
+
+    function getLockedBalance(address account)
+        external
+        view
+        override
+        returns (LockedBalance memory)
+    {
+        return locked[account];
     }
 
     function balanceOfAtTimestamp(address account, uint256 timestamp)

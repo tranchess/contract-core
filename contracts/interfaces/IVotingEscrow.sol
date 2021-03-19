@@ -40,5 +40,7 @@ interface IVotingEscrow {
         external
         view
         returns (uint256);
+
+    function getLockedBalance(address account) external view returns (LockedBalance memory);
     //function burn(uint256 amount) external;
 }

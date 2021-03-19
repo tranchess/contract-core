@@ -74,13 +74,13 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     uint256 public override underlyingDecimalMultiplier;
 
     /// @notice End timestamp of the current trading day.
-    ///         A settlement day starts at UTC time `SETTLEMENT_TIME` of a day (inclusive)
+    ///         A trading day starts at UTC time `SETTLEMENT_TIME` of a day (inclusive)
     ///         and ends at the same time of the next day (exclusive).
     uint256 public override currentDay;
 
     /// @notice End timestamp of the current trading week.
-    ///         A settlement wekk starts at UTC time `SETTLEMENT_TIME` of the first day of a week (inclusive)
-    ///         and ends at the same time of the last day (exclusive).
+    ///         A trading week starts at UTC time `SETTLEMENT_TIME` of the first day of a week (inclusive)
+    ///         and ends at the same time of next week (exclusive).
     uint256 public override currentWeek;
 
     uint256 public override activityStartTime;
@@ -129,11 +129,10 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     ///         the fund after settlement of that trading day.
     mapping(uint256 => uint256) public historyUnderlying;
 
-    /// @notice Mapping of trading day => interest rate of Share A.
+    /// @notice Mapping of trading week => interest rate of Share A.
     ///
-    ///         Key is the end timestamp of a trading day. Value is the interest rate captured
-    ///         after settlement of that trading day, i.e. the interest rate in the next
-    ///         trading day.
+    ///         Key is the end timestamp of a trading week. Value is the interest rate captured
+    ///         after settlement of the first day of the trading week.
     mapping(uint256 => uint256) public historyInterestRate;
 
     address[] private obsoletePrimaryMarkets;
@@ -929,7 +928,6 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     }
 
     function _updateInterestRate(uint256 newWeek) private returns (uint256) {
-        // TODO update every day or every week?
         uint256 baseInterestRate = MAX_INTEREST_RATE.min(aprOracle.capture());
         uint256 floatingInterestRate = ballot.countAndUpdate(newWeek).div(YEAR);
         uint256 rate = baseInterestRate.add(floatingInterestRate);
