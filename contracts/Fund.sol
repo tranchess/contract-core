@@ -78,14 +78,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     ///         and ends at the same time of the next day (exclusive).
     uint256 public override currentDay;
 
-    /// @notice End timestamp of the current trading week.
-    ///         A trading week starts at UTC time `SETTLEMENT_TIME` of the first day of a week (inclusive)
-    ///         and ends at the same time of next week (exclusive).
-    uint256 public override currentWeek;
-
     uint256 public override activityStartTime;
-
-    uint256 public override currentInterestRate;
 
     /// @dev History conversions. Conversions are often accessed in loops with bounds checking.
     ///      So we store them in a fixed-length array, in order to make compiler-generated
@@ -186,6 +179,10 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         _historyNavs[lastDay][TRANCHE_P] = UNIT;
         _historyNavs[lastDay][TRANCHE_A] = UNIT;
         _historyNavs[lastDay][TRANCHE_B] = UNIT;
+
+        historyInterestRate[endOfWeek(currentDay - 1 days)] = MAX_INTEREST_RATE.min(
+            aprOracle.capture()
+        );
     }
 
     /// @notice Return weights of Share A and B when splitting Share P.
@@ -386,14 +383,14 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
             }
         }
 
-        uint256 previousWeek = endOfWeek(previousDay);
+        uint256 week = endOfWeek(previousDay);
         uint256 newNavA =
             navA
                 .multiplyDecimal(
                 UNIT.sub(dailyManagementFeeRate.mul(timestamp - previousDay).div(1 days))
             )
                 .multiplyDecimal(
-                historyInterestRate[previousWeek].mul(timestamp - previousDay).div(1 days).add(UNIT)
+                UNIT.add(historyInterestRate[week].mul(timestamp - previousDay).div(1 days))
             );
         return newNavA > navA ? newNavA : navA;
     }
@@ -687,7 +684,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     ///         4. Capture new interest rate for Share A.
     function settle() external {
         uint256 day = currentDay;
-        uint256 week = currentWeek;
+        uint256 currentWeek = endOfWeek(currentDay - 1 days);
         require(block.timestamp >= day, "The current trading day does not end yet");
         uint256 price = twapOracle.getTwap(day);
         require(price != 0, "Underlying price for settlement is not ready yet");
@@ -709,7 +706,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
                 // this settlement
                 uint256 newNavA =
                     navA.multiplyDecimal(UNIT.sub(dailyManagementFeeRate)).multiplyDecimal(
-                        currentInterestRate.add(UNIT)
+                        historyInterestRate[currentWeek].add(UNIT)
                     );
                 if (navA < newNavA) {
                     navA = newNavA;
@@ -732,10 +729,8 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
             activityStartTime = day;
         }
 
-        if (week <= block.timestamp) {
-            week = endOfWeek(block.timestamp);
-            historyInterestRate[week] = _updateInterestRate(week);
-            currentWeek = week;
+        if (currentDay == currentWeek) {
+            historyInterestRate[currentWeek] = _updateInterestRate(currentWeek);
         }
 
         historyTotalShares[day] = totalShares;
@@ -925,7 +920,6 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         uint256 baseInterestRate = MAX_INTEREST_RATE.min(aprOracle.capture());
         uint256 floatingInterestRate = ballot.count(week).div(YEAR);
         uint256 rate = baseInterestRate.add(floatingInterestRate);
-        currentInterestRate = rate;
         return rate;
     }
 

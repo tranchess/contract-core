@@ -68,15 +68,11 @@ interface IFund {
 
     function currentDay() external view returns (uint256);
 
-    function currentWeek() external view returns (uint256);
-
     function activityStartTime() external view returns (uint256);
 
     function isActive(address primaryMarket, uint256 timestamp) external view returns (bool);
 
     function getTotalShares() external view returns (uint256);
-
-    function currentInterestRate() external view returns (uint256);
 
     function extrapolateNav(uint256 timestamp, uint256 price)
         external
