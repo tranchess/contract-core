@@ -66,11 +66,16 @@ describe("Fund", function () {
         // test development easier.
         const [user1, user2, owner, shareP, shareA, shareB, governance] = provider.getWallets();
 
-        // Start at 12 hours after the first settlement in the next week.
+        // Start at 12 hours after settlement time of the 6th day in a week, which makes sure that
+        // the first settlement after the fund's deployment settles the last day in a week and
+        // starts a new week by updating interest rate of Share A. Many test cases in this file
+        // rely on this fact to change the interest rate.
+        //
         // As Fund settles at 14:00 everyday and an Unix timestamp starts a week on Thursday,
-        // the test cases starts at 2:00 on Friday and the day settles at 14:00.
+        // the test cases starts at 2:00 on Thursday (`startTimestamp`) and the first day settles
+        // at 14:00 on Thursday (`startDay`).
         let startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
-        const lastDay = Math.ceil(startTimestamp / DAY / 7) * DAY * 7 + SETTLEMENT_TIME;
+        const lastDay = Math.ceil(startTimestamp / DAY / 7) * DAY * 7 + DAY * 6 + SETTLEMENT_TIME;
         const startDay = lastDay + DAY;
         startTimestamp = lastDay + 3600 * 12;
         await advanceBlockAtTime(startTimestamp);
@@ -1009,7 +1014,7 @@ describe("Fund", function () {
             expect(navsAt1000[TRANCHE_B]).to.equal(expectedB);
         });
 
-        it.skip("Should keep NAV of Share A non-decreasing", async function () {
+        it("Should keep NAV of Share A non-decreasing", async function () {
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
             // Interest of Share A is smaller than management fee
             await aprOracle.mock.capture.returns(
@@ -1222,7 +1227,7 @@ describe("Fund", function () {
         // 1 B => 0
         const preDefinedConvert040 = () => mockConversion(parseEther("0.4"));
 
-        describe.skip("Conversion matrix", function () {
+        describe("Conversion matrix", function () {
             it("Upper conversion", async function () {
                 await preDefinedConvert160();
                 expect(await fund.getConversionSize()).to.equal(1);
@@ -1365,7 +1370,7 @@ describe("Fund", function () {
             });
         });
 
-        describe.skip("convert()", function () {
+        describe("convert()", function () {
             it("Should use conversion at the specified index", async function () {
                 await preDefinedConvert070();
                 await preDefinedConvert200();
@@ -1387,7 +1392,7 @@ describe("Fund", function () {
             });
         });
 
-        describe.skip("batchConvert()", function () {
+        describe("batchConvert()", function () {
             it("Should use conversion at the specified index range", async function () {
                 await preDefinedConvert040();
                 await preDefinedConvert070();
@@ -1400,7 +1405,7 @@ describe("Fund", function () {
             });
         });
 
-        describe.skip("getConversion()", function () {
+        describe("getConversion()", function () {
             it("Should return the conversion struct at the given index", async function () {
                 await preDefinedConvert070();
                 await preDefinedConvert040();
