@@ -684,7 +684,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     ///         4. Capture new interest rate for Share A.
     function settle() external {
         uint256 day = currentDay;
-        uint256 currentWeek = endOfWeek(currentDay - 1 days);
+        uint256 currentWeek = endOfWeek(day - 1 days);
         require(block.timestamp >= day, "The current trading day does not end yet");
         uint256 price = twapOracle.getTwap(day);
         require(price != 0, "Underlying price for settlement is not ready yet");
@@ -730,7 +730,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         }
 
         if (currentDay == currentWeek) {
-            historyInterestRate[currentWeek] = _updateInterestRate(currentWeek);
+            historyInterestRate[currentWeek + 1 weeks] = _updateInterestRate(currentWeek);
         }
 
         historyTotalShares[day] = totalShares;

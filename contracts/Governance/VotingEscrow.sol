@@ -14,10 +14,10 @@ interface ISmartWalletChecker {
 }
 
 contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
-    uint256 public MAX_TIME = 4 * 365 days;
+    uint256 public immutable override maxTime;
 
-    string name;
-    string symbol;
+    string public name;
+    string public symbol;
 
     address public override token;
     address public checker;
@@ -31,12 +31,14 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         address _token,
         address _checker,
         string memory _name,
-        string memory _symbol
+        string memory _symbol,
+        uint256 _maxTime
     ) public {
         name = _name;
         symbol = _symbol;
         token = _token;
         checker = _checker;
+        maxTime = _maxTime;
     }
 
     function getTimestampDropBelow(address account, uint256 threshold)
@@ -49,7 +51,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         if (lockedBalance.amount <= threshold) {
             return 0;
         }
-        return lockedBalance.unlockTime - ((MAX_TIME * threshold) / lockedBalance.amount);
+        return lockedBalance.unlockTime - ((maxTime * threshold) / lockedBalance.amount);
     }
 
     function balanceOf(address account) external view override returns (uint256) {
@@ -102,7 +104,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         require(amount > 0, "zero value");
         require(lockedBalance.amount == 0, "Withdraw old tokens first");
         require(unlockTime > block.timestamp, "Can only lock until time in the future");
-        require(unlockTime <= block.timestamp + MAX_TIME, "Voting lock can be 4 years max");
+        require(unlockTime <= block.timestamp + maxTime, "Voting lock can be 4 years max");
 
         _lock(msg.sender, amount, unlockTime, lockedBalance, LockType.CREATE_LOCK_TYPE);
     }
@@ -126,7 +128,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         require(lockedBalance.unlockTime > block.timestamp, "Lock expired");
         require(lockedBalance.amount > 0, "Nothing is locked");
         require(unlockTime > lockedBalance.unlockTime, "Can only increase lock duration");
-        require(unlockTime <= block.timestamp + MAX_TIME, "Voting lock can be 4 years max");
+        require(unlockTime <= block.timestamp + maxTime, "Voting lock can be 4 years max");
 
         _lock(msg.sender, 0, unlockTime, lockedBalance, LockType.INCREASE_UNLOCK_TIME);
     }
@@ -165,14 +167,14 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         if (timestamp > lockedBalance.unlockTime) {
             return 0;
         }
-        return (lockedBalance.amount * (lockedBalance.unlockTime - timestamp)) / MAX_TIME;
+        return (lockedBalance.amount * (lockedBalance.unlockTime - timestamp)) / maxTime;
     }
 
     function _totalSupplyAtTimestamp(uint256 timestamp) private view returns (uint256) {
         uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
         uint256 total = 0;
-        for (; weekCursor <= timestamp + MAX_TIME; weekCursor += 1 weeks) {
-            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / MAX_TIME;
+        for (; weekCursor <= timestamp + maxTime; weekCursor += 1 weeks) {
+            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / maxTime;
         }
 
         return total;

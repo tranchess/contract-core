@@ -56,9 +56,9 @@ describe("Fund", function () {
     let twapOracle: MockContract;
     let wbtc: Contract;
     let aprOracle: MockContract;
+    let interestRateBallot: MockContract;
     let primaryMarket: MockContract;
     let fund: Contract;
-    let interestRateBallot: MockContract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
         // Initiating transactions from a Waffle mock contract doesn't work well in Hardhat
@@ -154,9 +154,9 @@ describe("Fund", function () {
         twapOracle = fixtureData.twapOracle;
         wbtc = fixtureData.wbtc;
         aprOracle = fixtureData.aprOracle;
+        interestRateBallot = fixtureData.interestRateBallot;
         primaryMarket = fixtureData.primaryMarket;
         fund = fixtureData.fund;
-        interestRateBallot = fixtureData.interestRateBallot;
     });
 
     describe("endOfDay()", function () {
@@ -1009,7 +1009,7 @@ describe("Fund", function () {
             expect(navsAt1000[TRANCHE_B]).to.equal(expectedB);
         });
 
-        it("Should keep NAV of Share A non-decreasing", async function () {
+        it.skip("Should keep NAV of Share A non-decreasing", async function () {
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
             // Interest of Share A is smaller than management fee
             await aprOracle.mock.capture.returns(
@@ -1019,26 +1019,18 @@ describe("Fund", function () {
             await advanceOneDayAndSettle();
 
             const day = (await fund.currentDay()).toNumber();
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
-            await primaryMarket.mock.settle.returns(parseEther("1000"), 0, parseWbtc("1"), 0, 0);
+            await primaryMarket.call(fund, "mint", TRANCHE_P, addr1, parseEther("1000"));
+            await wbtc.mint(fund.address, parseWbtc("1"));
             await advanceOneDayAndSettle();
 
-            const UNIT = parseEther("1");
-            const navAInHalfADays = UNIT.sub(parseEther("0.0001").div(2))
-                .mul(UNIT.add(parseEther("0.001").div(2)))
-                .div(UNIT);
-            const navAInTenDays = UNIT.sub(parseEther("0.0001").mul(10))
-                .mul(UNIT.add(parseEther("0.001").mul(10)))
-                .div(UNIT);
-
-            expect(await fund.extrapolateNavA(day + DAY / 2)).to.equal(navAInHalfADays);
-            expect(await fund.extrapolateNavA(day + DAY * 10)).to.equal(navAInTenDays);
+            expect(await fund.extrapolateNavA(day + DAY / 2)).to.equal(parseEther("1"));
+            expect(await fund.extrapolateNavA(day + DAY * 10)).to.equal(parseEther("1"));
             expect(
                 (await fund.extrapolateNav(day + DAY / 2, parseEther("1000")))[TRANCHE_A]
-            ).to.equal(navAInHalfADays);
+            ).to.equal(parseEther("1"));
             expect(
                 (await fund.extrapolateNav(day + DAY * 10, parseEther("1000")))[TRANCHE_A]
-            ).to.equal(navAInTenDays);
+            ).to.equal(parseEther("1"));
         });
     });
 

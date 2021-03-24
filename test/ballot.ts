@@ -8,7 +8,6 @@ import { deployMockForName } from "./mock";
 
 const DAY = 86400;
 const WEEK = DAY * 7;
-const MAX_TIME = 4 * 365 * DAY;
 
 async function advanceBlockAtTime(time: number) {
     await ethers.provider.send("evm_mine", [time]);
@@ -22,7 +21,6 @@ describe("Ballot", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly startWeek: number;
-        readonly startTimestamp: number;
         readonly votingEscrow: MockContract;
         readonly ballot: Contract;
     }
@@ -47,6 +45,7 @@ describe("Ballot", function () {
         await advanceBlockAtTime(startWeek);
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
+        await votingEscrow.mock.maxTime.returns(200 * WEEK);
 
         const InterestRateBallot = await ethers.getContractFactory("InterestRateBallot");
         const ballot = await InterestRateBallot.connect(owner).deploy(votingEscrow.address);
@@ -54,7 +53,6 @@ describe("Ballot", function () {
         return {
             wallets: { user1, user2, owner },
             startWeek,
-            startTimestamp,
             votingEscrow,
             ballot: ballot.connect(user1),
         };
@@ -75,14 +73,10 @@ describe("Ballot", function () {
         ballot = fixtureData.ballot;
     });
 
-    function roundWeek(timestamp: number): number {
-        return Math.ceil(timestamp / WEEK) * WEEK - WEEK;
-    }
-
     describe("cast()", function () {
         it("Should cast votes", async function () {
             const amount = parseEther("1");
-            const unlockTime = roundWeek(startWeek + MAX_TIME);
+            const unlockTime = startWeek + WEEK * 100;
             await votingEscrow.mock.getLockedBalance.returns([amount, unlockTime]);
 
             await expect(ballot.cast(0))
@@ -96,18 +90,18 @@ describe("Ballot", function () {
             expect(await ballot.scheduledUnlock(unlockTime)).to.equal(amount);
             expect(await ballot.scheduledWeightedUnlock(unlockTime)).to.equal(0);
 
-            expect(await ballot.balanceOfAtTimestamp(addr1, unlockTime - MAX_TIME / 2)).to.equal(
-                parseEther("0.5")
+            expect(await ballot.balanceOfAtTimestamp(addr1, startWeek + WEEK * 50)).to.equal(
+                parseEther("0.25")
             );
-            expect(await ballot.totalSupplyAtTimestamp(unlockTime - MAX_TIME / 2)).to.equal(
-                parseEther("0.5")
+            expect(await ballot.totalSupplyAtTimestamp(startWeek + WEEK * 50)).to.equal(
+                parseEther("0.25")
             );
-            expect(await ballot.sumAtTimestamp(unlockTime - MAX_TIME / 2)).to.equal(0);
+            expect(await ballot.sumAtTimestamp(startWeek + WEEK * 50)).to.equal(0);
         });
 
         it("Should change the votes", async function () {
             let amount = parseEther("1");
-            const unlockTime = roundWeek(startWeek + MAX_TIME);
+            const unlockTime = startWeek + WEEK * 100;
             await votingEscrow.mock.getLockedBalance.returns([amount, unlockTime]);
             await ballot.cast(0);
 
@@ -124,14 +118,14 @@ describe("Ballot", function () {
                 amount.mul(parseEther("0.02"))
             );
 
-            expect(await ballot.balanceOfAtTimestamp(addr1, unlockTime - MAX_TIME / 2)).to.equal(
-                parseEther("1")
+            expect(await ballot.balanceOfAtTimestamp(addr1, startWeek + WEEK * 50)).to.equal(
+                parseEther("0.5")
             );
-            expect(await ballot.totalSupplyAtTimestamp(unlockTime - MAX_TIME / 2)).to.equal(
-                parseEther("1")
+            expect(await ballot.totalSupplyAtTimestamp(startWeek + WEEK * 50)).to.equal(
+                parseEther("0.5")
             );
-            expect(await ballot.sumAtTimestamp(unlockTime - MAX_TIME / 2)).to.equal(
-                amount.mul(parseEther("0.02")).div(2)
+            expect(await ballot.sumAtTimestamp(startWeek + WEEK * 50)).to.equal(
+                amount.mul(parseEther("0.02")).div(4)
             );
         });
 
@@ -157,21 +151,18 @@ describe("Ballot", function () {
         it("Should count with multiple voters", async function () {
             await votingEscrow.mock.getLockedBalance
                 .withArgs(user1.address)
-                .returns([parseEther("1"), roundWeek(startWeek + WEEK * 40)]);
+                .returns([parseEther("1"), startWeek + WEEK * 40]);
             await votingEscrow.mock.getLockedBalance
                 .withArgs(user2.address)
-                .returns([parseEther("3"), roundWeek(startWeek + WEEK * 50)]);
+                .returns([parseEther("3"), startWeek + WEEK * 50]);
             await votingEscrow.mock.getLockedBalance
                 .withArgs(owner.address)
-                .returns([parseEther("1"), roundWeek(startWeek + WEEK * 60)]);
+                .returns([parseEther("1"), startWeek + WEEK * 60]);
 
             await ballot.cast(0);
             await ballot.connect(user2).cast(1);
             await ballot.connect(owner).cast(2);
 
-            /*for (let i = -1; i < 52; i++) {
-                console.log((await ballot.count(startWeek + WEEK * i)).toString());
-            }*/
             const initialWeightedAverage = parseEther("0")
                 .mul(40)
                 .add(parseEther("0.02").mul(50).mul(3))
@@ -189,10 +180,10 @@ describe("Ballot", function () {
                 .div(15 + 25 * 3 + 35);
             const weightedAverageOn49th = parseEther("0.04").mul(10).div(10);
 
-            expect(await ballot.count(startWeek - WEEK)).to.equal(initialWeightedAverage);
-            expect(await ballot.count(startWeek + WEEK * 9)).to.equal(weightedAverageOn9th);
-            expect(await ballot.count(startWeek + WEEK * 24)).to.equal(weightedAverageOn24th);
-            expect(await ballot.count(startWeek + WEEK * 49)).to.equal(weightedAverageOn49th);
+            expect(await ballot.count(startWeek)).to.equal(initialWeightedAverage);
+            expect(await ballot.count(startWeek + WEEK * 10)).to.equal(weightedAverageOn9th);
+            expect(await ballot.count(startWeek + WEEK * 25)).to.equal(weightedAverageOn24th);
+            expect(await ballot.count(startWeek + WEEK * 50)).to.equal(weightedAverageOn49th);
         });
     });
 });

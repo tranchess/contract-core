@@ -27,6 +27,8 @@ interface IVotingEscrow {
 
     function token() external view returns (address);
 
+    function maxTime() external view returns (uint256);
+
     function balanceOf(address account) external view returns (uint256);
 
     function totalSupply() external view returns (uint256);
