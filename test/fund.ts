@@ -1103,48 +1103,14 @@ describe("Fund", function () {
 
         it("Should not trigger at exactly fixed conversion threshold", async function () {
             // Set daily interest rate to 10%
-            await aprOracle.mock.capture.returns(parseEther("0.1")); // 0.1% per day
-
-            // Create a new temp fund to test fixed conversion
-            const Fund = await ethers.getContractFactory("Fund");
-            const tempFund = await Fund.connect(owner).deploy(
-                0,
-                UPPER_CONVERSION_THRESHOLD,
-                LOWER_CONVERSION_THRESHOLD,
-                FIXED_CONVERSION_THRESHOLD,
-                twapOracle.address
-            );
-
-            await primaryMarket.call(
-                wbtc,
-                "approve",
-                tempFund.address,
-                BigNumber.from("2").pow(256).sub(1)
-            );
-
-            await tempFund.initialize(
-                wbtc.address,
-                8,
-                shareP.address,
-                shareA.address,
-                shareB.address,
-                aprOracle.address,
-                interestRateBallot.address,
-                primaryMarket.address,
-                governance.address
-            );
-
             await aprOracle.mock.capture.returns(parseEther("0.1"));
-            await primaryMarket.call(tempFund, "mint", TRANCHE_P, addr1, parseEther("1000"));
-            await wbtc.mint(tempFund.address, parseWbtc("1"));
+            await primaryMarket.call(fund, "mint", TRANCHE_P, addr1, parseEther("1000"));
+            await wbtc.mint(fund.address, parseWbtc("1"));
+            await advanceOneDayAndSettle();
 
-            await advanceBlockAtTime((await tempFund.currentDay()).toNumber());
-            await tempFund.settle();
-            await advanceBlockAtTime((await tempFund.currentDay()).toNumber());
-            await tempFund.settle();
-
-            expect(await tempFund.getConversionSize()).to.equal(0);
-            const navs = await tempFund.historyNavs(startDay + DAY);
+            await advanceOneDayAndSettle();
+            expect(await fund.getConversionSize()).to.equal(0);
+            const navs = await fund.historyNavs(startDay + DAY);
             expect(navs[TRANCHE_A]).to.equal(parseEther("1.1"));
         });
     });
