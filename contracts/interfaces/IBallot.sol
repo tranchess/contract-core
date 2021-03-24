@@ -16,6 +16,6 @@ interface IBallot {
         address indexed account,
         uint256 amount,
         uint256 indexed unlockTime,
-        uint256 blockTimestamp
+        uint256 indexed weight
     );
 }

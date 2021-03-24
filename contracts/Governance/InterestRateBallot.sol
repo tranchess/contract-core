@@ -88,7 +88,7 @@ contract InterestRateBallot is IBallot {
             weight: weight
         });
 
-        emit Voted(msg.sender, lockedBalance.amount, lockedBalance.unlockTime, block.timestamp);
+        emit Voted(msg.sender, lockedBalance.amount, lockedBalance.unlockTime, weight);
     }
 
     function updateBallotParameters(

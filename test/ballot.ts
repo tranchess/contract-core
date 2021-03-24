@@ -84,7 +84,10 @@ describe("Ballot", function () {
             const amount = parseEther("1");
             const unlockTime = roundWeek(startWeek + MAX_TIME);
             await votingEscrow.mock.getLockedBalance.returns([amount, unlockTime]);
-            await ballot.cast(0);
+
+            await expect(ballot.cast(0))
+                .to.emit(ballot, "Voted")
+                .withArgs(addr1, amount, unlockTime, 0);
 
             expect((await ballot.getReceipt(addr1)).amount).to.equal(amount);
             expect((await ballot.getReceipt(addr1)).unlockTime).to.equal(unlockTime);
