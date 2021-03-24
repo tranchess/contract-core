@@ -1,166 +1,162 @@
 // SPDX-License-Identifier: MIT
 pragma experimental ABIEncoderV2;
-pragma solidity ^0.6.0;
-//import "github.com/OpenZeppelin/openzeppelin-contracts/contracts/math/SafeMath.sol";
-//import "github.com/OpenZeppelin/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-//import "github.com/OpenZeppelin/openzeppelin-contracts/contracts/token/ERC777/IERC777.sol";
+pragma solidity 0.6.9;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
-import "../interfaces/IToken.sol";
 import "../interfaces/IBallot.sol";
-import "../interfaces/IFund.sol";
 import "../interfaces/IVotingEscrow.sol";
-
-import "../utils/SafeDecimalMath.sol";
 
 contract InterestRateBallot is IBallot {
     using SafeMath for uint256;
-    using SafeDecimalMath for uint256;
 
-    uint256 public constant STEP_SIZE = 0.02e18;
-    uint256 public constant OPTION_NUMBER = 3;
+    uint256 public immutable maxTime;
 
-    // The EIP-712 typehash for the contract's domain
-    bytes32 public constant DOMAIN_TYPEHASH =
-        keccak256("EIP712Domain(string name,uint256 chainID,address verifyingContract)");
-
-    // The EIP-712 typehash for the ballot struct used by the contract
-    bytes32 public constant BALLOT_TYPEHASH = keccak256("Ballot(uint256 support)");
-
-    // The name of this contract
-    string public constant name = "Tranchess Governor Alpha";
+    uint256 public stepSize = 0.02e18;
+    uint256 public minRange = 0;
+    uint256 public maxOption = 3;
 
     IVotingEscrow public votingEscrow;
 
-    IFund public fund;
+    mapping(address => Voter) public voters;
 
-    // The official record of current round
-    VotingRound public round;
-    uint256[50] public voteDistribution;
-    uint256[50] public weightedVoteDistribution;
-    mapping(address => Receipt) public receipts;
+    // unlockTime => amount that will be unlocked at unlockTime
+    mapping(uint256 => uint256) public scheduledUnlock;
+    mapping(uint256 => uint256) public scheduledWeightedUnlock;
 
-    constructor(address votingEscrow_, address fund_) public {
-        votingEscrow = IVotingEscrow(votingEscrow_);
-        fund = IFund(fund_);
+    constructor(address _votingEscrow) public {
+        votingEscrow = IVotingEscrow(_votingEscrow);
+        maxTime = votingEscrow.maxTime();
     }
 
-    function initialize(uint256 timestamp) public override {
-        require(msg.sender == address(fund), "only fund");
-        round = VotingRound({
-            startTimestamp: block.timestamp,
-            endTimestamp: timestamp,
-            minRange: 0,
-            stepSize: STEP_SIZE,
-            totalVotes: 0,
-            totalValue: 0,
-            optionNumber: OPTION_NUMBER
+    function getWeight(uint256 index) public view returns (uint256) {
+        uint256 delta = stepSize.mul(index);
+        return minRange.add(delta);
+    }
+
+    function getReceipt(address account) public view returns (Voter memory) {
+        return voters[account];
+    }
+
+    function balanceOf(address account) external view returns (uint256) {
+        return _balanceOfAtTimestamp(account, block.timestamp);
+    }
+
+    function totalSupply() external view returns (uint256) {
+        return _totalSupplyAtTimestamp(block.timestamp);
+    }
+
+    function balanceOfAtTimestamp(address account, uint256 timestamp)
+        external
+        view
+        returns (uint256)
+    {
+        return _balanceOfAtTimestamp(account, timestamp);
+    }
+
+    function totalSupplyAtTimestamp(uint256 timestamp) external view returns (uint256) {
+        return _totalSupplyAtTimestamp(timestamp);
+    }
+
+    function sumAtTimestamp(uint256 timestamp) external view returns (uint256) {
+        return _sumAtTimestamp(timestamp);
+    }
+
+    function count(uint256 timestamp) external view override returns (uint256) {
+        return _averageAtTimestamp(timestamp);
+    }
+
+    // -------------------------------------------------------------------------
+    function cast(uint256 option) public {
+        require(option < maxOption, "invalid option");
+
+        IVotingEscrow.LockedBalance memory lockedBalance =
+            votingEscrow.getLockedBalance(msg.sender);
+        Voter memory voter = voters[msg.sender];
+        uint256 weight = getWeight(option);
+        require(lockedBalance.amount > 0, "zero value");
+
+        // update scheduled unlock
+        scheduledUnlock[voter.unlockTime] -= voter.amount;
+        scheduledUnlock[lockedBalance.unlockTime] += lockedBalance.amount;
+
+        scheduledWeightedUnlock[voter.unlockTime] -= voter.amount * voter.weight;
+        scheduledWeightedUnlock[lockedBalance.unlockTime] += lockedBalance.amount * weight;
+
+        // update voter amount per account
+        voters[msg.sender] = Voter({
+            amount: lockedBalance.amount,
+            unlockTime: lockedBalance.unlockTime,
+            weight: weight
         });
 
-        emit RoundCreated(
-            msg.sender,
-            round.startTimestamp,
-            round.endTimestamp,
-            "Schedule weekly rounds for interest rate adjustments"
-        );
+        emit Voted(msg.sender, lockedBalance.amount, lockedBalance.unlockTime, weight);
     }
 
-    function getOption(uint256 index) public view returns (uint256) {
-        uint256 delta = round.stepSize.mul(index);
-        return round.minRange.add(delta);
-    }
-
-    function getRound() public view returns (VotingRound memory) {
-        return round;
-    }
-
-    function getReceipt(address voter) public view returns (Receipt memory) {
-        return receipts[voter];
-    }
-
-    function count() public view returns (uint256 winner) {
-        if (round.totalValue == 0) return 0;
-        winner = round.totalValue.divideDecimal(round.totalVotes);
-    }
-
-    function countAndUpdate(uint256 currentTimestamp) public override returns (uint256 winner) {
-        require(msg.sender == address(fund), "only fund");
-        winner = count();
-
-        delete voteDistribution;
-        delete weightedVoteDistribution;
-
-        round = VotingRound({
-            startTimestamp: block.timestamp,
-            endTimestamp: currentTimestamp,
-            minRange: 0,
-            stepSize: STEP_SIZE,
-            totalVotes: 0,
-            totalValue: 0,
-            optionNumber: OPTION_NUMBER
-        });
-
-        emit RoundCreated(
-            msg.sender,
-            round.startTimestamp,
-            round.endTimestamp,
-            "Schedule weekly rounds for interest rate adjustments"
-        );
-    }
-
-    function castVote(uint256 support) public {
-        _castVote(msg.sender, support);
-    }
-
-    function castVoteBySig(
-        uint256 support,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
+    function updateBallotParameters(
+        uint256 _stepSize,
+        uint256 _minRange,
+        uint256 _maxOption
     ) public {
-        bytes32 domainSeparator =
-            keccak256(
-                abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), getChainID(), address(this))
-            );
-        bytes32 structHash = keccak256(abi.encode(BALLOT_TYPEHASH, support));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
-        address signatory = ecrecover(digest, v, r, s);
-        require(signatory != address(0), "Governance::castVoteBySig: invalid signature");
-        _castVote(signatory, support);
+        stepSize = _stepSize;
+        minRange = _minRange;
+        maxOption = _maxOption;
     }
 
-    function _castVote(address voter, uint256 support) internal {
-        Receipt storage receipt = receipts[voter];
-        require(support < round.optionNumber, "Governance::_castVote: invalid option");
-        require(
-            receipt.lastVotedTime < round.endTimestamp,
-            "Governance::_castVote: voter already voted"
-        );
-
-        uint256 votes = votingEscrow.balanceOfAtTimestamp(voter, round.endTimestamp);
-        voteDistribution[support] = voteDistribution[support].add(votes);
-        round.totalVotes = round.totalVotes.add(votes);
-
-        uint256 option = getOption(support);
-        option = option.multiplyDecimal(votes);
-
-        weightedVoteDistribution[support] = weightedVoteDistribution[support].add(option);
-        round.totalValue = round.totalValue.add(option);
-
-        receipt.lastVotedTime = round.endTimestamp;
-        receipt.support = support;
-        receipt.votes = votes;
-
-        emit VoteCast(voter, support, votes);
-    }
-
-    function getChainID() internal pure returns (uint256) {
-        uint256 chainID;
-        assembly {
-            chainID := chainid()
+    // -------------------------------------------------------------------------
+    function _balanceOfAtTimestamp(address account, uint256 timestamp)
+        private
+        view
+        returns (uint256)
+    {
+        require(timestamp >= block.timestamp, "must be current or future time");
+        Voter memory voter = voters[account];
+        if (timestamp > voter.unlockTime) {
+            return 0;
         }
-        return chainID;
+        return (voter.amount * (voter.unlockTime - timestamp)) / maxTime;
+    }
+
+    function _totalSupplyAtTimestamp(uint256 timestamp) private view returns (uint256) {
+        uint256 total = 0;
+        for (
+            uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
+            weekCursor <= timestamp + maxTime;
+            weekCursor += 1 weeks
+        ) {
+            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / maxTime;
+        }
+
+        return total;
+    }
+
+    function _sumAtTimestamp(uint256 timestamp) private view returns (uint256) {
+        uint256 sum = 0;
+        for (
+            uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
+            weekCursor <= timestamp + maxTime;
+            weekCursor += 1 weeks
+        ) {
+            sum += (scheduledWeightedUnlock[weekCursor] * (weekCursor - timestamp)) / maxTime;
+        }
+
+        return sum;
+    }
+
+    function _averageAtTimestamp(uint256 timestamp) private view returns (uint256) {
+        uint256 sum = 0;
+        uint256 total = 0;
+        for (
+            uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
+            weekCursor <= timestamp + maxTime;
+            weekCursor += 1 weeks
+        ) {
+            sum += (scheduledWeightedUnlock[weekCursor] * (weekCursor - timestamp)) / maxTime;
+            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / maxTime;
+        }
+
+        if (total == 0) {
+            return 0;
+        }
+        return sum / total;
     }
 }

@@ -12,6 +12,7 @@ import {
     STAGING_WBTC,
     STAGING_USDC,
 } from "../config";
+import { BigNumber } from "ethers";
 
 task("deploy", "Deploy contracts", async (_args, hre) => {
     const { ethers } = hre;
@@ -102,7 +103,8 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
         chess.address,
         ethers.constants.AddressZero,
         "Chess Vote",
-        "veCHESS"
+        "veCHESS",
+        BigNumber.from(4 * 365 * 24 * 60 * 60)
     );
     contractAddress.set("test.voting_escrow", votingEscrow.address);
     console.log("VotingEscrow:", votingEscrow.address);
