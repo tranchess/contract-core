@@ -88,7 +88,7 @@ describe("PrimaryMarket", function () {
         await fund.mock.tokenB.returns(shareB.address);
         await fund.mock.underlyingDecimalMultiplier.returns(1e10);
         await fund.mock.currentDay.returns(START_DAY);
-        await fund.mock.isActive.returns(true);
+        await fund.mock.isMarketActive.returns(true);
         const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
         const primaryMarket = await PrimaryMarket.connect(owner).deploy(
             fund.address,
@@ -130,7 +130,7 @@ describe("PrimaryMarket", function () {
 
     describe("create()", function () {
         it("Should check activeness", async function () {
-            await fund.mock.isActive.returns(false);
+            await fund.mock.isMarketActive.returns(false);
             await expect(primaryMarket.create(parseWbtc("1"))).to.be.revertedWith(
                 "only when active"
             );
@@ -178,7 +178,7 @@ describe("PrimaryMarket", function () {
 
     describe("redeem()", function () {
         it("Should check activeness", async function () {
-            await fund.mock.isActive.returns(false);
+            await fund.mock.isMarketActive.returns(false);
             await expect(primaryMarket.redeem(parseEther("1"))).to.be.revertedWith(
                 "only when active"
             );
@@ -231,7 +231,7 @@ describe("PrimaryMarket", function () {
 
     describe("split()", function () {
         it("Should check activeness", async function () {
-            await fund.mock.isActive.returns(false);
+            await fund.mock.isMarketActive.returns(false);
             await expect(primaryMarket.split(parseEther("1"))).to.be.revertedWith(
                 "only when active"
             );
@@ -291,7 +291,7 @@ describe("PrimaryMarket", function () {
 
     describe("merge()", function () {
         it("Should check activeness", async function () {
-            await fund.mock.isActive.returns(false);
+            await fund.mock.isMarketActive.returns(false);
             await expect(primaryMarket.merge(parseEther("1"))).to.be.revertedWith(
                 "only when active"
             );
