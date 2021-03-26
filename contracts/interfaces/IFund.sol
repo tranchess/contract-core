@@ -72,7 +72,10 @@ interface IFund {
 
     function exchangeActivityStartTime() external view returns (uint256);
 
-    function isMarketActive(address primaryMarket, uint256 timestamp) external view returns (bool);
+    function isPrimaryMarketActive(address primaryMarket, uint256 timestamp)
+        external
+        view
+        returns (bool);
 
     function isExchangeActive(uint256 timestamp) external view returns (bool);
 

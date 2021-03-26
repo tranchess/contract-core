@@ -219,7 +219,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     /// @param primaryMarket The primary market contract address
     /// @param timestamp Timestamp to assess
     /// @return True if the primary market contract is active
-    function isMarketActive(address primaryMarket, uint256 timestamp)
+    function isPrimaryMarketActive(address primaryMarket, uint256 timestamp)
         public
         view
         override

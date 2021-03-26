@@ -127,13 +127,13 @@ contract Chess is IChess, ERC20, ChessRoles {
                 while simultaneously updating mining parameters
     @return Timestamp of the next day
      */
-    function futureDayTimeWrite() public returns (uint256) {
+    function futureDayTimeWrite() public override returns (uint256, uint256) {
         uint256 _startDayTime = startDayTime;
         if (block.timestamp >= _startDayTime + RATE_REDUCTION_TIME) {
             _updateMiningParameters();
-            return startDayTime + RATE_REDUCTION_TIME;
+            return (startDayTime + RATE_REDUCTION_TIME, rate);
         }
-        return _startDayTime + RATE_REDUCTION_TIME;
+        return (_startDayTime + RATE_REDUCTION_TIME, rate);
     }
 
     function mint(address account, uint256 amount) public override onlyMinter {

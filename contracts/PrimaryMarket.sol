@@ -352,7 +352,7 @@ contract PrimaryMarket is IPrimaryMarket, ITrancheIndex {
 
     modifier onlyActive() {
         // Check roles in Fund.
-        require(fund.isMarketActive(address(this), block.timestamp), "only when active");
+        require(fund.isPrimaryMarketActive(address(this), block.timestamp), "only when active");
         _;
     }
 

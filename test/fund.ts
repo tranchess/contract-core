@@ -177,18 +177,20 @@ describe("Fund", function () {
         });
     });
 
-    describe("isMarketActive()", function () {
+    describe("isPrimaryMarketActive()", function () {
         it("Should return inactive for non-primaryMarket contracts", async function () {
             expect(await fund.marketActivityStartTime()).to.equal(startDay - DAY);
             expect(await fund.currentDay()).to.equal(startDay);
-            expect(await fund.isMarketActive(addr1, startDay - DAY + HOUR * 12)).to.equal(false);
+            expect(await fund.isPrimaryMarketActive(addr1, startDay - DAY + HOUR * 12)).to.equal(
+                false
+            );
         });
 
         it("Should return the activity window without conversion", async function () {
             expect(await fund.marketActivityStartTime()).to.equal(startDay - DAY);
             expect(await fund.currentDay()).to.equal(startDay);
             expect(
-                await fund.isMarketActive(primaryMarket.address, startDay - DAY + HOUR * 12)
+                await fund.isPrimaryMarketActive(primaryMarket.address, startDay - DAY + HOUR * 12)
             ).to.equal(true);
 
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
@@ -198,9 +200,9 @@ describe("Fund", function () {
 
             expect(await fund.marketActivityStartTime()).to.equal(startDay);
             expect(await fund.currentDay()).to.equal(startDay + DAY);
-            expect(await fund.isMarketActive(primaryMarket.address, startDay + HOUR * 12)).to.equal(
-                true
-            );
+            expect(
+                await fund.isPrimaryMarketActive(primaryMarket.address, startDay + HOUR * 12)
+            ).to.equal(true);
         });
 
         it("Should return the activity window with conversion", async function () {
@@ -215,13 +217,13 @@ describe("Fund", function () {
             );
             expect(await fund.currentDay()).to.equal(startDay + DAY);
             expect(
-                await fund.isMarketActive(
+                await fund.isPrimaryMarketActive(
                     primaryMarket.address,
                     startDay + POST_CONVERSION_DELAY_TIME - 1
                 )
             ).to.equal(false);
             expect(
-                await fund.isMarketActive(
+                await fund.isPrimaryMarketActive(
                     primaryMarket.address,
                     startDay + POST_CONVERSION_DELAY_TIME
                 )
