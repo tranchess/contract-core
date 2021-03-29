@@ -179,7 +179,7 @@ describe("Fund", function () {
 
     describe("isPrimaryMarketActive()", function () {
         it("Should return inactive for non-primaryMarket contracts", async function () {
-            expect(await fund.marketActivityStartTime()).to.equal(startDay - DAY);
+            expect(await fund.primaryMarketActivityStartTime()).to.equal(startDay - DAY);
             expect(await fund.currentDay()).to.equal(startDay);
             expect(await fund.isPrimaryMarketActive(addr1, startDay - DAY + HOUR * 12)).to.equal(
                 false
@@ -187,7 +187,7 @@ describe("Fund", function () {
         });
 
         it("Should return the activity window without conversion", async function () {
-            expect(await fund.marketActivityStartTime()).to.equal(startDay - DAY);
+            expect(await fund.primaryMarketActivityStartTime()).to.equal(startDay - DAY);
             expect(await fund.currentDay()).to.equal(startDay);
             expect(
                 await fund.isPrimaryMarketActive(primaryMarket.address, startDay - DAY + HOUR * 12)
@@ -198,7 +198,7 @@ describe("Fund", function () {
             await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
             await advanceOneDayAndSettle();
 
-            expect(await fund.marketActivityStartTime()).to.equal(startDay);
+            expect(await fund.primaryMarketActivityStartTime()).to.equal(startDay);
             expect(await fund.currentDay()).to.equal(startDay + DAY);
             expect(
                 await fund.isPrimaryMarketActive(primaryMarket.address, startDay + HOUR * 12)
@@ -212,7 +212,7 @@ describe("Fund", function () {
             await primaryMarket.mock.settle.returns(parseEther("500"), 0, parseWbtc("1"), 0, 0);
             await advanceOneDayAndSettle();
 
-            expect(await fund.marketActivityStartTime()).to.equal(
+            expect(await fund.primaryMarketActivityStartTime()).to.equal(
                 startDay + POST_CONVERSION_DELAY_TIME
             );
             expect(await fund.currentDay()).to.equal(startDay + DAY);

@@ -68,7 +68,7 @@ interface IFund {
 
     function currentDay() external view returns (uint256);
 
-    function marketActivityStartTime() external view returns (uint256);
+    function primaryMarketActivityStartTime() external view returns (uint256);
 
     function exchangeActivityStartTime() external view returns (uint256);
 

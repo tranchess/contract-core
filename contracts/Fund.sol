@@ -79,7 +79,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     uint256 public override currentDay;
 
     /// @notice Start timestamp of the current primary market activity window.
-    uint256 public override marketActivityStartTime;
+    uint256 public override primaryMarketActivityStartTime;
 
     /// @notice Start timestamp of the current exchange activity window.
     uint256 public override exchangeActivityStartTime;
@@ -148,7 +148,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         fixedConversionThreshold = fixedConversionThreshold_;
         twapOracle = ITwapOracle(twapOracle_);
         currentDay = endOfDay(block.timestamp);
-        marketActivityStartTime = endOfDay(block.timestamp) - 1 days;
+        primaryMarketActivityStartTime = endOfDay(block.timestamp) - 1 days;
         exchangeActivityStartTime = endOfDay(block.timestamp) - 1 days + 30 minutes;
     }
 
@@ -226,7 +226,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         returns (bool)
     {
         return (isPrimaryMarket(primaryMarket) &&
-            timestamp >= marketActivityStartTime &&
+            timestamp >= primaryMarketActivityStartTime &&
             timestamp < currentDay);
     }
 
@@ -741,10 +741,10 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
             navA = UNIT;
             navB = UNIT;
             totalShares = getTotalShares();
-            marketActivityStartTime = day + 12 hours;
+            primaryMarketActivityStartTime = day + 12 hours;
             exchangeActivityStartTime = day + 12 hours;
         } else {
-            marketActivityStartTime = day;
+            primaryMarketActivityStartTime = day;
             exchangeActivityStartTime = day + 30 minutes;
         }
 
