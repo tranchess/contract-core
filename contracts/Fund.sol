@@ -78,7 +78,11 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     ///         and ends at the same time of the next day (exclusive).
     uint256 public override currentDay;
 
-    uint256 public override activityStartTime;
+    /// @notice Start timestamp of the current primary market activity window.
+    uint256 public override primaryMarketActivityStartTime;
+
+    /// @notice Start timestamp of the current exchange activity window.
+    uint256 public override exchangeActivityStartTime;
 
     /// @dev History conversions. Conversions are often accessed in loops with bounds checking.
     ///      So we store them in a fixed-length array, in order to make compiler-generated
@@ -144,7 +148,8 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         fixedConversionThreshold = fixedConversionThreshold_;
         twapOracle = ITwapOracle(twapOracle_);
         currentDay = endOfDay(block.timestamp);
-        activityStartTime = endOfDay(block.timestamp) - 1 days;
+        primaryMarketActivityStartTime = endOfDay(block.timestamp) - 1 days;
+        exchangeActivityStartTime = endOfDay(block.timestamp) - 1 days + 30 minutes;
     }
 
     function initialize(
@@ -210,15 +215,27 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     }
 
     // ---------------------------------
-    function isActive(address primaryMarket, uint256 timestamp)
+    /// @notice Return the status of a given primary market contract.
+    /// @param primaryMarket The primary market contract address
+    /// @param timestamp Timestamp to assess
+    /// @return True if the primary market contract is active
+    function isPrimaryMarketActive(address primaryMarket, uint256 timestamp)
         public
         view
         override
         returns (bool)
     {
         return (isPrimaryMarket(primaryMarket) &&
-            timestamp >= activityStartTime &&
+            timestamp >= primaryMarketActivityStartTime &&
             timestamp < currentDay);
+    }
+
+    /// @notice Return the status of the exchange. Unlike the primary market, exchange is
+    ///         anonymous to fund
+    /// @param timestamp Timestamp to assess
+    /// @return True if the exchange contract is active
+    function isExchangeActive(uint256 timestamp) public view override returns (bool) {
+        return (timestamp >= exchangeActivityStartTime && timestamp < (currentDay - 60 minutes));
     }
 
     /// @notice Total shares of the fund, as if all A and B shares are merged.
@@ -724,9 +741,11 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
             navA = UNIT;
             navB = UNIT;
             totalShares = getTotalShares();
-            activityStartTime = day + 12 hours;
+            primaryMarketActivityStartTime = day + 12 hours;
+            exchangeActivityStartTime = day + 12 hours;
         } else {
-            activityStartTime = day;
+            primaryMarketActivityStartTime = day;
+            exchangeActivityStartTime = day + 30 minutes;
         }
 
         if (currentDay == currentWeek) {
