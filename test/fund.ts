@@ -179,17 +179,13 @@ describe("Fund", function () {
 
     describe("isFundActive()", function () {
         it("Should revert transfer when inactive", async function () {
-            expect(await fund.isFundActive(startDay - DAY + HOUR * 12)).to.equal(
-                true
-            );
+            expect(await fund.isFundActive(startDay - DAY + HOUR * 12)).to.equal(true);
             await fund.connect(shareP).transfer(TRANCHE_P, addr1, addr2, 0);
 
             const nextDay = (await fund.currentDay()).toNumber() + 1;
             await advanceBlockAtTime(nextDay);
 
-            expect(await fund.isFundActive(nextDay)).to.equal(
-                false
-            );
+            expect(await fund.isFundActive(nextDay)).to.equal(false);
             await expect(
                 fund.connect(shareP).transfer(TRANCHE_P, addr1, addr2, 0)
             ).to.be.revertedWith("Transfer is inactive");
@@ -198,9 +194,7 @@ describe("Fund", function () {
         it("Should return the activity window without conversion", async function () {
             expect(await fund.fundActivityStartTime()).to.equal(startDay - DAY);
             expect(await fund.currentDay()).to.equal(startDay);
-            expect(
-                await fund.isFundActive(startDay - DAY + HOUR * 12)
-            ).to.equal(true);
+            expect(await fund.isFundActive(startDay - DAY + HOUR * 12)).to.equal(true);
 
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
@@ -209,9 +203,7 @@ describe("Fund", function () {
 
             expect(await fund.fundActivityStartTime()).to.equal(startDay);
             expect(await fund.currentDay()).to.equal(startDay + DAY);
-            expect(
-                await fund.isFundActive(startDay + HOUR * 12)
-            ).to.equal(true);
+            expect(await fund.isFundActive(startDay + HOUR * 12)).to.equal(true);
         });
 
         it("Should return the activity window with conversion", async function () {
@@ -225,16 +217,10 @@ describe("Fund", function () {
                 startDay + POST_CONVERSION_DELAY_TIME
             );
             expect(await fund.currentDay()).to.equal(startDay + DAY);
-            expect(
-                await fund.isFundActive(
-                    startDay + POST_CONVERSION_DELAY_TIME - 1
-                )
-            ).to.equal(false);
-            expect(
-                await fund.isFundActive(
-                    startDay + POST_CONVERSION_DELAY_TIME
-                )
-            ).to.equal(true);
+            expect(await fund.isFundActive(startDay + POST_CONVERSION_DELAY_TIME - 1)).to.equal(
+                false
+            );
+            expect(await fund.isFundActive(startDay + POST_CONVERSION_DELAY_TIME)).to.equal(true);
         });
     });
 
