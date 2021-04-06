@@ -177,9 +177,70 @@ describe("Fund", function () {
         });
     });
 
+    describe("isFundActive()", function () {
+        it("Should revert transfer when inactive", async function () {
+            expect(await fund.isFundActive(startDay - DAY + HOUR * 12)).to.equal(
+                true
+            );
+            await fund.connect(shareP).transfer(TRANCHE_P, addr1, addr2, 0);
+
+            const nextDay = (await fund.currentDay()).toNumber() + 1;
+            await advanceBlockAtTime(nextDay);
+
+            expect(await fund.isFundActive(nextDay)).to.equal(
+                false
+            );
+            await expect(
+                fund.connect(shareP).transfer(TRANCHE_P, addr1, addr2, 0)
+            ).to.be.revertedWith("Transfer is inactive");
+        });
+
+        it("Should return the activity window without conversion", async function () {
+            expect(await fund.fundActivityStartTime()).to.equal(startDay - DAY);
+            expect(await fund.currentDay()).to.equal(startDay);
+            expect(
+                await fund.isFundActive(startDay - DAY + HOUR * 12)
+            ).to.equal(true);
+
+            await twapOracle.mock.getTwap.returns(parseEther("1000"));
+            await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
+            await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
+            await advanceOneDayAndSettle();
+
+            expect(await fund.fundActivityStartTime()).to.equal(startDay);
+            expect(await fund.currentDay()).to.equal(startDay + DAY);
+            expect(
+                await fund.isFundActive(startDay + HOUR * 12)
+            ).to.equal(true);
+        });
+
+        it("Should return the activity window with conversion", async function () {
+            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
+            await twapOracle.mock.getTwap.returns(parseEther("1510"));
+            await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
+            await primaryMarket.mock.settle.returns(parseEther("500"), 0, parseWbtc("1"), 0, 0);
+            await advanceOneDayAndSettle();
+
+            expect(await fund.fundActivityStartTime()).to.equal(
+                startDay + POST_CONVERSION_DELAY_TIME
+            );
+            expect(await fund.currentDay()).to.equal(startDay + DAY);
+            expect(
+                await fund.isFundActive(
+                    startDay + POST_CONVERSION_DELAY_TIME - 1
+                )
+            ).to.equal(false);
+            expect(
+                await fund.isFundActive(
+                    startDay + POST_CONVERSION_DELAY_TIME
+                )
+            ).to.equal(true);
+        });
+    });
+
     describe("isPrimaryMarketActive()", function () {
         it("Should return inactive for non-primaryMarket contracts", async function () {
-            expect(await fund.primaryMarketActivityStartTime()).to.equal(startDay - DAY);
+            expect(await fund.fundActivityStartTime()).to.equal(startDay - DAY);
             expect(await fund.currentDay()).to.equal(startDay);
             expect(await fund.isPrimaryMarketActive(addr1, startDay - DAY + HOUR * 12)).to.equal(
                 false
@@ -187,7 +248,7 @@ describe("Fund", function () {
         });
 
         it("Should return the activity window without conversion", async function () {
-            expect(await fund.primaryMarketActivityStartTime()).to.equal(startDay - DAY);
+            expect(await fund.fundActivityStartTime()).to.equal(startDay - DAY);
             expect(await fund.currentDay()).to.equal(startDay);
             expect(
                 await fund.isPrimaryMarketActive(primaryMarket.address, startDay - DAY + HOUR * 12)
@@ -198,7 +259,7 @@ describe("Fund", function () {
             await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
             await advanceOneDayAndSettle();
 
-            expect(await fund.primaryMarketActivityStartTime()).to.equal(startDay);
+            expect(await fund.fundActivityStartTime()).to.equal(startDay);
             expect(await fund.currentDay()).to.equal(startDay + DAY);
             expect(
                 await fund.isPrimaryMarketActive(primaryMarket.address, startDay + HOUR * 12)
@@ -212,7 +273,7 @@ describe("Fund", function () {
             await primaryMarket.mock.settle.returns(parseEther("500"), 0, parseWbtc("1"), 0, 0);
             await advanceOneDayAndSettle();
 
-            expect(await fund.primaryMarketActivityStartTime()).to.equal(
+            expect(await fund.fundActivityStartTime()).to.equal(
                 startDay + POST_CONVERSION_DELAY_TIME
             );
             expect(await fund.currentDay()).to.equal(startDay + DAY);
@@ -1468,6 +1529,7 @@ describe("Fund", function () {
                 await preDefinedConvert200();
                 const oldA1 = await fund.shareBalanceOf(TRANCHE_A, addr1);
                 const oldB2 = await fund.shareBalanceOf(TRANCHE_B, addr2);
+                await advanceOneDayAndSettle();
                 await fund.connect(shareP).transfer(TRANCHE_P, addr1, addr2, 1);
                 expect(await fund.shareBalanceVersion(addr1)).to.equal(2);
                 expect(await fund.shareBalanceVersion(addr2)).to.equal(2);
