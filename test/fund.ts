@@ -181,11 +181,9 @@ describe("Fund", function () {
         it("Should revert transfer when inactive", async function () {
             expect(await fund.isFundActive(startDay - DAY + HOUR * 12)).to.equal(true);
             await fund.connect(shareP).transfer(TRANCHE_P, addr1, addr2, 0);
+            await advanceBlockAtTime(startDay + DAY);
 
-            const nextDay = (await fund.currentDay()).toNumber() + 1;
-            await advanceBlockAtTime(nextDay);
-
-            expect(await fund.isFundActive(nextDay)).to.equal(false);
+            expect(await fund.isFundActive(startDay + DAY)).to.equal(false);
             await expect(
                 fund.connect(shareP).transfer(TRANCHE_P, addr1, addr2, 0)
             ).to.be.revertedWith("Transfer is inactive");
