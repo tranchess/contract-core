@@ -939,6 +939,9 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         uint256 baseInterestRate = MAX_INTEREST_RATE.min(aprOracle.capture());
         uint256 floatingInterestRate = ballot.count(week).div(YEAR);
         uint256 rate = baseInterestRate.add(floatingInterestRate);
+
+        emit InterestRateUpdated(rate);
+
         return rate;
     }
 
