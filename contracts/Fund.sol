@@ -940,7 +940,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         uint256 floatingInterestRate = ballot.count(week).div(YEAR);
         uint256 rate = baseInterestRate.add(floatingInterestRate);
 
-        emit InterestRateUpdated(rate);
+        emit InterestRateUpdated(baseInterestRate, floatingInterestRate);
 
         return rate;
     }

@@ -168,5 +168,5 @@ interface IFund {
         uint256 ratioAB
     );
     event Settled(uint256 indexed day, uint256 navP, uint256 navA, uint256 navB);
-    event InterestRateUpdated(uint256 indexed interestRate);
+    event InterestRateUpdated(uint256 baseInterestRate, uint256 floatingInterestRate);
 }
