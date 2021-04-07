@@ -79,7 +79,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     uint256 public override currentDay;
 
     /// @notice Start timestamp of the current primary market activity window.
-    uint256 public override primaryMarketActivityStartTime;
+    uint256 public override fundActivityStartTime;
 
     /// @notice Start timestamp of the current exchange activity window.
     uint256 public override exchangeActivityStartTime;
@@ -148,7 +148,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         fixedConversionThreshold = fixedConversionThreshold_;
         twapOracle = ITwapOracle(twapOracle_);
         currentDay = endOfDay(block.timestamp);
-        primaryMarketActivityStartTime = endOfDay(block.timestamp) - 1 days;
+        fundActivityStartTime = endOfDay(block.timestamp) - 1 days;
         exchangeActivityStartTime = endOfDay(block.timestamp) - 1 days + 30 minutes;
     }
 
@@ -215,6 +215,13 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     }
 
     // ---------------------------------
+    /// @notice Return the status of the fund contract.
+    /// @param timestamp Timestamp to assess
+    /// @return True if the fund contract is active
+    function isFundActive(uint256 timestamp) public view override returns (bool) {
+        return (timestamp >= fundActivityStartTime && timestamp < currentDay);
+    }
+
     /// @notice Return the status of a given primary market contract.
     /// @param primaryMarket The primary market contract address
     /// @param timestamp Timestamp to assess
@@ -225,9 +232,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         override
         returns (bool)
     {
-        return (isPrimaryMarket(primaryMarket) &&
-            timestamp >= primaryMarketActivityStartTime &&
-            timestamp < currentDay);
+        return (isPrimaryMarket(primaryMarket) && isFundActive(timestamp));
     }
 
     /// @notice Return the status of the exchange. Unlike the primary market, exchange is
@@ -623,6 +628,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         address recipient,
         uint256 amount
     ) public override onlyShare {
+        require(isFundActive(block.timestamp), "Transfer is inactive");
         _refreshBalance(sender, _conversionSize);
         _refreshBalance(recipient, _conversionSize);
         _transfer(tranche, sender, recipient, amount);
@@ -741,10 +747,10 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
             navA = UNIT;
             navB = UNIT;
             totalShares = getTotalShares();
-            primaryMarketActivityStartTime = day + 12 hours;
+            fundActivityStartTime = day + 12 hours;
             exchangeActivityStartTime = day + 12 hours;
         } else {
-            primaryMarketActivityStartTime = day;
+            fundActivityStartTime = day;
             exchangeActivityStartTime = day + 30 minutes;
         }
 
