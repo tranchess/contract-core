@@ -64,7 +64,7 @@ The [`Fund`](../contracts/Fund.sol) contract contains the bulk of the business l
 
 ## APR Oracle
 
-The [`AprOracle`](../contracts/AprOracle.sol) contract provides the on-chain oracle for weekly performance brief of risk-averse DeFi programs such as `Aave` and `Compound`. The `Fund` would adopt the average interest rate as the basis for Token A's interest rate.
+The [`AprOracle`](../contracts/AprOracle.sol) contract provides the on-chain oracle for weekly performance brief of risk-averse DeFi programs such as `Venus` on BSC, or `Aave` and `Compound` on Ethereum. The `Fund` would adopt the average interest rate as the basis for Token A's interest rate.
 
 1. Calculate the average daily interest rate from last week
 
