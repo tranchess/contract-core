@@ -25,9 +25,9 @@ contract BscAprOracle is IAprOracle, Exponential {
 
     string public name;
 
-    // Mainnet: 0x39AA39c021dfbaE8faC545936693aC917d5E7563
-    // Kovan: 0x4a92E71227D294F041BD82dd8f78591B75140d63
-    address public CTOKEN = address(0x4a92E71227D294F041BD82dd8f78591B75140d63);
+    // Mainnet: 0x882C173bC7Ff3b7786CA16dfeD3DFFfb9Ee7847B
+    // Testnet: 0xb6e9322C49FD75a367Fcb17B0Fcd62C5070EbCBe
+    address public VTOKEN = address(0xb6e9322C49FD75a367Fcb17B0Fcd62C5070EbCBe);
 
     uint256 public venusBorrowIndex;
     uint256 public timestamp;
@@ -44,11 +44,11 @@ contract BscAprOracle is IAprOracle, Exponential {
     // Venus
     function getVenusBorrowIndex() public view returns (uint256 newBorrowIndex) {
         /* Calculate the current borrow interest rate */
-        uint256 borrowRateMantissa = VTokenInterfaces(CTOKEN).borrowRatePerBlock();
+        uint256 borrowRateMantissa = VTokenInterfaces(VTOKEN).borrowRatePerBlock();
         require(borrowRateMantissa <= VENUS_BORROW_MAX_MANTISSA, "borrow rate is absurdly high");
 
-        uint256 borrowIndexPrior = VTokenInterfaces(CTOKEN).borrowIndex();
-        uint256 accrualBlockNumber = VTokenInterfaces(CTOKEN).accrualBlockNumber();
+        uint256 borrowIndexPrior = VTokenInterfaces(VTOKEN).borrowIndex();
+        uint256 accrualBlockNumber = VTokenInterfaces(VTOKEN).accrualBlockNumber();
 
         (, uint256 blockDelta) = subUInt(block.number, accrualBlockNumber);
 
