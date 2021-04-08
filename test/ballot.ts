@@ -81,7 +81,7 @@ describe("Ballot", function () {
 
             await expect(ballot.cast(0))
                 .to.emit(ballot, "Voted")
-                .withArgs(addr1, amount, unlockTime, 0);
+                .withArgs(addr1, 0, 0, 0, amount, unlockTime, 0);
 
             expect((await ballot.getReceipt(addr1)).amount).to.equal(amount);
             expect((await ballot.getReceipt(addr1)).unlockTime).to.equal(unlockTime);
@@ -107,7 +107,17 @@ describe("Ballot", function () {
 
             amount = parseEther("2");
             await votingEscrow.mock.getLockedBalance.returns([amount, unlockTime]);
-            await ballot.cast(1);
+            await expect(ballot.cast(1))
+                .to.emit(ballot, "Voted")
+                .withArgs(
+                    addr1,
+                    parseEther("1"),
+                    unlockTime,
+                    0,
+                    amount,
+                    unlockTime,
+                    parseEther("0.02")
+                );
 
             expect((await ballot.getReceipt(addr1)).amount).to.equal(amount);
             expect((await ballot.getReceipt(addr1)).unlockTime).to.equal(unlockTime);

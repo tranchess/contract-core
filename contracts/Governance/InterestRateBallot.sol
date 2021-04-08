@@ -82,14 +82,22 @@ contract InterestRateBallot is IBallot {
         scheduledWeightedUnlock[voter.unlockTime] -= voter.amount * voter.weight;
         scheduledWeightedUnlock[lockedBalance.unlockTime] += lockedBalance.amount * weight;
 
+        emit Voted(
+            msg.sender,
+            voter.amount,
+            voter.unlockTime,
+            voter.weight,
+            lockedBalance.amount,
+            lockedBalance.unlockTime,
+            weight
+        );
+
         // update voter amount per account
         voters[msg.sender] = Voter({
             amount: lockedBalance.amount,
             unlockTime: lockedBalance.unlockTime,
             weight: weight
         });
-
-        emit Voted(msg.sender, lockedBalance.amount, lockedBalance.unlockTime, weight);
     }
 
     function updateBallotParameters(

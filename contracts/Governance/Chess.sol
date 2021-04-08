@@ -48,57 +48,6 @@ contract Chess is IChess, ERC20, ChessRoles {
     }
 
     /**
-        @notice How much supply is mintable from start timestamp till end timestamp
-        @param start Start of the time interval (timestamp)
-        @param end End of the time interval (timestamp)
-        @return Tokens mintable from `start` till `end`
-     */
-    function mintableInTimeframe(uint256 start, uint256 end) public view returns (uint256) {
-        require(start <= end, "start > end");
-
-        uint256 amount = 0;
-        uint256 currentDayTime = startDayTime;
-        uint256 currentRate = rate;
-
-        // Special case if end is in future (not yet minted) day
-        if (end > currentDayTime + RATE_REDUCTION_TIME) {
-            currentDayTime += RATE_REDUCTION_TIME;
-            currentRate = currentRate.divideDecimal(RATE_REDUCTION_COEFFICIENT);
-        }
-
-        require(end <= currentDayTime + RATE_REDUCTION_TIME, "too far in future");
-
-        // Chess will work in 1000 years. Yeah!
-        for (uint256 i = 0; i < 1000; i++) {
-            if (end >= currentDayTime) {
-                uint256 currentEnd = end;
-                if (currentEnd > currentDayTime + RATE_REDUCTION_TIME) {
-                    currentEnd = currentDayTime + RATE_REDUCTION_TIME;
-                }
-
-                uint256 currentStart = start;
-                if (currentStart >= currentDayTime + RATE_REDUCTION_TIME) {
-                    break; // We should never get here but what if...
-                } else if (currentStart < currentDayTime) {
-                    currentStart = currentDayTime;
-                }
-
-                amount += currentRate * (currentEnd - currentStart);
-
-                if (start >= currentDayTime) {
-                    break;
-                }
-            }
-
-            currentDayTime -= RATE_REDUCTION_TIME;
-            currentRate = currentRate.multiplyDecimal(RATE_REDUCTION_COEFFICIENT); // double-division with rounding made rate a bit less => good
-            require(currentRate <= INITIAL_RATE, "WARNING: This should never happen");
-        }
-
-        return amount;
-    }
-
-    /**
     @notice Update mining rate and supply at the start of the day
     @dev Callable by any address, but only once per day
          Total supply becomes slightly larger if this function is called late
