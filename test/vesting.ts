@@ -3,20 +3,13 @@ import { BigNumber, Contract, Wallet } from "ethers";
 import type { Fixture, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
-const { parseEther, formatEther } = ethers.utils;
+const { parseEther } = ethers.utils;
 
 const DAY = 86400;
 const WEEK = DAY * 7;
 
 async function advanceBlockAtTime(time: number) {
     await ethers.provider.send("evm_mine", [time]);
-}
-
-/**
- * Note that failed transactions are silently ignored when automining is disabled.
- */
-async function setAutomine(flag: boolean) {
-    await ethers.provider.send("evm_setAutomine", [flag]);
 }
 
 describe("Vesting", function () {
@@ -160,6 +153,27 @@ describe("Vesting", function () {
             expect(await vestingEscrow.vestedOf(addr1)).to.equal(claimed);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
             expect(await vestingEscrow.lockedOf(addr1)).to.equal(intialVestedSupply.sub(claimed));
+        });
+
+        it("Should have nothing to claim at the end", async function () {
+            advanceBlockAtTime(startWeek + WEEK * 2);
+
+            expect(await vestingEscrow.totalClaimed(addr1)).to.equal(0);
+            expect(await vestingEscrow.vestedSupply()).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.lockedSupply()).to.equal(0);
+            expect(await vestingEscrow.vestedOf(addr1)).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.balanceOf(addr1)).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.lockedOf(addr1)).to.equal(0);
+
+            await vestingEscrow.claim(addr1);
+
+            expect(await chess.balanceOf(addr1)).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.totalClaimed(addr1)).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.vestedSupply()).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.lockedSupply()).to.equal(0);
+            expect(await vestingEscrow.vestedOf(addr1)).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
+            expect(await vestingEscrow.lockedOf(addr1)).to.equal(0);
         });
     });
 });
