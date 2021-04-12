@@ -137,7 +137,7 @@ describe("PrimaryMarket", function () {
         });
 
         it("Should check minimum creation amount", async function () {
-            // TODO this value should be configurable on intialization
+            // TODO this value should be configurable on initialization
             await expect(primaryMarket.create(MIN_CREATION_AMOUNT - 1)).to.be.revertedWith(
                 "min amount"
             );

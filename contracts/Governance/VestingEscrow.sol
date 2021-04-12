@@ -5,7 +5,6 @@ pragma solidity 0.6.9;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -13,19 +12,18 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
 
     event Fund(address indexed recipient, uint256 amount);
-    event Claim(address indexed recipient, uint256 claimed);
+    event Claim(address indexed recipient, uint256 amount);
 
     event ToggleDisable(address recipient, bool disabled);
 
     address public immutable token;
+    address public immutable recipient;
     uint256 public immutable startTime;
     uint256 public immutable endTime;
-    address public immutable recipient;
+    bool public canDisable;
 
     uint256 public initialLocked;
     uint256 public totalClaimed;
-
-    bool public canDisable;
     uint256 public disabledAt;
 
     constructor(
@@ -36,10 +34,10 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
         bool canDisable_
     ) public {
         token = token_;
+        recipient = recipient_;
         startTime = startTime_;
         endTime = endTime_;
         canDisable = canDisable_;
-        recipient = recipient_;
     }
 
     function initialize(uint256 amount) external {
@@ -114,7 +112,9 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
         uint256 locked = initialLocked;
         if (timestamp < start) {
             return 0;
+        } else if (timestamp > end) {
+            return locked;
         }
-        return Math.min((locked.mul(timestamp.sub(start))).div(end.sub(start)), locked);
+        return locked.mul(timestamp.sub(start)).div(end - start);
     }
 }

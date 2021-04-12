@@ -21,7 +21,7 @@ describe("Vesting", function () {
         readonly wallets: FixtureWalletMap;
         readonly startWeek: number;
         readonly endWeek: number;
-        readonly intialVestedSupply: BigNumber;
+        readonly initialVestedSupply: BigNumber;
         readonly chess: Contract;
         readonly vestingEscrow: Contract;
     }
@@ -30,7 +30,7 @@ describe("Vesting", function () {
     let fixtureData: FixtureData;
 
     let startWeek: number;
-    let intialVestedSupply: BigNumber;
+    let initialVestedSupply: BigNumber;
     let user1: Wallet;
     let user2: Wallet;
     let owner: Wallet;
@@ -41,7 +41,7 @@ describe("Vesting", function () {
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
         const [user1, user2, owner] = provider.getWallets();
-        const intialVestedSupply = parseEther("100");
+        const initialVestedSupply = parseEther("100");
 
         // Start at the midnight in the next Thursday.
         const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
@@ -60,15 +60,15 @@ describe("Vesting", function () {
             true
         );
 
-        await chess.connect(owner).approve(vestingEscrow.address, intialVestedSupply);
+        await chess.connect(owner).approve(vestingEscrow.address, initialVestedSupply);
 
-        await vestingEscrow.connect(owner).initialize(intialVestedSupply);
+        await vestingEscrow.connect(owner).initialize(initialVestedSupply);
 
         return {
             wallets: { user1, user2, owner },
             startWeek,
             endWeek,
-            intialVestedSupply,
+            initialVestedSupply,
             chess,
             vestingEscrow: vestingEscrow.connect(owner),
         };
@@ -86,7 +86,7 @@ describe("Vesting", function () {
         addr1 = user1.address;
         addr2 = user2.address;
         startWeek = fixtureData.startWeek;
-        intialVestedSupply = fixtureData.intialVestedSupply;
+        initialVestedSupply = fixtureData.initialVestedSupply;
         chess = fixtureData.chess;
         vestingEscrow = fixtureData.vestingEscrow;
     });
@@ -97,7 +97,7 @@ describe("Vesting", function () {
         });
 
         it("Should revert with already initialized", async function () {
-            await expect(vestingEscrow.initialize(intialVestedSupply)).to.revertedWith(
+            await expect(vestingEscrow.initialize(initialVestedSupply)).to.revertedWith(
                 "Already initialized"
             );
         });
@@ -126,7 +126,7 @@ describe("Vesting", function () {
     describe("claim()", function () {
         it("Should have nothing to claim before startTime", async function () {
             expect(await vestingEscrow.vestedSupply()).to.equal(0);
-            expect(await vestingEscrow.lockedSupply()).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.lockedSupply()).to.equal(initialVestedSupply);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
 
             await expect(vestingEscrow.claim()).to.emit(vestingEscrow, "Claim").withArgs(addr1, 0);
@@ -135,12 +135,12 @@ describe("Vesting", function () {
         it("Should have a clean state at the beginning of start time", async function () {
             advanceBlockAtTime(startWeek);
             expect(await vestingEscrow.vestedSupply()).to.equal(0);
-            expect(await vestingEscrow.lockedSupply()).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.lockedSupply()).to.equal(initialVestedSupply);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
         });
 
         it("Should claim", async function () {
-            const halfVestedSupply = intialVestedSupply.div(2);
+            const halfVestedSupply = initialVestedSupply.div(2);
             advanceBlockAtTime(startWeek + WEEK);
 
             expect(await vestingEscrow.totalClaimed()).to.equal(0);
@@ -153,7 +153,7 @@ describe("Vesting", function () {
             const claimed = await chess.balanceOf(addr1);
             expect(await vestingEscrow.totalClaimed()).to.equal(claimed);
             expect(await vestingEscrow.vestedSupply()).to.equal(claimed);
-            expect(await vestingEscrow.lockedSupply()).to.equal(intialVestedSupply.sub(claimed));
+            expect(await vestingEscrow.lockedSupply()).to.equal(initialVestedSupply.sub(claimed));
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
         });
 
@@ -161,16 +161,16 @@ describe("Vesting", function () {
             advanceBlockAtTime(startWeek + WEEK * 2);
 
             expect(await vestingEscrow.totalClaimed()).to.equal(0);
-            expect(await vestingEscrow.vestedSupply()).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.vestedSupply()).to.equal(initialVestedSupply);
             expect(await vestingEscrow.lockedSupply()).to.equal(0);
-            expect(await vestingEscrow.balanceOf(addr1)).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.balanceOf(addr1)).to.equal(initialVestedSupply);
             expect(await vestingEscrow.balanceOf(addr2)).to.equal(0);
 
             await vestingEscrow.claim();
 
-            expect(await chess.balanceOf(addr1)).to.equal(intialVestedSupply);
-            expect(await vestingEscrow.totalClaimed()).to.equal(intialVestedSupply);
-            expect(await vestingEscrow.vestedSupply()).to.equal(intialVestedSupply);
+            expect(await chess.balanceOf(addr1)).to.equal(initialVestedSupply);
+            expect(await vestingEscrow.totalClaimed()).to.equal(initialVestedSupply);
+            expect(await vestingEscrow.vestedSupply()).to.equal(initialVestedSupply);
             expect(await vestingEscrow.lockedSupply()).to.equal(0);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
         });
