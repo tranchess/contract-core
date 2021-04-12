@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.6.9;
 
-/// @title Simple Vesting Escrow
-/// @author Curve Finance
-/// @license MIT
-/// @notice Vests `ERC20CRV` tokens for a single address
-/// @dev Intended to be deployed many times via `VotingEscrowFactory`
+/// @notice Vests `Chess` tokens for a single address
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -27,7 +23,6 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
     address public immutable recipient;
 
     uint256 public initialLocked;
-    uint256 public initialLockedSupply;
     uint256 public totalClaimed;
 
     bool public canDisable;
@@ -47,32 +42,26 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
         recipient = recipient_;
     }
 
-    function initialize(uint256 amount_) external {
-        require(amount_ != 0, "Zero amount");
+    function initialize(uint256 amount) external {
+        require(amount != 0, "Zero amount");
         require(initialLocked == 0, "Already initialized");
 
-        IERC20(token).transferFrom(msg.sender, address(this), amount_);
+        IERC20(token).transferFrom(msg.sender, address(this), amount);
 
-        initialLocked = amount_;
-        initialLockedSupply = amount_;
-        emit Fund(recipient, amount_);
+        initialLocked = amount;
+        emit Fund(recipient, amount);
     }
 
     /// @notice Get the total number of tokens which have vested, that are held
     ///         by this contract
     function vestedSupply() external view returns (uint256) {
-        return _totalVested();
+        return _totalVestedOf(block.timestamp);
     }
 
     /// @notice Get the total number of tokens which are still locked
     ///         (have not yet vested)
     function lockedSupply() external view returns (uint256) {
-        return initialLockedSupply.sub(_totalVested());
-    }
-
-    /// @notice Get the number of tokens which have vested for a given address
-    function vestedOf() external view returns (uint256) {
-        return _totalVestedOf(block.timestamp);
+        return initialLocked.sub(_totalVestedOf(block.timestamp));
     }
 
     /// @notice Get the number of unclaimed, vested tokens for a given address
@@ -82,11 +71,6 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
             return 0;
         }
         return _totalVestedOf(block.timestamp).sub(totalClaimed);
-    }
-
-    /// @notice Get the number of locked tokens for a given address
-    function lockedOf() external view returns (uint256) {
-        return initialLocked.sub(_totalVestedOf(block.timestamp));
     }
 
     /// @notice Disable or re-enable a vested address's ability to claim tokens
@@ -132,15 +116,5 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
             return 0;
         }
         return Math.min((locked.mul(timestamp.sub(start))).div(end.sub(start)), locked);
-    }
-
-    function _totalVested() internal view returns (uint256) {
-        uint256 start = startTime;
-        uint256 end = endTime;
-        uint256 locked = initialLockedSupply;
-        if (block.timestamp < start) {
-            return 0;
-        }
-        return Math.min((locked.mul(block.timestamp.sub(start))).div(end.sub(start)), locked);
     }
 }

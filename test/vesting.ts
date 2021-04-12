@@ -127,9 +127,7 @@ describe("Vesting", function () {
         it("Should have nothing to claim before startTime", async function () {
             expect(await vestingEscrow.vestedSupply()).to.equal(0);
             expect(await vestingEscrow.lockedSupply()).to.equal(intialVestedSupply);
-            expect(await vestingEscrow.vestedOf()).to.equal(0);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
-            expect(await vestingEscrow.lockedOf()).to.equal(intialVestedSupply);
 
             await expect(vestingEscrow.claim()).to.emit(vestingEscrow, "Claim").withArgs(addr1, 0);
         });
@@ -138,9 +136,7 @@ describe("Vesting", function () {
             advanceBlockAtTime(startWeek);
             expect(await vestingEscrow.vestedSupply()).to.equal(0);
             expect(await vestingEscrow.lockedSupply()).to.equal(intialVestedSupply);
-            expect(await vestingEscrow.vestedOf()).to.equal(0);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
-            expect(await vestingEscrow.lockedOf()).to.equal(intialVestedSupply);
         });
 
         it("Should claim", async function () {
@@ -150,9 +146,7 @@ describe("Vesting", function () {
             expect(await vestingEscrow.totalClaimed()).to.equal(0);
             expect(await vestingEscrow.vestedSupply()).to.equal(halfVestedSupply);
             expect(await vestingEscrow.lockedSupply()).to.equal(halfVestedSupply);
-            expect(await vestingEscrow.vestedOf()).to.equal(halfVestedSupply);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(halfVestedSupply);
-            expect(await vestingEscrow.lockedOf()).to.equal(halfVestedSupply);
 
             await vestingEscrow.claim();
 
@@ -160,9 +154,7 @@ describe("Vesting", function () {
             expect(await vestingEscrow.totalClaimed()).to.equal(claimed);
             expect(await vestingEscrow.vestedSupply()).to.equal(claimed);
             expect(await vestingEscrow.lockedSupply()).to.equal(intialVestedSupply.sub(claimed));
-            expect(await vestingEscrow.vestedOf()).to.equal(claimed);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
-            expect(await vestingEscrow.lockedOf()).to.equal(intialVestedSupply.sub(claimed));
         });
 
         it("Should have nothing to claim at the end", async function () {
@@ -171,10 +163,8 @@ describe("Vesting", function () {
             expect(await vestingEscrow.totalClaimed()).to.equal(0);
             expect(await vestingEscrow.vestedSupply()).to.equal(intialVestedSupply);
             expect(await vestingEscrow.lockedSupply()).to.equal(0);
-            expect(await vestingEscrow.vestedOf()).to.equal(intialVestedSupply);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(intialVestedSupply);
             expect(await vestingEscrow.balanceOf(addr2)).to.equal(0);
-            expect(await vestingEscrow.lockedOf()).to.equal(0);
 
             await vestingEscrow.claim();
 
@@ -182,9 +172,7 @@ describe("Vesting", function () {
             expect(await vestingEscrow.totalClaimed()).to.equal(intialVestedSupply);
             expect(await vestingEscrow.vestedSupply()).to.equal(intialVestedSupply);
             expect(await vestingEscrow.lockedSupply()).to.equal(0);
-            expect(await vestingEscrow.vestedOf()).to.equal(intialVestedSupply);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
-            expect(await vestingEscrow.lockedOf()).to.equal(0);
         });
     });
 });
