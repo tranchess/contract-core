@@ -21,37 +21,40 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
 
     event ToggleDisable(address recipient, bool disabled);
 
-    address public token;
-    uint256 public startTime;
-    uint256 public endTime;
-    mapping(address => uint256) public initialLocked;
-    mapping(address => uint256) public totalClaimed;
+    address public immutable token;
+    uint256 public immutable startTime;
+    uint256 public immutable endTime;
+    address public immutable recipient;
 
+    uint256 public initialLocked;
     uint256 public initialLockedSupply;
+    uint256 public totalClaimed;
 
     bool public canDisable;
-    mapping(address => uint256) public disabledAt;
+    uint256 public disabledAt;
 
-    function initialize(
+    constructor(
         address _token,
         address _recipient,
-        uint256 _amount,
         uint256 _startTime,
         uint256 _endTime,
         bool _canDisable
-    ) external {
-        require(endTime == 0, "Already initialized");
-
+    ) public {
         token = _token;
         startTime = _startTime;
         endTime = _endTime;
         canDisable = _canDisable;
+        recipient = _recipient;
+    }
 
-        IERC20(_token).transferFrom(msg.sender, address(this), _amount);
+    function initialize(uint256 _amount) external {
+        require(initialLocked == 0, "Already initialized");
 
-        initialLocked[_recipient] = _amount;
+        IERC20(token).transferFrom(msg.sender, address(this), _amount);
+
+        initialLocked = _amount;
         initialLockedSupply = _amount;
-        emit Fund(_recipient, _amount);
+        emit Fund(recipient, _amount);
     }
 
     /// @notice Get the total number of tokens which have vested, that are held
@@ -67,36 +70,36 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
     }
 
     /// @notice Get the number of tokens which have vested for a given address
-    /// @param recipient address to check
-    function vestedOf(address recipient) external view returns (uint256) {
-        return _totalVestedOf(recipient, block.timestamp);
+    function vestedOf() external view returns (uint256) {
+        return _totalVestedOf(block.timestamp);
     }
 
     /// @notice Get the number of unclaimed, vested tokens for a given address
-    /// @param recipient address to check
-    function balanceOf(address recipient) external view returns (uint256) {
-        return _totalVestedOf(recipient, block.timestamp).sub(totalClaimed[recipient]);
+    /// @param account address to check
+    function balanceOf(address account) external view returns (uint256) {
+        if (account != recipient) {
+            return 0;
+        }
+        return _totalVestedOf(block.timestamp).sub(totalClaimed);
     }
 
     /// @notice Get the number of locked tokens for a given address
-    /// @param recipient address to check
-    function lockedOf(address recipient) external view returns (uint256) {
-        return initialLocked[recipient].sub(_totalVestedOf(recipient, block.timestamp));
+    function lockedOf() external view returns (uint256) {
+        return initialLocked.sub(_totalVestedOf(block.timestamp));
     }
 
     /// @notice Disable or re-enable a vested address's ability to claim tokens
     /// @dev When disabled, the address is only unable to claim tokens which are still
     ///      locked at the time of this call. It is not possible to block the claim
     ///      of tokens which have already vested.
-    /// @param recipient Address to disable or enable
-    function toggleDisable(address recipient) external onlyOwner {
+    function toggleDisable() external onlyOwner {
         require(canDisable, "Cannot disable");
 
-        bool isDisabled = disabledAt[recipient] == 0;
+        bool isDisabled = disabledAt == 0;
         if (isDisabled) {
-            disabledAt[recipient] = block.timestamp;
+            disabledAt = block.timestamp;
         } else {
-            disabledAt[recipient] = 0;
+            disabledAt = 0;
         }
 
         emit ToggleDisable(recipient, isDisabled);
@@ -108,23 +111,22 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
     }
 
     /// @notice Claim tokens which have vested
-    /// @param recipient Address to claim tokens for
-    function claim(address recipient) external nonReentrant {
-        uint256 timestamp = disabledAt[recipient];
+    function claim() external nonReentrant {
+        uint256 timestamp = disabledAt;
         if (timestamp == 0) {
             timestamp = block.timestamp;
         }
-        uint256 claimable = _totalVestedOf(recipient, timestamp).sub(totalClaimed[recipient]);
-        totalClaimed[recipient] = totalClaimed[recipient].add(claimable);
+        uint256 claimable = _totalVestedOf(timestamp).sub(totalClaimed);
+        totalClaimed = totalClaimed.add(claimable);
         IERC20(token).transfer(recipient, claimable);
 
         emit Claim(recipient, claimable);
     }
 
-    function _totalVestedOf(address recipient, uint256 timestamp) internal view returns (uint256) {
+    function _totalVestedOf(uint256 timestamp) internal view returns (uint256) {
         uint256 start = startTime;
         uint256 end = endTime;
-        uint256 locked = initialLocked[recipient];
+        uint256 locked = initialLocked;
         if (timestamp < start) {
             return 0;
         }

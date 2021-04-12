@@ -52,13 +52,17 @@ describe("Vesting", function () {
         const chess = await Chess.connect(owner).deploy();
 
         const VestingEscrow = await ethers.getContractFactory("VestingEscrow");
-        const vestingEscrow = await VestingEscrow.connect(owner).deploy();
+        const vestingEscrow = await VestingEscrow.connect(owner).deploy(
+            chess.address,
+            user1.address,
+            startWeek,
+            endWeek,
+            true
+        );
 
         await chess.connect(owner).approve(vestingEscrow.address, intialVestedSupply);
 
-        await vestingEscrow
-            .connect(owner)
-            .initialize(chess.address, user1.address, intialVestedSupply, startWeek, endWeek, true);
+        await vestingEscrow.connect(owner).initialize(intialVestedSupply);
 
         return {
             wallets: { user1, user2, owner },
@@ -89,11 +93,11 @@ describe("Vesting", function () {
 
     describe("toggleDisable()", function () {
         it("Should disable the recipient", async function () {
-            await expect(vestingEscrow.toggleDisable(addr1))
+            await expect(vestingEscrow.toggleDisable())
                 .to.emit(vestingEscrow, "ToggleDisable")
                 .withArgs(addr1, true);
 
-            await expect(vestingEscrow.toggleDisable(addr1))
+            await expect(vestingEscrow.toggleDisable())
                 .to.emit(vestingEscrow, "ToggleDisable")
                 .withArgs(addr1, false);
         });
@@ -103,7 +107,7 @@ describe("Vesting", function () {
         it("Should disable canDisable", async function () {
             await vestingEscrow.disableCanDisable();
 
-            await expect(vestingEscrow.toggleDisable(addr1)).to.be.revertedWith("Cannot disable");
+            await expect(vestingEscrow.toggleDisable()).to.be.revertedWith("Cannot disable");
         });
     });
 
@@ -111,69 +115,64 @@ describe("Vesting", function () {
         it("Should have nothing to claim before startTime", async function () {
             expect(await vestingEscrow.vestedSupply()).to.equal(0);
             expect(await vestingEscrow.lockedSupply()).to.equal(intialVestedSupply);
-            expect(await vestingEscrow.vestedOf(addr1)).to.equal(0);
+            expect(await vestingEscrow.vestedOf()).to.equal(0);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
-            expect(await vestingEscrow.lockedOf(addr1)).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.lockedOf()).to.equal(intialVestedSupply);
 
-            await expect(vestingEscrow.claim(addr1))
-                .to.emit(vestingEscrow, "Claim")
-                .withArgs(addr1, 0);
+            await expect(vestingEscrow.claim()).to.emit(vestingEscrow, "Claim").withArgs(addr1, 0);
         });
 
         it("Should have a clean state at the beginning of start time", async function () {
             advanceBlockAtTime(startWeek);
             expect(await vestingEscrow.vestedSupply()).to.equal(0);
             expect(await vestingEscrow.lockedSupply()).to.equal(intialVestedSupply);
-            expect(await vestingEscrow.vestedOf(addr1)).to.equal(0);
+            expect(await vestingEscrow.vestedOf()).to.equal(0);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
-            expect(await vestingEscrow.lockedOf(addr1)).to.equal(intialVestedSupply);
-
-            expect(await vestingEscrow.vestedOf(addr2)).to.equal(0);
-            expect(await vestingEscrow.balanceOf(addr2)).to.equal(0);
-            expect(await vestingEscrow.lockedOf(addr2)).to.equal(0);
+            expect(await vestingEscrow.lockedOf()).to.equal(intialVestedSupply);
         });
 
         it("Should claim", async function () {
             const halfVestedSupply = intialVestedSupply.div(2);
             advanceBlockAtTime(startWeek + WEEK);
 
-            expect(await vestingEscrow.totalClaimed(addr1)).to.equal(0);
+            expect(await vestingEscrow.totalClaimed()).to.equal(0);
             expect(await vestingEscrow.vestedSupply()).to.equal(halfVestedSupply);
             expect(await vestingEscrow.lockedSupply()).to.equal(halfVestedSupply);
-            expect(await vestingEscrow.vestedOf(addr1)).to.equal(halfVestedSupply);
+            expect(await vestingEscrow.vestedOf()).to.equal(halfVestedSupply);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(halfVestedSupply);
-            expect(await vestingEscrow.lockedOf(addr1)).to.equal(halfVestedSupply);
+            expect(await vestingEscrow.lockedOf()).to.equal(halfVestedSupply);
 
-            await vestingEscrow.claim(addr1);
+            await vestingEscrow.claim();
 
             const claimed = await chess.balanceOf(addr1);
-            expect(await vestingEscrow.totalClaimed(addr1)).to.equal(claimed);
+            expect(await vestingEscrow.totalClaimed()).to.equal(claimed);
             expect(await vestingEscrow.vestedSupply()).to.equal(claimed);
             expect(await vestingEscrow.lockedSupply()).to.equal(intialVestedSupply.sub(claimed));
-            expect(await vestingEscrow.vestedOf(addr1)).to.equal(claimed);
+            expect(await vestingEscrow.vestedOf()).to.equal(claimed);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
-            expect(await vestingEscrow.lockedOf(addr1)).to.equal(intialVestedSupply.sub(claimed));
+            expect(await vestingEscrow.lockedOf()).to.equal(intialVestedSupply.sub(claimed));
         });
 
         it("Should have nothing to claim at the end", async function () {
             advanceBlockAtTime(startWeek + WEEK * 2);
 
-            expect(await vestingEscrow.totalClaimed(addr1)).to.equal(0);
+            expect(await vestingEscrow.totalClaimed()).to.equal(0);
             expect(await vestingEscrow.vestedSupply()).to.equal(intialVestedSupply);
             expect(await vestingEscrow.lockedSupply()).to.equal(0);
-            expect(await vestingEscrow.vestedOf(addr1)).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.vestedOf()).to.equal(intialVestedSupply);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(intialVestedSupply);
-            expect(await vestingEscrow.lockedOf(addr1)).to.equal(0);
+            expect(await vestingEscrow.balanceOf(addr2)).to.equal(0);
+            expect(await vestingEscrow.lockedOf()).to.equal(0);
 
-            await vestingEscrow.claim(addr1);
+            await vestingEscrow.claim();
 
             expect(await chess.balanceOf(addr1)).to.equal(intialVestedSupply);
-            expect(await vestingEscrow.totalClaimed(addr1)).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.totalClaimed()).to.equal(intialVestedSupply);
             expect(await vestingEscrow.vestedSupply()).to.equal(intialVestedSupply);
             expect(await vestingEscrow.lockedSupply()).to.equal(0);
-            expect(await vestingEscrow.vestedOf(addr1)).to.equal(intialVestedSupply);
+            expect(await vestingEscrow.vestedOf()).to.equal(intialVestedSupply);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
-            expect(await vestingEscrow.lockedOf(addr1)).to.equal(0);
+            expect(await vestingEscrow.lockedOf()).to.equal(0);
         });
     });
 });
