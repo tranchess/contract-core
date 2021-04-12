@@ -91,6 +91,18 @@ describe("Vesting", function () {
         vestingEscrow = fixtureData.vestingEscrow;
     });
 
+    describe("initialize()", function () {
+        it("Should revert with zero amount", async function () {
+            await expect(vestingEscrow.initialize(0)).to.revertedWith("Zero amount");
+        });
+
+        it("Should revert with already initialized", async function () {
+            await expect(vestingEscrow.initialize(intialVestedSupply)).to.revertedWith(
+                "Already initialized"
+            );
+        });
+    });
+
     describe("toggleDisable()", function () {
         it("Should disable the recipient", async function () {
             await expect(vestingEscrow.toggleDisable())

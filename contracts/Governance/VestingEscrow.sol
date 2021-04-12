@@ -34,27 +34,28 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
     uint256 public disabledAt;
 
     constructor(
-        address _token,
-        address _recipient,
-        uint256 _startTime,
-        uint256 _endTime,
-        bool _canDisable
+        address token_,
+        address recipient_,
+        uint256 startTime_,
+        uint256 endTime_,
+        bool canDisable_
     ) public {
-        token = _token;
-        startTime = _startTime;
-        endTime = _endTime;
-        canDisable = _canDisable;
-        recipient = _recipient;
+        token = token_;
+        startTime = startTime_;
+        endTime = endTime_;
+        canDisable = canDisable_;
+        recipient = recipient_;
     }
 
-    function initialize(uint256 _amount) external {
+    function initialize(uint256 amount_) external {
+        require(amount_ != 0, "Zero amount");
         require(initialLocked == 0, "Already initialized");
 
-        IERC20(token).transferFrom(msg.sender, address(this), _amount);
+        IERC20(token).transferFrom(msg.sender, address(this), amount_);
 
-        initialLocked = _amount;
-        initialLockedSupply = _amount;
-        emit Fund(recipient, _amount);
+        initialLocked = amount_;
+        initialLockedSupply = amount_;
+        emit Fund(recipient, amount_);
     }
 
     /// @notice Get the total number of tokens which have vested, that are held
