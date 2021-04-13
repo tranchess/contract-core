@@ -115,6 +115,6 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
         } else if (timestamp > end) {
             return locked;
         }
-        return locked.mul(timestamp.sub(start)).div(end - start);
+        return locked.mul(timestamp - start).div(end - start);
     }
 }
