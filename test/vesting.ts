@@ -107,11 +107,11 @@ describe("Vesting", function () {
         it("Should disable the recipient", async function () {
             await expect(vestingEscrow.toggleDisable())
                 .to.emit(vestingEscrow, "ToggleDisable")
-                .withArgs(addr1, true);
+                .withArgs(true);
 
             await expect(vestingEscrow.toggleDisable())
                 .to.emit(vestingEscrow, "ToggleDisable")
-                .withArgs(addr1, false);
+                .withArgs(false);
         });
     });
 
@@ -129,7 +129,7 @@ describe("Vesting", function () {
             expect(await vestingEscrow.lockedSupply()).to.equal(initialVestedSupply);
             expect(await vestingEscrow.balanceOf(addr1)).to.equal(0);
 
-            await expect(vestingEscrow.claim()).to.emit(vestingEscrow, "Claim").withArgs(addr1, 0);
+            await expect(vestingEscrow.claim()).to.emit(vestingEscrow, "Claim").withArgs(0);
         });
 
         it("Should have a clean state at the beginning of start time", async function () {

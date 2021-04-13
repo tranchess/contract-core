@@ -11,10 +11,9 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 contract VestingEscrow is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
 
-    event Fund(address indexed recipient, uint256 amount);
-    event Claim(address indexed recipient, uint256 amount);
-
-    event ToggleDisable(address recipient, bool disabled);
+    event Fund(uint256 amount);
+    event Claim(uint256 amount);
+    event ToggleDisable(bool disabled);
 
     address public immutable token;
     address public immutable recipient;
@@ -47,7 +46,7 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
         IERC20(token).transferFrom(msg.sender, address(this), amount);
 
         initialLocked = amount;
-        emit Fund(recipient, amount);
+        emit Fund(amount);
     }
 
     /// @notice Get the total number of tokens which have vested, that are held
@@ -85,7 +84,7 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
             disabledAt = 0;
         }
 
-        emit ToggleDisable(recipient, isDisabled);
+        emit ToggleDisable(isDisabled);
     }
 
     /// @notice Disable the ability to call `toggleDisable`
@@ -103,7 +102,7 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
         totalClaimed = totalClaimed.add(claimable);
         IERC20(token).transfer(recipient, claimable);
 
-        emit Claim(recipient, claimable);
+        emit Claim(claimable);
     }
 
     function _totalVestedOf(uint256 timestamp) internal view returns (uint256) {

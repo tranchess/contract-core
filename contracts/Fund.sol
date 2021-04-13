@@ -551,6 +551,29 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         }
     }
 
+    /// @notice Return all three share balances to the latest conversion
+    /// @param account Owner of the shares
+    function allShareBalanceOf(address account)
+        external
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256
+        )
+    {
+        uint256 amountP = _balances[account][TRANCHE_P];
+        uint256 amountA = _balances[account][TRANCHE_A];
+        uint256 amountB = _balances[account][TRANCHE_B];
+
+        uint256 size = _conversionSize; // Gas saver
+        for (uint256 i = _balanceVersions[account]; i < size; i++) {
+            (amountP, amountA, amountB) = _convert(amountP, amountA, amountB, i);
+        }
+
+        return (amountP, amountA, amountB);
+    }
+
     function shareBalanceVersion(address account) external view override returns (uint256) {
         return _balanceVersions[account];
     }
