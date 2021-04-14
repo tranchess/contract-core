@@ -102,7 +102,7 @@ contract AprOracle is IAprOracle, Exponential {
             newAaveBorrowRate.sub(aaveBorrowIndex).divideDecimal(aaveBorrowIndex);
 
         uint256 dailyRate =
-            compoundPeriodicRate.add(aavePeriodicRate).mul(0.5 days).div(
+            compoundPeriodicRate.add(aavePeriodicRate).mul(1 days).div(2).div(
                 block.timestamp.sub(timestamp)
             );
 
