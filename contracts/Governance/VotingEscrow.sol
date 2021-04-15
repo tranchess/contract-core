@@ -48,7 +48,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         returns (uint256)
     {
         LockedBalance memory lockedBalance = locked[account];
-        if (lockedBalance.amount <= threshold) {
+        if (lockedBalance.amount < threshold) {
             return 0;
         }
         return lockedBalance.unlockTime - ((maxTime * threshold) / lockedBalance.amount);
@@ -89,7 +89,6 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         LockedBalance memory lockedBalance = locked[account];
 
         require(amount > 0, "zero value");
-        require(lockedBalance.amount > 0, "No existing lock found");
         require(lockedBalance.unlockTime > block.timestamp, "Cannot add to expired lock. Withdraw");
 
         _lock(account, amount, 0, lockedBalance, LockType.DEPOSIT_FOR_TYPE);
@@ -104,7 +103,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         require(amount > 0, "zero value");
         require(lockedBalance.amount == 0, "Withdraw old tokens first");
         require(unlockTime > block.timestamp, "Can only lock until time in the future");
-        require(unlockTime <= block.timestamp + maxTime, "Voting lock can be 4 years max");
+        require(unlockTime <= block.timestamp + maxTime, "Voting lock cannot exceed max lock time");
 
         _lock(msg.sender, amount, unlockTime, lockedBalance, LockType.CREATE_LOCK_TYPE);
     }
@@ -114,7 +113,6 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         LockedBalance memory lockedBalance = locked[msg.sender];
 
         require(amount > 0, "zero value");
-        require(lockedBalance.amount > 0, "No existing lock found");
         require(lockedBalance.unlockTime > block.timestamp, "Cannot add to expired lock. Withdraw");
 
         _lock(msg.sender, amount, 0, lockedBalance, LockType.INCREASE_LOCK_AMOUNT);
@@ -126,9 +124,8 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         unlockTime = (unlockTime / 1 weeks) * 1 weeks; // Locktime is rounded down to weeks
 
         require(lockedBalance.unlockTime > block.timestamp, "Lock expired");
-        require(lockedBalance.amount > 0, "Nothing is locked");
         require(unlockTime > lockedBalance.unlockTime, "Can only increase lock duration");
-        require(unlockTime <= block.timestamp + maxTime, "Voting lock can be 4 years max");
+        require(unlockTime <= block.timestamp + maxTime, "Voting lock cannot exceed max lock time");
 
         _lock(msg.sender, 0, unlockTime, lockedBalance, LockType.INCREASE_UNLOCK_TIME);
     }
@@ -144,7 +141,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
 
         IERC20(token).transfer(msg.sender, amount);
 
-        emit Withdrawn(msg.sender, amount, block.timestamp);
+        emit Withdrawn(msg.sender, amount);
     }
 
     // -------------------------------------------------------------------------
@@ -195,16 +192,15 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
             // update unlock time per account
             locked[account].unlockTime = unlockTime;
         } else {
-            scheduledUnlock[unlockTime] += amount;
+            scheduledUnlock[lockedBalance.unlockTime] += amount;
         }
-
-        // update locked amount per account
-        locked[account].amount = lockedBalance.amount + amount;
 
         if (amount != 0) {
             IERC20(token).transferFrom(account, address(this), amount);
+            // update locked amount per account
+            locked[account].amount = lockedBalance.amount + amount;
         }
 
-        emit Locked(account, amount, unlockTime, lockType, block.timestamp);
+        emit Locked(account, amount, unlockTime, lockType);
     }
 }

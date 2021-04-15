@@ -20,10 +20,9 @@ interface IVotingEscrow {
         address indexed account,
         uint256 amount,
         uint256 indexed unlockTime,
-        LockType lockType,
-        uint256 blockTimestamp
+        LockType lockType
     );
-    event Withdrawn(address indexed account, uint256 amount, uint256 blockTimestamp);
+    event Withdrawn(address indexed account, uint256 amount);
 
     function token() external view returns (address);
 
