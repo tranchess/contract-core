@@ -7,22 +7,35 @@ import {
     TEST_APR_ORACLE,
     TEST_WBTC,
     TEST_USDC,
+    TEST_MIN_CREATION,
     STAGING_TWAP_ORACLE,
     STAGING_APR_ORACLE,
     STAGING_WBTC,
     STAGING_USDC,
+    STAGING_MIN_CREATION,
 } from "../config";
 import { BigNumber } from "ethers";
+
+function getAddressFilename(network: string) {
+    const now = new Date();
+    let s = now.toISOString();
+    s = s.split(".")[0];
+    s = s.replace("T", "_");
+    s = s.split("-").join("");
+    s = s.split(":").join("");
+    return `deploy_${network}_${s}.json`;
+}
 
 task("deploy", "Deploy contracts", async (_args, hre) => {
     const { ethers } = hre;
     const { parseEther, parseUnits } = ethers.utils;
 
-    const CONTRACT_ADDRESS_DIR = path.join(__dirname, "..", "cache");
-    if (!fs.existsSync(CONTRACT_ADDRESS_DIR)) {
-        fs.mkdirSync(CONTRACT_ADDRESS_DIR);
+    const ADDRESS_FILE_LOCATION = path.join(__dirname, "..", "cache");
+    if (!fs.existsSync(ADDRESS_FILE_LOCATION)) {
+        fs.mkdirSync(ADDRESS_FILE_LOCATION);
     }
-    const contractAddress = editJsonFile(path.join(CONTRACT_ADDRESS_DIR, "contract_address.json"), {
+    const addressFilename = path.join(ADDRESS_FILE_LOCATION, getAddressFilename(hre.network.name));
+    const addressFile = editJsonFile(addressFilename, {
         autosave: true,
     });
     const [deployer] = await ethers.getSigners();
@@ -33,34 +46,33 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
     let aprOracleAddress;
     let wbtcAddress;
     let usdcAddress;
-    if (hre.network.name === "test") {
+    let minCreation;
+    if (hre.network.name === "test" || hre.network.name === "hardhat") {
         twapOracleAddress = TEST_TWAP_ORACLE;
         aprOracleAddress = TEST_APR_ORACLE;
         wbtcAddress = TEST_WBTC;
         usdcAddress = TEST_USDC;
+        minCreation = TEST_MIN_CREATION;
     } else if (hre.network.name === "staging") {
         twapOracleAddress = STAGING_TWAP_ORACLE;
         aprOracleAddress = STAGING_APR_ORACLE;
         wbtcAddress = STAGING_WBTC;
         usdcAddress = STAGING_USDC;
+        minCreation = STAGING_MIN_CREATION;
+    } else {
+        console.error("ERROR: Unknown hardhat network:", hre.network.name);
+        return;
     }
 
     if (!twapOracleAddress) {
         const MockTwapOracle = await ethers.getContractFactory("MockTwapOracle");
         const mockTwapOracle = await MockTwapOracle.deploy();
         twapOracleAddress = mockTwapOracle.address;
-        contractAddress.set("test.mock_twap_oracle", twapOracleAddress);
+        addressFile.set("mock_twap_oracle", twapOracleAddress);
         console.log("TwapOracle:", twapOracleAddress);
         await mockTwapOracle.updateYesterdayPrice(parseEther("20000"));
     }
-
-    if (!aprOracleAddress) {
-        const MockAprOracle = await ethers.getContractFactory("MockAprOracle");
-        const mockAprOracle = await MockAprOracle.deploy();
-        aprOracleAddress = mockAprOracle.address;
-        contractAddress.set("test.mock_apr_oracle", aprOracleAddress);
-        console.log("AprOracle:", aprOracleAddress);
-    }
+    addressFile.set("twap_oracle", twapOracleAddress);
 
     const MockToken = await ethers.getContractFactory("MockToken");
     let wbtc;
@@ -68,18 +80,21 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
         wbtc = await MockToken.deploy("Mock WBTC", "WBTC", 8);
         await wbtc.mint(deployer.address, 1000000e8);
         wbtcAddress = wbtc.address;
-        contractAddress.set("test.mock_wbtc", wbtcAddress);
+        addressFile.set("mock_wbtc", wbtcAddress);
         console.log("WBTC:", wbtcAddress);
     } else {
         wbtc = await MockToken.attach(wbtcAddress);
     }
+    addressFile.set("wbtc", wbtcAddress);
+    const wbtcDecimals = await wbtc.decimals();
     if (!usdcAddress) {
         const usdc = await MockToken.deploy("Mock USDC", "USDC", 6);
         await usdc.mint(deployer.address, 1000000e6);
         usdcAddress = usdc.address;
-        contractAddress.set("test.mock_usdc", usdcAddress);
+        addressFile.set("mock_usdc", usdcAddress);
         console.log("USDC:", usdcAddress);
     }
+    addressFile.set("usdc", usdcAddress);
 
     const Fund = await ethers.getContractFactory("Fund");
     const fund = await Fund.deploy(
@@ -89,13 +104,29 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
         parseEther("1.1"),
         twapOracleAddress
     );
-    contractAddress.set("test.fund", fund.address);
+    addressFile.set("fund", fund.address);
     console.log("Fund:", fund.address);
+
+    if (!aprOracleAddress) {
+        if (hre.network.name === "test" || hre.network.name === "hardhat") {
+            const MockAprOracle = await ethers.getContractFactory("MockAprOracle");
+            const mockAprOracle = await MockAprOracle.deploy();
+            aprOracleAddress = mockAprOracle.address;
+            addressFile.set("mock_apr_oracle", aprOracleAddress);
+        } else {
+            const BscAprOracle = await ethers.getContractFactory("BscAprOracle");
+            const bscAprOracle = await BscAprOracle.deploy("Venus USDC APR oracle", fund.address);
+            aprOracleAddress = bscAprOracle.address;
+            addressFile.set("bsc_apr_oracle", aprOracleAddress);
+        }
+        console.log("AprOracle:", aprOracleAddress);
+    }
+    addressFile.set("apr_oracle", aprOracleAddress);
 
     const Chess = await ethers.getContractFactory("Chess");
     const chess = await Chess.deploy();
     await chess.addMinter(deployer.address);
-    contractAddress.set("test.chess", chess.address);
+    addressFile.set("chess", chess.address);
     console.log("Chess:", chess.address);
 
     const VotingEscrow = await ethers.getContractFactory("VotingEscrow");
@@ -106,25 +137,25 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
         "veCHESS",
         BigNumber.from(4 * 365 * 24 * 60 * 60)
     );
-    contractAddress.set("test.voting_escrow", votingEscrow.address);
+    addressFile.set("voting_escrow", votingEscrow.address);
     console.log("VotingEscrow:", votingEscrow.address);
 
     const Share = await ethers.getContractFactory("Share");
     const shareP = await Share.deploy("Tranchess WBTC Class P", "tWBTC.P", fund.address, 0);
-    contractAddress.set("test.share_p", shareP.address);
+    addressFile.set("share_p", shareP.address);
     console.log("ShareP:", shareP.address);
 
     const shareA = await Share.deploy("Tranchess WBTC Class A", "tWBTC.A", fund.address, 1);
-    contractAddress.set("test.share_a", shareA.address);
+    addressFile.set("share_a", shareA.address);
     console.log("ShareA:", shareA.address);
 
     const shareB = await Share.deploy("Tranchess WBTC Class B", "tWBTC.B", fund.address, 2);
-    contractAddress.set("test.share_b", shareB.address);
+    addressFile.set("share_b", shareB.address);
     console.log("ShareB:", shareB.address);
 
     const InterestRateBallot = await ethers.getContractFactory("InterestRateBallot");
-    const interestRateBallot = await InterestRateBallot.deploy(votingEscrow.address, fund.address);
-    contractAddress.set("test.ballot", interestRateBallot.address);
+    const interestRateBallot = await InterestRateBallot.deploy(votingEscrow.address);
+    addressFile.set("interest_rate_ballot", interestRateBallot.address);
     console.log("InterestRateBallot:", interestRateBallot.address);
 
     const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
@@ -134,21 +165,16 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
         parseEther("0.001"),
         parseEther("0.0005"),
         parseEther("0.0005"),
-        parseUnits("0.5", 8)
+        parseUnits(minCreation, wbtcDecimals)
     );
-    contractAddress.set("test.primary_market", primaryMarket.address);
+    addressFile.set("primary_market", primaryMarket.address);
     console.log("PrimaryMarket:", primaryMarket.address);
 
-    console.log("Initialize Fund");
-    await fund.initialize(
-        wbtcAddress,
-        8,
-        shareP.address,
-        shareA.address,
-        shareB.address,
-        aprOracleAddress,
-        interestRateBallot.address,
-        primaryMarket.address,
-        deployer.address // FIXME read from configuration
+    console.log(`Contract addresses written to file "${addressFilename}"`);
+
+    console.log(
+        "Trying to initialize the fund, which may fail if price at the last settlement time" +
+            " is not available in the TwapOracle"
     );
+    await hre.run("initialize_fund", { deploy: addressFilename });
 });
