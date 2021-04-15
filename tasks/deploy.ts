@@ -74,15 +74,6 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
     }
     addressFile.set("twap_oracle", twapOracleAddress);
 
-    if (!aprOracleAddress) {
-        const MockAprOracle = await ethers.getContractFactory("MockAprOracle");
-        const mockAprOracle = await MockAprOracle.deploy();
-        aprOracleAddress = mockAprOracle.address;
-        addressFile.set("mock_apr_oracle", aprOracleAddress);
-        console.log("AprOracle:", aprOracleAddress);
-    }
-    addressFile.set("apr_oracle", aprOracleAddress);
-
     const MockToken = await ethers.getContractFactory("MockToken");
     let wbtc;
     if (!wbtcAddress) {
@@ -115,6 +106,22 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
     );
     addressFile.set("fund", fund.address);
     console.log("Fund:", fund.address);
+
+    if (!aprOracleAddress) {
+        if (hre.network.name === "test" || hre.network.name === "hardhat") {
+            const MockAprOracle = await ethers.getContractFactory("MockAprOracle");
+            const mockAprOracle = await MockAprOracle.deploy();
+            aprOracleAddress = mockAprOracle.address;
+            addressFile.set("mock_apr_oracle", aprOracleAddress);
+        } else {
+            const BscAprOracle = await ethers.getContractFactory("BscAprOracle");
+            const bscAprOracle = await BscAprOracle.deploy("Venus USDC APR oracle", fund.address);
+            aprOracleAddress = bscAprOracle.address;
+            addressFile.set("bsc_apr_oracle", aprOracleAddress);
+        }
+        console.log("AprOracle:", aprOracleAddress);
+    }
+    addressFile.set("apr_oracle", aprOracleAddress);
 
     const Chess = await ethers.getContractFactory("Chess");
     const chess = await Chess.deploy();
