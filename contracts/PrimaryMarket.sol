@@ -18,6 +18,7 @@ contract PrimaryMarket is IPrimaryMarket, ITrancheIndex {
     event Redeemed(address indexed account, uint256 shares);
     event Split(address indexed account, uint256 inP, uint256 outA, uint256 outB);
     event Merged(address indexed account, uint256 outP, uint256 inA, uint256 inB);
+    event Claimed(address indexed account, uint256 createdShares, uint256 redeemedUnderlying);
     event Settled(
         uint256 indexed day,
         uint256 sharesToMint,
@@ -118,6 +119,7 @@ contract PrimaryMarket is IPrimaryMarket, ITrancheIndex {
 
     function claim() external {
         CreationRedemption memory cr = _currentCreationRedemption(msg.sender);
+        emit Claimed(msg.sender, cr.createdShares, cr.redeemedUnderlying);
         if (cr.createdShares > 0) {
             IERC20(fund.tokenP()).transfer(msg.sender, cr.createdShares);
             cr.createdShares = 0;
