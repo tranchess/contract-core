@@ -123,7 +123,7 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
     console.log("ShareB:", shareB.address);
 
     const InterestRateBallot = await ethers.getContractFactory("InterestRateBallot");
-    const interestRateBallot = await InterestRateBallot.deploy(votingEscrow.address, fund.address);
+    const interestRateBallot = await InterestRateBallot.deploy(votingEscrow.address);
     contractAddress.set("test.ballot", interestRateBallot.address);
     console.log("InterestRateBallot:", interestRateBallot.address);
 
