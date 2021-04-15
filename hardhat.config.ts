@@ -3,6 +3,7 @@ import "@nomiclabs/hardhat-waffle";
 import "solidity-coverage";
 import "./tasks/accounts";
 import "./tasks/deploy";
+import "./tasks/initialize_fund";
 import {
     TEST_DEPLOYER_PK,
     TEST_ETH_RPC,
