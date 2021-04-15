@@ -48,7 +48,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         returns (uint256)
     {
         LockedBalance memory lockedBalance = locked[account];
-        if (lockedBalance.amount < threshold) {
+        if (lockedBalance.amount == 0 || lockedBalance.amount < threshold) {
             return 0;
         }
         return lockedBalance.unlockTime - ((maxTime * threshold) / lockedBalance.amount);
