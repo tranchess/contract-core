@@ -73,6 +73,7 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
     } else {
         wbtc = await MockToken.attach(wbtcAddress);
     }
+    const wbtcDecimals = await wbtc.decimals();
     if (!usdcAddress) {
         const usdc = await MockToken.deploy("Mock USDC", "USDC", 6);
         await usdc.mint(deployer.address, 1000000e6);
@@ -134,7 +135,7 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
         parseEther("0.001"),
         parseEther("0.0005"),
         parseEther("0.0005"),
-        parseUnits("0.5", 8)
+        parseUnits("0.5", wbtcDecimals)
     );
     contractAddress.set("test.primary_market", primaryMarket.address);
     console.log("PrimaryMarket:", primaryMarket.address);
@@ -142,7 +143,7 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
     console.log("Initialize Fund");
     await fund.initialize(
         wbtcAddress,
-        8,
+        wbtcDecimals,
         shareP.address,
         shareA.address,
         shareB.address,
