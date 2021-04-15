@@ -7,10 +7,12 @@ import {
     TEST_APR_ORACLE,
     TEST_WBTC,
     TEST_USDC,
+    TEST_MIN_CREATION,
     STAGING_TWAP_ORACLE,
     STAGING_APR_ORACLE,
     STAGING_WBTC,
     STAGING_USDC,
+    STAGING_MIN_CREATION,
 } from "../config";
 import { BigNumber } from "ethers";
 
@@ -44,16 +46,22 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
     let aprOracleAddress;
     let wbtcAddress;
     let usdcAddress;
-    if (hre.network.name === "test") {
+    let minCreation;
+    if (hre.network.name === "test" || hre.network.name === "hardhat") {
         twapOracleAddress = TEST_TWAP_ORACLE;
         aprOracleAddress = TEST_APR_ORACLE;
         wbtcAddress = TEST_WBTC;
         usdcAddress = TEST_USDC;
+        minCreation = TEST_MIN_CREATION;
     } else if (hre.network.name === "staging") {
         twapOracleAddress = STAGING_TWAP_ORACLE;
         aprOracleAddress = STAGING_APR_ORACLE;
         wbtcAddress = STAGING_WBTC;
         usdcAddress = STAGING_USDC;
+        minCreation = STAGING_MIN_CREATION;
+    } else {
+        console.error("ERROR: Unknown hardhat network:", hre.network.name);
+        return;
     }
 
     if (!twapOracleAddress) {
@@ -150,7 +158,7 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
         parseEther("0.001"),
         parseEther("0.0005"),
         parseEther("0.0005"),
-        parseUnits("0.5", wbtcDecimals)
+        parseUnits(minCreation, wbtcDecimals)
     );
     addressFile.set("primary_market", primaryMarket.address);
     console.log("PrimaryMarket:", primaryMarket.address);
