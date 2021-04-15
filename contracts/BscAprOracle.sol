@@ -75,7 +75,7 @@ contract BscAprOracle is IAprOracle, Exponential {
         uint256 venusPeriodicRate =
             newvenusBorrowIndex.sub(venusBorrowIndex).divideDecimal(venusBorrowIndex);
 
-        uint256 dailyRate = venusPeriodicRate.mul(0.5 days).div(block.timestamp.sub(timestamp));
+        uint256 dailyRate = venusPeriodicRate.mul(1 days).div(block.timestamp.sub(timestamp));
 
         return (newvenusBorrowIndex, venusPeriodicRate, dailyRate);
     }
