@@ -14,6 +14,16 @@ import {
 } from "../config";
 import { BigNumber } from "ethers";
 
+function getContractAddressFilename(network: string) {
+    const now = new Date();
+    let s = now.toISOString();
+    s = s.split(".")[0];
+    s = s.replace("T", "_");
+    s = s.split("-").join("");
+    s = s.split(":").join("");
+    return `deploy_${network}_${s}.json`;
+}
+
 task("deploy", "Deploy contracts", async (_args, hre) => {
     const { ethers } = hre;
     const { parseEther, parseUnits } = ethers.utils;
@@ -22,7 +32,11 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
     if (!fs.existsSync(CONTRACT_ADDRESS_DIR)) {
         fs.mkdirSync(CONTRACT_ADDRESS_DIR);
     }
-    const contractAddress = editJsonFile(path.join(CONTRACT_ADDRESS_DIR, "contract_address.json"), {
+    const contractAddressFilename = path.join(
+        CONTRACT_ADDRESS_DIR,
+        getContractAddressFilename(hre.network.name)
+    );
+    const contractAddress = editJsonFile(contractAddressFilename, {
         autosave: true,
     });
     const [deployer] = await ethers.getSigners();
