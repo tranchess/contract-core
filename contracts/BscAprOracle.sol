@@ -25,9 +25,9 @@ contract BscAprOracle is IAprOracle, Exponential {
 
     string public name;
 
-    // Mainnet: 0x882C173bC7Ff3b7786CA16dfeD3DFFfb9Ee7847B
-    // Testnet: 0xb6e9322C49FD75a367Fcb17B0Fcd62C5070EbCBe
-    address public VTOKEN = address(0xb6e9322C49FD75a367Fcb17B0Fcd62C5070EbCBe);
+    // Mainnet: 0xecA88125a5ADbe82614ffC12D0DB554E2e2867C8
+    // Testnet: 0xD5C4C2e2facBEB59D0216D0595d63FcDc6F9A1a7
+    address public VTOKEN = address(0xD5C4C2e2facBEB59D0216D0595d63FcDc6F9A1a7);
 
     uint256 public venusBorrowIndex;
     uint256 public timestamp;

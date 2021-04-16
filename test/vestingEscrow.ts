@@ -12,7 +12,7 @@ async function advanceBlockAtTime(time: number) {
     await ethers.provider.send("evm_mine", [time]);
 }
 
-describe("Vesting", function () {
+describe("VestingEscrow", function () {
     interface FixtureWalletMap {
         readonly [name: string]: Wallet;
     }
