@@ -92,7 +92,10 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
 
     function create(uint256 underlying) external nonReentrant onlyActive {
         require(underlying >= minCreationUnderlying, "min amount");
-        IERC20(fund.tokenUnderlying()).transferFrom(msg.sender, address(this), underlying);
+        require(
+            IERC20(fund.tokenUnderlying()).transferFrom(msg.sender, address(this), underlying),
+            "tokenUnderlying failed transferFrom"
+        );
 
         CreationRedemption memory cr = _currentCreationRedemption(msg.sender);
         cr.creatingUnderlying = cr.creatingUnderlying.add(underlying);
@@ -124,7 +127,10 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
             cr.createdShares = 0;
         }
         if (cr.redeemedUnderlying > 0) {
-            IERC20(fund.tokenUnderlying()).transfer(msg.sender, cr.redeemedUnderlying);
+            require(
+                IERC20(fund.tokenUnderlying()).transfer(msg.sender, cr.redeemedUnderlying),
+                "tokenUnderlying failed transfer"
+            );
             cr.redeemedUnderlying = 0;
         }
         _updateCreationRedemption(msg.sender, cr);
@@ -266,9 +272,12 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
         // Instead of directly transfering underlying to the fund, this implementation
         // makes testing much easier.
         if (creationUnderlying > redemptionUnderlying) {
-            IERC20(fund.tokenUnderlying()).approve(
-                address(fund),
-                creationUnderlying - redemptionUnderlying
+            require(
+                IERC20(fund.tokenUnderlying()).approve(
+                    address(fund),
+                    creationUnderlying - redemptionUnderlying
+                ),
+                "tokenUnderlying failed approve"
             );
         }
 

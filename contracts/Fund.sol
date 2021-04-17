@@ -725,7 +725,10 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, ITrancheIndex {
         uint256 currentUnderlying = IERC20(tokenUnderlying).balanceOf(address(this));
         uint256 fee = currentUnderlying.multiplyDecimal(dailyManagementFeeRate);
         if (fee > 0) {
-            IERC20(tokenUnderlying).transfer(address(governance), fee);
+            require(
+                IERC20(tokenUnderlying).transfer(address(governance), fee),
+                "tokenUnderlying failed transfer"
+            );
         }
     }
 
@@ -751,19 +754,28 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, ITrancheIndex {
                 _burn(TRANCHE_P, address(pm), sharesToBurn - sharesToMint);
             }
             if (creationUnderlying > redemptionUnderlying) {
-                IERC20(tokenUnderlying).transferFrom(
-                    address(pm),
-                    address(this),
-                    creationUnderlying - redemptionUnderlying
+                require(
+                    IERC20(tokenUnderlying).transferFrom(
+                        address(pm),
+                        address(this),
+                        creationUnderlying - redemptionUnderlying
+                    ),
+                    "tokenUnderlying failed transferFrom"
                 );
             } else if (redemptionUnderlying > creationUnderlying) {
-                IERC20(tokenUnderlying).transfer(
-                    address(pm),
-                    redemptionUnderlying - creationUnderlying
+                require(
+                    IERC20(tokenUnderlying).transfer(
+                        address(pm),
+                        redemptionUnderlying - creationUnderlying
+                    ),
+                    "tokenUnderlying failed transfer"
                 );
             }
             if (fee > 0) {
-                IERC20(tokenUnderlying).transfer(address(governance), fee);
+                require(
+                    IERC20(tokenUnderlying).transfer(address(governance), fee),
+                    "tokenUnderlying failed transferFrom"
+                );
             }
         }
     }
