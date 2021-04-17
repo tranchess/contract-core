@@ -5,6 +5,7 @@ pragma solidity ^0.6.0;
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import "./utils/SafeDecimalMath.sol";
 
@@ -13,7 +14,7 @@ import "./interfaces/ITwapOracle.sol";
 import "./interfaces/IFund.sol";
 import "./interfaces/ITrancheIndex.sol";
 
-contract PrimaryMarket is IPrimaryMarket, ITrancheIndex {
+contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     event Created(address indexed account, uint256 underlying);
     event Redeemed(address indexed account, uint256 shares);
     event Split(address indexed account, uint256 inP, uint256 outA, uint256 outB);
@@ -90,7 +91,7 @@ contract PrimaryMarket is IPrimaryMarket, ITrancheIndex {
         return _currentCreationRedemption(account);
     }
 
-    function create(uint256 underlying) external onlyActive {
+    function create(uint256 underlying) external nonReentrant onlyActive {
         require(underlying >= minCreationUnderlying, "min amount");
         IERC20(fund.tokenUnderlying()).transferFrom(msg.sender, address(this), underlying);
 
@@ -117,7 +118,7 @@ contract PrimaryMarket is IPrimaryMarket, ITrancheIndex {
         emit Redeemed(msg.sender, shares);
     }
 
-    function claim() external {
+    function claim() external nonReentrant {
         CreationRedemption memory cr = _currentCreationRedemption(msg.sender);
         emit Claimed(msg.sender, cr.createdShares, cr.redeemedUnderlying);
         if (cr.createdShares > 0) {
@@ -207,6 +208,7 @@ contract PrimaryMarket is IPrimaryMarket, ITrancheIndex {
     )
         external
         override
+        nonReentrant
         onlyFund
         returns (
             uint256 sharesToMint,
