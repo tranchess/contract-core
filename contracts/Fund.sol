@@ -735,7 +735,6 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, ITrancheIndex {
         require(block.timestamp >= day, "The current trading day does not end yet");
         uint256 price = twapOracle.getTwap(day);
         require(price != 0, "Underlying price for settlement is not ready yet");
-        // TODO reentrance check?
 
         _collectFee();
 
