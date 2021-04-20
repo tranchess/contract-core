@@ -27,6 +27,10 @@ contract Timelock is TimelockController {
         revokeRole(EXECUTOR_ROLE, account);
     }
 
+    function renounceAdmin() external {
+        revokeRole(TIMELOCK_ADMIN_ROLE, msg.sender);
+    }
+
     function isProposer(address account) external view returns (bool) {
         return hasRole(PROPOSER_ROLE, account);
     }
