@@ -21,11 +21,11 @@ contract ChessRoles {
         return _minterMembers.contains(account);
     }
 
-    function getMinterMember(uint256 index) public view returns (address) {
+    function getMinterMember(uint256 index) external view returns (address) {
         return _minterMembers.at(index);
     }
 
-    function getMinterCount() public view returns (uint256) {
+    function getMinterCount() external view returns (uint256) {
         return _minterMembers.length();
     }
 
