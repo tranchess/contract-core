@@ -13,6 +13,7 @@ import {
     STAGING_WBTC,
     STAGING_USDC,
     STAGING_MIN_CREATION,
+    BSC_TESTNET_VUSDC_ADDRESS,
 } from "../config";
 import { BigNumber } from "ethers";
 
@@ -116,7 +117,11 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
             addressFile.set("mock_apr_oracle", aprOracleAddress);
         } else {
             const BscAprOracle = await ethers.getContractFactory("BscAprOracle");
-            const bscAprOracle = await BscAprOracle.deploy("Venus USDC APR oracle", fund.address);
+            const bscAprOracle = await BscAprOracle.deploy(
+                "Venus USDC APR oracle",
+                fund.address,
+                BSC_TESTNET_VUSDC_ADDRESS
+            );
             aprOracleAddress = bscAprOracle.address;
             addressFile.set("bsc_apr_oracle", aprOracleAddress);
         }
