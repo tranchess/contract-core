@@ -178,7 +178,7 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
         [AddressZero] // executor
     );
     addressFile.set("timelock", timelock.address);
-    console.log("timelock:", timelock.address);
+    console.log("Timelock:", timelock.address);
 
     console.log(`Contract addresses written to file "${addressFilename}"`);
 
