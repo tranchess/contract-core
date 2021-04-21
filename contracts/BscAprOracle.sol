@@ -23,32 +23,34 @@ contract BscAprOracle is IAprOracle, Exponential {
 
     uint256 public constant VENUS_BORROW_MAX_MANTISSA = 0.0005e16;
 
+    address public immutable vUsdc;
+
     string public name;
-
-    // Mainnet: 0xecA88125a5ADbe82614ffC12D0DB554E2e2867C8
-    // Testnet: 0xD5C4C2e2facBEB59D0216D0595d63FcDc6F9A1a7
-    address public VTOKEN = address(0xD5C4C2e2facBEB59D0216D0595d63FcDc6F9A1a7);
-
     uint256 public venusBorrowIndex;
     uint256 public timestamp;
 
     address public fund;
 
-    constructor(string memory _name, address _fund) public {
+    constructor(
+        string memory _name,
+        address _fund,
+        address _vUsdc
+    ) public {
         name = _name;
-        venusBorrowIndex = getVenusBorrowIndex();
-        timestamp = block.timestamp;
         fund = _fund;
+        vUsdc = _vUsdc;
+        venusBorrowIndex = getVenusBorrowIndex(_vUsdc);
+        timestamp = block.timestamp;
     }
 
     // Venus
-    function getVenusBorrowIndex() public view returns (uint256 newBorrowIndex) {
+    function getVenusBorrowIndex(address vToken) public view returns (uint256 newBorrowIndex) {
         /* Calculate the current borrow interest rate */
-        uint256 borrowRateMantissa = VTokenInterfaces(VTOKEN).borrowRatePerBlock();
+        uint256 borrowRateMantissa = VTokenInterfaces(vToken).borrowRatePerBlock();
         require(borrowRateMantissa <= VENUS_BORROW_MAX_MANTISSA, "borrow rate is absurdly high");
 
-        uint256 borrowIndexPrior = VTokenInterfaces(VTOKEN).borrowIndex();
-        uint256 accrualBlockNumber = VTokenInterfaces(VTOKEN).accrualBlockNumber();
+        uint256 borrowIndexPrior = VTokenInterfaces(vToken).borrowIndex();
+        uint256 accrualBlockNumber = VTokenInterfaces(vToken).accrualBlockNumber();
 
         (, uint256 blockDelta) = subUInt(block.number, accrualBlockNumber);
 
@@ -70,18 +72,19 @@ contract BscAprOracle is IAprOracle, Exponential {
             uint256
         )
     {
-        uint256 newvenusBorrowIndex = getVenusBorrowIndex();
+        uint256 newVenusBorrowIndex = getVenusBorrowIndex(vUsdc);
 
         uint256 venusPeriodicRate =
-            newvenusBorrowIndex.sub(venusBorrowIndex).divideDecimal(venusBorrowIndex);
+            newVenusBorrowIndex.sub(venusBorrowIndex).divideDecimal(venusBorrowIndex);
 
         uint256 dailyRate = venusPeriodicRate.mul(1 days).div(block.timestamp.sub(timestamp));
 
-        return (newvenusBorrowIndex, venusPeriodicRate, dailyRate);
+        return (newVenusBorrowIndex, venusPeriodicRate, dailyRate);
     }
 
     function capture() public override returns (uint256 dailyRate) {
         require(msg.sender == fund, "only fund");
         (venusBorrowIndex, , dailyRate) = getAverageDailyRate();
+        timestamp = block.timestamp;
     }
 }
