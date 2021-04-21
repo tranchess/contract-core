@@ -29,6 +29,7 @@ function getAddressFilename(network: string) {
 task("deploy", "Deploy contracts", async (_args, hre) => {
     const { ethers } = hre;
     const { parseEther, parseUnits } = ethers.utils;
+    const { AddressZero } = ethers.constants;
 
     const ADDRESS_FILE_LOCATION = path.join(__dirname, "..", "cache");
     if (!fs.existsSync(ADDRESS_FILE_LOCATION)) {
@@ -170,6 +171,15 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
     addressFile.set("primary_market", primaryMarket.address);
     console.log("PrimaryMarket:", primaryMarket.address);
 
+    const Timelock = await ethers.getContractFactory("Timelock");
+    const timelock = await Timelock.deploy(
+        BigNumber.from(24 * 60 * 60), // minDelay
+        [deployer.address], // proposers
+        [AddressZero] // executor
+    );
+    addressFile.set("timelock", timelock.address);
+    console.log("Timelock:", timelock.address);
+
     console.log(`Contract addresses written to file "${addressFilename}"`);
 
     console.log(
@@ -177,4 +187,5 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
             " is not available in the TwapOracle"
     );
     await hre.run("initialize_fund", { deploy: addressFilename });
+    await hre.run("initialize_timelock", { deploy: addressFilename });
 });
