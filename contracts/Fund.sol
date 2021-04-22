@@ -594,13 +594,53 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, ITrancheIndex {
         _transfer(tranche, sender, recipient, amount);
     }
 
+    function transferFrom(
+        uint256 tranche,
+        address spender,
+        address sender,
+        address recipient,
+        uint256 amount
+    ) public override onlyShare returns (uint256 newAllowance) {
+        transfer(tranche, sender, recipient, amount);
+
+        _refreshAllowance(sender, spender, _conversionSize);
+        newAllowance = _allowances[sender][spender][tranche].sub(
+            amount,
+            "ERC20: transfer amount exceeds allowance"
+        );
+        _approve(tranche, sender, spender, newAllowance);
+    }
+
     function approve(
         uint256 tranche,
         address owner,
         address spender,
         uint256 amount
     ) public override onlyShare {
+        _refreshAllowance(owner, spender, _conversionSize);
         _approve(tranche, owner, spender, amount);
+    }
+
+    function increaseAllowance(
+        uint256 tranche,
+        address sender,
+        address spender,
+        uint256 addedValue
+    ) public override onlyShare returns (uint256 newAllowance) {
+        _refreshAllowance(sender, spender, _conversionSize);
+        newAllowance = _allowances[sender][spender][tranche].add(addedValue);
+        _approve(tranche, sender, spender, newAllowance);
+    }
+
+    function decreaseAllowance(
+        uint256 tranche,
+        address sender,
+        address spender,
+        uint256 subtractedValue
+    ) public override onlyShare returns (uint256 newAllowance) {
+        _refreshAllowance(sender, spender, _conversionSize);
+        newAllowance = _allowances[sender][spender][tranche].sub(subtractedValue);
+        _approve(tranche, sender, spender, newAllowance);
     }
 
     function _transfer(
@@ -652,8 +692,6 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, ITrancheIndex {
     ) private {
         require(owner != address(0), "ERC20: approve from the zero address");
         require(spender != address(0), "ERC20: approve to the zero address");
-
-        _refreshAllowance(owner, spender, _conversionSize);
 
         _allowances[owner][spender][tranche] = amount;
     }
