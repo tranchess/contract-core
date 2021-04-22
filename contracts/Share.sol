@@ -9,21 +9,18 @@ import "./interfaces/IFund.sol";
 contract Share is IERC20 {
     using SafeMath for uint256;
 
+    uint8 public constant decimals = 18;
+
     string public name;
     string public symbol;
-    uint8 public decimals;
     uint256 private immutable _tranche;
 
     IFund public fund;
 
     /**
-     * @dev Sets the values for {name} and {symbol}, initializes {decimals} with
-     * a default value of 18.
+     * @dev Sets the values for {name} and {symbol}.
      *
-     * To select a different value for {decimals}, use {_setupDecimals}.
-     *
-     * All three of these values are immutable: they can only be set once during
-     * construction.
+     * _tranche is immutable: it can only be set once during construction.
      */
     constructor(
         string memory name_,
@@ -33,7 +30,6 @@ contract Share is IERC20 {
     ) public {
         name = name_;
         symbol = symbol_;
-        decimals = 18;
         fund = IFund(fund_);
         _tranche = tranche_;
     }
