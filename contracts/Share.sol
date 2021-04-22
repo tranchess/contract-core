@@ -110,15 +110,9 @@ contract Share is IERC20 {
         address recipient,
         uint256 amount
     ) public virtual override returns (bool) {
-        uint256 allowances = fund.shareAllowance(_tranche, sender, msg.sender);
-        fund.approve(
-            _tranche,
-            sender,
-            msg.sender,
-            allowances.sub(amount, "ERC20: transfer amount exceeds allowance")
-        );
-        fund.transfer(_tranche, sender, recipient, amount);
+        uint256 newAllowance = fund.transferFrom(_tranche, msg.sender, sender, recipient, amount);
         emit Transfer(sender, recipient, amount);
+        emit Approval(sender, msg.sender, newAllowance);
         return true;
     }
 
@@ -135,9 +129,8 @@ contract Share is IERC20 {
      * - `spender` cannot be the zero address.
      */
     function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
-        uint256 allowances = allowance(msg.sender, spender);
-        fund.approve(_tranche, msg.sender, spender, allowances.add(addedValue));
-        emit Approval(msg.sender, spender, allowances.add(addedValue));
+        uint256 newAllowance = fund.increaseAllowance(_tranche, msg.sender, spender, addedValue);
+        emit Approval(msg.sender, spender, newAllowance);
         return true;
     }
 
@@ -160,14 +153,9 @@ contract Share is IERC20 {
         virtual
         returns (bool)
     {
-        uint256 allowances = allowance(msg.sender, spender);
-        fund.approve(
-            _tranche,
-            msg.sender,
-            spender,
-            allowances.sub(subtractedValue, "ERC20: decreased allowance below zero")
-        );
-        emit Approval(msg.sender, spender, allowances.sub(subtractedValue));
+        uint256 newAllowance =
+            fund.decreaseAllowance(_tranche, msg.sender, spender, subtractedValue);
+        emit Approval(msg.sender, spender, newAllowance);
         return true;
     }
 }
