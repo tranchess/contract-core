@@ -154,6 +154,28 @@ interface IFund {
         uint256 amount
     ) external;
 
+    function transferFrom(
+        uint256 tranche,
+        address spender,
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (uint256 newAllowance);
+
+    function increaseAllowance(
+        uint256 tranche,
+        address sender,
+        address spender,
+        uint256 addedValue
+    ) external returns (uint256 newAllowance);
+
+    function decreaseAllowance(
+        uint256 tranche,
+        address sender,
+        address spender,
+        uint256 subtractedValue
+    ) external returns (uint256 newAllowance);
+
     function approve(
         uint256 tranche,
         address owner,
