@@ -4,7 +4,6 @@ pragma solidity 0.6.9;
 // Libraries
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-// https://docs.synthetix.io/contracts/SafeDecimalMath
 library SafeDecimalMath {
     using SafeMath for uint256;
 
@@ -185,5 +184,22 @@ library SafeDecimalMath {
         }
 
         return quotientTimesTen.div(10);
+    }
+
+    /**
+     * @dev Returns the multiplication of two unsigned integers, and the max value of
+     * uint256 on overflow.
+     */
+    function saturatingMul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+        uint256 c = a * b;
+        return c / a != b ? type(uint256).max : c;
+    }
+
+    function saturatingMultiplyDecimal(uint256 x, uint256 y) internal pure returns (uint256) {
+        /* Divide by UNIT to remove the extra factor introduced by the product. */
+        return saturatingMul(x, y).div(UNIT);
     }
 }

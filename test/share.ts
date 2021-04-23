@@ -17,6 +17,7 @@ const UPPER_CONVERSION_THRESHOLD = parseEther("1.5");
 const LOWER_CONVERSION_THRESHOLD = parseEther("0.5");
 const FIXED_CONVERSION_THRESHOLD = parseEther("1.1");
 const MAX_UINT256 = BigNumber.from(2).pow(256).sub(1);
+const SUB_MAX_UINT256 = MAX_UINT256.div(parseEther("1"));
 
 async function advanceBlockAtTime(time: number) {
     await ethers.provider.send("evm_mine", [time]);
@@ -329,16 +330,26 @@ describe("Share", function () {
                 .withArgs(addr1, addr2, parseEther("100"));
         });
 
-        it.skip("Should convert for extremely large allowance", async function () {
+        it("Should convert for extremely large allowance", async function () {
             await shareP.approve(addr2, MAX_UINT256);
             await shareA.approve(addr2, MAX_UINT256);
             await shareB.approve(addr2, MAX_UINT256);
 
             await preDefinedConvert070();
 
-            expect(await shareP.allowance(addr1, addr2)).to.equal(MAX_UINT256);
-            expect(await shareA.allowance(addr1, addr2)).to.equal(MAX_UINT256);
-            expect(await shareB.allowance(addr1, addr2)).to.equal(MAX_UINT256);
+            expect(await shareP.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
+            expect(await shareA.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
+            expect(await shareB.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
+
+            await shareP.approve(addr2, MAX_UINT256);
+            await shareA.approve(addr2, MAX_UINT256);
+            await shareB.approve(addr2, MAX_UINT256);
+
+            await preDefinedConvert160();
+
+            expect(await shareP.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
+            expect(await shareA.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
+            expect(await shareB.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
         });
 
         it("Should convert allowance after lower conversion", async function () {
@@ -360,25 +371,25 @@ describe("Share", function () {
 
     describe("increaseAllowance()/decreaseAllowance()", function () {
         beforeEach(async function () {
-            await expect(shareP.increaseAllowance(addr2, parseEther("200")))
-                .to.emit(shareP, "Approval")
-                .withArgs(addr1, addr2, parseEther("200"));
-            await expect(shareA.increaseAllowance(addr2, parseEther("200")))
-                .to.emit(shareA, "Approval")
-                .withArgs(addr1, addr2, parseEther("200"));
-            await expect(shareB.increaseAllowance(addr2, parseEther("200")))
-                .to.emit(shareB, "Approval")
-                .withArgs(addr1, addr2, parseEther("200"));
+            await shareP.increaseAllowance(addr2, parseEther("200"));
+            await shareA.increaseAllowance(addr2, parseEther("200"));
+            await shareB.increaseAllowance(addr2, parseEther("200"));
 
-            await expect(shareP.decreaseAllowance(addr2, parseEther("100")))
-                .to.emit(shareP, "Approval")
-                .withArgs(addr1, addr2, parseEther("100"));
-            await expect(shareA.decreaseAllowance(addr2, parseEther("100")))
-                .to.emit(shareA, "Approval")
-                .withArgs(addr1, addr2, parseEther("100"));
-            await expect(shareB.decreaseAllowance(addr2, parseEther("100")))
-                .to.emit(shareB, "Approval")
-                .withArgs(addr1, addr2, parseEther("100"));
+            await shareP.decreaseAllowance(addr2, parseEther("100"));
+            await shareA.decreaseAllowance(addr2, parseEther("100"));
+            await shareB.decreaseAllowance(addr2, parseEther("100"));
+        });
+
+        it("Should convert for extremely large allowance", async function () {
+            await shareP.increaseAllowance(addr2, MAX_UINT256.sub(parseEther("100")));
+            await shareA.increaseAllowance(addr2, MAX_UINT256.sub(parseEther("100")));
+            await shareB.increaseAllowance(addr2, MAX_UINT256.sub(parseEther("100")));
+
+            await preDefinedConvert160();
+
+            expect(await shareP.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
+            expect(await shareA.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
+            expect(await shareB.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
         });
 
         it("Should convert allowance after lower conversion then upper conversion", async function () {

@@ -1139,8 +1139,10 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, ITrancheIndex {
         )
     {
         Conversion storage conversion = _conversions[index];
-        newAllowanceP = allowanceP.multiplyDecimal(conversion.ratioP);
-        newAllowanceA = allowanceA.multiplyDecimal(conversion.ratioAB);
-        newAllowanceB = allowanceB.multiplyDecimal(conversion.ratioAB);
+
+        /// @dev using saturating arithmetic to avoid unconscious overflow revert
+        newAllowanceP = allowanceP.saturatingMultiplyDecimal(conversion.ratioP);
+        newAllowanceA = allowanceA.saturatingMultiplyDecimal(conversion.ratioAB);
+        newAllowanceB = allowanceB.saturatingMultiplyDecimal(conversion.ratioAB);
     }
 }
