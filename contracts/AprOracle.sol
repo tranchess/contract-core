@@ -34,14 +34,14 @@ contract AprOracle is IAprOracle, Exponential {
 
     // Mainnet: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
     // Kovan: 0xe22da380ee6B445bb8273C81944ADEB6E8450422
-    address public TOKEN = address(0xe22da380ee6B445bb8273C81944ADEB6E8450422);
+    address public constant TOKEN = address(0xe22da380ee6B445bb8273C81944ADEB6E8450422);
 
     // Kovan: 0x9FE532197ad76c5a68961439604C037EB79681F0
-    address public AAVE_LENDING_POOL = address(0x9FE532197ad76c5a68961439604C037EB79681F0);
+    address public constant AAVE_LENDING_POOL = address(0x9FE532197ad76c5a68961439604C037EB79681F0);
 
     // Mainnet: 0x39AA39c021dfbaE8faC545936693aC917d5E7563
     // Kovan: 0x4a92E71227D294F041BD82dd8f78591B75140d63
-    address public CTOKEN = address(0x4a92E71227D294F041BD82dd8f78591B75140d63);
+    address public constant CTOKEN = address(0x4a92E71227D294F041BD82dd8f78591B75140d63);
 
     uint256 public compoundBorrowIndex;
     uint256 public aaveBorrowIndex;
