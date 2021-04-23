@@ -5,6 +5,7 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import "./utils/SafeDecimalMath.sol";
 
@@ -18,7 +19,7 @@ import "./interfaces/ITrancheIndex.sol";
 
 import "./FundRoles.sol";
 
-contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
+contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, ITrancheIndex {
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
@@ -664,7 +665,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     ///         2. Settle all pending creations and redemptions from all primary markets.
     ///         3. Calculate NAV of the day and trigger conversion if necessary.
     ///         4. Capture new interest rate for Share A.
-    function settle() external {
+    function settle() external nonReentrant {
         uint256 day = currentDay;
         require(block.timestamp >= day, "The current trading day does not end yet");
         uint256 price = twapOracle.getTwap(day);
