@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "./interfaces/IAprOracle.sol";
+import "./interfaces/IFund.sol";
 import "./utils/SafeDecimalMath.sol";
 import "./utils/Exponential.sol";
 
@@ -45,8 +46,9 @@ contract AprOracle is IAprOracle, Exponential {
     uint256 public compoundBorrowIndex;
     uint256 public aaveBorrowIndex;
     uint256 public timestamp;
+    uint256 public currentDailyRate;
 
-    address public fund;
+    IFund public fund;
 
     constructor(
         string memory _name,
@@ -56,7 +58,7 @@ contract AprOracle is IAprOracle, Exponential {
         address _cUsdc
     ) public {
         name = _name;
-        fund = _fund;
+        fund = IFund(_fund);
         usdc = _usdc;
         aaveUsdcLendingPool = _aaveUsdcLendingPool;
         cUsdc = _cUsdc;
@@ -127,9 +129,14 @@ contract AprOracle is IAprOracle, Exponential {
         );
     }
 
-    function capture() public override returns (uint256 dailyRate) {
-        require(msg.sender == fund, "only fund");
+    function capture() external override returns (uint256 dailyRate) {
+        uint256 currentWeek = fund.endOfWeek(timestamp);
+        if (currentWeek > block.timestamp) {
+            return currentDailyRate;
+        }
+
         (compoundBorrowIndex, aaveBorrowIndex, , , dailyRate) = getAverageDailyRate();
         timestamp = block.timestamp;
+        currentDailyRate = dailyRate;
     }
 }

@@ -5,6 +5,7 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
 import "./interfaces/IAprOracle.sol";
+import "./interfaces/IFund.sol";
 import "./utils/SafeDecimalMath.sol";
 import "./utils/Exponential.sol";
 
@@ -28,8 +29,9 @@ contract BscAprOracle is IAprOracle, Exponential {
     string public name;
     uint256 public venusBorrowIndex;
     uint256 public timestamp;
+    uint256 public currentDailyRate;
 
-    address public fund;
+    IFund public fund;
 
     constructor(
         string memory _name,
@@ -37,7 +39,7 @@ contract BscAprOracle is IAprOracle, Exponential {
         address _vUsdc
     ) public {
         name = _name;
-        fund = _fund;
+        fund = IFund(_fund);
         vUsdc = _vUsdc;
         venusBorrowIndex = getVenusBorrowIndex(_vUsdc);
         timestamp = block.timestamp;
@@ -82,9 +84,14 @@ contract BscAprOracle is IAprOracle, Exponential {
         return (newVenusBorrowIndex, venusPeriodicRate, dailyRate);
     }
 
-    function capture() public override returns (uint256 dailyRate) {
-        require(msg.sender == fund, "only fund");
+    function capture() external override returns (uint256 dailyRate) {
+        uint256 currentWeek = fund.endOfWeek(timestamp);
+        if (currentWeek > block.timestamp) {
+            return currentDailyRate;
+        }
+
         (venusBorrowIndex, , dailyRate) = getAverageDailyRate();
         timestamp = block.timestamp;
+        currentDailyRate = dailyRate;
     }
 }
