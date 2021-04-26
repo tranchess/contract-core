@@ -44,8 +44,6 @@ interface IFund {
 
     function endOfDay(uint256 timestamp) external pure returns (uint256);
 
-    function endOfWeek(uint256 timestamp) external pure returns (uint256);
-
     function shareTotalSupply(uint256 tranche) external view returns (uint256);
 
     function shareBalanceOf(uint256 tranche, address account) external view returns (uint256);

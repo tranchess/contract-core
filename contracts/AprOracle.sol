@@ -9,6 +9,7 @@ import "./interfaces/IAprOracle.sol";
 import "./interfaces/IFund.sol";
 import "./utils/SafeDecimalMath.sol";
 import "./utils/Exponential.sol";
+import "./utils/CoreUtility.sol";
 
 // Compound
 interface CTokenInterface {
@@ -24,7 +25,7 @@ interface ILendingPool {
     function getReserveNormalizedVariableDebt(address asset) external view returns (uint256);
 }
 
-contract AprOracle is IAprOracle, Exponential {
+contract AprOracle is IAprOracle, Exponential, CoreUtility {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
 
@@ -130,7 +131,7 @@ contract AprOracle is IAprOracle, Exponential {
     }
 
     function capture() external override returns (uint256 dailyRate) {
-        uint256 currentWeek = fund.endOfWeek(timestamp);
+        uint256 currentWeek = endOfWeek(timestamp);
         if (currentWeek > block.timestamp) {
             return currentDailyRate;
         }
