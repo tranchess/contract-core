@@ -3,13 +3,14 @@ pragma solidity ^0.6.0;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../utils/SafeDecimalMath.sol";
 import "../interfaces/IChess.sol";
 
 import "./ChessRoles.sol";
 
-contract Chess is IChess, ERC20, ChessRoles {
+contract Chess is IChess, Ownable, ERC20, ChessRoles {
     using SafeDecimalMath for uint256;
 
     uint256 public constant YEAR = 86400 * 365;
@@ -96,6 +97,14 @@ contract Chess is IChess, ERC20, ChessRoles {
         }
 
         return amount;
+    }
+
+    function addMinter(address account) external onlyOwner {
+        _addMinter(account);
+    }
+
+    function removeMinter(address account) external onlyOwner {
+        _removeMinter(account);
     }
 
     /**

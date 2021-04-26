@@ -2,48 +2,42 @@
 
 pragma solidity ^0.6.0;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 
-contract ChessRoles is AccessControl {
-    bytes32 public constant MINTER_ROLE = keccak256("minter");
+contract ChessRoles {
+    using EnumerableSet for EnumerableSet.AddressSet;
 
-    constructor() internal {
-        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
-    }
+    EnumerableSet.AddressSet private _minterMembers;
 
-    //---------- Admin ---------//
-    modifier onlyAdmin() {
-        require(isAdmin(msg.sender), "AdminRole: caller does not have the Admin role");
-        _;
-    }
+    event MinterAdded(address indexed minter);
+    event MinterRemoved(address indexed minter);
 
-    function isAdmin(address account) public view returns (bool) {
-        return hasRole(DEFAULT_ADMIN_ROLE, account);
-    }
-
-    function addAdmin(address account) public {
-        grantRole(DEFAULT_ADMIN_ROLE, account);
-    }
-
-    function renounceAdmin() public {
-        renounceRole(DEFAULT_ADMIN_ROLE, msg.sender);
-    }
-
-    //---------- Minter ---------//
     modifier onlyMinter() {
-        require(isMinter(msg.sender), "only minter");
+        require(isMinter(msg.sender), "Only minter");
         _;
     }
 
     function isMinter(address account) public view returns (bool) {
-        return hasRole(MINTER_ROLE, account);
+        return _minterMembers.contains(account);
     }
 
-    function addMinter(address account) public {
-        grantRole(MINTER_ROLE, account);
+    function getMinterMember(uint256 index) external view returns (address) {
+        return _minterMembers.at(index);
     }
 
-    function removeMinter(address account) public {
-        revokeRole(MINTER_ROLE, account);
+    function getMinterCount() external view returns (uint256) {
+        return _minterMembers.length();
+    }
+
+    function _addMinter(address minter) internal {
+        if (_minterMembers.add(minter)) {
+            emit MinterAdded(minter);
+        }
+    }
+
+    function _removeMinter(address minter) internal {
+        if (_minterMembers.remove(minter)) {
+            emit MinterRemoved(minter);
+        }
     }
 }

@@ -5,6 +5,7 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import "./utils/SafeDecimalMath.sol";
 
@@ -18,7 +19,7 @@ import "./interfaces/ITrancheIndex.sol";
 
 import "./FundRoles.sol";
 
-contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
+contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, ITrancheIndex {
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
@@ -593,13 +594,53 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         _transfer(tranche, sender, recipient, amount);
     }
 
+    function transferFrom(
+        uint256 tranche,
+        address spender,
+        address sender,
+        address recipient,
+        uint256 amount
+    ) public override onlyShare returns (uint256 newAllowance) {
+        transfer(tranche, sender, recipient, amount);
+
+        _refreshAllowance(sender, spender, _conversionSize);
+        newAllowance = _allowances[sender][spender][tranche].sub(
+            amount,
+            "ERC20: transfer amount exceeds allowance"
+        );
+        _approve(tranche, sender, spender, newAllowance);
+    }
+
     function approve(
         uint256 tranche,
         address owner,
         address spender,
         uint256 amount
     ) public override onlyShare {
+        _refreshAllowance(owner, spender, _conversionSize);
         _approve(tranche, owner, spender, amount);
+    }
+
+    function increaseAllowance(
+        uint256 tranche,
+        address sender,
+        address spender,
+        uint256 addedValue
+    ) public override onlyShare returns (uint256 newAllowance) {
+        _refreshAllowance(sender, spender, _conversionSize);
+        newAllowance = _allowances[sender][spender][tranche].add(addedValue);
+        _approve(tranche, sender, spender, newAllowance);
+    }
+
+    function decreaseAllowance(
+        uint256 tranche,
+        address sender,
+        address spender,
+        uint256 subtractedValue
+    ) public override onlyShare returns (uint256 newAllowance) {
+        _refreshAllowance(sender, spender, _conversionSize);
+        newAllowance = _allowances[sender][spender][tranche].sub(subtractedValue);
+        _approve(tranche, sender, spender, newAllowance);
     }
 
     function _transfer(
@@ -652,8 +693,6 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         require(owner != address(0), "ERC20: approve from the zero address");
         require(spender != address(0), "ERC20: approve to the zero address");
 
-        _refreshAllowance(owner, spender, _conversionSize);
-
         _allowances[owner][spender][tranche] = amount;
     }
 
@@ -664,7 +703,7 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
     ///         2. Settle all pending creations and redemptions from all primary markets.
     ///         3. Calculate NAV of the day and trigger conversion if necessary.
     ///         4. Capture new interest rate for Share A.
-    function settle() external {
+    function settle() external nonReentrant {
         uint256 day = currentDay;
         require(block.timestamp >= day, "The current trading day does not end yet");
         uint256 price = twapOracle.getTwap(day);
@@ -724,7 +763,10 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
         uint256 currentUnderlying = IERC20(tokenUnderlying).balanceOf(address(this));
         uint256 fee = currentUnderlying.multiplyDecimal(dailyManagementFeeRate);
         if (fee > 0) {
-            IERC20(tokenUnderlying).transfer(address(governance), fee);
+            require(
+                IERC20(tokenUnderlying).transfer(address(governance), fee),
+                "tokenUnderlying failed transfer"
+            );
         }
     }
 
@@ -750,19 +792,28 @@ contract Fund is IFund, Ownable, FundRoles, ITrancheIndex {
                 _burn(TRANCHE_P, address(pm), sharesToBurn - sharesToMint);
             }
             if (creationUnderlying > redemptionUnderlying) {
-                IERC20(tokenUnderlying).transferFrom(
-                    address(pm),
-                    address(this),
-                    creationUnderlying - redemptionUnderlying
+                require(
+                    IERC20(tokenUnderlying).transferFrom(
+                        address(pm),
+                        address(this),
+                        creationUnderlying - redemptionUnderlying
+                    ),
+                    "tokenUnderlying failed transferFrom"
                 );
             } else if (redemptionUnderlying > creationUnderlying) {
-                IERC20(tokenUnderlying).transfer(
-                    address(pm),
-                    redemptionUnderlying - creationUnderlying
+                require(
+                    IERC20(tokenUnderlying).transfer(
+                        address(pm),
+                        redemptionUnderlying - creationUnderlying
+                    ),
+                    "tokenUnderlying failed transfer"
                 );
             }
             if (fee > 0) {
-                IERC20(tokenUnderlying).transfer(address(governance), fee);
+                require(
+                    IERC20(tokenUnderlying).transfer(address(governance), fee),
+                    "tokenUnderlying failed transferFrom"
+                );
             }
         }
     }

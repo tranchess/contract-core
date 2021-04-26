@@ -5,6 +5,7 @@ pragma solidity ^0.6.0;
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import "./utils/SafeDecimalMath.sol";
 
@@ -13,7 +14,7 @@ import "./interfaces/ITwapOracle.sol";
 import "./interfaces/IFund.sol";
 import "./interfaces/ITrancheIndex.sol";
 
-contract PrimaryMarket is IPrimaryMarket, ITrancheIndex {
+contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     event Created(address indexed account, uint256 underlying);
     event Redeemed(address indexed account, uint256 shares);
     event Split(address indexed account, uint256 inP, uint256 outA, uint256 outB);
@@ -89,9 +90,12 @@ contract PrimaryMarket is IPrimaryMarket, ITrancheIndex {
         return _currentCreationRedemption(account);
     }
 
-    function create(uint256 underlying) external onlyActive {
+    function create(uint256 underlying) external nonReentrant onlyActive {
         require(underlying >= minCreationUnderlying, "min amount");
-        IERC20(fund.tokenUnderlying()).transferFrom(msg.sender, address(this), underlying);
+        require(
+            IERC20(fund.tokenUnderlying()).transferFrom(msg.sender, address(this), underlying),
+            "tokenUnderlying failed transferFrom"
+        );
 
         CreationRedemption memory cr = _currentCreationRedemption(msg.sender);
         cr.creatingUnderlying = cr.creatingUnderlying.add(underlying);
@@ -116,14 +120,17 @@ contract PrimaryMarket is IPrimaryMarket, ITrancheIndex {
         emit Redeemed(msg.sender, shares);
     }
 
-    function claim() external {
+    function claim() external nonReentrant {
         CreationRedemption memory cr = _currentCreationRedemption(msg.sender);
         if (cr.createdShares > 0) {
             IERC20(fund.tokenP()).transfer(msg.sender, cr.createdShares);
             cr.createdShares = 0;
         }
         if (cr.redeemedUnderlying > 0) {
-            IERC20(fund.tokenUnderlying()).transfer(msg.sender, cr.redeemedUnderlying);
+            require(
+                IERC20(fund.tokenUnderlying()).transfer(msg.sender, cr.redeemedUnderlying),
+                "tokenUnderlying failed transfer"
+            );
             cr.redeemedUnderlying = 0;
         }
         _updateCreationRedemption(msg.sender, cr);
@@ -205,6 +212,7 @@ contract PrimaryMarket is IPrimaryMarket, ITrancheIndex {
     )
         external
         override
+        nonReentrant
         onlyFund
         returns (
             uint256 sharesToMint,
@@ -264,9 +272,12 @@ contract PrimaryMarket is IPrimaryMarket, ITrancheIndex {
         // Instead of directly transfering underlying to the fund, this implementation
         // makes testing much easier.
         if (creationUnderlying > redemptionUnderlying) {
-            IERC20(fund.tokenUnderlying()).approve(
-                address(fund),
-                creationUnderlying - redemptionUnderlying
+            require(
+                IERC20(fund.tokenUnderlying()).approve(
+                    address(fund),
+                    creationUnderlying - redemptionUnderlying
+                ),
+                "tokenUnderlying failed approve"
             );
         }
 
