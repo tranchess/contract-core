@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "./interfaces/IAprOracle.sol";
-import "./interfaces/IFund.sol";
 import "./utils/SafeDecimalMath.sol";
 import "./utils/Exponential.sol";
 import "./utils/CoreUtility.sol";
@@ -49,17 +48,13 @@ contract AprOracle is IAprOracle, Exponential, CoreUtility {
     uint256 public timestamp;
     uint256 public currentDailyRate;
 
-    IFund public fund;
-
     constructor(
         string memory _name,
-        address _fund,
         address _usdc,
         address _aaveUsdcLendingPool,
         address _cUsdc
     ) public {
         name = _name;
-        fund = IFund(_fund);
         usdc = _usdc;
         aaveUsdcLendingPool = _aaveUsdcLendingPool;
         cUsdc = _cUsdc;

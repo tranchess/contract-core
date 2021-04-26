@@ -5,7 +5,6 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
 import "./interfaces/IAprOracle.sol";
-import "./interfaces/IFund.sol";
 import "./utils/SafeDecimalMath.sol";
 import "./utils/Exponential.sol";
 import "./utils/CoreUtility.sol";
@@ -32,15 +31,8 @@ contract BscAprOracle is IAprOracle, Exponential, CoreUtility {
     uint256 public timestamp;
     uint256 public currentDailyRate;
 
-    IFund public fund;
-
-    constructor(
-        string memory _name,
-        address _fund,
-        address _vUsdc
-    ) public {
+    constructor(string memory _name, address _vUsdc) public {
         name = _name;
-        fund = IFund(_fund);
         vUsdc = _vUsdc;
         venusBorrowIndex = getVenusBorrowIndex(_vUsdc);
         timestamp = block.timestamp;
