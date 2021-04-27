@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "./interfaces/IAprOracle.sol";
 import "./utils/SafeDecimalMath.sol";
 import "./utils/Exponential.sol";
+import "./utils/CoreUtility.sol";
 
 // Venus
 interface VTokenInterfaces {
@@ -17,7 +18,7 @@ interface VTokenInterfaces {
     function accrualBlockNumber() external view returns (uint256);
 }
 
-contract BscAprOracle is IAprOracle, Exponential {
+contract BscAprOracle is IAprOracle, Exponential, CoreUtility {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
 
@@ -28,16 +29,10 @@ contract BscAprOracle is IAprOracle, Exponential {
     string public name;
     uint256 public venusBorrowIndex;
     uint256 public timestamp;
+    uint256 public currentDailyRate;
 
-    address public fund;
-
-    constructor(
-        string memory _name,
-        address _fund,
-        address _vUsdc
-    ) public {
+    constructor(string memory _name, address _vUsdc) public {
         name = _name;
-        fund = _fund;
         vUsdc = _vUsdc;
         venusBorrowIndex = getVenusBorrowIndex(_vUsdc);
         timestamp = block.timestamp;
@@ -82,9 +77,14 @@ contract BscAprOracle is IAprOracle, Exponential {
         return (newVenusBorrowIndex, venusPeriodicRate, dailyRate);
     }
 
-    function capture() public override returns (uint256 dailyRate) {
-        require(msg.sender == fund, "only fund");
+    function capture() external override returns (uint256 dailyRate) {
+        uint256 currentWeek = endOfWeek(timestamp);
+        if (currentWeek > block.timestamp) {
+            return currentDailyRate;
+        }
+
         (venusBorrowIndex, , dailyRate) = getAverageDailyRate();
         timestamp = block.timestamp;
+        currentDailyRate = dailyRate;
     }
 }

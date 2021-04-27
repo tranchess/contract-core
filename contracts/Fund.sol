@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import "./utils/SafeDecimalMath.sol";
+import "./utils/CoreUtility.sol";
 
 import "./interfaces/IPrimaryMarket.sol";
 import "./interfaces/IFund.sol";
@@ -19,13 +20,10 @@ import "./interfaces/ITrancheIndex.sol";
 
 import "./FundRoles.sol";
 
-contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, ITrancheIndex {
+contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITrancheIndex {
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
-
-    /// @notice UTC time of a day when the fund settles.
-    uint256 public constant SETTLEMENT_TIME = 14 hours;
 
     uint256 private constant YEAR = 365 days;
     uint256 private constant UNIT = 1e18;
@@ -206,13 +204,6 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, ITrancheIndex {
     /// @return End timestamp of the trading day.
     function endOfDay(uint256 timestamp) public pure override returns (uint256) {
         return ((timestamp.add(1 days) - SETTLEMENT_TIME) / 1 days) * 1 days + SETTLEMENT_TIME;
-    }
-
-    /// @notice Return end timestamp of the trading week containing a given timestamp.
-    /// @param timestamp The given timestamp
-    /// @return End timestamp of the trading week.
-    function endOfWeek(uint256 timestamp) public pure override returns (uint256) {
-        return ((timestamp.add(1 weeks) - SETTLEMENT_TIME) / 1 weeks) * 1 weeks + SETTLEMENT_TIME;
     }
 
     // ---------------------------------

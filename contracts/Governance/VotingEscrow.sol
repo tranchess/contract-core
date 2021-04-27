@@ -3,6 +3,7 @@ pragma experimental ABIEncoderV2;
 pragma solidity 0.6.9;
 
 import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -14,6 +15,8 @@ interface ISmartWalletChecker {
 }
 
 contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
+    using SafeMath for uint256;
+
     uint256 public immutable override maxTime;
 
     string public name;
@@ -51,7 +54,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         if (lockedBalance.amount == 0 || lockedBalance.amount < threshold) {
             return 0;
         }
-        return lockedBalance.unlockTime - ((maxTime * threshold) / lockedBalance.amount);
+        return lockedBalance.unlockTime.sub(threshold.mul(maxTime).div(lockedBalance.amount));
     }
 
     function balanceOf(address account) external view override returns (uint256) {
@@ -164,14 +167,14 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         if (timestamp > lockedBalance.unlockTime) {
             return 0;
         }
-        return (lockedBalance.amount * (lockedBalance.unlockTime - timestamp)) / maxTime;
+        return (lockedBalance.amount.mul(lockedBalance.unlockTime - timestamp)) / maxTime;
     }
 
     function _totalSupplyAtTimestamp(uint256 timestamp) private view returns (uint256) {
         uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
         uint256 total = 0;
         for (; weekCursor <= timestamp + maxTime; weekCursor += 1 weeks) {
-            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / maxTime;
+            total = total.add((scheduledUnlock[weekCursor].mul(weekCursor - timestamp)) / maxTime);
         }
 
         return total;
@@ -186,19 +189,23 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
     ) private {
         if (unlockTime != 0) {
             // update scheduled unlock
-            scheduledUnlock[lockedBalance.unlockTime] -= lockedBalance.amount;
-            scheduledUnlock[unlockTime] += lockedBalance.amount + amount;
+            scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime]
+                .sub(lockedBalance.amount);
+            scheduledUnlock[unlockTime] = scheduledUnlock[unlockTime].add(lockedBalance.amount).add(
+                amount
+            );
 
             // update unlock time per account
             locked[account].unlockTime = unlockTime;
         } else {
-            scheduledUnlock[lockedBalance.unlockTime] += amount;
+            scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime]
+                .add(amount);
         }
 
         if (amount != 0) {
             IERC20(token).transferFrom(account, address(this), amount);
             // update locked amount per account
-            locked[account].amount = lockedBalance.amount + amount;
+            locked[account].amount = lockedBalance.amount.add(amount);
         }
 
         emit Locked(account, amount, unlockTime, lockType);

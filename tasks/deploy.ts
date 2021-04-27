@@ -119,7 +119,6 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
             const BscAprOracle = await ethers.getContractFactory("BscAprOracle");
             const bscAprOracle = await BscAprOracle.deploy(
                 "Venus USDC APR oracle",
-                fund.address,
                 BSC_TESTNET_VUSDC_ADDRESS
             );
             aprOracleAddress = bscAprOracle.address;
