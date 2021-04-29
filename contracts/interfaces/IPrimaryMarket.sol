@@ -3,7 +3,9 @@ pragma experimental ABIEncoderV2;
 pragma solidity ^0.6.0;
 
 interface IPrimaryMarket {
-    function claim(address sender) external;
+    function claim(address sender)
+        external
+        returns (uint256 createdShares, uint256 redeemedUnderlying);
 
     function settle(
         uint256 day,
