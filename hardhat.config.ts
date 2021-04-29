@@ -13,6 +13,7 @@ import {
     STAGING_ETH_RPC,
     STAGING_ETH_CHAIN_ID,
 } from "./config";
+import "hardhat-gas-reporter";
 
 const networks: NetworksUserConfig = {
     hardhat: {},
@@ -45,6 +46,11 @@ const config: HardhatUserConfig = {
                 runs: 1000,
             },
         },
+    },
+    // @see https://hardhat.org/plugins/hardhat-gas-reporter.html
+    gasReporter: {
+        enabled: process.env.REPORT_GAS ? true : false,
+        excludeContracts: ["test/"],
     },
 };
 export default config;
