@@ -121,21 +121,21 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
         emit Redeemed(msg.sender, shares);
     }
 
-    function claim() external nonReentrant {
-        CreationRedemption memory cr = _currentCreationRedemption(msg.sender);
-        emit Claimed(msg.sender, cr.createdShares, cr.redeemedUnderlying);
+    function claim(address sender) external override nonReentrant {
+        CreationRedemption memory cr = _currentCreationRedemption(sender);
+        emit Claimed(sender, cr.createdShares, cr.redeemedUnderlying);
         if (cr.createdShares > 0) {
-            IERC20(fund.tokenP()).transfer(msg.sender, cr.createdShares);
+            IERC20(fund.tokenP()).transfer(sender, cr.createdShares);
             cr.createdShares = 0;
         }
         if (cr.redeemedUnderlying > 0) {
             require(
-                IERC20(fund.tokenUnderlying()).transfer(msg.sender, cr.redeemedUnderlying),
+                IERC20(fund.tokenUnderlying()).transfer(sender, cr.redeemedUnderlying),
                 "tokenUnderlying failed transfer"
             );
             cr.redeemedUnderlying = 0;
         }
-        _updateCreationRedemption(msg.sender, cr);
+        _updateCreationRedemption(sender, cr);
     }
 
     function split(uint256 inP) external onlyActive {
