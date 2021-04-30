@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma experimental ABIEncoderV2;
-pragma solidity ^0.6.0;
+pragma solidity >=0.6.10 <0.8.0;
 
 interface IPrimaryMarket {
     function claim(address account)
