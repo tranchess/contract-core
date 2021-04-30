@@ -165,7 +165,7 @@ describe("PrimaryMarket", function () {
         it("Should not be claimable in the same day", async function () {
             await primaryMarket.create(parseWbtc("1"));
             // No shares or underlying is transfered
-            const tx = () => primaryMarket.claim();
+            const tx = () => primaryMarket.claim(user1.address);
             await expect(tx).to.changeTokenBalances(wbtc, [user1, fund], [0, 0]);
         });
 
@@ -216,7 +216,7 @@ describe("PrimaryMarket", function () {
             await fund.mock.burn.revertsWithReason("Mock function reset");
             await fund.mock.mint.revertsWithReason("Mock function reset");
             // No shares or underlying is transfered
-            const tx = () => primaryMarket.claim();
+            const tx = () => primaryMarket.claim(user1.address);
             await expect(tx).to.changeTokenBalances(wbtc, [user1, fund], [0, 0]);
         });
 
@@ -595,7 +595,7 @@ describe("PrimaryMarket", function () {
         });
 
         it("Should transfer created shares", async function () {
-            await expect(() => primaryMarket.claim()).to.callMocks({
+            await expect(() => primaryMarket.claim(user1.address)).to.callMocks({
                 func: shareP.mock.transfer.withArgs(user1.address, createdShares),
                 rets: [true],
             });
@@ -603,7 +603,7 @@ describe("PrimaryMarket", function () {
 
         it("Should transfer redeemed underlying", async function () {
             await shareP.mock.transfer.returns(true);
-            await expect(() => primaryMarket.claim()).to.changeTokenBalances(
+            await expect(() => primaryMarket.claim(user1.address)).to.changeTokenBalances(
                 wbtc,
                 [user1, primaryMarket],
                 [redeemedWbtc, redeemedWbtc.mul(-1)]
@@ -617,7 +617,7 @@ describe("PrimaryMarket", function () {
             const createdAgain = parseEther("2000")
                 .mul(10000 - CREATION_FEE_BPS)
                 .div(10000);
-            await expect(() => primaryMarket.claim()).to.callMocks({
+            await expect(() => primaryMarket.claim(user1.address)).to.callMocks({
                 func: shareP.mock.transfer.withArgs(user1.address, createdShares.add(createdAgain)),
                 rets: [true],
             });
@@ -634,7 +634,7 @@ describe("PrimaryMarket", function () {
             await wbtc.mint(primaryMarket.address, redeemedAgain);
             const total = redeemedWbtc.add(redeemedAgain);
             await shareP.mock.transfer.returns(true);
-            await expect(() => primaryMarket.claim()).to.changeTokenBalances(
+            await expect(() => primaryMarket.claim(user1.address)).to.changeTokenBalances(
                 wbtc,
                 [user1, primaryMarket],
                 [total, total.mul(-1)]
@@ -675,7 +675,7 @@ describe("PrimaryMarket", function () {
 
         it("Should convert claimable shares on claim", async function () {
             await fund.mock.getConversionSize.returns(1);
-            await expect(() => primaryMarket.claim()).to.callMocks(
+            await expect(() => primaryMarket.claim(user1.address)).to.callMocks(
                 {
                     func: fund.mock.batchConvert.withArgs(createdShares, 0, 0, 0, 1),
                     rets: [parseEther("7000"), 0, 0],

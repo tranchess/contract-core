@@ -466,7 +466,7 @@ async function redeem(primaryMarket: Contract, sharesP: BigNumber, sender: Signe
 }
 
 async function claim(primaryMarket: Contract, sender: SignerWithAddress) {
-    return primaryMarket.connect(sender).claim();
+    return primaryMarket.connect(sender).claim(sender.address);
 }
 
 async function split(primaryMarket: Contract, sharesP: BigNumber, sender: SignerWithAddress) {
