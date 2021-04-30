@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.6.9;
+pragma solidity >=0.6.10 <0.8.0;
 
-// Libraries
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
 library SafeDecimalMath {
