@@ -383,6 +383,22 @@ describe("Fund", function () {
         });
     });
 
+    describe("InterestRateBallot", function () {
+        it("Should return the next settlement timestamp", async function () {
+            expect(
+                await fund.historyInterestRate(await fund.endOfWeek(await fund.currentDay()))
+            ).to.equal(parseEther("0"));
+            await interestRateBallot.mock.count.returns(parseEther("365"));
+            await twapOracle.mock.getTwap.returns(parseEther("1000"));
+            await aprOracle.mock.capture.returns(0);
+            await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
+            await advanceOneDayAndSettle();
+            expect(
+                await fund.historyInterestRate(await fund.endOfWeek(await fund.currentDay()))
+            ).to.equal(parseEther("1"));
+        });
+    });
+
     describe("Share balance management", function () {
         let outerFixture: Fixture<FixtureData>;
 

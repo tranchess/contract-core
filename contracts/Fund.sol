@@ -25,7 +25,6 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
 
-    uint256 private constant YEAR = 365 days;
     uint256 private constant UNIT = 1e18;
     uint256 private constant MAX_INTEREST_RATE = 0.5e18; // 50% APR
 
@@ -1007,7 +1006,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
 
     function _updateInterestRate(uint256 week) private returns (uint256) {
         uint256 baseInterestRate = MAX_INTEREST_RATE.min(aprOracle.capture());
-        uint256 floatingInterestRate = ballot.count(week).div(YEAR);
+        uint256 floatingInterestRate = ballot.count(week).div(365);
         uint256 rate = baseInterestRate.add(floatingInterestRate);
 
         emit InterestRateUpdated(baseInterestRate, floatingInterestRate);
