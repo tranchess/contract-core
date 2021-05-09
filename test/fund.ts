@@ -1504,7 +1504,10 @@ describe("Fund", function () {
                 await preDefinedConvert040();
                 await preDefinedConvert160();
                 await preDefinedConvert200();
-                expect((await fund.getConversionTimestamp(2)).toNumber()).to.approximately(startDay + DAY * 4, 3);
+                expect((await fund.getConversionTimestamp(2)).toNumber()).to.approximately(
+                    startDay + DAY * 4,
+                    3
+                );
             });
 
             it("Should return zero if the given index is out of bound", async function () {
