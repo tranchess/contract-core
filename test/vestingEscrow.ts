@@ -49,7 +49,7 @@ describe("VestingEscrow", function () {
         const endWeek = Math.ceil(startTimestamp / WEEK) * WEEK + 4 * WEEK;
 
         const Chess = await ethers.getContractFactory("Chess");
-        const chess = await Chess.connect(owner).deploy();
+        const chess = await Chess.connect(owner).deploy(startTimestamp);
 
         const VestingEscrow = await ethers.getContractFactory("VestingEscrow");
         const vestingEscrow = await VestingEscrow.connect(owner).deploy(
