@@ -938,7 +938,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 navA,
         uint256 navBOrZero
     ) private {
-        Conversion memory conversion = _calculateConversion(day, navP, navA, navBOrZero);
+        Conversion memory conversion = _calculateConversion(navP, navA, navBOrZero);
         uint256 oldSize = _conversionSize;
         _conversions[oldSize] = conversion;
         _conversionSize = oldSize + 1;
@@ -969,17 +969,15 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     ///      Note that NAV of Share B can be negative before conversion when the underlying price
     ///      drops dramatically in a single trading day, in which case zero should be passed to
     ///      this function instead of the negative NAV.
-    /// @param day Trading day that triggers this conversion
     /// @param navP NAV of Share P before conversion
     /// @param navA NAV of Share A before conversion
     /// @param navBOrZero NAV of Share B before conversion or zero if the NAV is negative
     /// @return The conversion matrix
     function _calculateConversion(
-        uint256 day,
         uint256 navP,
         uint256 navA,
         uint256 navBOrZero
-    ) private pure returns (Conversion memory) {
+    ) private view returns (Conversion memory) {
         uint256 ratioAB;
         uint256 ratioA2P;
         uint256 ratioB2P;
@@ -1000,7 +998,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
                 ratioA2P: ratioA2P,
                 ratioB2P: ratioB2P,
                 ratioAB: ratioAB,
-                day: day
+                day: block.timestamp
             });
     }
 
