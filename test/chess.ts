@@ -35,9 +35,6 @@ describe("Ballot", function () {
     let chess: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
-        for (let i = 100; i < 160; i += 10) {
-            console.log(BigNumber.from(i).mul(BigNumber.from(10).pow(18)).toHexString());
-        }
         const [user1, user2, owner] = provider.getWallets();
 
         // Start at the midnight in the next Thursday.
@@ -71,8 +68,8 @@ describe("Ballot", function () {
     describe("getScheduledSupply()", function () {
         it("Should get scheduled supply", async function () {
             expect(await chess.getScheduledSupply(0)).to.equal(BigNumber.from(10).pow(18).mul(100));
-            expect(await chess.getScheduledSupply(1)).to.equal(BigNumber.from(10).pow(18).mul(100));
-            expect(await chess.getScheduledSupply(2)).to.equal(BigNumber.from(10).pow(18).mul(110));
+            expect(await chess.getScheduledSupply(1)).to.equal(BigNumber.from(10).pow(18).mul(110));
+            expect(await chess.getScheduledSupply(2)).to.equal(BigNumber.from(10).pow(18).mul(120));
         });
     });
 });
