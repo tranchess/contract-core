@@ -23,7 +23,7 @@ interface IFund {
         uint256 ratioA2P;
         uint256 ratioB2P;
         uint256 ratioAB;
-        uint256 day;
+        uint256 timestamp;
     }
 
     function splitWeights() external pure returns (uint256 weightA, uint256 weightB);

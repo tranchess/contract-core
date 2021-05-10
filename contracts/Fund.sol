@@ -251,9 +251,9 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Return trading day triggering a conversion at a given index. Zero is returned
     ///         if `index` is out of bound.
     /// @param index Conversion index
-    /// @return End timestamp of the conversion's trading day
+    /// @return Timestamp of the conversion
     function getConversionTimestamp(uint256 index) external view override returns (uint256) {
-        return _conversions[index].day;
+        return _conversions[index].timestamp;
     }
 
     /// @notice Return the number of conversions.
@@ -998,7 +998,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
                 ratioA2P: ratioA2P,
                 ratioB2P: ratioB2P,
                 ratioAB: ratioAB,
-                day: block.timestamp
+                timestamp: block.timestamp
             });
     }
 

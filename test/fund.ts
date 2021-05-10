@@ -1305,7 +1305,7 @@ describe("Fund", function () {
                 expect(conversion.ratioA2P).to.equal(parseEther("0.1"));
                 expect(conversion.ratioB2P).to.equal(parseEther("1.1"));
                 expect(conversion.ratioAB).to.equal(parseEther("1"));
-                expect(conversion.day.toNumber()).to.approximately(startDay + DAY * 2, 3);
+                expect(conversion.timestamp.toNumber()).to.approximately(startDay + DAY * 2, 3);
                 expect(await fund.shareBalanceOf(TRANCHE_P, addr1)).to.equal(parseEther("650"));
                 expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(parseEther("100"));
                 expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(0);
@@ -1331,7 +1331,7 @@ describe("Fund", function () {
                 expect(conversion.ratioA2P).to.equal(parseEther("0.8"));
                 expect(conversion.ratioB2P).to.equal(0);
                 expect(conversion.ratioAB).to.equal(parseEther("0.3"));
-                expect(conversion.day.toNumber()).to.approximately(startDay + DAY * 2, 3);
+                expect(conversion.timestamp.toNumber()).to.approximately(startDay + DAY * 2, 3);
                 expect(await fund.shareBalanceOf(TRANCHE_P, addr1)).to.equal(parseEther("360"));
                 expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(parseEther("30"));
                 expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(0);
@@ -1356,7 +1356,7 @@ describe("Fund", function () {
                 expect(conversion.ratioA2P).to.equal(parseEther("0.8"));
                 expect(conversion.ratioB2P).to.equal(0);
                 expect(conversion.ratioAB).to.equal(0);
-                expect(conversion.day.toNumber()).to.approximately(startDay + DAY * 2, 3);
+                expect(conversion.timestamp.toNumber()).to.approximately(startDay + DAY * 2, 3);
                 expect(await fund.shareBalanceOf(TRANCHE_P, addr1)).to.equal(parseEther("240"));
                 expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(0);
                 expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(0);
@@ -1388,7 +1388,7 @@ describe("Fund", function () {
                 expect(conversion.ratioA2P).to.equal(parseEther("0.42"));
                 expect(conversion.ratioB2P).to.equal(0);
                 expect(conversion.ratioAB).to.equal(parseEther("0.79"));
-                expect(conversion.day.toNumber()).to.approximately(startDay + DAY * 3, 3);
+                expect(conversion.timestamp.toNumber()).to.approximately(startDay + DAY * 3, 3);
                 expect(await fund.shareBalanceOf(TRANCHE_P, addr1)).to.equal(parseEther("442"));
                 expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(parseEther("79"));
                 expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(0);
@@ -1421,7 +1421,7 @@ describe("Fund", function () {
                 expect(conversion.ratioA2P).to.equal(parseEther("0.21"));
                 expect(conversion.ratioB2P).to.equal(parseEther("0.59"));
                 expect(conversion.ratioAB).to.equal(parseEther("1"));
-                expect(conversion.day.toNumber()).to.approximately(startDay + DAY * 3, 3);
+                expect(conversion.timestamp.toNumber()).to.approximately(startDay + DAY * 3, 3);
                 expect(await fund.shareBalanceOf(TRANCHE_P, addr1)).to.equal(parseEther("581"));
                 expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(parseEther("100"));
                 expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(0);
@@ -1481,7 +1481,7 @@ describe("Fund", function () {
                 expect(conversion.ratioA2P).to.equal(parseEther("0.1"));
                 expect(conversion.ratioB2P).to.equal(parseEther("1.1"));
                 expect(conversion.ratioAB).to.equal(parseEther("1"));
-                expect(conversion.day.toNumber()).to.approximately(startDay + DAY * 4, 3);
+                expect(conversion.timestamp.toNumber()).to.approximately(startDay + DAY * 4, 3);
             });
 
             it("Should return zeros if the given index is out of bound", async function () {
@@ -1494,7 +1494,7 @@ describe("Fund", function () {
                 expect(conversion.ratioA2P).to.equal(0);
                 expect(conversion.ratioB2P).to.equal(0);
                 expect(conversion.ratioAB).to.equal(0);
-                expect(conversion.day).to.equal(0);
+                expect(conversion.timestamp).to.equal(0);
             });
         });
 
