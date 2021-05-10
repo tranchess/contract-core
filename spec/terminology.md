@@ -5,8 +5,7 @@ This document defines terminologies and abbreviations used in smart contracts.
 ## Fund
 
 -   **Underlying**: assets invested in the fund to create fund shares.
--   **Token M/A/B**: ERC-20 token of Tranche M/A/B. In smart contracts, the amount of tranche tokens
-    are usually named as `amountX` or `balanceX`, where `X` is `M`, `A` or `B`.
+-   **Token M/A/B**: ERC-20 token of Tranche M/A/B.
 -   **Share**: a unit of a tranche token, or a tranche token smart contract.
 -   **Tranche**: integer representation of a tranche, 0 for M, 1 for A, 2 for B.
 -   **Tranche Weight**: weight of the three tranches in splitting and merging. For example,
