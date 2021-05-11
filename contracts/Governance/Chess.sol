@@ -12,50 +12,83 @@ import "./ChessRoles.sol";
 contract Chess is IChess, Ownable, ERC20, ChessRoles {
     using SafeMath for uint256;
 
-    // Supply parameters
+    /// @dev Supply parameters
+    ///      [ 100e18, 140e18, 170e18, 190e18, 200e18 ]
     // prettier-ignore
-    bytes public constant schedule = 
+    bytes private constant CUMULATIVE_SUPPLY_SCHEDULE = 
         hex"0000000000000000000000000000000000000000000000056bc75e2d63100000"
-        hex"000000000000000000000000000000000000000000000005f68e8131ecf80000"
-        hex"0000000000000000000000000000000000000000000000068155a43676e00000"
-        hex"0000000000000000000000000000000000000000000000070c1cc73b00c80000"
-        hex"00000000000000000000000000000000000000000000000796e3ea3f8ab00000"
-        hex"00000000000000000000000000000000000000000000000821ab0d4414980000";
+        hex"00000000000000000000000000000000000000000000000796E3EA3F8AB00000"
+        hex"0000000000000000000000000000000000000000000000093739534D28680000"
+        hex"00000000000000000000000000000000000000000000000A4CC799563C380000"
+        hex"00000000000000000000000000000000000000000000000AD78EBC5AC6200000";
 
     uint256 public immutable startTimestamp;
 
     constructor(uint256 _startTimestamp) public ERC20("Chess", "CHESS") ChessRoles() {
-        _mint(msg.sender, getScheduledSupply(0));
+        _mint(msg.sender, getCumulativeSupply(0));
         startTimestamp = _startTimestamp;
     }
 
-    function getScheduledSupply(uint256 index) public pure returns (uint256 value) {
-        bytes memory scheduleBytes = bytes(schedule);
-        uint256 offset = (index + 1) * 32;
-        assembly {
-            value := mload(add(scheduleBytes, offset))
-        }
+    /// @notice Get length of the supply schedule
+    /// @return The length of the supply schedule
+    function getScheduleLength() public pure returns (uint256) {
+        return CUMULATIVE_SUPPLY_SCHEDULE.length / 32;
     }
 
+    /// @notice Get the cumulative supply at the given week index
+    /// @param index Index for cumulative supply
+    /// @return currentWeekCumulativeSupply The cumulative supply of the index
+    function getCumulativeSupply(uint256 index)
+        public
+        pure
+        returns (uint256 currentWeekCumulativeSupply)
+    {
+        (currentWeekCumulativeSupply, ) = getWeeklySupply(index);
+    }
+
+    /// @notice Get the total supply and weekly supply at the given week index
+    /// @param index Index for weekly supply
+    /// @return currentWeekCumulativeSupply The cumulative supply of the index
+    /// @return weeklySupply Weekly supply
     function getWeeklySupply(uint256 index)
         public
         pure
-        returns (uint256 currentWeekSupply, uint256 weeklySupply)
+        returns (uint256 currentWeekCumulativeSupply, uint256 weeklySupply)
     {
-        bytes memory scheduleBytes = bytes(schedule);
-        uint256 offset = (index + 1) * 32;
-        uint256 nextWeekSupply;
-        assembly {
-            currentWeekSupply := mload(add(scheduleBytes, offset))
-            nextWeekSupply := mload(add(scheduleBytes, add(offset, 32)))
-        }
+        uint256 length = getScheduleLength();
+        bytes memory scheduleBytes = bytes(CUMULATIVE_SUPPLY_SCHEDULE);
 
-        weeklySupply = nextWeekSupply.sub(currentWeekSupply);
+        if (index < length - 1) {
+            uint256 offset = (index + 1) * 32;
+            uint256 nextWeekCumulativeSupply;
+            assembly {
+                currentWeekCumulativeSupply := mload(add(scheduleBytes, offset))
+                nextWeekCumulativeSupply := mload(add(scheduleBytes, add(offset, 32)))
+            }
+
+            weeklySupply = nextWeekCumulativeSupply.sub(currentWeekCumulativeSupply);
+        } else {
+            uint256 offset = length * 32;
+            assembly {
+                currentWeekCumulativeSupply := mload(add(scheduleBytes, offset))
+            }
+
+            weeklySupply = 0;
+        }
     }
 
     /// @notice Current number of tokens in existence (claimed or unclaimed)
     function availableSupply() public view returns (uint256) {
-        return _availableSupply();
+        if (block.timestamp < startTimestamp) {
+            return getCumulativeSupply(0);
+        }
+        uint256 index = _getScheduleIndex(block.timestamp);
+        uint256 currentWeek = index * 1 weeks + startTimestamp;
+        (uint256 currentWeekCumulativeSupply, uint256 weeklySupply) = getWeeklySupply(index);
+        return
+            currentWeekCumulativeSupply.add(
+                weeklySupply.mul(block.timestamp - currentWeek).div(1 weeks)
+            );
     }
 
     /// @notice Get the release rate of CHESS token at the given timestamp
@@ -65,7 +98,7 @@ contract Chess is IChess, Ownable, ERC20, ChessRoles {
         if (timestamp < startTimestamp) {
             return 0;
         }
-        uint256 index = _getIndex(timestamp);
+        uint256 index = _getScheduleIndex(timestamp);
         (, uint256 weeklySupply) = getWeeklySupply(index);
         return weeklySupply.div(1 weeks);
     }
@@ -75,7 +108,7 @@ contract Chess is IChess, Ownable, ERC20, ChessRoles {
     /// @param account recipient of the token
     /// @param amount amount of the token
     function mint(address account, uint256 amount) external override onlyMinter {
-        require(totalSupply().add(amount) <= _availableSupply(), "exceeds allowable mint amount");
+        require(totalSupply().add(amount) <= availableSupply(), "Exceeds allowable mint amount");
         _mint(account, amount);
     }
 
@@ -87,20 +120,10 @@ contract Chess is IChess, Ownable, ERC20, ChessRoles {
         _removeMinter(account);
     }
 
-    /// @notice Get the index of the given timestamp
+    /// @notice Get the index of the given timestamp in the supply schedule
     /// @param timestamp Timestamp for index
     /// @return Index
-    function _getIndex(uint256 timestamp) private view returns (uint256) {
+    function _getScheduleIndex(uint256 timestamp) private view returns (uint256) {
         return (timestamp - startTimestamp) / 1 weeks;
-    }
-
-    function _availableSupply() internal view returns (uint256) {
-        if (block.timestamp < startTimestamp) {
-            return getScheduledSupply(0);
-        }
-        uint256 index = _getIndex(block.timestamp);
-        uint256 currentWeek = index * 1 weeks + startTimestamp;
-        (uint256 currentWeekSupply, uint256 weeklySupply) = getWeeklySupply(index);
-        return currentWeekSupply.add(weeklySupply.mul(block.timestamp - currentWeek).div(1 weeks));
     }
 }
