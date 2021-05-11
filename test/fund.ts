@@ -1295,6 +1295,7 @@ describe("Fund", function () {
         describe("Conversion matrix", function () {
             it("Upper conversion", async function () {
                 await preDefinedConvert160();
+                const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
                 expect(await fund.getConversionSize()).to.equal(1);
                 const navs = await fund.historyNavs(startDay + DAY);
                 expect(navs[TRANCHE_P]).to.equal(parseEther("1"));
@@ -1305,7 +1306,7 @@ describe("Fund", function () {
                 expect(conversion.ratioA2P).to.equal(parseEther("0.1"));
                 expect(conversion.ratioB2P).to.equal(parseEther("1.1"));
                 expect(conversion.ratioAB).to.equal(parseEther("1"));
-                expect(conversion.day).to.equal(startDay + DAY * 2);
+                expect(conversion.timestamp).to.equal(settlementTimestamp);
                 expect(await fund.shareBalanceOf(TRANCHE_P, addr1)).to.equal(parseEther("650"));
                 expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(parseEther("100"));
                 expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(0);
@@ -1320,6 +1321,7 @@ describe("Fund", function () {
 
             it("Lower conversion", async function () {
                 await preDefinedConvert070();
+                const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
                 await advanceOneDayAndSettle();
                 expect(await fund.getConversionSize()).to.equal(1);
                 const navs = await fund.historyNavs(startDay + DAY * 2);
@@ -1331,7 +1333,7 @@ describe("Fund", function () {
                 expect(conversion.ratioA2P).to.equal(parseEther("0.8"));
                 expect(conversion.ratioB2P).to.equal(0);
                 expect(conversion.ratioAB).to.equal(parseEther("0.3"));
-                expect(conversion.day).to.equal(startDay + DAY * 2);
+                expect(conversion.timestamp).to.equal(settlementTimestamp);
                 expect(await fund.shareBalanceOf(TRANCHE_P, addr1)).to.equal(parseEther("360"));
                 expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(parseEther("30"));
                 expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(0);
@@ -1346,6 +1348,7 @@ describe("Fund", function () {
 
             it("Lower conversion with negative NAV of Share B", async function () {
                 await preDefinedConvert040();
+                const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
                 expect(await fund.getConversionSize()).to.equal(1);
                 const navs = await fund.historyNavs(startDay + DAY * 2);
                 expect(navs[TRANCHE_P]).to.equal(parseEther("1"));
@@ -1356,7 +1359,7 @@ describe("Fund", function () {
                 expect(conversion.ratioA2P).to.equal(parseEther("0.8"));
                 expect(conversion.ratioB2P).to.equal(0);
                 expect(conversion.ratioAB).to.equal(0);
-                expect(conversion.day).to.equal(startDay + DAY * 2);
+                expect(conversion.timestamp).to.equal(settlementTimestamp);
                 expect(await fund.shareBalanceOf(TRANCHE_P, addr1)).to.equal(parseEther("240"));
                 expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(0);
                 expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(0);
@@ -1388,7 +1391,8 @@ describe("Fund", function () {
                 expect(conversion.ratioA2P).to.equal(parseEther("0.42"));
                 expect(conversion.ratioB2P).to.equal(0);
                 expect(conversion.ratioAB).to.equal(parseEther("0.79"));
-                expect(conversion.day).to.equal(startDay + DAY * 3);
+                const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+                expect(conversion.timestamp).to.equal(settlementTimestamp);
                 expect(await fund.shareBalanceOf(TRANCHE_P, addr1)).to.equal(parseEther("442"));
                 expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(parseEther("79"));
                 expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(0);
@@ -1408,6 +1412,7 @@ describe("Fund", function () {
 
                 // NAV before conversion: (1.4, 1.21, 0.99)
                 await advanceOneDayAndSettle();
+                const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
                 expect(await fund.getConversionSize()).to.equal(1);
                 const navs = await fund.historyNavs(startDay + DAY * 3);
                 expect(navs[TRANCHE_P]).to.equal(parseEther("1"));
@@ -1421,7 +1426,7 @@ describe("Fund", function () {
                 expect(conversion.ratioA2P).to.equal(parseEther("0.21"));
                 expect(conversion.ratioB2P).to.equal(parseEther("0.59"));
                 expect(conversion.ratioAB).to.equal(parseEther("1"));
-                expect(conversion.day).to.equal(startDay + DAY * 3);
+                expect(conversion.timestamp).to.equal(settlementTimestamp);
                 expect(await fund.shareBalanceOf(TRANCHE_P, addr1)).to.equal(parseEther("581"));
                 expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(parseEther("100"));
                 expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(0);
@@ -1475,13 +1480,14 @@ describe("Fund", function () {
                 await preDefinedConvert070();
                 await preDefinedConvert040();
                 await preDefinedConvert160();
+                const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
                 await preDefinedConvert200();
                 const conversion = await fund.getConversion(2);
                 expect(conversion.ratioP).to.equal(parseEther("1.6"));
                 expect(conversion.ratioA2P).to.equal(parseEther("0.1"));
                 expect(conversion.ratioB2P).to.equal(parseEther("1.1"));
                 expect(conversion.ratioAB).to.equal(parseEther("1"));
-                expect(conversion.day).to.equal(startDay + DAY * 4);
+                expect(conversion.timestamp).to.equal(settlementTimestamp);
             });
 
             it("Should return zeros if the given index is out of bound", async function () {
@@ -1494,7 +1500,7 @@ describe("Fund", function () {
                 expect(conversion.ratioA2P).to.equal(0);
                 expect(conversion.ratioB2P).to.equal(0);
                 expect(conversion.ratioAB).to.equal(0);
-                expect(conversion.day).to.equal(0);
+                expect(conversion.timestamp).to.equal(0);
             });
         });
 
@@ -1503,8 +1509,9 @@ describe("Fund", function () {
                 await preDefinedConvert070();
                 await preDefinedConvert040();
                 await preDefinedConvert160();
+                const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
                 await preDefinedConvert200();
-                expect(await fund.getConversionTimestamp(2)).to.equal(startDay + DAY * 4);
+                expect(await fund.getConversionTimestamp(2)).to.equal(settlementTimestamp);
             });
 
             it("Should return zero if the given index is out of bound", async function () {
