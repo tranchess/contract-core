@@ -6,10 +6,11 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
 import "../interfaces/IChess.sol";
+import "../utils/CoreUtility.sol";
 
 import "./ChessRoles.sol";
 
-contract Chess is IChess, Ownable, ERC20, ChessRoles {
+contract Chess is IChess, Ownable, ERC20, ChessRoles, CoreUtility {
     using SafeMath for uint256;
 
     /// @dev Supply parameters
@@ -24,9 +25,9 @@ contract Chess is IChess, Ownable, ERC20, ChessRoles {
 
     uint256 public immutable startTimestamp;
 
-    constructor(uint256 _startTimestamp) public ERC20("Chess", "CHESS") ChessRoles() {
+    constructor(uint256 startTimestamp_) public ERC20("Chess", "CHESS") ChessRoles() {
         _mint(msg.sender, getCumulativeSupply(0));
-        startTimestamp = _startTimestamp;
+        startTimestamp = endOfWeek(startTimestamp_);
     }
 
     /// @notice Get length of the supply schedule
@@ -37,7 +38,8 @@ contract Chess is IChess, Ownable, ERC20, ChessRoles {
 
     /// @notice Get the cumulative supply at the given week index
     /// @param index Index for cumulative supply
-    /// @return currentWeekCumulativeSupply The cumulative supply of the index
+    /// @return currentWeekCumulativeSupply The cumulative supply at the
+    ///         beginning of the week
     function getCumulativeSupply(uint256 index)
         public
         pure
@@ -48,7 +50,8 @@ contract Chess is IChess, Ownable, ERC20, ChessRoles {
 
     /// @notice Get the total supply and weekly supply at the given week index
     /// @param index Index for weekly supply
-    /// @return currentWeekCumulativeSupply The cumulative supply of the index
+    /// @return currentWeekCumulativeSupply The cumulative supply at the
+    ///         beginning of the week
     /// @return weeklySupply Weekly supply
     function getWeeklySupply(uint256 index)
         public
@@ -82,7 +85,7 @@ contract Chess is IChess, Ownable, ERC20, ChessRoles {
         if (block.timestamp < startTimestamp) {
             return getCumulativeSupply(0);
         }
-        uint256 index = _getScheduleIndex(block.timestamp);
+        uint256 index = (block.timestamp - startTimestamp) / 1 weeks;
         uint256 currentWeek = index * 1 weeks + startTimestamp;
         (uint256 currentWeekCumulativeSupply, uint256 weeklySupply) = getWeeklySupply(index);
         return
@@ -98,7 +101,7 @@ contract Chess is IChess, Ownable, ERC20, ChessRoles {
         if (timestamp < startTimestamp) {
             return 0;
         }
-        uint256 index = _getScheduleIndex(timestamp);
+        uint256 index = (timestamp - startTimestamp) / 1 weeks;
         (, uint256 weeklySupply) = getWeeklySupply(index);
         return weeklySupply.div(1 weeks);
     }
@@ -118,12 +121,5 @@ contract Chess is IChess, Ownable, ERC20, ChessRoles {
 
     function removeMinter(address account) external onlyOwner {
         _removeMinter(account);
-    }
-
-    /// @notice Get the index of the given timestamp in the supply schedule
-    /// @param timestamp Timestamp for index
-    /// @return Index
-    function _getScheduleIndex(uint256 timestamp) private view returns (uint256) {
-        return (timestamp - startTimestamp) / 1 weeks;
     }
 }

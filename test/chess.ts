@@ -6,6 +6,7 @@ const { loadFixture } = waffle;
 
 const DAY = 86400;
 const WEEK = DAY * 7;
+const SETTLEMENT_TIME = 3600 * 14; // UTC time 14:00 every day
 
 const CUMULATIVE_SUPPLY_SCHEDULE = [
     BigNumber.from(10).pow(18).mul(100),
@@ -42,24 +43,24 @@ describe("Chess", function () {
 
     let startWeek: number;
     let user1: Wallet;
-    let user2: Wallet;
     let owner: Wallet;
     let addr1: string;
     let chess: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
-        const [user1, user2, owner] = provider.getWallets();
+        const [user1, owner] = provider.getWallets();
 
         // Start at the midnight in the next Thursday.
         const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
-        const startWeek = Math.ceil(startTimestamp / WEEK) * WEEK + WEEK;
+        const startWeek =
+            Math.floor((startTimestamp + WEEK - SETTLEMENT_TIME) / WEEK) * WEEK + SETTLEMENT_TIME;
 
         const Chess = await ethers.getContractFactory("Chess");
-        const chess = await Chess.connect(owner).deploy(startWeek);
+        const chess = await Chess.connect(owner).deploy(startTimestamp);
         await chess.addMinter(owner.address);
 
         return {
-            wallets: { user1, user2, owner },
+            wallets: { user1, owner },
             startWeek,
             chess: chess.connect(user1),
         };
@@ -72,7 +73,6 @@ describe("Chess", function () {
     beforeEach(async function () {
         fixtureData = await loadFixture(currentFixture);
         user1 = fixtureData.wallets.user1;
-        user2 = fixtureData.wallets.user2;
         owner = fixtureData.wallets.owner;
         addr1 = user1.address;
         startWeek = fixtureData.startWeek;
@@ -81,6 +81,8 @@ describe("Chess", function () {
 
     describe("At beginning", function () {
         it("Should setup correctly", async function () {
+            expect(await chess.startTimestamp()).to.equal(startWeek);
+            expect(await chess.balanceOf(owner.address)).to.equal(CUMULATIVE_SUPPLY_SCHEDULE[0]);
             expect(await chess.getScheduleLength()).to.equal(CUMULATIVE_SUPPLY_SCHEDULE.length);
             for (let i = 0; i < CUMULATIVE_SUPPLY_SCHEDULE.length; i++) {
                 expect(await chess.getCumulativeSupply(i)).to.equal(CUMULATIVE_SUPPLY_SCHEDULE[i]);
@@ -148,6 +150,11 @@ describe("Chess", function () {
             expect(await chess.availableSupply()).to.equal(
                 CUMULATIVE_SUPPLY_SCHEDULE[CUMULATIVE_SUPPLY_SCHEDULE.length - 1]
             );
+
+            advanceBlockAtTime(startWeek + WEEK * WEEKLY_SUPPLY_SCHEDULE.length + DAY * 100);
+            expect(await chess.availableSupply()).to.equal(
+                CUMULATIVE_SUPPLY_SCHEDULE[CUMULATIVE_SUPPLY_SCHEDULE.length - 1]
+            );
         });
     });
 
@@ -168,6 +175,10 @@ describe("Chess", function () {
             expect(await chess.getRate(startWeek + WEEK * WEEKLY_SUPPLY_SCHEDULE.length)).to.equal(
                 0
             );
+
+            expect(
+                await chess.getRate(startWeek + WEEK * WEEKLY_SUPPLY_SCHEDULE.length + DAY * 100)
+            ).to.equal(0);
         });
     });
 
