@@ -26,6 +26,7 @@ contract Chess is IChess, Ownable, ERC20, ChessRoles, CoreUtility {
     uint256 public immutable startTimestamp;
 
     constructor(uint256 startTimestamp_) public ERC20("Chess", "CHESS") ChessRoles() {
+        require(startTimestamp_ > block.timestamp, "Start timestamp is not in future");
         _mint(msg.sender, getCumulativeSupply(0));
         startTimestamp = endOfWeek(startTimestamp_);
     }

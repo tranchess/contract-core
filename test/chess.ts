@@ -50,8 +50,7 @@ describe("Chess", function () {
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
         const [user1, owner] = provider.getWallets();
 
-        // Start at the midnight in the next Thursday.
-        const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+        const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp + WEEK;
         const startWeek =
             Math.floor((startTimestamp + WEEK - SETTLEMENT_TIME) / WEEK) * WEEK + SETTLEMENT_TIME;
 

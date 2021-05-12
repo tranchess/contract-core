@@ -44,7 +44,7 @@ describe("VestingEscrow", function () {
         const initialVestedSupply = parseEther("100");
 
         // Start at the midnight in the next Thursday.
-        const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+        const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp + WEEK;
         const startWeek = Math.ceil(startTimestamp / WEEK) * WEEK + 2 * WEEK;
         const endWeek = Math.ceil(startTimestamp / WEEK) * WEEK + 4 * WEEK;
 
