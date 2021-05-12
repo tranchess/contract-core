@@ -3,48 +3,117 @@ pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/math/SafeMath.sol";
 
-import "../utils/SafeDecimalMath.sol";
 import "../interfaces/IChess.sol";
+import "../utils/CoreUtility.sol";
 
 import "./ChessRoles.sol";
 
-contract Chess is IChess, Ownable, ERC20, ChessRoles {
-    using SafeDecimalMath for uint256;
+contract Chess is IChess, Ownable, ERC20, ChessRoles, CoreUtility {
+    using SafeMath for uint256;
 
-    uint256 public constant YEAR = 86400 * 365;
+    /// @dev Supply parameters
+    ///      [ 100e18, 140e18, 170e18, 190e18, 200e18 ]
+    // prettier-ignore
+    bytes private constant CUMULATIVE_SUPPLY_SCHEDULE = 
+        hex"0000000000000000000000000000000000000000000000056bc75e2d63100000"
+        hex"00000000000000000000000000000000000000000000000796E3EA3F8AB00000"
+        hex"0000000000000000000000000000000000000000000000093739534D28680000"
+        hex"00000000000000000000000000000000000000000000000A4CC799563C380000"
+        hex"00000000000000000000000000000000000000000000000AD78EBC5AC6200000";
 
-    // Supply parameters
-    uint256 public constant INITIAL_SUPPLY = 1303030303 * 10**18;
-    uint256 public constant INITIAL_RATE = (274815283 * 10**18) / YEAR; // leading to 43% premine
-    uint256 public constant RATE_REDUCTION_TIME = YEAR;
-    uint256 public constant RATE_REDUCTION_COEFFICIENT = 1189207115002721024; // 2 ** (1/4) * 1e18;
-    uint256 public constant RATE_DENOMINATOR = 10**18;
-    uint256 public constant INFLATION_DELAY = 86400;
+    uint256 public immutable startTimestamp;
 
-    event UpdateMiningParameters(uint256 time, uint256 rate, uint256 supply);
-
-    // Supply variables
-    int128 public miningDay;
-    uint256 public startDayTime;
-    uint256 public override rate;
-
-    uint256 public startDaySupply;
-
-    constructor() public ERC20("Chess", "CHESS") ChessRoles() {
-        _mint(msg.sender, INITIAL_SUPPLY);
-
-        startDayTime = block.timestamp + INFLATION_DELAY - RATE_REDUCTION_TIME;
-        miningDay = -1;
-        rate = 0;
-        startDaySupply = INITIAL_SUPPLY;
+    constructor(uint256 startTimestamp_) public ERC20("Chess", "CHESS") ChessRoles() {
+        require(startTimestamp_ > block.timestamp, "Start timestamp is not in future");
+        _mint(msg.sender, getCumulativeSupply(0));
+        startTimestamp = endOfWeek(startTimestamp_);
     }
 
-    /**
-        @notice Current number of tokens in existence (claimed or unclaimed)
-     */
+    /// @notice Get length of the supply schedule
+    /// @return The length of the supply schedule
+    function getScheduleLength() public pure returns (uint256) {
+        return CUMULATIVE_SUPPLY_SCHEDULE.length / 32;
+    }
+
+    /// @notice Get the cumulative supply at the given week index
+    /// @param index Index for cumulative supply
+    /// @return currentWeekCumulativeSupply The cumulative supply at the
+    ///         beginning of the week
+    function getCumulativeSupply(uint256 index)
+        public
+        pure
+        returns (uint256 currentWeekCumulativeSupply)
+    {
+        (currentWeekCumulativeSupply, ) = getWeeklySupply(index);
+    }
+
+    /// @notice Get the total supply and weekly supply at the given week index
+    /// @param index Index for weekly supply
+    /// @return currentWeekCumulativeSupply The cumulative supply at the
+    ///         beginning of the week
+    /// @return weeklySupply Weekly supply
+    function getWeeklySupply(uint256 index)
+        public
+        pure
+        returns (uint256 currentWeekCumulativeSupply, uint256 weeklySupply)
+    {
+        uint256 length = getScheduleLength();
+        bytes memory scheduleBytes = bytes(CUMULATIVE_SUPPLY_SCHEDULE);
+
+        if (index < length - 1) {
+            uint256 offset = (index + 1) * 32;
+            uint256 nextWeekCumulativeSupply;
+            assembly {
+                currentWeekCumulativeSupply := mload(add(scheduleBytes, offset))
+                nextWeekCumulativeSupply := mload(add(scheduleBytes, add(offset, 32)))
+            }
+
+            weeklySupply = nextWeekCumulativeSupply.sub(currentWeekCumulativeSupply);
+        } else {
+            uint256 offset = length * 32;
+            assembly {
+                currentWeekCumulativeSupply := mload(add(scheduleBytes, offset))
+            }
+
+            weeklySupply = 0;
+        }
+    }
+
+    /// @notice Current number of tokens in existence (claimed or unclaimed)
     function availableSupply() public view returns (uint256) {
-        return _availableSupply();
+        if (block.timestamp < startTimestamp) {
+            return getCumulativeSupply(0);
+        }
+        uint256 index = (block.timestamp - startTimestamp) / 1 weeks;
+        uint256 currentWeek = index * 1 weeks + startTimestamp;
+        (uint256 currentWeekCumulativeSupply, uint256 weeklySupply) = getWeeklySupply(index);
+        return
+            currentWeekCumulativeSupply.add(
+                weeklySupply.mul(block.timestamp - currentWeek).div(1 weeks)
+            );
+    }
+
+    /// @notice Get the release rate of CHESS token at the given timestamp
+    /// @param timestamp Timestamp for release rate
+    /// @return Release rate (number of CHESS token per second)
+    function getRate(uint256 timestamp) external view override returns (uint256) {
+        if (timestamp < startTimestamp) {
+            return 0;
+        }
+        uint256 index = (timestamp - startTimestamp) / 1 weeks;
+        (, uint256 weeklySupply) = getWeeklySupply(index);
+        return weeklySupply.div(1 weeks);
+    }
+
+    /// @notice Creates `amount` CHESS tokens and assigns them to `account`,
+    ///         increasing the total supply. This is guarded by `Minter` role.
+    /// @param account recipient of the token
+    /// @param amount amount of the token
+    function mint(address account, uint256 amount) external override onlyMinter {
+        require(totalSupply().add(amount) <= availableSupply(), "Exceeds allowable mint amount");
+        _mint(account, amount);
     }
 
     function addMinter(address account) external onlyOwner {
@@ -53,80 +122,5 @@ contract Chess is IChess, Ownable, ERC20, ChessRoles {
 
     function removeMinter(address account) external onlyOwner {
         _removeMinter(account);
-    }
-
-    /**
-    @notice Update mining rate and supply at the start of the day
-    @dev Callable by any address, but only once per day
-         Total supply becomes slightly larger if this function is called late
-     */
-    function updateMiningParameters() public {
-        require(block.timestamp >= startDayTime + RATE_REDUCTION_TIME, "too soon!");
-        _updateMiningParameters();
-    }
-
-    /**
-    @notice Get timestamp of the current mining day start
-                while simultaneously updating mining parameters
-    @return Timestamp of the day
-     */
-    function startDayTimeWrite() public returns (uint256) {
-        uint256 _startDayTime = startDayTime;
-        if (block.timestamp >= _startDayTime + RATE_REDUCTION_TIME) {
-            _updateMiningParameters();
-            return startDayTime;
-        }
-        return _startDayTime;
-    }
-
-    /**
-    @notice Get timestamp of the next mining day start
-                while simultaneously updating mining parameters
-    @return Timestamp of the next day
-     */
-    function futureDayTimeWrite() public override returns (uint256, uint256) {
-        uint256 _startDayTime = startDayTime;
-        if (block.timestamp >= _startDayTime + RATE_REDUCTION_TIME) {
-            _updateMiningParameters();
-            return (startDayTime + RATE_REDUCTION_TIME, rate);
-        }
-        return (_startDayTime + RATE_REDUCTION_TIME, rate);
-    }
-
-    function mint(address account, uint256 amount) public override onlyMinter {
-        if (block.timestamp >= startDayTime + RATE_REDUCTION_TIME) {
-            _updateMiningParameters();
-        }
-
-        require(totalSupply() + amount <= _availableSupply(), "exceeds allowable mint amount");
-        _mint(account, amount);
-    }
-
-    // -------------------------------------------------------------------------
-    function _availableSupply() internal view returns (uint256) {
-        return startDaySupply + (block.timestamp - startDayTime) * rate;
-    }
-
-    /**
-    @dev Update mining rate and supply at the start of the day
-         Any modifying mining call must also call this
-     */
-    function _updateMiningParameters() internal {
-        uint256 _rate = rate;
-        uint256 _startDaySupply = startDaySupply;
-
-        startDayTime += RATE_REDUCTION_TIME;
-        miningDay += 1;
-
-        if (_rate == 0) {
-            _rate = INITIAL_RATE;
-        } else {
-            _startDaySupply += _rate * RATE_REDUCTION_TIME;
-            startDaySupply = _startDaySupply;
-            _rate = _rate.divideDecimal(RATE_REDUCTION_COEFFICIENT);
-        }
-        rate = _rate;
-
-        emit UpdateMiningParameters(block.timestamp, _rate, _startDaySupply);
     }
 }

@@ -44,12 +44,12 @@ describe("VestingEscrow", function () {
         const initialVestedSupply = parseEther("100");
 
         // Start at the midnight in the next Thursday.
-        const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+        const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp + WEEK;
         const startWeek = Math.ceil(startTimestamp / WEEK) * WEEK + 2 * WEEK;
         const endWeek = Math.ceil(startTimestamp / WEEK) * WEEK + 4 * WEEK;
 
         const Chess = await ethers.getContractFactory("Chess");
-        const chess = await Chess.connect(owner).deploy();
+        const chess = await Chess.connect(owner).deploy(startTimestamp);
 
         const VestingEscrow = await ethers.getContractFactory("VestingEscrow");
         const vestingEscrow = await VestingEscrow.connect(owner).deploy(
