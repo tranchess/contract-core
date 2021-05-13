@@ -369,7 +369,32 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 pdLevel,
         uint256 index
     ) external {
-        _cancelBid(conversionID, tranche, msg.sender, pdLevel, index);
+        OrderQueue storage orderQueue = bids[conversionID][tranche][pdLevel];
+        Order storage order = orderQueue.list[index];
+        require(order.maker == msg.sender, "Maker address mismatched");
+
+        uint256 fillable = order.fillable;
+        emit BidOrderCanceled(
+            msg.sender,
+            tranche,
+            pdLevel,
+            order.amount,
+            conversionID,
+            index,
+            fillable
+        );
+        orderQueue.cancel(index);
+
+        // Update bestBid
+        if (bestBids[conversionID][tranche] == pdLevel) {
+            uint256 newBestBid = pdLevel;
+            while (newBestBid > 0 && bids[conversionID][tranche][newBestBid].isEmpty()) {
+                newBestBid--;
+            }
+            bestBids[conversionID][tranche] = newBestBid;
+        }
+
+        _transferQuote(msg.sender, fillable);
     }
 
     /// @notice Cancel an ask order by order identifier
@@ -383,7 +408,40 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 pdLevel,
         uint256 index
     ) external {
-        _cancelAsk(conversionID, tranche, msg.sender, pdLevel, index);
+        OrderQueue storage orderQueue = asks[conversionID][tranche][pdLevel];
+        Order storage order = orderQueue.list[index];
+        require(order.maker == msg.sender, "Maker address mismatched");
+
+        uint256 fillable = order.fillable;
+        emit AskOrderCanceled(
+            msg.sender,
+            tranche,
+            pdLevel,
+            order.amount,
+            conversionID,
+            index,
+            fillable
+        );
+        orderQueue.cancel(index);
+
+        // Update bestAsk
+        if (bestAsks[conversionID][tranche] == pdLevel) {
+            uint256 newBestAsk = pdLevel;
+            while (
+                newBestAsk <= PD_LEVEL_COUNT && asks[conversionID][tranche][newBestAsk].isEmpty()
+            ) {
+                newBestAsk++;
+            }
+            bestAsks[conversionID][tranche] = newBestAsk;
+        }
+
+        if (tranche == TRANCHE_P) {
+            _convertAndUnlock(msg.sender, fillable, 0, 0, conversionID);
+        } else if (tranche == TRANCHE_A) {
+            _convertAndUnlock(msg.sender, 0, fillable, 0, conversionID);
+        } else {
+            _convertAndUnlock(msg.sender, 0, 0, fillable, conversionID);
+        }
     }
 
     /// @notice Buy share P
@@ -544,80 +602,6 @@ contract Exchange is ExchangeRoles, Staking {
         _transferQuote(account, quoteAmount);
 
         emit TakerSettled(account, epoch, sharesP, sharesA, sharesB, quoteAmount);
-    }
-
-    /// @dev Cancel a bid order
-    /// @param conversionID Order's conversion ID
-    /// @param tranche Tranche of the order's base asset
-    /// @param maker Order's maker address
-    /// @param pdLevel Order's premium-discount level
-    /// @param index Order's index
-    function _cancelBid(
-        uint256 conversionID,
-        uint256 tranche,
-        address maker,
-        uint256 pdLevel,
-        uint256 index
-    ) internal {
-        OrderQueue storage orderQueue = bids[conversionID][tranche][pdLevel];
-        Order storage order = orderQueue.list[index];
-        require(order.maker == maker, "Maker address mismatched");
-
-        uint256 fillable = order.fillable;
-        emit BidOrderCanceled(maker, tranche, pdLevel, order.amount, conversionID, index, fillable);
-        orderQueue.cancel(index);
-
-        // Update bestBid
-        if (bestBids[conversionID][tranche] == pdLevel) {
-            uint256 newBestBid = pdLevel;
-            while (newBestBid > 0 && bids[conversionID][tranche][newBestBid].isEmpty()) {
-                newBestBid--;
-            }
-            bestBids[conversionID][tranche] = newBestBid;
-        }
-
-        _transferQuote(maker, fillable);
-    }
-
-    /// @dev Cancel an ask order
-    /// @param conversionID Order's conversion ID
-    /// @param tranche Tranche of the order's base asset address
-    /// @param maker Order's maker address
-    /// @param pdLevel Order's premium-discount level
-    /// @param index Order's index
-    function _cancelAsk(
-        uint256 conversionID,
-        uint256 tranche,
-        address maker,
-        uint256 pdLevel,
-        uint256 index
-    ) internal {
-        OrderQueue storage orderQueue = asks[conversionID][tranche][pdLevel];
-        Order storage order = orderQueue.list[index];
-        require(order.maker == maker, "Maker address mismatched");
-
-        uint256 fillable = order.fillable;
-        emit AskOrderCanceled(maker, tranche, pdLevel, order.amount, conversionID, index, fillable);
-        orderQueue.cancel(index);
-
-        // Update bestAsk
-        if (bestAsks[conversionID][tranche] == pdLevel) {
-            uint256 newBestAsk = pdLevel;
-            while (
-                newBestAsk <= PD_LEVEL_COUNT && asks[conversionID][tranche][newBestAsk].isEmpty()
-            ) {
-                newBestAsk++;
-            }
-            bestAsks[conversionID][tranche] = newBestAsk;
-        }
-
-        if (tranche == TRANCHE_P) {
-            _convertAndUnlock(maker, fillable, 0, 0, conversionID);
-        } else if (tranche == TRANCHE_A) {
-            _convertAndUnlock(maker, 0, fillable, 0, conversionID);
-        } else {
-            _convertAndUnlock(maker, 0, 0, fillable, conversionID);
-        }
     }
 
     /// @dev Buy share
