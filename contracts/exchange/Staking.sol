@@ -35,9 +35,9 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     uint256 private constant REWARD_WEIGHT_P = 3;
 
     IFund public immutable fund;
-    address private immutable tokenP;
-    address private immutable tokenA;
-    address private immutable tokenB;
+    IERC20 private immutable tokenP;
+    IERC20 private immutable tokenA;
+    IERC20 private immutable tokenB;
 
     /// @notice The CHESS token contract.
     IChess public immutable chess;
@@ -90,9 +90,9 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         address quoteAssetAddress_
     ) public {
         fund = IFund(fund_);
-        tokenP = IFund(fund_).tokenP();
-        tokenA = IFund(fund_).tokenA();
-        tokenB = IFund(fund_).tokenB();
+        tokenP = IERC20(IFund(fund_).tokenP());
+        tokenA = IERC20(IFund(fund_).tokenA());
+        tokenB = IERC20(IFund(fund_).tokenB());
         chess = IChess(chess_);
         chessController = IChessController(chessController_);
         quoteAssetAddress = quoteAssetAddress_;
@@ -223,11 +223,11 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         _checkpoint(conversionSize);
         _userCheckpoint(msg.sender, conversionSize);
         if (tranche == TRANCHE_P) {
-            IERC20(tokenP).transferFrom(msg.sender, address(this), amount);
+            tokenP.transferFrom(msg.sender, address(this), amount);
         } else if (tranche == TRANCHE_A) {
-            IERC20(tokenA).transferFrom(msg.sender, address(this), amount);
+            tokenA.transferFrom(msg.sender, address(this), amount);
         } else {
-            IERC20(tokenB).transferFrom(msg.sender, address(this), amount);
+            tokenB.transferFrom(msg.sender, address(this), amount);
         }
         _availableBalances[msg.sender][tranche] = _availableBalances[msg.sender][tranche].add(
             amount
@@ -257,11 +257,11 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         );
         _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
         if (tranche == TRANCHE_P) {
-            IERC20(tokenP).transfer(msg.sender, amount);
+            tokenP.transfer(msg.sender, amount);
         } else if (tranche == TRANCHE_A) {
-            IERC20(tokenA).transfer(msg.sender, amount);
+            tokenA.transfer(msg.sender, amount);
         } else {
-            IERC20(tokenB).transfer(msg.sender, amount);
+            tokenB.transfer(msg.sender, amount);
         }
 
         emit Withdrawn(tranche, msg.sender, amount);
