@@ -2,7 +2,8 @@ import type { HardhatUserConfig, NetworksUserConfig } from "hardhat/types";
 import "@nomiclabs/hardhat-waffle";
 import "solidity-coverage";
 import "./tasks/accounts";
-import "./tasks/deploy";
+import "./tasks/deploy_fund";
+import "./tasks/deploy_exchange";
 import "./tasks/initialize_fund";
 import "./tasks/initialize_timelock";
 import {
