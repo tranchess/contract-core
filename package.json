@@ -5,7 +5,8 @@
         "fmt": "prettier --ignore-path .gitignore -w .",
         "lint": "eslint --ext .js,.ts --ignore-path .gitignore .",
         "test": "hardhat test",
-        "coverage": "hardhat coverage --solcoverjs ./.primary_market.solcover.js"
+        "coverage": "hardhat coverage --solcoverjs ./.primary_market.solcover.js",
+        "cc": "hardhat clean && hardhat compile"
     },
     "devDependencies": {
         "@nomiclabs/hardhat-ethers": "^2.0.1",

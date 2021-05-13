@@ -7,16 +7,16 @@ import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-import "./utils/SafeDecimalMath.sol";
-import "./utils/CoreUtility.sol";
+import "../utils/SafeDecimalMath.sol";
+import "../utils/CoreUtility.sol";
 
-import "./interfaces/IPrimaryMarket.sol";
-import "./interfaces/IFund.sol";
-import "./interfaces/ITwapOracle.sol";
-import "./interfaces/IAprOracle.sol";
-import "./interfaces/IBallot.sol";
-import "./interfaces/IVotingEscrow.sol";
-import "./interfaces/ITrancheIndex.sol";
+import "../interfaces/IPrimaryMarket.sol";
+import "../interfaces/IFund.sol";
+import "../interfaces/ITwapOracle.sol";
+import "../interfaces/IAprOracle.sol";
+import "../interfaces/IBallot.sol";
+import "../interfaces/IVotingEscrow.sol";
+import "../interfaces/ITrancheIndex.sol";
 
 import "./FundRoles.sol";
 
@@ -547,6 +547,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     function allShareBalanceOf(address account)
         external
         view
+        override
         returns (
             uint256,
             uint256,

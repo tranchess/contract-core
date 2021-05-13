@@ -3,10 +3,10 @@ pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-import "./interfaces/IAprOracle.sol";
-import "./utils/SafeDecimalMath.sol";
-import "./utils/Exponential.sol";
-import "./utils/CoreUtility.sol";
+import "../interfaces/IAprOracle.sol";
+import "../utils/SafeDecimalMath.sol";
+import "../utils/Exponential.sol";
+import "../utils/CoreUtility.sol";
 
 // Venus
 interface VTokenInterfaces {

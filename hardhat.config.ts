@@ -50,7 +50,7 @@ const config: HardhatUserConfig = {
     // @see https://hardhat.org/plugins/hardhat-gas-reporter.html
     gasReporter: {
         enabled: process.env.REPORT_GAS ? true : false,
-        excludeContracts: ["test/"],
+        excludeContracts: ["test/", "utils/", "misc/"],
     },
 };
 export default config;

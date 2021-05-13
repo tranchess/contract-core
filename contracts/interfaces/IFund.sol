@@ -48,6 +48,15 @@ interface IFund {
 
     function shareBalanceOf(uint256 tranche, address account) external view returns (uint256);
 
+    function allShareBalanceOf(address account)
+        external
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256
+        );
+
     function shareBalanceVersion(address account) external view returns (uint256);
 
     function shareAllowance(
