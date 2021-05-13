@@ -35,9 +35,9 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     uint256 private constant REWARD_WEIGHT_P = 3;
 
     IFund public immutable fund;
-    address public immutable tokenP;
-    address public immutable tokenA;
-    address public immutable tokenB;
+    address private immutable tokenP;
+    address private immutable tokenA;
+    address private immutable tokenB;
 
     /// @notice The CHESS token contract.
     IChess public immutable chess;
