@@ -218,22 +218,53 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @dev Deposit to get rewards
     /// @param tranche Tranche of the share
     /// @param amount The amount to deposit
-    function deposit(uint256 tranche, uint256 amount) external {
-        _deposit(tranche, msg.sender, amount);
+    function deposit(uint256 tranche, uint256 amount) public {
+        uint256 conversionSize = fund.getConversionSize();
+        _checkpoint(conversionSize);
+        _userCheckpoint(msg.sender, conversionSize);
+        if (tranche == TRANCHE_P) {
+            IERC20(tokenP).transferFrom(msg.sender, address(this), amount);
+        } else if (tranche == TRANCHE_A) {
+            IERC20(tokenA).transferFrom(msg.sender, address(this), amount);
+        } else {
+            IERC20(tokenB).transferFrom(msg.sender, address(this), amount);
+        }
+        _availableBalances[msg.sender][tranche] = _availableBalances[msg.sender][tranche].add(
+            amount
+        );
+        _totalSupplies[tranche] = _totalSupplies[tranche].add(amount);
+
+        emit Deposited(tranche, msg.sender, amount);
     }
 
     /// @dev Claim settled shares and deposit to get rewards
     /// @param primaryMarket The primary market to claim shares from
     function claimAndDeposit(address primaryMarket) external {
         (uint256 createdShares, ) = IPrimaryMarket(primaryMarket).claim(msg.sender);
-        _deposit(TRANCHE_P, msg.sender, createdShares);
+        deposit(TRANCHE_P, createdShares);
     }
 
     /// @dev Withdraw
     /// @param tranche Tranche of the share
     /// @param amount The amount to deposit
     function withdraw(uint256 tranche, uint256 amount) external {
-        _withdraw(tranche, msg.sender, amount);
+        uint256 conversionSize = fund.getConversionSize();
+        _checkpoint(conversionSize);
+        _userCheckpoint(msg.sender, conversionSize);
+        _availableBalances[msg.sender][tranche] = _availableBalances[msg.sender][tranche].sub(
+            amount,
+            "Insufficient balance to withdraw"
+        );
+        _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
+        if (tranche == TRANCHE_P) {
+            IERC20(tokenP).transfer(msg.sender, amount);
+        } else if (tranche == TRANCHE_A) {
+            IERC20(tokenA).transfer(msg.sender, amount);
+        } else {
+            IERC20(tokenB).transfer(msg.sender, amount);
+        }
+
+        emit Withdrawn(tranche, msg.sender, amount);
     }
 
     /// @notice Convert the account to latest version and accumulate rewards. It helps to eliminate
@@ -273,59 +304,6 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         _checkpoint(conversionSize);
         _userCheckpoint(account, conversionSize);
         _claim(account);
-    }
-
-    /// @dev Deposit to get rewards
-    /// @param tranche Tranche of the share
-    /// @param account Target account
-    /// @param amount The amount to deposit
-    function _deposit(
-        uint256 tranche,
-        address account,
-        uint256 amount
-    ) private {
-        uint256 conversionSize = fund.getConversionSize();
-        _checkpoint(conversionSize);
-        _userCheckpoint(account, conversionSize);
-        if (tranche == TRANCHE_P) {
-            IERC20(tokenP).transferFrom(account, address(this), amount);
-        } else if (tranche == TRANCHE_A) {
-            IERC20(tokenA).transferFrom(account, address(this), amount);
-        } else {
-            IERC20(tokenB).transferFrom(account, address(this), amount);
-        }
-        _availableBalances[account][tranche] = _availableBalances[account][tranche].add(amount);
-        _totalSupplies[tranche] = _totalSupplies[tranche].add(amount);
-
-        emit Deposited(tranche, account, amount);
-    }
-
-    /// @dev Withdraw
-    /// @param tranche Tranche of the share
-    /// @param account Target account
-    /// @param amount The amount to deposit
-    function _withdraw(
-        uint256 tranche,
-        address account,
-        uint256 amount
-    ) private {
-        uint256 conversionSize = fund.getConversionSize();
-        _checkpoint(conversionSize);
-        _userCheckpoint(account, conversionSize);
-        _availableBalances[account][tranche] = _availableBalances[account][tranche].sub(
-            amount,
-            "Insufficient balance to withdraw"
-        );
-        _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
-        if (tranche == TRANCHE_P) {
-            IERC20(tokenP).transfer(account, amount);
-        } else if (tranche == TRANCHE_A) {
-            IERC20(tokenA).transfer(account, amount);
-        } else {
-            IERC20(tokenB).transfer(account, amount);
-        }
-
-        emit Withdrawn(tranche, account, amount);
     }
 
     /// @dev Transfer shares from the sender to the contract internally
