@@ -69,7 +69,7 @@ describe("Staking", function () {
         readonly shareP: MockContract;
         readonly shareA: MockContract;
         readonly shareB: MockContract;
-        readonly chess: Contract;
+        readonly chess: MockContract;
         readonly chessController: MockContract;
         readonly usdc: Contract;
         readonly staking: Contract;
@@ -89,7 +89,7 @@ describe("Staking", function () {
     let shareP: MockContract;
     let shareA: MockContract;
     let shareB: MockContract;
-    let chess: Contract;
+    let chess: MockContract;
     let chessController: MockContract;
     let usdc: Contract;
     let staking: Contract;
@@ -114,8 +114,8 @@ describe("Staking", function () {
         await fund.mock.tokenB.returns(shareB.address);
         await fund.mock.getConversionSize.returns(0);
 
-        const MockChess = await ethers.getContractFactory("MockChess");
-        const chess = await MockChess.connect(owner).deploy("CHESS", "CHESS", 18);
+        const chess = await deployMockForName(owner, "IChess");
+        await chess.mock.getRate.returns(0);
 
         const chessController = await deployMockForName(owner, "IChessController");
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
@@ -783,7 +783,7 @@ describe("Staking", function () {
             await fund.mock.getConversionTimestamp
                 .withArgs(0)
                 .returns(nextRateUpdateTime + 100 * WEEK);
-            await chess.set(nextRateUpdateTime, parseEther("1"));
+            await chess.mock.getRate.withArgs(nextRateUpdateTime).returns(parseEther("1"));
             await advanceBlockAtTime(nextRateUpdateTime);
 
             rate1 = parseEther("1").mul(USER1_WEIGHT).div(TOTAL_WEIGHT);
@@ -795,23 +795,23 @@ describe("Staking", function () {
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rate1.mul(100));
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(rate2.mul(100));
 
-            await setNextBlockTime(nextRateUpdateTime + 300);
-            await expect(() => staking.claimRewards(addr1)).to.changeTokenBalance(
-                chess,
-                user1,
-                rate1.mul(300)
-            );
+            await expect(async () => {
+                await setNextBlockTime(nextRateUpdateTime + 300);
+                await staking.claimRewards(addr1);
+            }).to.callMocks({
+                func: chess.mock.mint.withArgs(addr1, rate1.mul(300)),
+            });
 
             await advanceBlockAtTime(nextRateUpdateTime + 800);
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rate1.mul(500));
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(rate2.mul(800));
 
-            await setNextBlockTime(nextRateUpdateTime + 1000);
-            await expect(() => staking.claimRewards(addr1)).to.changeTokenBalance(
-                chess,
-                user1,
-                rate1.mul(700)
-            );
+            await expect(async () => {
+                await setNextBlockTime(nextRateUpdateTime + 1000);
+                await staking.claimRewards(addr1);
+            }).to.callMocks({
+                func: chess.mock.mint.withArgs(addr1, rate1.mul(700)),
+            });
         });
 
         it("Should make a checkpoint on deposit()", async function () {
@@ -911,9 +911,13 @@ describe("Staking", function () {
         });
 
         it("Should calculate rewards for two users in multiple weeks", async function () {
-            await chess.set(nextRateUpdateTime + WEEK, parseEther("2"));
-            await chess.set(nextRateUpdateTime + WEEK * 2, parseEther("3"));
-            await chess.set(nextRateUpdateTime + WEEK * 3, parseEther("4"));
+            await chess.mock.getRate.withArgs(nextRateUpdateTime + WEEK).returns(parseEther("2"));
+            await chess.mock.getRate
+                .withArgs(nextRateUpdateTime + WEEK * 2)
+                .returns(parseEther("3"));
+            await chess.mock.getRate
+                .withArgs(nextRateUpdateTime + WEEK * 3)
+                .returns(parseEther("4"));
 
             let balance1 = rate1.mul(WEEK);
             let balance2 = rate2.mul(WEEK);
@@ -923,12 +927,12 @@ describe("Staking", function () {
 
             balance1 = balance1.add(rate1.mul(WEEK).mul(2));
             balance2 = balance2.add(rate2.mul(WEEK).mul(2));
-            await setNextBlockTime(nextRateUpdateTime + WEEK * 2);
-            await expect(() => staking.claimRewards(addr1)).to.changeTokenBalance(
-                chess,
-                user1,
-                balance1
-            );
+            await expect(async () => {
+                await setNextBlockTime(nextRateUpdateTime + WEEK * 2);
+                await staking.claimRewards(addr1);
+            }).to.callMocks({
+                func: chess.mock.mint.withArgs(addr1, balance1),
+            });
 
             balance1 = balance1
                 .add(rate1.mul(WEEK).mul(3))
@@ -941,17 +945,21 @@ describe("Staking", function () {
 
             balance1 = balance1.add(rate1.mul(WEEK).mul(4));
             balance2 = balance2.add(rate2.mul(WEEK).mul(4));
-            await setNextBlockTime(nextRateUpdateTime + WEEK * 4);
-            await expect(() => staking.claimRewards(addr1)).to.changeTokenBalance(
-                chess,
-                user1,
-                balance1
-            );
+            await expect(async () => {
+                await setNextBlockTime(nextRateUpdateTime + WEEK * 4);
+                await staking.claimRewards(addr1);
+            }).to.callMocks({
+                func: chess.mock.mint.withArgs(addr1, balance1),
+            });
         });
 
         it("Should calculate rewards with conversion in two weeks", async function () {
-            await chess.set(nextRateUpdateTime + WEEK * 1, parseEther("3"));
-            await chess.set(nextRateUpdateTime + WEEK * 2, parseEther("5"));
+            await chess.mock.getRate
+                .withArgs(nextRateUpdateTime + WEEK * 1)
+                .returns(parseEther("3"));
+            await chess.mock.getRate
+                .withArgs(nextRateUpdateTime + WEEK * 2)
+                .returns(parseEther("5"));
             await fund.mock.getConversionSize.returns(1);
             await fund.mock.getConversionTimestamp
                 .withArgs(0)
