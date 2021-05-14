@@ -27,7 +27,7 @@
 
 Tranchess Protocol is a platform for crypto-backed synthetic assets capable of speculating, hedging, and arbitraging with minimal liquidation risk, settlement risk, and other systematic risks. In our approach, it consists of two major components: the primary market and the secondary market.
 
-Tranchess Fund Protocol is the set of contracts representing the primary market. In the primary market, the underlying asset could create tokenized shares in the corresponding Master Fund (Token M). Token M could further split into tokenized shares in Tranche A (Token A) and Tranche B (Token B) for different purposes. Holding Token A leads to income with a weekly floating interest rate determined by market performance and governance, whereas holding Token B implies the use of leverages with no liquidation risk and maximal capital efficiency. The Fund would perform periodic evaluation of the net asset values (NAVs) per share, and when one or more of NAVs are over the limitation, it triggers conversions to universally and proportionally rebases shares across every address.
+Tranchess Fund Protocol is the set of contracts representing the primary market. In the primary market, the underlying asset could create tokenized shares in the corresponding Master Fund (Token M). Token M could further split into tokenized shares in Tranche A (Token A) and Tranche B (Token B) for different purposes. Holding Token A leads to income with a weekly floating interest rate determined by market performance and governance, whereas holding Token B implies the use of leverages with no liquidation risk and maximal capital efficiency. The Fund would perform periodic evaluation of the net asset values (NAVs) per share, and when one or more of NAVs are over the limitation, it triggers rebalances to universally and proportionally rebases shares across every address.
 
 <div style="text-align: center;">
 <img src="./images/tranchess_primary_market.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
@@ -54,13 +54,13 @@ The [`Share`](../contracts/Share.sol) contract is the main entrance to all stand
 
 ## Fund
 
-The [`Fund`](../contracts/Fund.sol) contract contains the bulk of the business logic within Tranchess protocol. The `Fund` implements its ingenious NAV calculation and share conversion logic, which would be invoked daily with public access. The `Fund` is also responsible for storing most of the underlying asset and collects the protocol fee against the underlying asset daily. Although Token M, A, and B are exposed as three independent contracts with ERC20 interfaces, the `Fund` manages all three token balances and total supplies under the hood for smooth conversions.
+The [`Fund`](../contracts/Fund.sol) contract contains the bulk of the business logic within Tranchess protocol. The `Fund` implements its ingenious NAV calculation and share rebalance logic, which would be invoked daily with public access. The `Fund` is also responsible for storing most of the underlying asset and collects the protocol fee against the underlying asset daily. Although Token M, A, and B are exposed as three independent contracts with ERC20 interfaces, the `Fund` manages all three token balances and total supplies under the hood for smooth rebalances.
 
 1. Mint/Burn/Transfer Token M/A/B
 1. Calculate NAVs of Token M/A/B
-1. Trigger new conversion
+1. Trigger new rebalance
 1. Collect protocol fee
-1. Calculate per-account balances/allowances from current conversion number to any more recent conversion number
+1. Calculate per-account balances/allowances from current rebalance version to the latest version
 
 ## APR Oracle
 
@@ -158,7 +158,7 @@ The protocol checks NAVs daily. For different tranche, the NAV is also calculate
 1. NAV of A is the compounding interest from the previous period
 1. NAV of B is the rest of the value after taking out NAV of A from Nav of M
 
-It also triggers a conversion at the end of a trading day when one of the following conditions is met:
+It also triggers a rebalance at the end of a trading day when one of the following conditions is met:
 
 1. NAV of M is more than `UPPER_CONVERSION`
 1. NAV of A is more than `FIXED_CONVERSION`
@@ -200,7 +200,7 @@ function create(uint256 underlying) external;
 Calling `create` will perform the following steps:
 
 1. Transfer the underlying asset to `PrimaryMarket` contract
-1. Convert the current state of creation and redemption of the account to the latest conversion
+1. Rebalance the current state of creation and redemption of the account to the latest version
 1. Update the amount of underlying asset waiting for creation
 1. Update the total received amount of underlying asset in the current day and emit a `Created` event
 
@@ -226,7 +226,7 @@ function redeem(uint256 shares) external;
 Calling `redeem` will perform the following steps:
 
 1. Transfer the amount of token M to `PrimaryMarket` contract
-1. Convert the current state of creation and redemption of the account to the latest conversion
+1. Rebalance the current state of creation and redemption of the account to the latest version
 1. Update the amount of token M waiting for redemption
 1. Update the total received the amount of token M in the current day and emit a `Redeemed` event
 
@@ -250,7 +250,7 @@ function claim() external;
 
 Calling `claim` will perform the following steps:
 
-1. Convert the current state of creation and redemption of the account to the latest conversion
+1. Rebalance the current state of creation and redemption of the account to the latest version
 1. Transfer the amount of created token M from `PrimaryMarket` contract to the account
 1. Transfer the amount of redeemed underlying asset from `PrimaryMarket` contract to the account
 1. Reset the amount of token M waiting for redemption and underlying asset waiting for creation to none
@@ -327,7 +327,7 @@ Calling `merge` will perform the following steps:
 ///
 ///         1. Transfer protocol fee of the day to the governance address.
 ///         2. Settle all pending creations and redemptions from all primary markets.
-///         3. Calculate NAV of the day and trigger conversion if necessary.
+///         3. Calculate NAV of the day and trigger rebalance if necessary.
 ///         4. Capture new interest rate for Share A.
 function settle() external
 ```
@@ -347,7 +347,7 @@ Calling `settle` will perform the following steps:
     1. Fill in the gap if `settle` is not invoked daily
     1. Update the global state in `PrimaryMarket` and emit a `Settled` event
 1. Calculate NAVs of token M, A, and B
-1. Trigger a conversion if one of the NAVs exceed the reasonable range
+1. Trigger a rebalance if one of the NAVs exceed the reasonable range
 1. Update the global state in `Fund`
 1. Update token A's interest rate if at the end of the week
 1. Emit a `Settled` event

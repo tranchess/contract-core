@@ -38,14 +38,14 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     /// @param redeemingShares Shares that will be redeemed at the end of this day.
     /// @param createdShares Shares already created in previous days.
     /// @param redeemedUnderlying Underlying already redeemed in previous days.
-    /// @param conversionIndex Conversion index before the end of this day.
+    /// @param version Rebalance version before the end of this trading day.
     struct CreationRedemption {
         uint256 day;
         uint256 creatingUnderlying;
         uint256 redeemingShares;
         uint256 createdShares;
         uint256 redeemedUnderlying;
-        uint256 conversionIndex;
+        uint256 version;
     }
 
     IFund public fund;
@@ -201,7 +201,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     ///         3. Transfer fee in underlying assets to the governance address.
     ///
     ///         This function can only be called from the Fund contract. It should be called
-    ///         after protocol fee is collected and before conversion is triggered for the same
+    ///         after protocol fee is collected and before rebalance is triggered for the same
     ///         trading day.
     /// @param day The trading day to settle
     /// @param fundTotalShares Total shares of the fund (as if all Token A and B are merged)
@@ -328,16 +328,16 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
                 cr.creatingUnderlying = 0;
             }
             if (cr.createdShares > 0) {
-                uint256 conversionSize = fund.getConversionSize();
-                if (conversionSize > cr.conversionIndex) {
-                    (cr.createdShares, , ) = fund.batchConvert(
+                uint256 rebalanceSize = fund.getRebalanceSize();
+                if (rebalanceSize > cr.version) {
+                    (cr.createdShares, , ) = fund.batchRebalance(
                         cr.createdShares,
                         0,
                         0,
-                        cr.conversionIndex,
-                        conversionSize
+                        cr.version,
+                        rebalanceSize
                     );
-                    cr.conversionIndex = conversionSize;
+                    cr.version = rebalanceSize;
                 }
             }
             if (cr.redeemingShares > 0) {
@@ -367,8 +367,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
         if (old.redeemedUnderlying != cr.redeemedUnderlying) {
             old.redeemedUnderlying = cr.redeemedUnderlying;
         }
-        if (old.conversionIndex != cr.conversionIndex) {
-            old.conversionIndex = cr.conversionIndex;
+        if (old.version != cr.version) {
+            old.version = cr.version;
         }
     }
 

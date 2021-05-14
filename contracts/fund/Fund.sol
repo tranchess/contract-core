@@ -82,31 +82,31 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Start timestamp of the current exchange activity window.
     uint256 public override exchangeActivityStartTime;
 
-    /// @dev History conversions. Conversions are often accessed in loops with bounds checking.
+    /// @dev Historical rebalances. Rebalances are often accessed in loops with bounds checking.
     ///      So we store them in a fixed-length array, in order to make compiler-generated
-    ///      bounds checking on every access cheaper. Actual length of this array is stored in
-    ///      `_conversionSize` and should be explicitly checked when necessary.
-    Conversion[65535] private _conversions;
+    ///      bounds checking on every access cheaper. The actual length of this array is stored in
+    ///      `_rebalanceSize` and should be explicitly checked when necessary.
+    Rebalance[65535] private _rebalances;
 
-    /// @dev History conversion count.
-    uint256 private _conversionSize;
+    /// @dev Historical rebalance count.
+    uint256 private _rebalanceSize;
 
-    /// @dev Total share supply of the three tranches. They are always converted to the latest
+    /// @dev Total share supply of the three tranches. They are always rebalanced to the latest
     ///      version.
     uint256[TRANCHE_COUNT] private _totalSupplies;
 
     /// @dev Mapping of account => share balance of the three tranches.
-    ///      Conversion versions are stored in a separate mapping `_balanceVersions`.
+    ///      Rebalance versions are stored in a separate mapping `_balanceVersions`.
     mapping(address => uint256[TRANCHE_COUNT]) private _balances;
 
-    /// @dev Conversion version mapping for `_balances`.
+    /// @dev Rebalance version mapping for `_balances`.
     mapping(address => uint256) private _balanceVersions;
 
     /// @dev Mapping of owner => spender => share allowance of the three tranches.
-    ///      Conversion versions are stored in a separate mapping `_allowanceVersions`.
+    ///      Rebalance versions are stored in a separate mapping `_allowanceVersions`.
     mapping(address => mapping(address => uint256[TRANCHE_COUNT])) private _allowances;
 
-    /// @dev Conversion version mapping for `_allowances`.
+    /// @dev Rebalance version mapping for `_allowances`.
     mapping(address => mapping(address => uint256)) private _allowanceVersions;
 
     /// @dev Mapping of trading day => NAV tuple.
@@ -240,25 +240,25 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             _totalSupplies[TRANCHE_M].add(_totalSupplies[TRANCHE_A]).add(_totalSupplies[TRANCHE_B]);
     }
 
-    /// @notice Return the conversion matrix at a given index. A zero struct is returned
+    /// @notice Return the rebalance matrix at a given index. A zero struct is returned
     ///         if `index` is out of bound.
-    /// @param index Conversion index
-    /// @return A conversion
-    function getConversion(uint256 index) external view override returns (Conversion memory) {
-        return _conversions[index];
+    /// @param index Rebalance index
+    /// @return A rebalance matrix
+    function getRebalance(uint256 index) external view override returns (Rebalance memory) {
+        return _rebalances[index];
     }
 
-    /// @notice Return trading day triggering a conversion at a given index. Zero is returned
-    ///         if `index` is out of bound.
-    /// @param index Conversion index
-    /// @return Timestamp of the conversion
-    function getConversionTimestamp(uint256 index) external view override returns (uint256) {
-        return _conversions[index].timestamp;
+    /// @notice Return timestamp of the transaction triggering the rebalance at a given index.
+    ///         Zero is returned if `index` is out of bound.
+    /// @param index Rebalance index
+    /// @return Timestamp of the rebalance
+    function getRebalanceTimestamp(uint256 index) external view override returns (uint256) {
+        return _rebalances[index].timestamp;
     }
 
-    /// @notice Return the number of conversions.
-    function getConversionSize() external view override returns (uint256) {
-        return _conversionSize;
+    /// @notice Return the number of historical rebalances.
+    function getRebalanceSize() external view override returns (uint256) {
+        return _rebalanceSize;
     }
 
     /// @notice Return NAV of Token M, A and B of the given trading day.
@@ -417,23 +417,23 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         }
     }
 
-    /// @notice Transform share amounts according to the conversion at a given index.
+    /// @notice Transform share amounts according to the rebalance at a given index.
     ///         This function performs no bounds checking on the given index. A non-existent
-    ///         conversion transforms anything to a zero vector.
-    /// @param amountM Amount of Token M before conversion
-    /// @param amountA Amount of Token A before conversion
-    /// @param amountB Amount of Token B before conversion
-    /// @param index Conversion index
-    /// @return newAmountM Amount of Token M after conversion
-    /// @return newAmountA Amount of Token A after conversion
-    /// @return newAmountB Amount of Token B after conversion
-    function convert(
+    ///         rebalance transforms anything to a zero vector.
+    /// @param amountM Amount of Token M before the rebalance
+    /// @param amountA Amount of Token A before the rebalance
+    /// @param amountB Amount of Token B before the rebalance
+    /// @param index Rebalance index
+    /// @return newAmountM Amount of Token M after the rebalance
+    /// @return newAmountA Amount of Token A after the rebalance
+    /// @return newAmountB Amount of Token B after the rebalance
+    function doRebalance(
         uint256 amountM,
         uint256 amountA,
         uint256 amountB,
         uint256 index
     )
-        external
+        public
         view
         override
         returns (
@@ -442,22 +442,29 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             uint256 newAmountB
         )
     {
-        return _convert(amountM, amountA, amountB, index);
+        Rebalance storage rebalance = _rebalances[index];
+        newAmountM = amountM
+            .multiplyDecimal(rebalance.ratioM)
+            .add(amountA.multiplyDecimal(rebalance.ratioA2M))
+            .add(amountB.multiplyDecimal(rebalance.ratioB2M));
+        uint256 ratioAB = rebalance.ratioAB; // Gas saver
+        newAmountA = amountA.multiplyDecimal(ratioAB);
+        newAmountB = amountB.multiplyDecimal(ratioAB);
     }
 
-    /// @notice Transform share amounts according to conversions in a given index range,
+    /// @notice Transform share amounts according to rebalances in a given index range,
     ///         This function performs no bounds checking on the given indices. The original amounts
     ///         are returned if `fromIndex` is no less than `toIndex`. A zero vector is returned
-    ///         if `toIndex` is greater than the number of existing conversions.
-    /// @param amountM Amount of Token M before conversion
-    /// @param amountA Amount of Token A before conversion
-    /// @param amountB Amount of Token B before conversion
-    /// @param fromIndex Starting of the conversion index range, inclusive
-    /// @param toIndex End of the conversion index range, exclusive
-    /// @return newAmountM Amount of Token M after conversion
-    /// @return newAmountA Amount of Token A after conversion
-    /// @return newAmountB Amount of Token B after conversion
-    function batchConvert(
+    ///         if `toIndex` is greater than the number of existing rebalances.
+    /// @param amountM Amount of Token M before the rebalance
+    /// @param amountA Amount of Token A before the rebalance
+    /// @param amountB Amount of Token B before the rebalance
+    /// @param fromIndex Starting of the rebalance index range, inclusive
+    /// @param toIndex End of the rebalance index range, exclusive
+    /// @return newAmountM Amount of Token M after the rebalance
+    /// @return newAmountA Amount of Token A after the rebalance
+    /// @return newAmountB Amount of Token B after the rebalance
+    function batchRebalance(
         uint256 amountM,
         uint256 amountA,
         uint256 amountB,
@@ -474,38 +481,36 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         )
     {
         for (uint256 i = fromIndex; i < toIndex; i++) {
-            (amountM, amountA, amountB) = _convert(amountM, amountA, amountB, i);
+            (amountM, amountA, amountB) = doRebalance(amountM, amountA, amountB, i);
         }
         newAmountM = amountM;
         newAmountA = amountA;
         newAmountB = amountB;
     }
 
-    /// @notice Transform share balance to a given conversion, or to the latest conversion
+    /// @notice Transform share balance to a given rebalance version, or to the latest version
     ///         if `targetVersion` is zero.
-    /// @param account Account of the balance to convert
-    /// @param targetVersion Index beyond the last conversion in this transformation,
-    ///                      or zero for the latest version
+    /// @param account Account of the balance to rebalance
+    /// @param targetVersion The target rebalance version, or zero for the latest version
     function refreshBalance(address account, uint256 targetVersion) external override {
         if (targetVersion > 0) {
-            require(targetVersion <= _conversionSize, "Target version out of bound");
+            require(targetVersion <= _rebalanceSize, "Target version out of bound");
         }
         _refreshBalance(account, targetVersion);
     }
 
-    /// @notice Transform allowance to a given conversion, or to the latest conversion
+    /// @notice Transform allowance to a given rebalance version, or to the latest version
     ///         if `targetVersion` is zero.
-    /// @param owner Owner of the allowance to convert
-    /// @param spender Spender of the allowance to convert
-    /// @param targetVersion Index beyond the last conversion in this transformation,
-    ///                      or zero for the latest version
+    /// @param owner Owner of the allowance to rebalance
+    /// @param spender Spender of the allowance to rebalance
+    /// @param targetVersion The target rebalance version, or zero for the latest version
     function refreshAllowance(
         address owner,
         address spender,
         uint256 targetVersion
     ) external override {
         if (targetVersion > 0) {
-            require(targetVersion <= _conversionSize, "Target version out of bound");
+            require(targetVersion <= _rebalanceSize, "Target version out of bound");
         }
         _refreshAllowance(owner, spender, targetVersion);
     }
@@ -528,9 +533,9 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             if (amountB == 0) return 0;
         }
 
-        uint256 size = _conversionSize; // Gas saver
+        uint256 size = _rebalanceSize; // Gas saver
         for (uint256 i = _balanceVersions[account]; i < size; i++) {
-            (amountM, amountA, amountB) = _convert(amountM, amountA, amountB, i);
+            (amountM, amountA, amountB) = doRebalance(amountM, amountA, amountB, i);
         }
 
         if (tranche == TRANCHE_M) {
@@ -542,7 +547,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         }
     }
 
-    /// @notice Return all three share balances to the latest conversion
+    /// @notice Return all three share balances transformed to the latest rebalance version.
     /// @param account Owner of the shares
     function allShareBalanceOf(address account)
         external
@@ -558,9 +563,9 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 amountA = _balances[account][TRANCHE_A];
         uint256 amountB = _balances[account][TRANCHE_B];
 
-        uint256 size = _conversionSize; // Gas saver
+        uint256 size = _rebalanceSize; // Gas saver
         for (uint256 i = _balanceVersions[account]; i < size; i++) {
-            (amountM, amountA, amountB) = _convert(amountM, amountA, amountB, i);
+            (amountM, amountA, amountB) = doRebalance(amountM, amountA, amountB, i);
         }
 
         return (amountM, amountA, amountB);
@@ -587,9 +592,9 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             if (allowanceB == 0) return 0;
         }
 
-        uint256 size = _conversionSize; // Gas saver
+        uint256 size = _rebalanceSize; // Gas saver
         for (uint256 i = _allowanceVersions[owner][spender]; i < size; i++) {
-            (allowanceM, allowanceA, allowanceB) = _convertAllowance(
+            (allowanceM, allowanceA, allowanceB) = _rebalanceAllowance(
                 allowanceM,
                 allowanceA,
                 allowanceB,
@@ -624,7 +629,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address account,
         uint256 amount
     ) public override onlyPrimaryMarket {
-        _refreshBalance(account, _conversionSize);
+        _refreshBalance(account, _rebalanceSize);
         _mint(tranche, account, amount);
     }
 
@@ -633,7 +638,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address account,
         uint256 amount
     ) public override onlyPrimaryMarket {
-        _refreshBalance(account, _conversionSize);
+        _refreshBalance(account, _rebalanceSize);
         _burn(tranche, account, amount);
     }
 
@@ -644,8 +649,8 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 amount
     ) public override onlyShare {
         require(isFundActive(block.timestamp), "Transfer is inactive");
-        _refreshBalance(sender, _conversionSize);
-        _refreshBalance(recipient, _conversionSize);
+        _refreshBalance(sender, _rebalanceSize);
+        _refreshBalance(recipient, _rebalanceSize);
         _transfer(tranche, sender, recipient, amount);
     }
 
@@ -658,7 +663,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     ) public override onlyShare returns (uint256 newAllowance) {
         transfer(tranche, sender, recipient, amount);
 
-        _refreshAllowance(sender, spender, _conversionSize);
+        _refreshAllowance(sender, spender, _rebalanceSize);
         newAllowance = _allowances[sender][spender][tranche].sub(
             amount,
             "ERC20: transfer amount exceeds allowance"
@@ -672,7 +677,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address spender,
         uint256 amount
     ) public override onlyShare {
-        _refreshAllowance(owner, spender, _conversionSize);
+        _refreshAllowance(owner, spender, _rebalanceSize);
         _approve(tranche, owner, spender, amount);
     }
 
@@ -682,7 +687,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address spender,
         uint256 addedValue
     ) public override onlyShare returns (uint256 newAllowance) {
-        _refreshAllowance(sender, spender, _conversionSize);
+        _refreshAllowance(sender, spender, _rebalanceSize);
         newAllowance = _allowances[sender][spender][tranche].add(addedValue);
         _approve(tranche, sender, spender, newAllowance);
     }
@@ -693,7 +698,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address spender,
         uint256 subtractedValue
     ) public override onlyShare returns (uint256 newAllowance) {
-        _refreshAllowance(sender, spender, _conversionSize);
+        _refreshAllowance(sender, spender, _rebalanceSize);
         newAllowance = _allowances[sender][spender][tranche].sub(subtractedValue);
         _approve(tranche, sender, spender, newAllowance);
     }
@@ -756,7 +761,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     ///
     ///         1. Transfer protocol fee of the day to the governance address.
     ///         2. Settle all pending creations and redemptions from all primary markets.
-    ///         3. Calculate NAV of the day and trigger conversion if necessary.
+    ///         3. Calculate NAV of the day and trigger rebalance if necessary.
     ///         4. Capture new interest rate for Token A.
     function settle() external nonReentrant {
         uint256 day = currentDay;
@@ -793,8 +798,8 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         }
         uint256 navB = calculateNavB(navM, navA);
 
-        if (_shouldTriggerConversion(navM, navA, navB)) {
-            _triggerConversion(day, navM, navA, navB);
+        if (_shouldTriggerRebalance(navM, navA, navB)) {
+            _triggerRebalance(day, navM, navA, navB);
             navM = UNIT;
             navA = UNIT;
             navB = UNIT;
@@ -906,17 +911,17 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         }
     }
 
-    /// @dev Check whether a new conversion should be triggered. Conversion is triggered if
+    /// @dev Check whether a new rebalance should be triggered. Rebalance is triggered if
     ///      one of the following conditions is met:
     ///
     ///      1. NAV of Token M grows above a threshold.
     ///      2. NAV of Token B drops below a threshold.
     ///      3. NAV of Token A grows above a threshold.
-    /// @param navM NAV of Token M before conversion
-    /// @param navA NAV of Token A before conversion
-    /// @param navBOrZero NAV of Token B before conversion or zero if the NAV is negative
-    /// @return Whether a new conversion should be triggered
-    function _shouldTriggerConversion(
+    /// @param navM NAV of Token M before the rebalance
+    /// @param navA NAV of Token A before the rebalance
+    /// @param navBOrZero NAV of Token B before the rebalance or zero if the NAV is negative
+    /// @return Whether a new rebalance should be triggered
+    function _shouldTriggerRebalance(
         uint256 navM,
         uint256 navA,
         uint256 navBOrZero
@@ -927,36 +932,36 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             navA > fixedConversionThreshold;
     }
 
-    /// @dev Create a new conversion that converts NAV of all tranches to 1. Total supplies are
-    ///      converted immediately.
-    /// @param day Trading day that triggers this conversion
-    /// @param navM NAV of Token M before conversion
-    /// @param navA NAV of Token A before conversion
-    /// @param navBOrZero NAV of Token B before conversion or zero if the NAV is negative
-    function _triggerConversion(
+    /// @dev Create a new rebalance that resets NAV of all tranches to 1. Total supplies are
+    ///      rebalanced immediately.
+    /// @param day Trading day that triggers this rebalance
+    /// @param navM NAV of Token M before this rebalance
+    /// @param navA NAV of Token A before this rebalance
+    /// @param navBOrZero NAV of Token B before this rebalance or zero if the NAV is negative
+    function _triggerRebalance(
         uint256 day,
         uint256 navM,
         uint256 navA,
         uint256 navBOrZero
     ) private {
-        Conversion memory conversion = _calculateConversion(navM, navA, navBOrZero);
-        uint256 oldSize = _conversionSize;
-        _conversions[oldSize] = conversion;
-        _conversionSize = oldSize + 1;
-        emit ConversionTriggered(
+        Rebalance memory rebalance = _calculateRebalance(navM, navA, navBOrZero);
+        uint256 oldSize = _rebalanceSize;
+        _rebalances[oldSize] = rebalance;
+        _rebalanceSize = oldSize + 1;
+        emit RebalanceTriggered(
             oldSize,
             day,
-            conversion.ratioM,
-            conversion.ratioA2M,
-            conversion.ratioB2M,
-            conversion.ratioAB
+            rebalance.ratioM,
+            rebalance.ratioA2M,
+            rebalance.ratioB2M,
+            rebalance.ratioAB
         );
 
         (
             _totalSupplies[TRANCHE_M],
             _totalSupplies[TRANCHE_A],
             _totalSupplies[TRANCHE_B]
-        ) = _convert(
+        ) = doRebalance(
             _totalSupplies[TRANCHE_M],
             _totalSupplies[TRANCHE_A],
             _totalSupplies[TRANCHE_B],
@@ -965,36 +970,36 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         _refreshBalance(address(this), oldSize + 1);
     }
 
-    /// @dev Create a new conversion matrix that transforms given NAVs to (1, 1, 1).
+    /// @dev Create a new rebalance matrix that resets given NAVs to (1, 1, 1).
     ///
-    ///      Note that NAV of Token B can be negative before conversion when the underlying price
+    ///      Note that NAV of Token B can be negative before the rebalance when the underlying price
     ///      drops dramatically in a single trading day, in which case zero should be passed to
     ///      this function instead of the negative NAV.
-    /// @param navM NAV of Token M before conversion
-    /// @param navA NAV of Token A before conversion
-    /// @param navBOrZero NAV of Token B before conversion or zero if the NAV is negative
-    /// @return The conversion matrix
-    function _calculateConversion(
+    /// @param navM NAV of Token M before the rebalance
+    /// @param navA NAV of Token A before the rebalance
+    /// @param navBOrZero NAV of Token B before the rebalance or zero if the NAV is negative
+    /// @return The rebalance matrix
+    function _calculateRebalance(
         uint256 navM,
         uint256 navA,
         uint256 navBOrZero
-    ) private view returns (Conversion memory) {
+    ) private view returns (Rebalance memory) {
         uint256 ratioAB;
         uint256 ratioA2M;
         uint256 ratioB2M;
         if (navBOrZero <= navA) {
-            // Lower conversion
+            // Lower rebalance
             ratioAB = navBOrZero;
             ratioA2M = ((navM - navBOrZero) * WEIGHT_M) / WEIGHT_A;
             ratioB2M = 0;
         } else {
-            // Upper conversion
+            // Upper rebalance
             ratioAB = UNIT;
             ratioA2M = navA - UNIT;
             ratioB2M = navBOrZero - UNIT;
         }
         return
-            Conversion({
+            Rebalance({
                 ratioM: navM,
                 ratioA2M: ratioA2M,
                 ratioB2M: ratioB2M,
@@ -1013,14 +1018,13 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         return rate;
     }
 
-    /// @dev Transform share balance to a given conversion, or to the latest conversion
+    /// @dev Transform share balance to a given rebalance version, or to the latest version
     ///      if `targetVersion` is zero. This function does no bound check on `targetVersion`.
-    /// @param account Account of the balance to convert
-    /// @param targetVersion Index beyond the last conversion in this transformation,
-    ///                      or zero for the latest version
+    /// @param account Account of the balance to rebalance
+    /// @param targetVersion The target rebalance version, or zero for the latest version
     function _refreshBalance(address account, uint256 targetVersion) private {
         if (targetVersion == 0) {
-            targetVersion = _conversionSize;
+            targetVersion = _rebalanceSize;
         }
         uint256 oldVersion = _balanceVersions[account];
         if (oldVersion >= targetVersion) {
@@ -1039,26 +1043,25 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         }
 
         for (uint256 i = oldVersion; i < targetVersion; i++) {
-            (balanceM, balanceA, balanceB) = _convert(balanceM, balanceA, balanceB, i);
+            (balanceM, balanceA, balanceB) = doRebalance(balanceM, balanceA, balanceB, i);
         }
         balanceTuple[TRANCHE_M] = balanceM;
         balanceTuple[TRANCHE_A] = balanceA;
         balanceTuple[TRANCHE_B] = balanceB;
     }
 
-    /// @dev Transform allowance to a given conversion, or to the latest conversion
+    /// @dev Transform allowance to a given rebalance version, or to the latest version
     ///      if `targetVersion` is zero. This function does no bound check on `targetVersion`.
-    /// @param owner Owner of the allowance to convert
-    /// @param spender Spender of the allowance to convert
-    /// @param targetVersion Index beyond the last conversion in this transformation,
-    ///                      or zero for the latest version
+    /// @param owner Owner of the allowance to rebalance
+    /// @param spender Spender of the allowance to rebalance
+    /// @param targetVersion The target rebalance version, or zero for the latest version
     function _refreshAllowance(
         address owner,
         address spender,
         uint256 targetVersion
     ) private {
         if (targetVersion == 0) {
-            targetVersion = _conversionSize;
+            targetVersion = _rebalanceSize;
         }
         uint256 oldVersion = _allowanceVersions[owner][spender];
         if (oldVersion >= targetVersion) {
@@ -1077,7 +1080,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         }
 
         for (uint256 i = oldVersion; i < targetVersion; i++) {
-            (allowanceM, allowanceA, allowanceB) = _convertAllowance(
+            (allowanceM, allowanceA, allowanceB) = _rebalanceAllowance(
                 allowanceM,
                 allowanceA,
                 allowanceB,
@@ -1089,31 +1092,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         allowanceTuple[TRANCHE_B] = allowanceB;
     }
 
-    function _convert(
-        uint256 amountM,
-        uint256 amountA,
-        uint256 amountB,
-        uint256 index
-    )
-        private
-        view
-        returns (
-            uint256 newAmountM,
-            uint256 newAmountA,
-            uint256 newAmountB
-        )
-    {
-        Conversion storage conversion = _conversions[index];
-        newAmountM = amountM
-            .multiplyDecimal(conversion.ratioM)
-            .add(amountA.multiplyDecimal(conversion.ratioA2M))
-            .add(amountB.multiplyDecimal(conversion.ratioB2M));
-        uint256 ratioAB = conversion.ratioAB; // Gas saver
-        newAmountA = amountA.multiplyDecimal(ratioAB);
-        newAmountB = amountB.multiplyDecimal(ratioAB);
-    }
-
-    function _convertAllowance(
+    function _rebalanceAllowance(
         uint256 allowanceM,
         uint256 allowanceA,
         uint256 allowanceB,
@@ -1127,11 +1106,11 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             uint256 newAllowanceB
         )
     {
-        Conversion storage conversion = _conversions[index];
+        Rebalance storage rebalance = _rebalances[index];
 
         /// @dev using saturating arithmetic to avoid unconscious overflow revert
-        newAllowanceM = allowanceM.saturatingMultiplyDecimal(conversion.ratioM);
-        newAllowanceA = allowanceA.saturatingMultiplyDecimal(conversion.ratioAB);
-        newAllowanceB = allowanceB.saturatingMultiplyDecimal(conversion.ratioAB);
+        newAllowanceM = allowanceM.saturatingMultiplyDecimal(rebalance.ratioM);
+        newAllowanceA = allowanceA.saturatingMultiplyDecimal(rebalance.ratioAB);
+        newAllowanceB = allowanceB.saturatingMultiplyDecimal(rebalance.ratioAB);
     }
 }

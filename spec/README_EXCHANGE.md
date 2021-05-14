@@ -33,11 +33,11 @@
 
 Tranchess Protocol is a platform for crypto-backed synthetic assets capable of speculating, hedging, and arbitraging with minimal liquidation risk, settlement risk, and other systematic risks. In our approach, it consists of two major components: the primary market and the secondary market.
 
-Tranchess Exchange Protocol is the set of contracts representing the secondary market. Since the tokenized shares could experience conversions, which are essentially linear transformations upon all account balances, no existing swaps or centralized exchanges are readily available for trading shares. As a result, we set off to design our exchange for liquidity. In the secondary market, both the stablecoins such as `USDC` and tokenized shares could be exchanged using a matching mechanism we refer to as **Premium-Discount Orderbook**.
+Tranchess Exchange Protocol is the set of contracts representing the secondary market. Since the tokenized shares could experience rebalances, which are essentially linear transformations upon all account balances, no existing swaps or centralized exchanges are readily available for trading shares. As a result, we set off to design our exchange for liquidity. In the secondary market, both the stablecoins such as `USDC` and tokenized shares could be exchanged using a matching mechanism we refer to as **Premium-Discount Orderbook**.
 
 In our approach, trade activities are divided into the same 30-minutes period as the Oracle Protocol, and the exact trading price could not be determined at the trading time, because the price oracles are still subject to change. Instead of a fixed price, the makers need only to specify a certain percentage for an order. The percentage is relative to the net asset values calculated in the future, with a positive percentage known as **Premium** and a negative percentage known as **Discount**. Similar to a traditional exchange order book, the smart contracts also arrange orders in order books from the highest to the lowest percentage forbidding order, and lowest to highest for asking order. We've achieved a few goals with this design:
 
-1. Conversions do not affect trading activities
+1. Rebalances do not affect trading activities
 1. Low cost for liquidity providers to interact with the blockchain
     1. No impermanent loss, because it is not using AMM
     1. No high-frequency order submission and cancellation, because premiums and discounts fluctuate with the price
@@ -53,7 +53,7 @@ In our approach, trade activities are divided into the same 30-minutes period as
 
 The [`Staking`](../contracts/Staking.sol) contract stores tokenized shares and makes them available for exchange and rewards. Each `Staking` corresponds to 1 instance of `Reward`, 1 instance of `Fund`, and thus 3 instances of the `Share` token contract. It accepts deposit or withdraw requests from one of the `Share` token, and accumulates the rewards with the help from `Reward`.
 
-In addition, it keeps the history of the global integral, ∫(rate \* balance / totalSupply dt) from the last Conversion till checkpoint, the most recent per-account integrals, and per-account claimable rewards. It is invoked whenever deposits are changed and accumulate the rewards for the accounts involved.
+In addition, it keeps the history of the global integral, ∫(rate \* balance / totalSupply dt) from the last rebalance till checkpoint, the most recent per-account integrals, and per-account claimable rewards. It is invoked whenever deposits are changed and accumulate the rewards for the accounts involved.
 
 1. Deposit Token M/A/B
 1. Withdraw Token M/A/B
@@ -99,10 +99,10 @@ To receive rewards of governance token and participate in the secondary market, 
 1. Chess: (return release rate of `Chess`)
 1. ChessController.getFundRelativeWeight(address(this), block.timestamp)
 1. ChessController: (return relative weight of this `Staking` contract)
-1. Fund.convert(totalSupplyM, totalSupplyA, totalSupplyB, version)
-1. Fund: (return conversion result for total supplies)
-1. Fund.convert(balanceM, balanceA, balanceB, version)
-1. Fund: (return conversion result for available and locked balances)
+1. Fund.rebalance(totalSupplyM, totalSupplyA, totalSupplyB, version)
+1. Fund: (return rebalance result for total supplies)
+1. Fund.rebalance(balanceM, balanceA, balanceB, version)
+1. Fund: (return rebalance result for available and locked balances)
 1. ERC20Token(tranche).transferFrom(account, address(this), amount)
 
 ### Withdraw
@@ -118,15 +118,15 @@ To receive rewards of governance token and participate in the secondary market, 
 1. Chess: (return release rate of `Chess`)
 1. ChessController.getFundRelativeWeight(address(this), block.timestamp)
 1. ChessController: (return relative weight of this `Staking` contract)
-1. Fund.convert(totalSupplyM, totalSupplyA, totalSupplyB, version)
-1. Fund: (return conversion result for total supplies)
-1. Fund.convert(balanceM, balanceA, balanceB, version)
-1. Fund: (return conversion result for available and locked balances)
+1. Fund.rebalance(totalSupplyM, totalSupplyA, totalSupplyB, version)
+1. Fund: (return rebalance result for total supplies)
+1. Fund.rebalance(balanceM, balanceA, balanceB, version)
+1. Fund: (return rebalance result for available and locked balances)
 1. ERC20Token(tranche).transfer(account, amount)
 
 ## Placing an order
 
-Bid and ask orders are created by makers to either buy or sell shares of Token M/A/B for the USD stablecoin. For each order placed, the maker is asked to provide the amount, PD level, conversion ID, and a custom order ID of the order. The order book is using a link list implementation and arranges all orders by PD levels (premium-discount level), which is ranged from 0 (-10%) to 80 (-10%) with a step size of 0.25%. Makers are also asked to lock up the equal value of USD stablecoin or shares based on the amount and the PD level of the order.
+Bid and ask orders are created by makers to either buy or sell shares of Token M/A/B for the USD stablecoin. For each order placed, the maker is asked to provide the amount, PD level, rebalance version, and a custom order ID of the order. The order book is using a link list implementation and arranges all orders by PD levels (premium-discount level), which is ranged from 0 (-10%) to 80 (-10%) with a step size of 0.25%. Makers are also asked to lock up the equal value of USD stablecoin or shares based on the amount and the PD level of the order.
 
 ### Bid order
 
@@ -136,7 +136,7 @@ Bid and ask orders are created by makers to either buy or sell shares of Token M
 
 #### Transaction #1
 
-1. Exchange.placeBid(tranche, pdLevel, quoteAmount, conversionID, clientOrderID)
+1. Exchange.placeBid(tranche, pdLevel, quoteAmount, version, clientOrderID)
 1. ERC20Token(stableCoin).transferFrom(maker, address(this), quoteAmount)
 
 ### Ask Order
@@ -147,11 +147,11 @@ Bid and ask orders are created by makers to either buy or sell shares of Token M
 
 #### Transaction #1
 
-1. Exchange.placeAsk(tranche, pdLevel, quoteAmount, conversionID, clientOrderID)
+1. Exchange.placeAsk(tranche, pdLevel, quoteAmount, version, clientOrderID)
 
 ## Filling orders
 
-Takers could either buy or sell fund shares by filling one or more maker orders in the Exchange contract. Takers are asked to specify the minimal or maximal PD level they'd accept, the amount of asset willing to trade, and the conversion ID.
+Takers could either buy or sell fund shares by filling one or more maker orders in the Exchange contract. Takers are asked to specify the minimal or maximal PD level they'd accept, the amount of asset willing to trade, and the rebalance version.
 
 ### Buying shares
 
@@ -161,7 +161,7 @@ Takers could either buy or sell fund shares by filling one or more maker orders 
 
 #### Transaction #1
 
-1. Exchange.buyM(conversionID, maxPDLevel, quoteAmount)
+1. Exchange.buyM(version, maxPDLevel, quoteAmount)
 1. TwapOracle.getTwap(timestamp)
 1. TwapOracle: (return Twap Oracle)
 1. Fund.extrapolateNav(timestamp, price)
@@ -170,10 +170,10 @@ Takers could either buy or sell fund shares by filling one or more maker orders 
 1. Chess: (return release rate of `Chess`)
 1. ChessController.getFundRelativeWeight(address(this), block.timestamp)
 1. ChessController: (return relative weight of this `Staking` contract)
-1. Fund.convert(totalSupplyM, totalSupplyA, totalSupplyB, version)
-1. Fund: (return conversion result for total supplies)
-1. Fund.convert(balanceM, balanceA, balanceB, version)
-1. Fund: (return conversion result for available and locked balances)
+1. Fund.rebalance(totalSupplyM, totalSupplyA, totalSupplyB, version)
+1. Fund: (return rebalance result for total supplies)
+1. Fund.rebalance(balanceM, balanceA, balanceB, version)
+1. Fund: (return rebalance result for available and locked balances)
 1. ERC20Token(stableCoin).transferFrom(msg.sender, address(this), frozenQuote)
 
 ### Selling shares
@@ -184,7 +184,7 @@ Takers could either buy or sell fund shares by filling one or more maker orders 
 
 #### Transaction #1
 
-1. Exchange.sellM(conversionID, minPDLevel, baseAmount)
+1. Exchange.sellM(version, minPDLevel, baseAmount)
 1. TwapOracle.getTwap(timestamp)
 1. TwapOracle: (return Twap Oracle)
 1. Fund.extrapolateNav(timestamp, price)
@@ -193,10 +193,10 @@ Takers could either buy or sell fund shares by filling one or more maker orders 
 1. Chess: (return release rate of `Chess`)
 1. ChessController.getFundRelativeWeight(address(this), block.timestamp)
 1. ChessController: (return relative weight of this `Staking` contract)
-1. Fund.convert(totalSupplyM, totalSupplyA, totalSupplyB, version)
-1. Fund: (return conversion result for total supplies)
-1. Fund.convert(balanceM, balanceA, balanceB, version)
-1. Fund: (return conversion result for available and locked balances)
+1. Fund.rebalance(totalSupplyM, totalSupplyA, totalSupplyB, version)
+1. Fund: (return rebalance result for total supplies)
+1. Fund.rebalance(balanceM, balanceA, balanceB, version)
+1. Fund: (return rebalance result for available and locked balances)
 
 ## Cancelling an order
 
@@ -210,7 +210,7 @@ Makers could cancel a previous order at any time, even if the account is no long
 
 #### Transaction #1
 
-1. Exchange.cancelBid(conversionID, tranche, pdLevel, index)
+1. Exchange.cancelBid(version, tranche, pdLevel, index)
 1. ERC20Token(stableCoin).transfer(makerAddress, order.fillable)
 
 ### Ask order
@@ -221,15 +221,15 @@ Makers could cancel a previous order at any time, even if the account is no long
 
 #### Transaction #1
 
-1. Exchange.cancelAsk(conversionID, tranche, pdLevel, index)
+1. Exchange.cancelAsk(version, tranche, pdLevel, index)
 1. Chess.rate()
 1. Chess: (return release rate of `Chess`)
 1. ChessController.getFundRelativeWeight(address(this), block.timestamp)
 1. ChessController: (return relative weight of this `Staking` contract)
-1. Fund.convert(totalSupplyM, totalSupplyA, totalSupplyB, version)
-1. Fund: (return conversion result for total supplies)
-1. Fund.convert(balanceM, balanceA, balanceB, version)
-1. Fund: (return conversion result for available and locked balances)
+1. Fund.rebalance(totalSupplyM, totalSupplyA, totalSupplyB, version)
+1. Fund: (return rebalance result for total supplies)
+1. Fund.rebalance(balanceM, balanceA, balanceB, version)
+1. Fund: (return rebalance result for available and locked balances)
 
 ## Settlement
 
@@ -252,10 +252,10 @@ All the matches are stored as pending trades in the exchange protocol, waiting f
 1. Chess: (return release rate of `Chess`)
 1. ChessController.getFundRelativeWeight(address(this), block.timestamp)
 1. ChessController: (return relative weight of this `Staking` contract)
-1. Fund.convert(totalSupplyM, totalSupplyA, totalSupplyB, version)
-1. Fund: (return conversion result for total supplies)
-1. Fund.convert(balanceM, balanceA, balanceB, version)
-1. Fund: (return conversion result for available and locked balances)
+1. Fund.rebalance(totalSupplyM, totalSupplyA, totalSupplyB, version)
+1. Fund: (return rebalance result for total supplies)
+1. Fund.rebalance(balanceM, balanceA, balanceB, version)
+1. Fund: (return rebalance result for available and locked balances)
 1. ERC20Token(stableCoin).transfer(msg.sender, quoteAmount)
 
 ### Settle for taker
@@ -275,10 +275,10 @@ All the matches are stored as pending trades in the exchange protocol, waiting f
 1. Chess: (return release rate of `Chess`)
 1. ChessController.getFundRelativeWeight(address(this), block.timestamp)
 1. ChessController: (return relative weight of this `Staking` contract)
-1. Fund.convert(totalSupplyM, totalSupplyA, totalSupplyB, version)
-1. Fund: (return conversion result for total supplies)
-1. Fund.convert(balanceM, balanceA, balanceB, version)
-1. Fund: (return conversion result for available and locked balances)
+1. Fund.rebalance(totalSupplyM, totalSupplyA, totalSupplyB, version)
+1. Fund: (return rebalance result for total supplies)
+1. Fund.rebalance(balanceM, balanceA, balanceB, version)
+1. Fund: (return rebalance result for available and locked balances)
 1. ERC20Token(stableCoin).transfer(msg.sender, quoteAmount)
 
 # Contract Methods
@@ -298,7 +298,7 @@ function deposit(uint256 tranche, uint256 amount) external
 
 Calling `deposit` will perform the following steps:
 
-1. Invoke global and per-user reward checkpoint, and convert the total supplies and locked/available balances to the latest conversion
+1. Invoke global and per-user reward checkpoint, and rebalance the total supplies and locked/available balances to the latest version
 1. Transfer the shares to `Exchange` contract
 1. Update the deposit balances and emit `Deposited` event
 
@@ -323,7 +323,7 @@ function withdraw(uint256 tranche, uint256 amount) external
 
 Calling `withdraw` will perform the following steps:
 
-1. Invoke global and per-user reward checkpoint, and convert the total supplies and locked/available balances to the latest conversion
+1. Invoke global and per-user reward checkpoint, and rebalance the total supplies and locked/available balances to the latest version
 1. Transfer the shares from `Exchange` contract to the account
 1. Update the deposit balances and emit `Withdrawn` event
 
@@ -343,15 +343,13 @@ Calling `withdraw` will perform the following steps:
 /// @notice Place a bid order for makers
 /// @param tranche Tranche of the base asset
 /// @param pdLevel Premium-discount level
-/// @param quoteAmount Quote asset amount
-/// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
-/// @param clientOrderID Self-assigned order ID
+/// @param quoteAmount Quote asset amount with 18 decimal places
+/// @param version Current rebalance version. Revert if it is not the latest version.
 function placeBid(
     uint256 tranche,
     uint256 pdLevel,
     uint256 quoteAmount,
-    uint256 conversionID,
-    uint256 clientOrderID
+    uint256 version
 ) external;
 ```
 
@@ -360,7 +358,7 @@ function placeBid(
 Calling `placeBid` will perform the following steps:
 
 1. Revert if the amount of tokenzied shares is less than the minimal amount for bid orders
-1. Revert if the conversion ID is not the latest
+1. Revert if the rebalance version is not the latest
 1. Transfer the shares from `makerAddress` to `Exchange` contract
 1. Update the bid orderbook and emit a `OrderPlaced` event
 1. Update the account's order identifier and emit a `BidOrderPlaced` event
@@ -369,11 +367,11 @@ Calling `placeBid` will perform the following steps:
 
 `placeBid` may revert with any of the following errors, in addition to any errors specified in the `ERC20`:
 
-| Error                  | Condition                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------- |
-| MinimalBidError        | The amount of shares is less than `BID_MIN_AMOUNT`                              |
-| InvalidPDError         | The premium-discount level exceeds the valid range                              |
-| InvalidConversionError | The conversion ID is not the most recent, possibly due to an ongoing conversion |
+| Error                 | Condition                                          |
+| --------------------- | -------------------------------------------------- |
+| MinimalBidError       | The amount of shares is less than `BID_MIN_AMOUNT` |
+| InvalidPDError        | The premium-discount level exceeds the valid range |
+| InvalidRebalanceError | The rebalance version is not the latest            |
 
 ### placeAsk
 
@@ -382,14 +380,12 @@ Calling `placeBid` will perform the following steps:
 /// @param tranche Tranche of the base asset
 /// @param pdLevel Premium-discount level
 /// @param baseAmount Base asset amount
-/// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
-/// @param clientOrderID Self-assigned order ID
+/// @param version Current rebalance version. Revert if it is not the latest version.
 function placeAsk(
     uint256 tranche,
     uint256 pdLevel,
     uint256 baseAmount,
-    uint256 conversionID,
-    uint256 clientOrderID
+    uint256 version
 ) external;
 ```
 
@@ -398,8 +394,8 @@ function placeAsk(
 Calling `placeAsk` will perform the following steps:
 
 1. Revert if the amount of USD stablecoin is less than the minimal amount for ask orders
-1. Revert if the conversion ID is not the latest
-1. Invoke global and per-user reward checkpoint, and convert the total supplies and locked/available balances to the latest conversion
+1. Revert if the rebalance version is not the latest
+1. Invoke global and per-user reward checkpoint, and rebalance the total supplies and locked/available balances to the latest version
 1. Increase the on-hold amount of shares
 1. Update the ask orderbook and emit a `OrderPlaced` event
 1. Update the account's order identifier and emit a `AskOrderPlaced` event
@@ -408,25 +404,25 @@ Calling `placeAsk` will perform the following steps:
 
 `placeAsk` may revert with any of the following errors:
 
-| Error                  | Condition                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------- |
-| MinimalAskError        | The amount of USD stablecoin is less than `ASK_MIN_AMOUNT`                      |
-| InvalidPDError         | The premium-discount level exceeds the valid range                              |
-| InvalidConversionError | The conversion ID is not the most recent, possibly due to an ongoing conversion |
-| OnHoldOverflowError    | Not enough deposits for placing the order                                       |
+| Error                 | Condition                                                  |
+| --------------------- | ---------------------------------------------------------- |
+| MinimalAskError       | The amount of USD stablecoin is less than `ASK_MIN_AMOUNT` |
+| InvalidPDError        | The premium-discount level exceeds the valid range         |
+| InvalidRebalanceError | The rebalance version is not the latest                    |
+| OnHoldOverflowError   | Not enough deposits for placing the order                  |
 
 ### buyM
 
 ```
 /// @notice Buy Token M
-/// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
+/// @param version Current rebalance version. Revert if it is not the latest version.
 /// @param maxPDLevel Maximal premium-discount level accepted
-/// @param quoteAmount Amount of quote assets willing to trade
+/// @param quoteAmount Amount of quote assets (with 18 decimal places) willing to trade
 function buyM(
-    uint256 conversionID,
+    uint256 version,
     uint256 maxPDLevel,
     uint256 quoteAmount
-) external
+) external;
 ```
 
 #### Logic
@@ -442,7 +438,7 @@ Calling `buyM` will perform the following steps:
         1. Skip the order if order creator is no longer qualified for maker
         1. Update the global states of the order queue
         1. Update the maker's pending trades
-        1. Invoke global and per-user reward checkpoint, and convert the total supplies and locked/available balances to the latest conversion
+        1. Invoke global and per-user reward checkpoint, and rebalance the total supplies and locked/available balances to the latest version
         1. Unfreeze and transfer the on-hold amount of shares to `Exchange` contract
         1. Remove the order if maker is completely filled
         1. Go to next order until the taker is completely filled
@@ -462,14 +458,14 @@ Calling `buyM` will perform the following steps:
 
 ```
 /// @notice Sell Token M
-/// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
+/// @param version Current rebalance version. Revert if it is not the latest version.
 /// @param minPDLevel Minimal premium-discount level accepted
 /// @param baseAmount Amount of Token M willing to trade
 function sellM(
-    uint256 conversionID,
+    uint256 version,
     uint256 minPDLevel,
     uint256 baseAmount
-) external
+) external;
 ```
 
 #### Logic
@@ -503,16 +499,16 @@ Calling `sellM` will perform the following steps:
 
 ```
 /// @notice Cancel a bid order by order identifier
-/// @param conversionID Order's conversion ID
+/// @param version Order's rebalance version
 /// @param tranche Tranche of the order's base asset
 /// @param pdLevel Order's premium-discount level
 /// @param index Order's index
 function cancelBid(
-    uint256 conversionID,
+    uint256 version,
     uint256 tranche,
     uint256 pdLevel,
     uint256 index
-) external
+) external;
 ```
 
 #### Logic
@@ -533,51 +529,20 @@ Calling `cancelBid` will perform the following steps:
 | NotActiveError    | The contract is not active                         |
 | InvalidMakerError | The maker address does not match the order's maker |
 
-### cancelBidByClientOrderID
-
-```
-/// @notice Cancel a bid order by client order ID
-/// @param conversionID Order's conversion ID
-/// @param tranche Tranche of the order's base asset
-/// @param clientOrderID Self-assigned order ID
-function cancelBidByClientOrderID(
-    uint256 conversionID,
-    uint256 tranche,
-    uint256 clientOrderID
-) external
-```
-
-#### Logic
-
-Calling `cancelBidByClientOrderID` will perform the following steps:
-
-1. Retrieve the order identifier through conversion ID and personal order ID
-1. Same as [`cancelBid`](#cancelbid)
-1. Remove the personal order ID
-
-#### Error
-
-`cancelBidByClientOrderID` may revert with any of the following errors, in addition to any errors specified in the `ERC20`:
-
-| Error             | Condition                                          |
-| ----------------- | -------------------------------------------------- |
-| NotActiveError    | The contract is not active                         |
-| InvalidMakerError | The maker address does not match the order's maker |
-
 ### cancelAsk
 
 ```
 /// @notice Cancel an ask order by order identifier
-/// @param conversionID Order's conversion ID
+/// @param version Order's rebalance version
 /// @param tranche Tranche of the order's base asset
 /// @param pdLevel Order's premium-discount level
 /// @param index Order's index
 function cancelAsk(
-    uint256 conversionID,
+    uint256 version,
     uint256 tranche,
     uint256 pdLevel,
     uint256 index
-) external
+) external;
 ```
 
 #### Logic
@@ -587,43 +552,12 @@ Calling `cancelAsk` will perform the following steps:
 1. Revert if the maker address does not match
 1. Remove the order from its order queue
 1. Update the global state of the order queue
-1. Invoke global and per-user reward checkpoint, and convert the total supplies and locked/available balances to the latest conversion
+1. Invoke global and per-user reward checkpoint, and rebalance the total supplies and locked/available balances to the latest version
 1. Transfer the locked shares from `Exchange` contract to the maker
 
 #### Error
 
 `cancelAsk` may revert with any of the following errors, in addition to any errors specified in the `ERC20`:
-
-| Error             | Condition                                          |
-| ----------------- | -------------------------------------------------- |
-| NotActiveError    | The contract is not active                         |
-| InvalidMakerError | The maker address does not match the order's maker |
-
-### cancelAskByClientOrderID
-
-```
-/// @notice Cancel an ask order by client order ID
-/// @param conversionID Order's conversion ID
-/// @param tranche Tranche of the order's base asset
-/// @param clientOrderID Self-assigned order ID
-function cancelAskByClientOrderID(
-    uint256 conversionID,
-    uint256 tranche,
-    uint256 clientOrderID
-) external
-```
-
-#### Logic
-
-Calling `cancelAskByClientOrderID` will perform the following steps:
-
-1. Retrieve the order identifier through conversion ID and personal order ID
-1. Same as [`cancelAsk`](#cancelAsk)
-1. Remove the personal order ID
-
-#### Error
-
-`cancelAskByClientOrderID` may revert with any of the following errors, in addition to any errors specified in the `ERC20`:
 
 | Error             | Condition                                          |
 | ----------------- | -------------------------------------------------- |

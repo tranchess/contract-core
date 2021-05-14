@@ -31,14 +31,14 @@ contract Exchange is ExchangeRoles, Staking {
     /// @param pdLevel Premium-discount level
     /// @param quoteAmount Amount of quote asset in the order, rounding precision to 18
     ///                    for quote assets with precision other than 18 decimal places
-    /// @param conversionID The latest conversion ID when the order is placed
+    /// @param version The latest rebalance version when the order is placed
     /// @param orderIndex Index of the order in the order queue
     event BidOrderPlaced(
         address indexed maker,
         uint256 indexed tranche,
         uint256 pdLevel,
         uint256 quoteAmount,
-        uint256 conversionID,
+        uint256 version,
         uint256 orderIndex
     );
 
@@ -47,14 +47,14 @@ contract Exchange is ExchangeRoles, Staking {
     /// @param tranche Tranche of the share to sell
     /// @param pdLevel Premium-discount level
     /// @param baseAmount Amount of base asset in the order
-    /// @param conversionID The latest conversion ID when the order is placed
+    /// @param version The latest rebalance version when the order is placed
     /// @param orderIndex Index of the order in the order queue
     event AskOrderPlaced(
         address indexed maker,
         uint256 indexed tranche,
         uint256 pdLevel,
         uint256 baseAmount,
-        uint256 conversionID,
+        uint256 version,
         uint256 orderIndex
     );
 
@@ -64,7 +64,7 @@ contract Exchange is ExchangeRoles, Staking {
     /// @param pdLevel Premium-discount level
     /// @param quoteAmount Original amount of quote asset in the order, rounding precision to 18
     ///                    for quote assets with precision other than 18 decimal places
-    /// @param conversionID The latest conversion ID when the order is placed
+    /// @param version The latest rebalance version when the order is placed
     /// @param orderIndex Index of the order in the order queue
     /// @param fillable Unfilled amount when the order is canceled, rounding precision to 18 for
     ///                 quote assets with precision other than 18 decimal places
@@ -73,7 +73,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 indexed tranche,
         uint256 pdLevel,
         uint256 quoteAmount,
-        uint256 conversionID,
+        uint256 version,
         uint256 orderIndex,
         uint256 fillable
     );
@@ -83,7 +83,7 @@ contract Exchange is ExchangeRoles, Staking {
     /// @param tranche Tranche of the share to sell
     /// @param pdLevel Premium-discount level
     /// @param baseAmount Original amount of base asset in the order
-    /// @param conversionID The latest conversion ID when the order is placed
+    /// @param version The latest rebalance version when the order is placed
     /// @param orderIndex Index of the order in the order queue
     /// @param fillable Unfilled amount when the order is canceled
     event AskOrderCanceled(
@@ -91,7 +91,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 indexed tranche,
         uint256 pdLevel,
         uint256 baseAmount,
-        uint256 conversionID,
+        uint256 version,
         uint256 orderIndex,
         uint256 fillable
     );
@@ -101,7 +101,7 @@ contract Exchange is ExchangeRoles, Staking {
     /// @param tranche Tranche of the share
     /// @param quoteAmount Matched amount of quote asset, rounding precision to 18 for quote assets
     ///                    with precision other than 18 decimal places
-    /// @param conversionID Conversion ID of this trade
+    /// @param version Rebalance version of this trade
     /// @param lastMatchedPDLevel Premium-discount level of the last matched maker order
     /// @param lastMatchedOrderIndex Index of the last matched maker order in its order queue
     /// @param lastMatchedBaseAmount Matched base asset amount of the last matched maker order
@@ -109,7 +109,7 @@ contract Exchange is ExchangeRoles, Staking {
         address indexed taker,
         uint256 indexed tranche,
         uint256 quoteAmount,
-        uint256 conversionID,
+        uint256 version,
         uint256 lastMatchedPDLevel,
         uint256 lastMatchedOrderIndex,
         uint256 lastMatchedBaseAmount
@@ -119,7 +119,7 @@ contract Exchange is ExchangeRoles, Staking {
     /// @param taker Account placing the order
     /// @param tranche Tranche of the share
     /// @param baseAmount Matched amount of base asset
-    /// @param conversionID Conversion ID of this trade
+    /// @param version Rebalance version of this trade
     /// @param lastMatchedPDLevel Premium-discount level of the last matched maker order
     /// @param lastMatchedOrderIndex Index of the last matched maker order in its order queue
     /// @param lastMatchedQuoteAmount Matched quote asset amount of the last matched maker order,
@@ -129,7 +129,7 @@ contract Exchange is ExchangeRoles, Staking {
         address indexed taker,
         uint256 indexed tranche,
         uint256 baseAmount,
-        uint256 conversionID,
+        uint256 version,
         uint256 lastMatchedPDLevel,
         uint256 lastMatchedOrderIndex,
         uint256 lastMatchedQuoteAmount
@@ -192,22 +192,23 @@ contract Exchange is ExchangeRoles, Staking {
     /// @dev A multipler that normalizes a quote asset balance to 18 decimal places.
     uint256 private immutable _quoteDecimalMultiplier;
 
-    /// @notice Mapping of conversion ID => tranche => an array of order queues
+    /// @notice Mapping of rebalance version => tranche => an array of order queues
     mapping(uint256 => mapping(uint256 => OrderQueue[PD_LEVEL_COUNT + 1])) public bids;
     mapping(uint256 => mapping(uint256 => OrderQueue[PD_LEVEL_COUNT + 1])) public asks;
 
-    /// @notice Mapping of conversion ID => best bid premium-discount level of the three tranches.
+    /// @notice Mapping of rebalance version => best bid premium-discount level of the three tranches.
     ///         Zero indicates that there is no bid order.
     mapping(uint256 => uint256[TRANCHE_COUNT]) public bestBids;
 
-    /// @notice Mapping of conversion ID => best ask premium-discount level of the three tranches.
+    /// @notice Mapping of rebalance version => best ask premium-discount level of the three tranches.
     ///         Zero or `PD_LEVEL_COUNT + 1` indicates that there is no ask order.
     mapping(uint256 => uint256[TRANCHE_COUNT]) public bestAsks;
 
     /// @notice Mapping of account => tranche => epoch ID => pending trade
     mapping(address => mapping(uint256 => mapping(uint256 => PendingTrade))) public pendingTrades;
-    /// @notice Mapping of epoch ID => most recent conversion ID for pending trades
-    mapping(uint256 => uint256) public mostRecentConversionPendingTrades;
+
+    /// @dev Mapping of epoch => rebalance version
+    mapping(uint256 => uint256) private _epochVersions;
 
     constructor(
         address fund_,
@@ -238,7 +239,7 @@ contract Exchange is ExchangeRoles, Staking {
     }
 
     function getBidOrder(
-        uint256 conversionID,
+        uint256 version,
         uint256 tranche,
         uint256 pdLevel,
         uint256 index
@@ -251,14 +252,14 @@ contract Exchange is ExchangeRoles, Staking {
             uint256 fillable
         )
     {
-        Order storage order = bids[conversionID][tranche][pdLevel].list[index];
+        Order storage order = bids[version][tranche][pdLevel].list[index];
         maker = order.maker;
         amount = order.amount;
         fillable = order.fillable;
     }
 
     function getAskOrder(
-        uint256 conversionID,
+        uint256 version,
         uint256 tranche,
         uint256 pdLevel,
         uint256 index
@@ -271,7 +272,7 @@ contract Exchange is ExchangeRoles, Staking {
             uint256 fillable
         )
     {
-        Order storage order = asks[conversionID][tranche][pdLevel].list[index];
+        Order storage order = asks[version][tranche][pdLevel].list[index];
         maker = order.maker;
         amount = order.amount;
         fillable = order.fillable;
@@ -300,226 +301,206 @@ contract Exchange is ExchangeRoles, Staking {
     /// @param tranche Tranche of the base asset
     /// @param pdLevel Premium-discount level
     /// @param quoteAmount Quote asset amount with 18 decimal places
-    /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
+    /// @param version Current rebalance version. Revert if it is not the latest version.
     function placeBid(
         uint256 tranche,
         uint256 pdLevel,
         uint256 quoteAmount,
-        uint256 conversionID
+        uint256 version
     ) external onlyMaker {
         require(quoteAmount >= minBidAmount, "Quote amount too low");
-        uint256 bestAsk = bestAsks[conversionID][tranche];
+        uint256 bestAsk = bestAsks[version][tranche];
         require(
             pdLevel > 0 && pdLevel < (bestAsk == 0 ? PD_LEVEL_COUNT + 1 : bestAsk),
             "Invalid premium-discount level"
         );
-        require(conversionID == fund.getConversionSize(), "Invalid conversion ID");
+        require(version == fund.getRebalanceSize(), "Invalid version");
 
         _transferQuoteFrom(msg.sender, quoteAmount);
 
-        uint256 index =
-            bids[conversionID][tranche][pdLevel].append(msg.sender, quoteAmount, conversionID);
-        if (bestBids[conversionID][tranche] < pdLevel) {
-            bestBids[conversionID][tranche] = pdLevel;
+        uint256 index = bids[version][tranche][pdLevel].append(msg.sender, quoteAmount, version);
+        if (bestBids[version][tranche] < pdLevel) {
+            bestBids[version][tranche] = pdLevel;
         }
 
-        emit BidOrderPlaced(msg.sender, tranche, pdLevel, quoteAmount, conversionID, index);
+        emit BidOrderPlaced(msg.sender, tranche, pdLevel, quoteAmount, version, index);
     }
 
     /// @notice Place an ask order for makers
     /// @param tranche Tranche of the base asset
     /// @param pdLevel Premium-discount level
     /// @param baseAmount Base asset amount
-    /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
+    /// @param version Current rebalance version. Revert if it is not the latest version.
     function placeAsk(
         uint256 tranche,
         uint256 pdLevel,
         uint256 baseAmount,
-        uint256 conversionID
+        uint256 version
     ) external onlyMaker {
         require(baseAmount >= minAskAmount, "Base amount too low");
         require(
-            pdLevel > bestBids[conversionID][tranche] && pdLevel <= PD_LEVEL_COUNT,
+            pdLevel > bestBids[version][tranche] && pdLevel <= PD_LEVEL_COUNT,
             "Invalid premium-discount level"
         );
-        require(conversionID == fund.getConversionSize(), "Invalid conversion ID");
+        require(version == fund.getRebalanceSize(), "Invalid version");
 
         _lock(tranche, msg.sender, baseAmount);
-        uint256 index =
-            asks[conversionID][tranche][pdLevel].append(msg.sender, baseAmount, conversionID);
-        uint256 oldBestAsk = bestAsks[conversionID][tranche];
+        uint256 index = asks[version][tranche][pdLevel].append(msg.sender, baseAmount, version);
+        uint256 oldBestAsk = bestAsks[version][tranche];
         if (oldBestAsk > pdLevel) {
-            bestAsks[conversionID][tranche] = pdLevel;
-        } else if (oldBestAsk == 0 && asks[conversionID][tranche][0].tail == 0) {
+            bestAsks[version][tranche] = pdLevel;
+        } else if (oldBestAsk == 0 && asks[version][tranche][0].tail == 0) {
             // The best ask level is not initialized yet, because order queue at PD level 0 is empty
-            bestAsks[conversionID][tranche] = pdLevel;
+            bestAsks[version][tranche] = pdLevel;
         }
 
-        emit AskOrderPlaced(msg.sender, tranche, pdLevel, baseAmount, conversionID, index);
+        emit AskOrderPlaced(msg.sender, tranche, pdLevel, baseAmount, version, index);
     }
 
     /// @notice Cancel a bid order by order identifier
-    /// @param conversionID Order's conversion ID
+    /// @param version Order's rebalance version
     /// @param tranche Tranche of the order's base asset
     /// @param pdLevel Order's premium-discount level
     /// @param index Order's index
     function cancelBid(
-        uint256 conversionID,
+        uint256 version,
         uint256 tranche,
         uint256 pdLevel,
         uint256 index
     ) external {
-        OrderQueue storage orderQueue = bids[conversionID][tranche][pdLevel];
+        OrderQueue storage orderQueue = bids[version][tranche][pdLevel];
         Order storage order = orderQueue.list[index];
         require(order.maker == msg.sender, "Maker address mismatched");
 
         uint256 fillable = order.fillable;
-        emit BidOrderCanceled(
-            msg.sender,
-            tranche,
-            pdLevel,
-            order.amount,
-            conversionID,
-            index,
-            fillable
-        );
+        emit BidOrderCanceled(msg.sender, tranche, pdLevel, order.amount, version, index, fillable);
         orderQueue.cancel(index);
 
         // Update bestBid
-        if (bestBids[conversionID][tranche] == pdLevel) {
+        if (bestBids[version][tranche] == pdLevel) {
             uint256 newBestBid = pdLevel;
-            while (newBestBid > 0 && bids[conversionID][tranche][newBestBid].isEmpty()) {
+            while (newBestBid > 0 && bids[version][tranche][newBestBid].isEmpty()) {
                 newBestBid--;
             }
-            bestBids[conversionID][tranche] = newBestBid;
+            bestBids[version][tranche] = newBestBid;
         }
 
         _transferQuote(msg.sender, fillable);
     }
 
     /// @notice Cancel an ask order by order identifier
-    /// @param conversionID Order's conversion ID
+    /// @param version Order's rebalance version
     /// @param tranche Tranche of the order's base asset
     /// @param pdLevel Order's premium-discount level
     /// @param index Order's index
     function cancelAsk(
-        uint256 conversionID,
+        uint256 version,
         uint256 tranche,
         uint256 pdLevel,
         uint256 index
     ) external {
-        OrderQueue storage orderQueue = asks[conversionID][tranche][pdLevel];
+        OrderQueue storage orderQueue = asks[version][tranche][pdLevel];
         Order storage order = orderQueue.list[index];
         require(order.maker == msg.sender, "Maker address mismatched");
 
         uint256 fillable = order.fillable;
-        emit AskOrderCanceled(
-            msg.sender,
-            tranche,
-            pdLevel,
-            order.amount,
-            conversionID,
-            index,
-            fillable
-        );
+        emit AskOrderCanceled(msg.sender, tranche, pdLevel, order.amount, version, index, fillable);
         orderQueue.cancel(index);
 
         // Update bestAsk
-        if (bestAsks[conversionID][tranche] == pdLevel) {
+        if (bestAsks[version][tranche] == pdLevel) {
             uint256 newBestAsk = pdLevel;
-            while (
-                newBestAsk <= PD_LEVEL_COUNT && asks[conversionID][tranche][newBestAsk].isEmpty()
-            ) {
+            while (newBestAsk <= PD_LEVEL_COUNT && asks[version][tranche][newBestAsk].isEmpty()) {
                 newBestAsk++;
             }
-            bestAsks[conversionID][tranche] = newBestAsk;
+            bestAsks[version][tranche] = newBestAsk;
         }
 
         if (tranche == TRANCHE_M) {
-            _convertAndUnlock(msg.sender, fillable, 0, 0, conversionID);
+            _rebalanceAndUnlock(msg.sender, fillable, 0, 0, version);
         } else if (tranche == TRANCHE_A) {
-            _convertAndUnlock(msg.sender, 0, fillable, 0, conversionID);
+            _rebalanceAndUnlock(msg.sender, 0, fillable, 0, version);
         } else {
-            _convertAndUnlock(msg.sender, 0, 0, fillable, conversionID);
+            _rebalanceAndUnlock(msg.sender, 0, 0, fillable, version);
         }
     }
 
     /// @notice Buy Token M
-    /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
+    /// @param version Current rebalance version. Revert if it is not the latest version.
     /// @param maxPDLevel Maximal premium-discount level accepted
     /// @param quoteAmount Amount of quote assets (with 18 decimal places) willing to trade
     function buyM(
-        uint256 conversionID,
+        uint256 version,
         uint256 maxPDLevel,
         uint256 quoteAmount
     ) external onlyActive {
         (uint256 estimatedNav, , ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _buy(conversionID, msg.sender, TRANCHE_M, maxPDLevel, estimatedNav, quoteAmount);
+        _buy(version, msg.sender, TRANCHE_M, maxPDLevel, estimatedNav, quoteAmount);
     }
 
     /// @notice Buy Token A
-    /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
+    /// @param version Current rebalance version. Revert if it is not the latest version.
     /// @param maxPDLevel Maximal premium-discount level accepted
     /// @param quoteAmount Amount of quote assets (with 18 decimal places) willing to trade
     function buyA(
-        uint256 conversionID,
+        uint256 version,
         uint256 maxPDLevel,
         uint256 quoteAmount
     ) external onlyActive {
         (, uint256 estimatedNav, ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _buy(conversionID, msg.sender, TRANCHE_A, maxPDLevel, estimatedNav, quoteAmount);
+        _buy(version, msg.sender, TRANCHE_A, maxPDLevel, estimatedNav, quoteAmount);
     }
 
     /// @notice Buy Token B
-    /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
+    /// @param version Current rebalance version. Revert if it is not the latest version.
     /// @param maxPDLevel Maximal premium-discount level accepted
     /// @param quoteAmount Amount of quote assets (with 18 decimal places) willing to trade
     function buyB(
-        uint256 conversionID,
+        uint256 version,
         uint256 maxPDLevel,
         uint256 quoteAmount
     ) external onlyActive {
         (, , uint256 estimatedNav) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _buy(conversionID, msg.sender, TRANCHE_B, maxPDLevel, estimatedNav, quoteAmount);
+        _buy(version, msg.sender, TRANCHE_B, maxPDLevel, estimatedNav, quoteAmount);
     }
 
     /// @notice Sell Token M
-    /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
+    /// @param version Current rebalance version. Revert if it is not the latest version.
     /// @param minPDLevel Minimal premium-discount level accepted
     /// @param baseAmount Amount of Token M willing to trade
     function sellM(
-        uint256 conversionID,
+        uint256 version,
         uint256 minPDLevel,
         uint256 baseAmount
     ) external onlyActive {
         (uint256 estimatedNav, , ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _sell(conversionID, msg.sender, TRANCHE_M, minPDLevel, estimatedNav, baseAmount);
+        _sell(version, msg.sender, TRANCHE_M, minPDLevel, estimatedNav, baseAmount);
     }
 
     /// @notice Sell Token A
-    /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
+    /// @param version Current rebalance version. Revert if it is not the latest version.
     /// @param minPDLevel Minimal premium-discount level accepted
     /// @param baseAmount Amount of Token A willing to trade
     function sellA(
-        uint256 conversionID,
+        uint256 version,
         uint256 minPDLevel,
         uint256 baseAmount
     ) external onlyActive {
         (, uint256 estimatedNav, ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _sell(conversionID, msg.sender, TRANCHE_A, minPDLevel, estimatedNav, baseAmount);
+        _sell(version, msg.sender, TRANCHE_A, minPDLevel, estimatedNav, baseAmount);
     }
 
     /// @notice Sell Token B
-    /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
+    /// @param version Current rebalance version. Revert if it is not the latest version.
     /// @param minPDLevel Minimal premium-discount level accepted
     /// @param baseAmount Amount of Token B willing to trade
     function sellB(
-        uint256 conversionID,
+        uint256 version,
         uint256 minPDLevel,
         uint256 baseAmount
     ) external onlyActive {
         (, , uint256 estimatedNav) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _sell(conversionID, msg.sender, TRANCHE_B, minPDLevel, estimatedNav, baseAmount);
+        _sell(version, msg.sender, TRANCHE_B, minPDLevel, estimatedNav, baseAmount);
     }
 
     /// @notice Settle trades of a specified epoch for makers
@@ -549,13 +530,13 @@ contract Exchange is ExchangeRoles, Staking {
         (amountA, quoteAmountA) = _settleMaker(account, TRANCHE_A, estimatedNavA, epoch);
         (amountB, quoteAmountB) = _settleMaker(account, TRANCHE_B, estimatedNavB, epoch);
 
-        uint256 conversionID = mostRecentConversionPendingTrades[epoch];
-        (amountM, amountA, amountB) = _convertAndClearTrade(
+        uint256 version = _epochVersions[epoch];
+        (amountM, amountA, amountB) = _rebalanceAndClearTrade(
             account,
             amountM,
             amountA,
             amountB,
-            conversionID
+            version
         );
         quoteAmount = quoteAmountM.add(quoteAmountA).add(quoteAmountB);
         _transferQuote(account, quoteAmount);
@@ -590,13 +571,13 @@ contract Exchange is ExchangeRoles, Staking {
         (amountA, quoteAmountA) = _settleTaker(account, TRANCHE_A, estimatedNavA, epoch);
         (amountB, quoteAmountB) = _settleTaker(account, TRANCHE_B, estimatedNavB, epoch);
 
-        uint256 conversionID = mostRecentConversionPendingTrades[epoch];
-        (amountM, amountA, amountB) = _convertAndClearTrade(
+        uint256 version = _epochVersions[epoch];
+        (amountM, amountA, amountB) = _rebalanceAndClearTrade(
             account,
             amountM,
             amountA,
             amountB,
-            conversionID
+            version
         );
         quoteAmount = quoteAmountM.add(quoteAmountA).add(quoteAmountB);
         _transferQuote(account, quoteAmount);
@@ -605,14 +586,14 @@ contract Exchange is ExchangeRoles, Staking {
     }
 
     /// @dev Buy share
-    /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
+    /// @param version Current rebalance version. Revert if it is not the latest version.
     /// @param taker Taker address
     /// @param tranche Tranche of the base asset
     /// @param maxPDLevel Maximal premium-discount level accepted
     /// @param estimatedNav Estimated net asset value of the base asset
     /// @param quoteAmount Amount of quote assets willing to trade with 18 decimal places
     function _buy(
-        uint256 conversionID,
+        uint256 version,
         address taker,
         uint256 tranche,
         uint256 maxPDLevel,
@@ -620,19 +601,19 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 quoteAmount
     ) internal {
         require(maxPDLevel > 0 && maxPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
-        require(conversionID == fund.getConversionSize(), "Invalid conversion ID");
+        require(version == fund.getRebalanceSize(), "Invalid version");
 
         PendingBuyTrade memory totalTrade;
         uint256 epoch = endOfEpoch(block.timestamp);
 
-        // Record epoch ID => conversion ID in the first trasaction in the epoch
-        if (mostRecentConversionPendingTrades[epoch] != conversionID) {
-            mostRecentConversionPendingTrades[epoch] = conversionID;
+        // Record rebalance version in the first transaction in the epoch
+        if (_epochVersions[epoch] != version) {
+            _epochVersions[epoch] = version;
         }
 
         PendingBuyTrade memory currentTrade;
         uint256 orderIndex = 0;
-        uint256 pdLevel = bestAsks[conversionID][tranche];
+        uint256 pdLevel = bestAsks[version][tranche];
         if (pdLevel == 0) {
             // Zero best ask indicates that no ask order is ever placed.
             // We set pdLevel beyond the largest valid level, forcing the following loop
@@ -641,7 +622,7 @@ contract Exchange is ExchangeRoles, Staking {
         }
         for (; pdLevel <= maxPDLevel; pdLevel++) {
             uint256 price = pdLevel.mul(PD_TICK).add(PD_START).multiplyDecimal(estimatedNav);
-            OrderQueue storage orderQueue = asks[conversionID][tranche][pdLevel];
+            OrderQueue storage orderQueue = asks[version][tranche][pdLevel];
             orderIndex = orderQueue.head;
             while (orderIndex != 0) {
                 Order storage order = orderQueue.list[orderIndex];
@@ -680,7 +661,7 @@ contract Exchange is ExchangeRoles, Staking {
                 totalTrade.reservedBase = totalTrade.reservedBase.add(currentTrade.reservedBase);
                 pendingTrades[order.maker][tranche][epoch].makerSell.add(currentTrade);
 
-                // There is no need to convert for maker; the fact that the order could
+                // There is no need to rebalance for maker; the fact that the order could
                 // be filled here indicates that the maker is in the latest version
                 _tradeLocked(tranche, order.maker, currentTrade.reservedBase);
 
@@ -698,8 +679,8 @@ contract Exchange is ExchangeRoles, Staking {
             orderQueue.updateHead(orderIndex);
             if (orderIndex != 0) {
                 // This premium-discount level is not completely filled. Matching ends here.
-                if (bestAsks[conversionID][tranche] != pdLevel) {
-                    bestAsks[conversionID][tranche] = pdLevel;
+                if (bestAsks[version][tranche] != pdLevel) {
+                    bestAsks[version][tranche] = pdLevel;
                 }
                 break;
             }
@@ -708,7 +689,7 @@ contract Exchange is ExchangeRoles, Staking {
             taker,
             tranche,
             totalTrade.frozenQuote,
-            conversionID,
+            version,
             pdLevel,
             orderIndex,
             orderIndex == 0 ? 0 : currentTrade.reservedBase
@@ -718,11 +699,11 @@ contract Exchange is ExchangeRoles, Staking {
             // premium-discount level `maxPDLevel`.
             // Find the new best ask beyond that level.
             for (; pdLevel <= PD_LEVEL_COUNT; pdLevel++) {
-                if (!asks[conversionID][tranche][pdLevel].isEmpty()) {
+                if (!asks[version][tranche][pdLevel].isEmpty()) {
                     break;
                 }
             }
-            bestAsks[conversionID][tranche] = pdLevel;
+            bestAsks[version][tranche] = pdLevel;
         }
 
         require(
@@ -734,14 +715,14 @@ contract Exchange is ExchangeRoles, Staking {
     }
 
     /// @dev Sell share
-    /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
+    /// @param version Current rebalance version. Revert if it is not the latest version.
     /// @param taker Taker address
     /// @param tranche Tranche of the base asset
     /// @param minPDLevel Minimal premium-discount level accepted
     /// @param estimatedNav Estimated net asset value of the base asset
     /// @param baseAmount Amount of base assets willing to trade
     function _sell(
-        uint256 conversionID,
+        uint256 version,
         address taker,
         uint256 tranche,
         uint256 minPDLevel,
@@ -749,22 +730,22 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 baseAmount
     ) internal {
         require(minPDLevel > 0 && minPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
-        require(conversionID == fund.getConversionSize(), "Invalid conversion ID");
+        require(version == fund.getRebalanceSize(), "Invalid version");
 
         PendingSellTrade memory totalTrade;
         uint256 epoch = endOfEpoch(block.timestamp);
 
-        // Record epoch ID => conversion ID in the first trasaction in the epoch
-        if (mostRecentConversionPendingTrades[epoch] != conversionID) {
-            mostRecentConversionPendingTrades[epoch] = conversionID;
+        // Record rebalance version in the first transaction in the epoch
+        if (_epochVersions[epoch] != version) {
+            _epochVersions[epoch] = version;
         }
 
         PendingSellTrade memory currentTrade;
         uint256 orderIndex;
-        uint256 pdLevel = bestBids[conversionID][tranche];
+        uint256 pdLevel = bestBids[version][tranche];
         for (; pdLevel >= minPDLevel; pdLevel--) {
             uint256 price = pdLevel.mul(PD_TICK).add(PD_START).multiplyDecimal(estimatedNav);
-            OrderQueue storage orderQueue = bids[conversionID][tranche][pdLevel];
+            OrderQueue storage orderQueue = bids[version][tranche][pdLevel];
             orderIndex = orderQueue.head;
             while (orderIndex != 0) {
                 Order storage order = orderQueue.list[orderIndex];
@@ -818,8 +799,8 @@ contract Exchange is ExchangeRoles, Staking {
             orderQueue.updateHead(orderIndex);
             if (orderIndex != 0) {
                 // This premium-discount level is not completely filled. Matching ends here.
-                if (bestBids[conversionID][tranche] != pdLevel) {
-                    bestBids[conversionID][tranche] = pdLevel;
+                if (bestBids[version][tranche] != pdLevel) {
+                    bestBids[version][tranche] = pdLevel;
                 }
                 break;
             }
@@ -828,7 +809,7 @@ contract Exchange is ExchangeRoles, Staking {
             taker,
             tranche,
             totalTrade.frozenBase,
-            conversionID,
+            version,
             pdLevel,
             orderIndex,
             orderIndex == 0 ? 0 : currentTrade.reservedQuote
@@ -838,11 +819,11 @@ contract Exchange is ExchangeRoles, Staking {
             // premium-discount level `minPDLevel`.
             // Find the new best ask beyond that level.
             for (; pdLevel > 0; pdLevel--) {
-                if (!bids[conversionID][tranche][pdLevel].isEmpty()) {
+                if (!bids[version][tranche][pdLevel].isEmpty()) {
                     break;
                 }
             }
-            bestBids[conversionID][tranche] = pdLevel;
+            bestBids[version][tranche] = pdLevel;
         }
 
         require(

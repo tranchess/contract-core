@@ -97,7 +97,7 @@ describe("Exchange", function () {
         await fund.mock.tokenM.returns(shareM.address);
         await fund.mock.tokenA.returns(shareA.address);
         await fund.mock.tokenB.returns(shareB.address);
-        await fund.mock.getConversionSize.returns(0);
+        await fund.mock.getRebalanceSize.returns(0);
         await fund.mock.twapOracle.returns(twapOracle.address);
         await fund.mock.isExchangeActive.returns(true);
         await twapOracle.mock.getTwap.returns(parseEther("1000"));
@@ -252,9 +252,9 @@ describe("Exchange", function () {
             );
         });
 
-        it("Should check conversion ID", async function () {
+        it("Should check version", async function () {
             await expect(exchange.placeBid(TRANCHE_M, 1, MIN_BID_AMOUNT, 1)).to.be.revertedWith(
-                "Invalid conversion ID"
+                "Invalid version"
             );
         });
 
@@ -335,9 +335,9 @@ describe("Exchange", function () {
             );
         });
 
-        it("Should check conversion ID", async function () {
+        it("Should check version", async function () {
             await expect(exchange.placeAsk(TRANCHE_M, 81, MIN_ASK_AMOUNT, 1)).to.be.revertedWith(
-                "Invalid conversion ID"
+                "Invalid version"
             );
         });
 
@@ -493,13 +493,13 @@ describe("Exchange", function () {
             );
         });
 
-        it("Should check conversion ID", async function () {
+        it("Should check version", async function () {
             await fund.mock.extrapolateNav.returns(
                 parseEther("1"),
                 parseEther("1"),
                 parseEther("1")
             );
-            await expect(exchange.buyM(1, 41, 1)).to.be.revertedWith("Invalid conversion ID");
+            await expect(exchange.buyM(1, 41, 1)).to.be.revertedWith("Invalid version");
         });
 
         it("Should revert if no order can be matched", async function () {
@@ -849,13 +849,13 @@ describe("Exchange", function () {
             );
         });
 
-        it("Should check conversion ID", async function () {
+        it("Should check version", async function () {
             await fund.mock.extrapolateNav.returns(
                 parseEther("1"),
                 parseEther("1"),
                 parseEther("1")
             );
-            await expect(exchange.sellM(1, 41, 1)).to.be.revertedWith("Invalid conversion ID");
+            await expect(exchange.sellM(1, 41, 1)).to.be.revertedWith("Invalid version");
         });
 
         it("Should revert if no order can be matched", async function () {
@@ -1677,41 +1677,41 @@ describe("Exchange", function () {
         });
     });
 
-    describe("Conversion", function () {
+    describe("Rebalance", function () {
         beforeEach(async function () {
-            await fund.mock.getConversionSize.returns(1);
-            await fund.mock.getConversionTimestamp.withArgs(0).returns(startEpoch + EPOCH * 5);
-            await fund.mock.getConversionTimestamp.withArgs(1).returns(startEpoch + EPOCH * 15);
-            await fund.mock.getConversionTimestamp.withArgs(2).returns(startEpoch + EPOCH * 20);
-            await fund.mock.convert
+            await fund.mock.getRebalanceSize.returns(1);
+            await fund.mock.getRebalanceTimestamp.withArgs(0).returns(startEpoch + EPOCH * 5);
+            await fund.mock.getRebalanceTimestamp.withArgs(1).returns(startEpoch + EPOCH * 15);
+            await fund.mock.getRebalanceTimestamp.withArgs(2).returns(startEpoch + EPOCH * 20);
+            await fund.mock.doRebalance
                 .withArgs(TOTAL_M, TOTAL_A, TOTAL_B, 0)
                 .returns(TOTAL_M, TOTAL_A, TOTAL_B);
-            await fund.mock.convert
+            await fund.mock.doRebalance
                 .withArgs(TOTAL_M, TOTAL_A, TOTAL_B, 1)
                 .returns(TOTAL_M, TOTAL_A, TOTAL_B);
-            await fund.mock.convert
+            await fund.mock.doRebalance
                 .withArgs(TOTAL_M, TOTAL_A, TOTAL_B, 2)
                 .returns(TOTAL_M, TOTAL_A, TOTAL_B);
-            await fund.mock.convert
+            await fund.mock.doRebalance
                 .withArgs(USER1_M, USER1_A, USER1_B, 0)
                 .returns(USER1_M, USER1_A, USER1_B);
-            await fund.mock.convert
+            await fund.mock.doRebalance
                 .withArgs(USER2_M, USER2_A, USER2_B, 0)
                 .returns(USER2_M, USER2_A, USER2_B);
             advanceBlockAtTime(startEpoch + EPOCH * 9);
         });
 
-        it("Should convert on cancellation", async function () {
+        it("Should rebalance on cancellation", async function () {
             await exchange.placeAsk(TRANCHE_A, 41, parseEther("1"), 1);
             await exchange.placeAsk(TRANCHE_A, 41, parseEther("2"), 1);
 
-            // Cancel the first order after two conversions
+            // Cancel the first order after two rebalances
             advanceBlockAtTime(startEpoch + EPOCH * 30);
-            await fund.mock.getConversionSize.returns(3);
+            await fund.mock.getRebalanceSize.returns(3);
             await expect(() => exchange.cancelAsk(1, TRANCHE_A, 41, 1)).to.callMocks(
                 {
-                    // Convert available balance from version 1 to 2
-                    func: fund.mock.convert.withArgs(
+                    // Rebalance available balance from version 1 to 2
+                    func: fund.mock.doRebalance.withArgs(
                         USER1_M,
                         USER1_A.sub(parseEther("3")),
                         USER1_B,
@@ -1720,23 +1720,23 @@ describe("Exchange", function () {
                     rets: [11111, 2222, 333],
                 },
                 {
-                    // Convert locked balance from version 1 to 2
-                    func: fund.mock.convert.withArgs(0, parseEther("3"), 0, 1),
+                    // Rebalance locked balance from version 1 to 2
+                    func: fund.mock.doRebalance.withArgs(0, parseEther("3"), 0, 1),
                     rets: [7777, 888, 99],
                 },
                 {
-                    // Convert available balance from version 2 to 3
-                    func: fund.mock.convert.withArgs(11111, 2222, 333, 2),
+                    // Rebalance available balance from version 2 to 3
+                    func: fund.mock.doRebalance.withArgs(11111, 2222, 333, 2),
                     rets: [10000, 2000, 300],
                 },
                 {
-                    // Convert locked balance from version 2 to 3
-                    func: fund.mock.convert.withArgs(7777, 888, 99, 2),
+                    // Rebalance locked balance from version 2 to 3
+                    func: fund.mock.doRebalance.withArgs(7777, 888, 99, 2),
                     rets: [7000, 800, 90],
                 },
                 {
-                    // Convert order amount from version 1 to 3
-                    func: fund.mock.batchConvert.withArgs(0, parseEther("1"), 0, 1, 3),
+                    // Rebalance order amount from version 1 to 3
+                    func: fund.mock.batchRebalance.withArgs(0, parseEther("1"), 0, 1, 3),
                     rets: [4000, 500, 60],
                 }
             );
@@ -1745,7 +1745,7 @@ describe("Exchange", function () {
             expect(await exchange.availableBalanceOf(TRANCHE_B, addr1)).to.equal(300 + 60);
         });
 
-        it("Should convert on settlement", async function () {
+        it("Should rebalance on settlement", async function () {
             const frozenUsdc = parseEther("1");
             const orderA = parseEther("2");
             const reservedA = parseEther("1").mul(MAKER_RESERVE_BPS).div(10000);
@@ -1754,27 +1754,27 @@ describe("Exchange", function () {
             await exchange.connect(user2).placeAsk(TRANCHE_A, 41, orderA, 1);
             await exchange.buyA(1, 41, frozenUsdc);
 
-            // Settle the taker's trade after two conversions
+            // Settle the taker's trade after two rebalances
             advanceBlockAtTime(startEpoch + EPOCH * 30);
-            await fund.mock.getConversionSize.returns(3);
-            await fund.mock.convert
+            await fund.mock.getRebalanceSize.returns(3);
+            await fund.mock.doRebalance
                 .withArgs(TOTAL_M, TOTAL_A.sub(reservedA), TOTAL_B, 1)
                 .returns(11111, 2222, 333);
-            await fund.mock.convert.withArgs(11111, 2222, 333, 2).returns(10000, 2000, 300);
+            await fund.mock.doRebalance.withArgs(11111, 2222, 333, 2).returns(10000, 2000, 300);
             await expect(() => exchange.settleTaker(addr1, startEpoch + EPOCH * 10)).to.callMocks(
                 {
-                    // Convert available balance from version 1 to 2
-                    func: fund.mock.convert.withArgs(USER1_M, USER1_A, USER1_B, 1),
+                    // Rebalance available balance from version 1 to 2
+                    func: fund.mock.doRebalance.withArgs(USER1_M, USER1_A, USER1_B, 1),
                     rets: [4444, 555, 66],
                 },
                 {
-                    // Convert available balance from version 2 to 3
-                    func: fund.mock.convert.withArgs(4444, 555, 66, 2),
+                    // Rebalance available balance from version 2 to 3
+                    func: fund.mock.doRebalance.withArgs(4444, 555, 66, 2),
                     rets: [4000, 500, 60],
                 },
                 {
-                    // Convert settled amount from version 1 to 3
-                    func: fund.mock.batchConvert.withArgs(0, settledA, 0, 1, 3),
+                    // Rebalance settled amount from version 1 to 3
+                    func: fund.mock.batchRebalance.withArgs(0, settledA, 0, 1, 3),
                     rets: [700, 80, 9],
                 }
             );
@@ -1782,31 +1782,31 @@ describe("Exchange", function () {
             expect(await exchange.availableBalanceOf(TRANCHE_A, addr1)).to.equal(500 + 80);
             expect(await exchange.availableBalanceOf(TRANCHE_B, addr1)).to.equal(60 + 9);
 
-            // Settle the maker's trade after two conversions
+            // Settle the maker's trade after two rebalances
             await expect(() => exchange.settleMaker(addr2, startEpoch + EPOCH * 10)).to.callMocks(
                 {
-                    // Convert available balance from version 1 to 2
-                    func: fund.mock.convert.withArgs(USER2_M, USER2_A.sub(orderA), USER2_B, 1),
+                    // Rebalance available balance from version 1 to 2
+                    func: fund.mock.doRebalance.withArgs(USER2_M, USER2_A.sub(orderA), USER2_B, 1),
                     rets: [4444, 555, 66],
                 },
                 {
-                    // Convert locked balance from version 1 to 2
-                    func: fund.mock.convert.withArgs(0, orderA.sub(reservedA), 0, 1),
+                    // Rebalance locked balance from version 1 to 2
+                    func: fund.mock.doRebalance.withArgs(0, orderA.sub(reservedA), 0, 1),
                     rets: [7777, 888, 99],
                 },
                 {
-                    // Convert available balance from version 2 to 3
-                    func: fund.mock.convert.withArgs(4444, 555, 66, 2),
+                    // Rebalance available balance from version 2 to 3
+                    func: fund.mock.doRebalance.withArgs(4444, 555, 66, 2),
                     rets: [4000, 500, 60],
                 },
                 {
-                    // Convert locked balance from version 2 to 3
-                    func: fund.mock.convert.withArgs(7777, 888, 99, 2),
+                    // Rebalance locked balance from version 2 to 3
+                    func: fund.mock.doRebalance.withArgs(7777, 888, 99, 2),
                     rets: [7000, 800, 90],
                 },
                 {
-                    // Convert settled amount from version 1 to 3
-                    func: fund.mock.batchConvert.withArgs(0, reservedA.sub(settledA), 0, 1, 3),
+                    // Rebalance settled amount from version 1 to 3
+                    func: fund.mock.batchRebalance.withArgs(0, reservedA.sub(settledA), 0, 1, 3),
                     rets: [100, 20, 3],
                 }
             );
@@ -1815,15 +1815,15 @@ describe("Exchange", function () {
             expect(await exchange.availableBalanceOf(TRANCHE_B, addr2)).to.equal(60 + 3);
         });
 
-        it("Should start a new order book after conversion", async function () {
+        it("Should start a new order book after rebalance", async function () {
             await fund.mock.extrapolateNav.returns(0, parseEther("1"), 0);
             await exchange.connect(user2).placeAsk(TRANCHE_A, 45, parseEther("1"), 1);
             await exchange.connect(user2).placeBid(TRANCHE_A, 37, parseEther("1"), 1);
 
             advanceBlockAtTime(startEpoch + EPOCH * 30);
-            await fund.mock.getConversionSize.returns(3);
-            await expect(exchange.buyA(1, 81, 100)).to.be.revertedWith("Invalid conversion ID");
-            await expect(exchange.sellA(1, 1, 100)).to.be.revertedWith("Invalid conversion ID");
+            await fund.mock.getRebalanceSize.returns(3);
+            await expect(exchange.buyA(1, 81, 100)).to.be.revertedWith("Invalid version");
+            await expect(exchange.sellA(1, 1, 100)).to.be.revertedWith("Invalid version");
             await expect(exchange.buyA(3, 81, 100)).to.be.revertedWith(
                 "Nothing can be bought at the given premium-discount level"
             );

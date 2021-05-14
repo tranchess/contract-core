@@ -5,7 +5,7 @@ pragma experimental ABIEncoderV2;
 import "./ITwapOracle.sol";
 
 interface IFund {
-    /// @notice A linear transformation matrix that represents a conversion.
+    /// @notice A linear transformation matrix that represents a rebalance.
     ///
     ///         ```
     ///             [ ratioM          0        0 ]
@@ -13,12 +13,12 @@ interface IFund {
     ///             [ ratioB2M        0  ratioAB ]
     ///         ```
     ///
-    ///         Amounts of the three tranches `m`, `a` and `b` can be converted by multiplying the matrix:
+    ///         Amounts of the three tranches `m`, `a` and `b` can be rebalanced by multiplying the matrix:
     ///
     ///         ```
     ///         [ m', a', b' ] = [ m, a, b ] * C
     ///         ```
-    struct Conversion {
+    struct Rebalance {
         uint256 ratioM;
         uint256 ratioA2M;
         uint256 ratioB2M;
@@ -67,11 +67,11 @@ interface IFund {
 
     function shareAllowanceVersion(address owner, address spender) external view returns (uint256);
 
-    function getConversionSize() external view returns (uint256);
+    function getRebalanceSize() external view returns (uint256);
 
-    function getConversion(uint256 index) external view returns (Conversion memory);
+    function getRebalance(uint256 index) external view returns (Rebalance memory);
 
-    function getConversionTimestamp(uint256 index) external view returns (uint256);
+    function getRebalanceTimestamp(uint256 index) external view returns (uint256);
 
     function currentDay() external view returns (uint256);
 
@@ -105,7 +105,7 @@ interface IFund {
 
     function calculateNavB(uint256 navM, uint256 navA) external pure returns (uint256);
 
-    function convert(
+    function doRebalance(
         uint256 amountM,
         uint256 amountA,
         uint256 amountB,
@@ -119,7 +119,7 @@ interface IFund {
             uint256 newAmountB
         );
 
-    function batchConvert(
+    function batchRebalance(
         uint256 amountM,
         uint256 amountA,
         uint256 amountB,
@@ -190,7 +190,7 @@ interface IFund {
         uint256 amount
     ) external;
 
-    event ConversionTriggered(
+    event RebalanceTriggered(
         uint256 indexed index,
         uint256 indexed day,
         uint256 ratioM,

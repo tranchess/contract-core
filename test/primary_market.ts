@@ -554,7 +554,7 @@ describe("PrimaryMarket", function () {
 
         async function settleFixture(): Promise<SettleFixtureData> {
             const f = await loadFixture(deployFixture);
-            await f.fund.mock.getConversionSize.returns(0);
+            await f.fund.mock.getRebalanceSize.returns(0);
             await f.fund.mock.burn.returns();
             await f.fund.mock.mint.returns();
             await f.primaryMarket.create(parseWbtc("1"));
@@ -641,43 +641,43 @@ describe("PrimaryMarket", function () {
             );
         });
 
-        it("Should convert claimable shares on new creation", async function () {
-            await fund.mock.getConversionSize.returns(3);
+        it("Should rebalance claimable shares on new creation", async function () {
+            await fund.mock.getRebalanceSize.returns(3);
             await expect(() => primaryMarket.create(parseWbtc("4"))).to.callMocks({
-                func: fund.mock.batchConvert.withArgs(createdShares, 0, 0, 0, 3),
+                func: fund.mock.batchRebalance.withArgs(createdShares, 0, 0, 0, 3),
                 rets: [parseEther("300"), 0, 0],
             });
             const cr = await primaryMarket.creationRedemptionOf(user1.address);
             expect(cr.createdShares).to.equal(parseEther("300"));
-            expect(cr.conversionIndex).to.equal(3);
-            // No conversion function is called this time
+            expect(cr.version).to.equal(3);
+            // No rebalance function is called this time
             await primaryMarket.create(parseWbtc("6"));
             const cr2 = await primaryMarket.creationRedemptionOf(user1.address);
             expect(cr2.createdShares).to.equal(parseEther("300"));
-            expect(cr2.conversionIndex).to.equal(3);
+            expect(cr2.version).to.equal(3);
         });
 
-        it("Should convert claimable shares on new redemption", async function () {
-            await fund.mock.getConversionSize.returns(5);
+        it("Should rebalance claimable shares on new redemption", async function () {
+            await fund.mock.getRebalanceSize.returns(5);
             await expect(() => primaryMarket.redeem(parseEther("2000"))).to.callMocks({
-                func: fund.mock.batchConvert.withArgs(createdShares, 0, 0, 0, 5),
+                func: fund.mock.batchRebalance.withArgs(createdShares, 0, 0, 0, 5),
                 rets: [parseEther("800"), 0, 0],
             });
             const cr = await primaryMarket.creationRedemptionOf(user1.address);
             expect(cr.createdShares).to.equal(parseEther("800"));
-            expect(cr.conversionIndex).to.equal(5);
-            // No conversion function is called this time
+            expect(cr.version).to.equal(5);
+            // No rebalance function is called this time
             await primaryMarket.redeem(parseEther("3000"));
             const cr2 = await primaryMarket.creationRedemptionOf(user1.address);
             expect(cr2.createdShares).to.equal(parseEther("800"));
-            expect(cr2.conversionIndex).to.equal(5);
+            expect(cr2.version).to.equal(5);
         });
 
-        it("Should convert claimable shares on claim", async function () {
-            await fund.mock.getConversionSize.returns(1);
+        it("Should rebalance claimable shares on claim", async function () {
+            await fund.mock.getRebalanceSize.returns(1);
             await expect(() => primaryMarket.claim(user1.address)).to.callMocks(
                 {
-                    func: fund.mock.batchConvert.withArgs(createdShares, 0, 0, 0, 1),
+                    func: fund.mock.batchRebalance.withArgs(createdShares, 0, 0, 0, 1),
                     rets: [parseEther("7000"), 0, 0],
                 },
                 {

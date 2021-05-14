@@ -90,7 +90,7 @@ describe("LibOrderBook", function () {
             expect(order.next).to.equal(0);
             expect(order.maker).to.equal(addr1);
             expect(order.amount).to.equal(100);
-            expect(order.conversionID).to.equal(8);
+            expect(order.version).to.equal(8);
             expect(order.fillable).to.equal(100);
         });
 
@@ -136,7 +136,7 @@ describe("LibOrderBook", function () {
             expect(order.next).to.equal(0);
             expect(order.maker).to.equal(ethers.constants.AddressZero);
             expect(order.amount).to.equal(0);
-            expect(order.conversionID).to.equal(0);
+            expect(order.version).to.equal(0);
             expect(order.fillable).to.equal(0);
         });
 
@@ -187,7 +187,7 @@ describe("LibOrderBook", function () {
             expect(order.next).to.equal(0);
             expect(order.maker).to.equal(ethers.constants.AddressZero);
             expect(order.amount).to.equal(0);
-            expect(order.conversionID).to.equal(0);
+            expect(order.version).to.equal(0);
             expect(order.fillable).to.equal(0);
         });
 
@@ -283,7 +283,7 @@ describe("LibOrderBook", function () {
             expect(order.next).to.equal(0);
             expect(order.maker).to.equal(ethers.constants.AddressZero);
             expect(order.amount).to.equal(0);
-            expect(order.conversionID).to.equal(0);
+            expect(order.version).to.equal(0);
             expect(order.fillable).to.equal(0);
         });
 
