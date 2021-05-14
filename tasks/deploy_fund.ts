@@ -146,9 +146,9 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
     console.log("VotingEscrow:", votingEscrow.address);
 
     const Share = await ethers.getContractFactory("Share");
-    const shareP = await Share.deploy("Tranchess WBTC Class P", "tWBTC.P", fund.address, 0);
-    addressFile.set("share_p", shareP.address);
-    console.log("ShareP:", shareP.address);
+    const shareM = await Share.deploy("Tranchess WBTC Class M", "tWBTC.M", fund.address, 0);
+    addressFile.set("share_m", shareM.address);
+    console.log("ShareM:", shareM.address);
 
     const shareA = await Share.deploy("Tranchess WBTC Class A", "tWBTC.A", fund.address, 1);
     addressFile.set("share_a", shareA.address);

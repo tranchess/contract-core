@@ -20,8 +20,8 @@
     1.  [Exchange Contract](#exchange-contract)
         1.  [placeBid](#placeBid)
         1.  [placeAsk](#placeAsk)
-        1.  [buyP](#buyP)
-        1.  [sellP](#sellP)
+        1.  [buyM](#buyM)
+        1.  [sellM](#sellM)
         1.  [cancelBid](#cancelBid)
         1.  [cancelBidByClientOrderID](#cancelBidByClientOrderID)
         1.  [cancelAsk](#cancelAsk)
@@ -55,8 +55,8 @@ The [`Staking`](../contracts/Staking.sol) contract stores tokenized shares and m
 
 In addition, it keeps the history of the global integral, ∫(rate \* balance / totalSupply dt) from the last Conversion till checkpoint, the most recent per-account integrals, and per-account claimable rewards. It is invoked whenever deposits are changed and accumulate the rewards for the accounts involved.
 
-1. Deposit Token P/A/B
-1. Withdraw Token P/A/B
+1. Deposit Token M/A/B
+1. Withdraw Token M/A/B
 1. Claim rewards
 
 ## Exchange
@@ -99,9 +99,9 @@ To receive rewards of governance token and participate in the secondary market, 
 1. Chess: (return release rate of `Chess`)
 1. ChessController.getFundRelativeWeight(address(this), block.timestamp)
 1. ChessController: (return relative weight of this `Staking` contract)
-1. Fund.convert(totalSupplyP, totalSupplyA, totalSupplyB, version)
+1. Fund.convert(totalSupplyM, totalSupplyA, totalSupplyB, version)
 1. Fund: (return conversion result for total supplies)
-1. Fund.convert(balanceP, balanceA, balanceB, version)
+1. Fund.convert(balanceM, balanceA, balanceB, version)
 1. Fund: (return conversion result for available and locked balances)
 1. ERC20Token(tranche).transferFrom(account, address(this), amount)
 
@@ -118,15 +118,15 @@ To receive rewards of governance token and participate in the secondary market, 
 1. Chess: (return release rate of `Chess`)
 1. ChessController.getFundRelativeWeight(address(this), block.timestamp)
 1. ChessController: (return relative weight of this `Staking` contract)
-1. Fund.convert(totalSupplyP, totalSupplyA, totalSupplyB, version)
+1. Fund.convert(totalSupplyM, totalSupplyA, totalSupplyB, version)
 1. Fund: (return conversion result for total supplies)
-1. Fund.convert(balanceP, balanceA, balanceB, version)
+1. Fund.convert(balanceM, balanceA, balanceB, version)
 1. Fund: (return conversion result for available and locked balances)
 1. ERC20Token(tranche).transfer(account, amount)
 
 ## Placing an order
 
-Bid and ask orders are created by makers to either buy or sell shares of Tranche P/A/B for the USD stablecoin. For each order placed, the maker is asked to provide the amount, PD level, conversion ID, and a custom order ID of the order. The order book is using a link list implementation and arranges all orders by PD levels (premium-discount level), which is ranged from 0 (-10%) to 80 (-10%) with a step size of 0.25%. Makers are also asked to lock up the equal value of USD stablecoin or shares based on the amount and the PD level of the order.
+Bid and ask orders are created by makers to either buy or sell shares of Tranche M/A/B for the USD stablecoin. For each order placed, the maker is asked to provide the amount, PD level, conversion ID, and a custom order ID of the order. The order book is using a link list implementation and arranges all orders by PD levels (premium-discount level), which is ranged from 0 (-10%) to 80 (-10%) with a step size of 0.25%. Makers are also asked to lock up the equal value of USD stablecoin or shares based on the amount and the PD level of the order.
 
 ### Bid order
 
@@ -161,7 +161,7 @@ Takers could either buy or sell fund shares by filling one or more maker orders 
 
 #### Transaction #1
 
-1. Exchange.buyP(conversionID, maxPDLevel, quoteAmount)
+1. Exchange.buyM(conversionID, maxPDLevel, quoteAmount)
 1. TwapOracle.getTwap(timestamp)
 1. TwapOracle: (return Twap Oracle)
 1. Fund.extrapolateNav(timestamp, price)
@@ -170,9 +170,9 @@ Takers could either buy or sell fund shares by filling one or more maker orders 
 1. Chess: (return release rate of `Chess`)
 1. ChessController.getFundRelativeWeight(address(this), block.timestamp)
 1. ChessController: (return relative weight of this `Staking` contract)
-1. Fund.convert(totalSupplyP, totalSupplyA, totalSupplyB, version)
+1. Fund.convert(totalSupplyM, totalSupplyA, totalSupplyB, version)
 1. Fund: (return conversion result for total supplies)
-1. Fund.convert(balanceP, balanceA, balanceB, version)
+1. Fund.convert(balanceM, balanceA, balanceB, version)
 1. Fund: (return conversion result for available and locked balances)
 1. ERC20Token(stableCoin).transferFrom(msg.sender, address(this), frozenQuote)
 
@@ -184,7 +184,7 @@ Takers could either buy or sell fund shares by filling one or more maker orders 
 
 #### Transaction #1
 
-1. Exchange.sellP(conversionID, minPDLevel, baseAmount)
+1. Exchange.sellM(conversionID, minPDLevel, baseAmount)
 1. TwapOracle.getTwap(timestamp)
 1. TwapOracle: (return Twap Oracle)
 1. Fund.extrapolateNav(timestamp, price)
@@ -193,9 +193,9 @@ Takers could either buy or sell fund shares by filling one or more maker orders 
 1. Chess: (return release rate of `Chess`)
 1. ChessController.getFundRelativeWeight(address(this), block.timestamp)
 1. ChessController: (return relative weight of this `Staking` contract)
-1. Fund.convert(totalSupplyP, totalSupplyA, totalSupplyB, version)
+1. Fund.convert(totalSupplyM, totalSupplyA, totalSupplyB, version)
 1. Fund: (return conversion result for total supplies)
-1. Fund.convert(balanceP, balanceA, balanceB, version)
+1. Fund.convert(balanceM, balanceA, balanceB, version)
 1. Fund: (return conversion result for available and locked balances)
 
 ## Cancelling an order
@@ -226,9 +226,9 @@ Makers could cancel a previous order at any time, even if the account is no long
 1. Chess: (return release rate of `Chess`)
 1. ChessController.getFundRelativeWeight(address(this), block.timestamp)
 1. ChessController: (return relative weight of this `Staking` contract)
-1. Fund.convert(totalSupplyP, totalSupplyA, totalSupplyB, version)
+1. Fund.convert(totalSupplyM, totalSupplyA, totalSupplyB, version)
 1. Fund: (return conversion result for total supplies)
-1. Fund.convert(balanceP, balanceA, balanceB, version)
+1. Fund.convert(balanceM, balanceA, balanceB, version)
 1. Fund: (return conversion result for available and locked balances)
 
 ## Settlement
@@ -252,9 +252,9 @@ All the matches are stored as pending trades in the exchange protocol, waiting f
 1. Chess: (return release rate of `Chess`)
 1. ChessController.getFundRelativeWeight(address(this), block.timestamp)
 1. ChessController: (return relative weight of this `Staking` contract)
-1. Fund.convert(totalSupplyP, totalSupplyA, totalSupplyB, version)
+1. Fund.convert(totalSupplyM, totalSupplyA, totalSupplyB, version)
 1. Fund: (return conversion result for total supplies)
-1. Fund.convert(balanceP, balanceA, balanceB, version)
+1. Fund.convert(balanceM, balanceA, balanceB, version)
 1. Fund: (return conversion result for available and locked balances)
 1. ERC20Token(stableCoin).transfer(msg.sender, quoteAmount)
 
@@ -275,9 +275,9 @@ All the matches are stored as pending trades in the exchange protocol, waiting f
 1. Chess: (return release rate of `Chess`)
 1. ChessController.getFundRelativeWeight(address(this), block.timestamp)
 1. ChessController: (return relative weight of this `Staking` contract)
-1. Fund.convert(totalSupplyP, totalSupplyA, totalSupplyB, version)
+1. Fund.convert(totalSupplyM, totalSupplyA, totalSupplyB, version)
 1. Fund: (return conversion result for total supplies)
-1. Fund.convert(balanceP, balanceA, balanceB, version)
+1. Fund.convert(balanceM, balanceA, balanceB, version)
 1. Fund: (return conversion result for available and locked balances)
 1. ERC20Token(stableCoin).transfer(msg.sender, quoteAmount)
 
@@ -415,14 +415,14 @@ Calling `placeAsk` will perform the following steps:
 | InvalidConversionError | The conversion ID is not the most recent, possibly due to an ongoing conversion |
 | OnHoldOverflowError    | Not enough deposits for placing the order                                       |
 
-### buyP
+### buyM
 
 ```
-/// @notice Buy share P
+/// @notice Buy share M
 /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
 /// @param maxPDLevel Maximal premium-discount level accepted
 /// @param quoteAmount Amount of quote assets willing to trade
-function buyP(
+function buyM(
     uint256 conversionID,
     uint256 maxPDLevel,
     uint256 quoteAmount
@@ -431,12 +431,12 @@ function buyP(
 
 #### Logic
 
-> Note: the logic behind `buyP`, `buyA` and `buyB` is the same.
+> Note: the logic behind `buyM`, `buyA` and `buyB` is the same.
 
-Calling `buyP` will perform the following steps:
+Calling `buyM` will perform the following steps:
 
 1. Get the TWAP Oracle from two trading periods ago
-1. Estimate the net asset value of P based on the TWAP
+1. Estimate the net asset value of M based on the TWAP
 1. Loop through the ask orderbook from the highest discount to `pdLevel`:
     1. Loop through the order queue in each pd level:
         1. Skip the order if order creator is no longer qualified for maker
@@ -452,20 +452,20 @@ Calling `buyP` will perform the following steps:
 
 #### Error
 
-`buyP` may revert with any of the following errors, in addition to any errors specified in the `ERC20`:
+`buyM` may revert with any of the following errors, in addition to any errors specified in the `ERC20`:
 
 | Error          | Condition                  |
 | -------------- | -------------------------- |
 | NotActiveError | The contract is not active |
 
-### sellP
+### sellM
 
 ```
-/// @notice Sell share P
+/// @notice Sell share M
 /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
 /// @param minPDLevel Minimal premium-discount level accepted
-/// @param baseAmount Amount of share P willing to trade
-function sellP(
+/// @param baseAmount Amount of share M willing to trade
+function sellM(
     uint256 conversionID,
     uint256 minPDLevel,
     uint256 baseAmount
@@ -474,12 +474,12 @@ function sellP(
 
 #### Logic
 
-> Note: the logic behind `sellP`, `sellA` and `sellB` is the same.
+> Note: the logic behind `sellM`, `sellA` and `sellB` is the same.
 
-Calling `sellP` will perform the following steps:
+Calling `sellM` will perform the following steps:
 
 1. Get the TWAP Oracle from two trading periods ago
-1. Estimate the net asset value of P based on the TWAP
+1. Estimate the net asset value of M based on the TWAP
 1. Loop through the bid orderbook from the lowest discount to `pdLevel`:
     1. Loop through the order queue in each pd level:
         1. Skip the order if order creator is no longer qualified for maker
@@ -493,7 +493,7 @@ Calling `sellP` will perform the following steps:
 
 #### Error
 
-`sellP` may revert with any of the following errors, in addition to any errors specified in the `ERC20`:
+`sellM` may revert with any of the following errors, in addition to any errors specified in the `ERC20`:
 
 | Error          | Condition                  |
 | -------------- | -------------------------- |

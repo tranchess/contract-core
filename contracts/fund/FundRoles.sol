@@ -13,12 +13,12 @@ contract FundRoles {
     event PrimaryMarketRemoved(address indexed primaryMarket);
 
     function _initializeRoles(
-        address tokenP_,
+        address tokenM_,
         address tokenA_,
         address tokenB_,
         address primaryMarket_
     ) internal {
-        _shareMembers[tokenP_] = true;
+        _shareMembers[tokenM_] = true;
         _shareMembers[tokenA_] = true;
         _shareMembers[tokenB_] = true;
 

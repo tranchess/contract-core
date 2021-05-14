@@ -7,7 +7,7 @@ const { parseEther, parseUnits } = ethers.utils;
 const parseWbtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
 
-const TRANCHE_P = 0;
+const TRANCHE_M = 0;
 const TRANCHE_A = 1;
 const TRANCHE_B = 2;
 const CREATION_FEE_BPS = 3000;
@@ -42,7 +42,7 @@ describe("PrimaryMarket", function () {
         readonly wallets: FixtureWalletMap;
         readonly wbtc: Contract;
         readonly fund: Contract;
-        readonly shareP: Contract;
+        readonly shareM: Contract;
         readonly primaryMarket: Contract;
     }
 
@@ -53,7 +53,7 @@ describe("PrimaryMarket", function () {
     let user2: Wallet;
     let wbtc: Contract;
     let fund: Contract;
-    let shareP: Contract;
+    let shareM: Contract;
     let primaryMarket: Contract;
 
     function settleWithNav(
@@ -78,12 +78,12 @@ describe("PrimaryMarket", function () {
         const MockToken = await ethers.getContractFactory("MockToken");
         const wbtc = await MockToken.connect(owner).deploy("Wrapped BTC", "WBTC", 8);
         const fund = await deployMockForName(owner, "Fund");
-        const shareP = await deployMockForName(owner, "Share");
+        const shareM = await deployMockForName(owner, "Share");
         const shareA = await deployMockForName(owner, "Share");
         const shareB = await deployMockForName(owner, "Share");
         await fund.mock.splitWeights.returns(1, 1);
         await fund.mock.tokenUnderlying.returns(wbtc.address);
-        await fund.mock.tokenP.returns(shareP.address);
+        await fund.mock.tokenM.returns(shareM.address);
         await fund.mock.tokenA.returns(shareA.address);
         await fund.mock.tokenB.returns(shareB.address);
         await fund.mock.underlyingDecimalMultiplier.returns(1e10);
@@ -109,7 +109,7 @@ describe("PrimaryMarket", function () {
             wallets: { user1, user2 },
             wbtc,
             fund,
-            shareP,
+            shareM,
             primaryMarket: primaryMarket.connect(user1),
         };
     }
@@ -124,7 +124,7 @@ describe("PrimaryMarket", function () {
         user2 = fixtureData.wallets.user2;
         wbtc = fixtureData.wbtc;
         fund = fixtureData.fund;
-        shareP = fixtureData.shareP;
+        shareM = fixtureData.shareM;
         primaryMarket = fixtureData.primaryMarket;
     });
 
@@ -190,8 +190,8 @@ describe("PrimaryMarket", function () {
 
         it("Should transfer shares and save the redemption", async function () {
             const amount = parseEther("1");
-            await fund.mock.burn.withArgs(TRANCHE_P, user1.address, amount).returns();
-            await fund.mock.mint.withArgs(TRANCHE_P, primaryMarket.address, amount).returns();
+            await fund.mock.burn.withArgs(TRANCHE_M, user1.address, amount).returns();
+            await fund.mock.mint.withArgs(TRANCHE_M, primaryMarket.address, amount).returns();
             await primaryMarket.redeem(amount);
             const cr = await primaryMarket.creationRedemptionOf(user1.address);
             expect(cr.redeemingShares).to.equal(amount);
@@ -243,13 +243,13 @@ describe("PrimaryMarket", function () {
 
         it("Should burn and mint shares", async function () {
             // No rounding in this case
-            const inP = 10000 * 20;
-            const feeP = SPLIT_FEE_BPS * 20;
+            const inM = 10000 * 20;
+            const feeM = SPLIT_FEE_BPS * 20;
             const outA = (10000 - SPLIT_FEE_BPS) * 10;
             const outB = (10000 - SPLIT_FEE_BPS) * 10;
-            await expect(() => primaryMarket.split(inP)).to.callMocks(
+            await expect(() => primaryMarket.split(inM)).to.callMocks(
                 {
-                    func: fund.mock.burn.withArgs(TRANCHE_P, user1.address, inP),
+                    func: fund.mock.burn.withArgs(TRANCHE_M, user1.address, inM),
                 },
                 {
                     func: fund.mock.mint.withArgs(TRANCHE_A, user1.address, outA),
@@ -258,7 +258,7 @@ describe("PrimaryMarket", function () {
                     func: fund.mock.mint.withArgs(TRANCHE_B, user1.address, outB),
                 },
                 {
-                    func: fund.mock.mint.withArgs(TRANCHE_P, primaryMarket.address, feeP),
+                    func: fund.mock.mint.withArgs(TRANCHE_M, primaryMarket.address, feeM),
                 }
             );
         });
@@ -270,14 +270,14 @@ describe("PrimaryMarket", function () {
             expect(await primaryMarket.currentFeeInShares()).to.equal(SPLIT_FEE_BPS * 10);
         });
 
-        it("Should add unsplittable P shares to fee", async function () {
+        it("Should add unsplittable M shares to fee", async function () {
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            // The last 1 P share cannot be split and goes to fee
-            const inP = 10000 * 20 + 1;
-            const feeP = SPLIT_FEE_BPS * 20 + 1;
-            await primaryMarket.split(inP);
-            expect(await primaryMarket.currentFeeInShares()).to.equal(feeP);
+            // The last 1 M share cannot be split and goes to fee
+            const inM = 10000 * 20 + 1;
+            const feeM = SPLIT_FEE_BPS * 20 + 1;
+            await primaryMarket.split(inM);
+            expect(await primaryMarket.currentFeeInShares()).to.equal(feeM);
         });
 
         it("Should emit an event", async function () {
@@ -306,8 +306,8 @@ describe("PrimaryMarket", function () {
             // No rounding in this case
             const inA = 10000 * 10;
             const inB = 10000 * 10;
-            const feeP = MERGE_FEE_BPS * 20;
-            const outP = (10000 - MERGE_FEE_BPS) * 20;
+            const feeM = MERGE_FEE_BPS * 20;
+            const outM = (10000 - MERGE_FEE_BPS) * 20;
             await expect(() => primaryMarket.merge(inA)).to.callMocks(
                 {
                     func: fund.mock.burn.withArgs(TRANCHE_A, user1.address, inA),
@@ -316,10 +316,10 @@ describe("PrimaryMarket", function () {
                     func: fund.mock.burn.withArgs(TRANCHE_B, user1.address, inB),
                 },
                 {
-                    func: fund.mock.mint.withArgs(TRANCHE_P, user1.address, outP),
+                    func: fund.mock.mint.withArgs(TRANCHE_M, user1.address, outM),
                 },
                 {
-                    func: fund.mock.mint.withArgs(TRANCHE_P, primaryMarket.address, feeP),
+                    func: fund.mock.mint.withArgs(TRANCHE_M, primaryMarket.address, feeM),
                 }
             );
         });
@@ -372,14 +372,14 @@ describe("PrimaryMarket", function () {
         it("Should settle creation using price and NAV when fund was empty", async function () {
             // Create with 1 WBTC at price 30000 and NAV 0.5
             const inWbtc = parseWbtc("1");
-            const feeP = inWbtc.mul(CREATION_FEE_BPS).div(10000);
-            const outP = parseEther("60000")
+            const feeM = inWbtc.mul(CREATION_FEE_BPS).div(10000);
+            const outM = parseEther("60000")
                 .mul(10000 - CREATION_FEE_BPS)
                 .div(10000);
             await primaryMarket.create(inWbtc);
             await expect(settleWithNav(START_DAY, parseEther("30000"), parseEther("0.5")))
                 .to.emit(primaryMarket, "Settled")
-                .withArgs(START_DAY, outP, 0, inWbtc, 0, feeP);
+                .withArgs(START_DAY, outM, 0, inWbtc, 0, feeM);
             expect(await wbtc.allowance(primaryMarket.address, fund.address)).to.equal(inWbtc);
         });
 
@@ -401,14 +401,14 @@ describe("PrimaryMarket", function () {
             // Fund had 10 WBTC and 10000 shares
             // Create with 1 WBTC
             const inWbtc = parseWbtc("1");
-            const feeP = inWbtc.mul(CREATION_FEE_BPS).div(10000);
-            const outP = parseEther("1000")
+            const feeM = inWbtc.mul(CREATION_FEE_BPS).div(10000);
+            const outM = parseEther("1000")
                 .mul(10000 - CREATION_FEE_BPS)
                 .div(10000);
             await primaryMarket.create(inWbtc);
             await expect(settleWithShare(START_DAY, parseEther("10000"), parseWbtc("10")))
                 .to.emit(primaryMarket, "Settled")
-                .withArgs(START_DAY, outP, 0, inWbtc, 0, feeP);
+                .withArgs(START_DAY, outM, 0, inWbtc, 0, feeM);
             expect(await wbtc.allowance(primaryMarket.address, fund.address)).to.equal(inWbtc);
         });
 
@@ -492,7 +492,7 @@ describe("PrimaryMarket", function () {
 
         it("Should settle split and merge fee", async function () {
             // Fund had 10 WBTC and 10000 shares
-            // Split 1000 P and merge 100 A and 100 B
+            // Split 1000 M and merge 100 A and 100 B
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
             await primaryMarket.split(parseEther("1000"));
@@ -522,7 +522,7 @@ describe("PrimaryMarket", function () {
             await primaryMarket.redeem(parseEther("1000"));
             const redemptionFee = parseWbtc("1").mul(REDEMPTION_FEE_BPS).div(10000);
             const redeemedWbtc = parseWbtc("1").sub(redemptionFee);
-            // Split 1000 P and merge 100 A and 100 B
+            // Split 1000 M and merge 100 A and 100 B
             await primaryMarket.split(parseEther("1000"));
             await primaryMarket.connect(user2).merge(parseEther("100"));
             const splitFee = parseEther("1000").mul(SPLIT_FEE_BPS).div(10000);
@@ -596,13 +596,13 @@ describe("PrimaryMarket", function () {
 
         it("Should transfer created shares", async function () {
             await expect(() => primaryMarket.claim(user1.address)).to.callMocks({
-                func: shareP.mock.transfer.withArgs(user1.address, createdShares),
+                func: shareM.mock.transfer.withArgs(user1.address, createdShares),
                 rets: [true],
             });
         });
 
         it("Should transfer redeemed underlying", async function () {
-            await shareP.mock.transfer.returns(true);
+            await shareM.mock.transfer.returns(true);
             await expect(() => primaryMarket.claim(user1.address)).to.changeTokenBalances(
                 wbtc,
                 [user1, primaryMarket],
@@ -618,7 +618,7 @@ describe("PrimaryMarket", function () {
                 .mul(10000 - CREATION_FEE_BPS)
                 .div(10000);
             await expect(() => primaryMarket.claim(user1.address)).to.callMocks({
-                func: shareP.mock.transfer.withArgs(user1.address, createdShares.add(createdAgain)),
+                func: shareM.mock.transfer.withArgs(user1.address, createdShares.add(createdAgain)),
                 rets: [true],
             });
         });
@@ -633,7 +633,7 @@ describe("PrimaryMarket", function () {
             // Fund should transfer redeemed underlying after settlement
             await wbtc.mint(primaryMarket.address, redeemedAgain);
             const total = redeemedWbtc.add(redeemedAgain);
-            await shareP.mock.transfer.returns(true);
+            await shareM.mock.transfer.returns(true);
             await expect(() => primaryMarket.claim(user1.address)).to.changeTokenBalances(
                 wbtc,
                 [user1, primaryMarket],
@@ -681,7 +681,7 @@ describe("PrimaryMarket", function () {
                     rets: [parseEther("7000"), 0, 0],
                 },
                 {
-                    func: shareP.mock.transfer.withArgs(user1.address, parseEther("7000")),
+                    func: shareM.mock.transfer.withArgs(user1.address, parseEther("7000")),
                     rets: [true],
                 }
             );

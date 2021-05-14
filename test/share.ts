@@ -7,7 +7,7 @@ const { parseEther, parseUnits } = ethers.utils;
 const parseWbtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
 
-const TRANCHE_P = 0;
+const TRANCHE_M = 0;
 const TRANCHE_A = 1;
 const TRANCHE_B = 2;
 const DAY = 86400;
@@ -36,16 +36,16 @@ describe("Share", function () {
         readonly aprOracle: MockContract;
         readonly interestRateBallot: MockContract;
         readonly wbtc: Contract;
-        readonly shareP: Contract;
+        readonly shareM: Contract;
         readonly shareA: Contract;
         readonly shareB: Contract;
         readonly fund: Contract;
     }
 
     // Initial balances
-    // User 1: 400 P + 100 A
+    // User 1: 400 M + 100 A
     // User 2:         200 A + 300 B
-    // Total:  400 P + 300 A + 300 B = 1000 total shares
+    // Total:  400 M + 300 A + 300 B = 1000 total shares
     const INIT_P_1 = parseEther("400");
     const INIT_A_1 = parseEther("100");
     const INIT_B_1 = parseEther("0");
@@ -62,7 +62,7 @@ describe("Share", function () {
     let user1: Wallet;
     let user2: Wallet;
     let owner: Wallet;
-    let shareP: Contract;
+    let shareM: Contract;
     let shareA: Contract;
     let shareB: Contract;
     let addr1: string;
@@ -123,14 +123,14 @@ describe("Share", function () {
         );
 
         const Share = await ethers.getContractFactory("Share");
-        const shareP = await Share.connect(owner).deploy("Share P", "P", fund.address, TRANCHE_P);
+        const shareM = await Share.connect(owner).deploy("Share M", "M", fund.address, TRANCHE_M);
         const shareA = await Share.connect(owner).deploy("Share A", "A", fund.address, TRANCHE_A);
         const shareB = await Share.connect(owner).deploy("Share B", "B", fund.address, TRANCHE_B);
 
         await fund.initialize(
             wbtc.address,
             8,
-            shareP.address,
+            shareM.address,
             shareA.address,
             shareB.address,
             aprOracle.address,
@@ -143,10 +143,10 @@ describe("Share", function () {
         await fund.settle();
         const addr1 = user1.address;
         const addr2 = user2.address;
-        await primaryMarket.call(fund, "mint", TRANCHE_P, addr1, INIT_P_1);
+        await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, INIT_P_1);
         await primaryMarket.call(fund, "mint", TRANCHE_A, addr1, INIT_A_1);
         await primaryMarket.call(fund, "mint", TRANCHE_B, addr1, INIT_B_1);
-        await primaryMarket.call(fund, "mint", TRANCHE_P, addr2, INIT_P_2);
+        await primaryMarket.call(fund, "mint", TRANCHE_M, addr2, INIT_P_2);
         await primaryMarket.call(fund, "mint", TRANCHE_A, addr2, INIT_A_2);
         await primaryMarket.call(fund, "mint", TRANCHE_B, addr2, INIT_B_2);
         await wbtc.mint(fund.address, INIT_WBTC);
@@ -161,7 +161,7 @@ describe("Share", function () {
             aprOracle,
             interestRateBallot,
             wbtc,
-            shareP: shareP.connect(user1),
+            shareM: shareM.connect(user1),
             shareA: shareA.connect(user1),
             shareB: shareB.connect(user1),
             fund: fund.connect(user1),
@@ -182,7 +182,7 @@ describe("Share", function () {
         user1 = fixtureData.wallets.user1;
         user2 = fixtureData.wallets.user2;
         owner = fixtureData.wallets.owner;
-        shareP = fixtureData.shareP;
+        shareM = fixtureData.shareM;
         shareA = fixtureData.shareA;
         shareB = fixtureData.shareB;
         addr1 = user1.address;
@@ -194,36 +194,36 @@ describe("Share", function () {
         fund = fixtureData.fund;
     });
 
-    // Trigger a new conversion at the given NAV of Share P
-    async function mockConversion(navP: BigNumber) {
+    // Trigger a new conversion at the given NAV of Share M
+    async function mockConversion(navM: BigNumber) {
         const lastPrice = await twapOracle.getTwap(0);
-        const newPrice = lastPrice.mul(navP).div(parseEther("1"));
+        const newPrice = lastPrice.mul(navM).div(parseEther("1"));
         await twapOracle.mock.getTwap.returns(newPrice);
         await advanceOneDayAndSettle();
         advanceBlockAtTime((await fund.currentDay()).toNumber() - HOUR);
     }
 
     // NAV before conversion: (1.6, 1.1, 2.1)
-    // 1 P => 1.6 P'
-    // 1 A => 0.1 P' + 1 A'
-    // 1 B => 1.1 P'        + 1 B'
+    // 1 M => 1.6 M'
+    // 1 A => 0.1 M' + 1 A'
+    // 1 B => 1.1 M'        + 1 B'
     const preDefinedConvert160 = () => mockConversion(parseEther("1.6"));
 
     // NAV before conversion: (2.0, 1.1, 2.9)
-    // 1 P => 2.0 P'
-    // 1 A => 0.1 P' + 1 A'
-    // 1 B => 1.9 P'        + 1 B'
+    // 1 M => 2.0 M'
+    // 1 A => 0.1 M' + 1 A'
+    // 1 B => 1.9 M'        + 1 B'
     const preDefinedConvert200 = () => mockConversion(parseEther("2"));
 
     // NAV before conversion: (0.7, 1.1, 0.3)
-    // 1 P => 0.7 P'
-    // 1 A => 0.8 P' + 0.3 A'
+    // 1 M => 0.7 M'
+    // 1 A => 0.8 M' + 0.3 A'
     // 1 B =>                   0.3 B'
     const preDefinedConvert070 = () => mockConversion(parseEther("0.7"));
 
     // NAV before conversion: (0.4, 1.1, -0.3)
-    // 1 P => 0.4 P'
-    // 1 A => 0.8 P'
+    // 1 M => 0.4 M'
+    // 1 A => 0.8 M'
     // 1 B => 0
     const preDefinedConvert040 = () => mockConversion(parseEther("0.4"));
 
@@ -231,19 +231,19 @@ describe("Share", function () {
         it("Should transfer after lower conversion", async function () {
             await preDefinedConvert070();
 
-            expect(await shareP.balanceOf(addr1)).to.equal(parseEther("360"));
-            expect(await shareP.balanceOf(addr2)).to.equal(parseEther("160"));
+            expect(await shareM.balanceOf(addr1)).to.equal(parseEther("360"));
+            expect(await shareM.balanceOf(addr2)).to.equal(parseEther("160"));
             expect(await shareA.balanceOf(addr1)).to.equal(parseEther("30"));
             expect(await shareA.balanceOf(addr2)).to.equal(parseEther("60"));
             expect(await shareB.balanceOf(addr1)).to.equal(parseEther("0"));
             expect(await shareB.balanceOf(addr2)).to.equal(parseEther("90"));
 
-            await expect(shareP.transfer(addr2, parseEther("1")))
-                .to.emit(shareP, "Transfer")
+            await expect(shareM.transfer(addr2, parseEther("1")))
+                .to.emit(shareM, "Transfer")
                 .withArgs(addr1, addr2, parseEther("1"));
 
-            expect(await shareP.balanceOf(addr1)).to.equal(parseEther("359"));
-            expect(await shareP.balanceOf(addr2)).to.equal(parseEther("161"));
+            expect(await shareM.balanceOf(addr1)).to.equal(parseEther("359"));
+            expect(await shareM.balanceOf(addr2)).to.equal(parseEther("161"));
             expect(await shareA.balanceOf(addr1)).to.equal(parseEther("30"));
             expect(await shareA.balanceOf(addr2)).to.equal(parseEther("60"));
             expect(await shareB.balanceOf(addr1)).to.equal(parseEther("0"));
@@ -253,19 +253,19 @@ describe("Share", function () {
         it("Should transfer after upper conversion", async function () {
             await preDefinedConvert160();
 
-            expect(await shareP.balanceOf(addr1)).to.equal(parseEther("650"));
-            expect(await shareP.balanceOf(addr2)).to.equal(parseEther("350"));
+            expect(await shareM.balanceOf(addr1)).to.equal(parseEther("650"));
+            expect(await shareM.balanceOf(addr2)).to.equal(parseEther("350"));
             expect(await shareA.balanceOf(addr1)).to.equal(parseEther("100"));
             expect(await shareA.balanceOf(addr2)).to.equal(parseEther("200"));
             expect(await shareB.balanceOf(addr1)).to.equal(parseEther("0"));
             expect(await shareB.balanceOf(addr2)).to.equal(parseEther("300"));
 
-            await expect(shareP.transfer(addr2, parseEther("1")))
-                .to.emit(shareP, "Transfer")
+            await expect(shareM.transfer(addr2, parseEther("1")))
+                .to.emit(shareM, "Transfer")
                 .withArgs(addr1, addr2, parseEther("1"));
 
-            expect(await shareP.balanceOf(addr1)).to.equal(parseEther("649"));
-            expect(await shareP.balanceOf(addr2)).to.equal(parseEther("351"));
+            expect(await shareM.balanceOf(addr1)).to.equal(parseEther("649"));
+            expect(await shareM.balanceOf(addr2)).to.equal(parseEther("351"));
             expect(await shareA.balanceOf(addr1)).to.equal(parseEther("100"));
             expect(await shareA.balanceOf(addr2)).to.equal(parseEther("200"));
             expect(await shareB.balanceOf(addr1)).to.equal(parseEther("0"));
@@ -275,23 +275,23 @@ describe("Share", function () {
 
     describe("transferFrom()", function () {
         beforeEach(async function () {
-            await shareP.approve(addr2, parseEther("100"));
+            await shareM.approve(addr2, parseEther("100"));
             await shareA.approve(addr2, parseEther("100"));
             await shareB.approve(addr2, parseEther("100"));
         });
 
         it("Should convert balances and allowances after lower conversion and transferFrom", async function () {
             await preDefinedConvert070();
-            await expect(shareP.connect(user2).transferFrom(addr1, addr2, parseEther("1")))
-                .to.emit(shareP, "Approval")
+            await expect(shareM.connect(user2).transferFrom(addr1, addr2, parseEther("1")))
+                .to.emit(shareM, "Approval")
                 .withArgs(addr1, addr2, parseEther("69"));
 
-            expect(await shareP.allowance(addr1, addr2)).to.equal(parseEther("69"));
+            expect(await shareM.allowance(addr1, addr2)).to.equal(parseEther("69"));
             expect(await shareA.allowance(addr1, addr2)).to.equal(parseEther("30"));
             expect(await shareB.allowance(addr1, addr2)).to.equal(parseEther("30"));
 
-            expect(await shareP.balanceOf(addr1)).to.equal(parseEther("359"));
-            expect(await shareP.balanceOf(addr2)).to.equal(parseEther("161"));
+            expect(await shareM.balanceOf(addr1)).to.equal(parseEther("359"));
+            expect(await shareM.balanceOf(addr2)).to.equal(parseEther("161"));
             expect(await shareA.balanceOf(addr1)).to.equal(parseEther("30"));
             expect(await shareA.balanceOf(addr2)).to.equal(parseEther("60"));
             expect(await shareB.balanceOf(addr1)).to.equal(parseEther("0"));
@@ -300,16 +300,16 @@ describe("Share", function () {
 
         it("Should convert balances and allowances after upper conversion and transferFrom", async function () {
             await preDefinedConvert160();
-            await expect(shareP.connect(user2).transferFrom(addr1, addr2, parseEther("1")))
-                .to.emit(shareP, "Approval")
+            await expect(shareM.connect(user2).transferFrom(addr1, addr2, parseEther("1")))
+                .to.emit(shareM, "Approval")
                 .withArgs(addr1, addr2, parseEther("159"));
 
-            expect(await shareP.allowance(addr1, addr2)).to.equal(parseEther("159"));
+            expect(await shareM.allowance(addr1, addr2)).to.equal(parseEther("159"));
             expect(await shareA.allowance(addr1, addr2)).to.equal(parseEther("100"));
             expect(await shareB.allowance(addr1, addr2)).to.equal(parseEther("100"));
 
-            expect(await shareP.balanceOf(addr1)).to.equal(parseEther("649"));
-            expect(await shareP.balanceOf(addr2)).to.equal(parseEther("351"));
+            expect(await shareM.balanceOf(addr1)).to.equal(parseEther("649"));
+            expect(await shareM.balanceOf(addr2)).to.equal(parseEther("351"));
             expect(await shareA.balanceOf(addr1)).to.equal(parseEther("100"));
             expect(await shareA.balanceOf(addr2)).to.equal(parseEther("200"));
             expect(await shareB.balanceOf(addr1)).to.equal(parseEther("0"));
@@ -319,8 +319,8 @@ describe("Share", function () {
 
     describe("approve()", function () {
         beforeEach(async function () {
-            await expect(shareP.approve(addr2, parseEther("100")))
-                .to.emit(shareP, "Approval")
+            await expect(shareM.approve(addr2, parseEther("100")))
+                .to.emit(shareM, "Approval")
                 .withArgs(addr1, addr2, parseEther("100"));
             await expect(shareA.approve(addr2, parseEther("100")))
                 .to.emit(shareA, "Approval")
@@ -331,23 +331,23 @@ describe("Share", function () {
         });
 
         it("Should convert for extremely large allowance", async function () {
-            await shareP.approve(addr2, MAX_UINT256);
+            await shareM.approve(addr2, MAX_UINT256);
             await shareA.approve(addr2, MAX_UINT256);
             await shareB.approve(addr2, MAX_UINT256);
 
             await preDefinedConvert070();
 
-            expect(await shareP.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
+            expect(await shareM.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
             expect(await shareA.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
             expect(await shareB.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
 
-            await shareP.approve(addr2, MAX_UINT256);
+            await shareM.approve(addr2, MAX_UINT256);
             await shareA.approve(addr2, MAX_UINT256);
             await shareB.approve(addr2, MAX_UINT256);
 
             await preDefinedConvert160();
 
-            expect(await shareP.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
+            expect(await shareM.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
             expect(await shareA.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
             expect(await shareB.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
         });
@@ -355,7 +355,7 @@ describe("Share", function () {
         it("Should convert allowance after lower conversion", async function () {
             await preDefinedConvert070();
 
-            expect(await shareP.allowance(addr1, addr2)).to.equal(parseEther("70"));
+            expect(await shareM.allowance(addr1, addr2)).to.equal(parseEther("70"));
             expect(await shareA.allowance(addr1, addr2)).to.equal(parseEther("30"));
             expect(await shareB.allowance(addr1, addr2)).to.equal(parseEther("30"));
         });
@@ -363,7 +363,7 @@ describe("Share", function () {
         it("Should convert allowance after upper conversion", async function () {
             await preDefinedConvert160();
 
-            expect(await shareP.allowance(addr1, addr2)).to.equal(parseEther("160"));
+            expect(await shareM.allowance(addr1, addr2)).to.equal(parseEther("160"));
             expect(await shareA.allowance(addr1, addr2)).to.equal(parseEther("100"));
             expect(await shareB.allowance(addr1, addr2)).to.equal(parseEther("100"));
         });
@@ -371,39 +371,39 @@ describe("Share", function () {
 
     describe("increaseAllowance()/decreaseAllowance()", function () {
         beforeEach(async function () {
-            await shareP.increaseAllowance(addr2, parseEther("200"));
+            await shareM.increaseAllowance(addr2, parseEther("200"));
             await shareA.increaseAllowance(addr2, parseEther("200"));
             await shareB.increaseAllowance(addr2, parseEther("200"));
 
-            await shareP.decreaseAllowance(addr2, parseEther("100"));
+            await shareM.decreaseAllowance(addr2, parseEther("100"));
             await shareA.decreaseAllowance(addr2, parseEther("100"));
             await shareB.decreaseAllowance(addr2, parseEther("100"));
         });
 
         it("Should convert for extremely large allowance", async function () {
-            await shareP.increaseAllowance(addr2, MAX_UINT256.sub(parseEther("100")));
+            await shareM.increaseAllowance(addr2, MAX_UINT256.sub(parseEther("100")));
             await shareA.increaseAllowance(addr2, MAX_UINT256.sub(parseEther("100")));
             await shareB.increaseAllowance(addr2, MAX_UINT256.sub(parseEther("100")));
 
             await preDefinedConvert160();
 
-            expect(await shareP.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
+            expect(await shareM.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
             expect(await shareA.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
             expect(await shareB.allowance(addr1, addr2)).to.equal(SUB_MAX_UINT256);
         });
 
         it("Should convert allowance after lower conversion then upper conversion", async function () {
             await preDefinedConvert070();
-            expect(await shareP.allowance(addr1, addr2)).to.equal(parseEther("70"));
+            expect(await shareM.allowance(addr1, addr2)).to.equal(parseEther("70"));
             expect(await shareA.allowance(addr1, addr2)).to.equal(parseEther("30"));
             expect(await shareB.allowance(addr1, addr2)).to.equal(parseEther("30"));
 
             await preDefinedConvert160();
-            await shareP.decreaseAllowance(addr2, parseEther("1"));
+            await shareM.decreaseAllowance(addr2, parseEther("1"));
             await shareA.decreaseAllowance(addr2, parseEther("1"));
             await shareB.decreaseAllowance(addr2, parseEther("1"));
 
-            expect(await shareP.allowance(addr1, addr2)).to.equal(parseEther("111"));
+            expect(await shareM.allowance(addr1, addr2)).to.equal(parseEther("111"));
             expect(await shareA.allowance(addr1, addr2)).to.equal(parseEther("29"));
             expect(await shareB.allowance(addr1, addr2)).to.equal(parseEther("29"));
         });
@@ -411,16 +411,16 @@ describe("Share", function () {
         it("Should convert allowance after upper conversion then lower conversion", async function () {
             await preDefinedConvert160();
 
-            expect(await shareP.allowance(addr1, addr2)).to.equal(parseEther("160"));
+            expect(await shareM.allowance(addr1, addr2)).to.equal(parseEther("160"));
             expect(await shareA.allowance(addr1, addr2)).to.equal(parseEther("100"));
             expect(await shareB.allowance(addr1, addr2)).to.equal(parseEther("100"));
 
             await preDefinedConvert070();
-            await shareP.decreaseAllowance(addr2, parseEther("1"));
+            await shareM.decreaseAllowance(addr2, parseEther("1"));
             await shareA.decreaseAllowance(addr2, parseEther("1"));
             await shareB.decreaseAllowance(addr2, parseEther("1"));
 
-            expect(await shareP.allowance(addr1, addr2)).to.equal(parseEther("111"));
+            expect(await shareM.allowance(addr1, addr2)).to.equal(parseEther("111"));
             expect(await shareA.allowance(addr1, addr2)).to.equal(parseEther("29"));
             expect(await shareB.allowance(addr1, addr2)).to.equal(parseEther("29"));
         });
