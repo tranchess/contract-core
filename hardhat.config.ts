@@ -2,8 +2,7 @@ import type { HardhatUserConfig, NetworksUserConfig } from "hardhat/types";
 import "@nomiclabs/hardhat-waffle";
 import "solidity-coverage";
 import "./tasks/accounts";
-import "./tasks/deploy_fund";
-import "./tasks/deploy_exchange";
+import "./tasks/deploy";
 import "./tasks/initialize_fund";
 import "./tasks/initialize_timelock";
 import {
@@ -51,7 +50,7 @@ const config: HardhatUserConfig = {
     // @see https://hardhat.org/plugins/hardhat-gas-reporter.html
     gasReporter: {
         enabled: process.env.REPORT_GAS ? true : false,
-        excludeContracts: ["test/", "utils/", "misc/"],
+        excludeContracts: ["test/"],
     },
 };
 export default config;

@@ -6,5 +6,5 @@ module.exports = {
         mnemonic:
             "tuition produce fat desk suggest case essence wreck warfare convince razor bless",
     },
-    skipFiles: ["utils", "test", "interfaces", "misc"],
+    skipFiles: ["ERC20", "libs", "utils", "test", "interfaces", "Governance", "FundRoles.sol"],
 };
