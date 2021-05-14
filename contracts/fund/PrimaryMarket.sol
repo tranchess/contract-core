@@ -7,12 +7,12 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-import "./utils/SafeDecimalMath.sol";
+import "../utils/SafeDecimalMath.sol";
 
-import "./interfaces/IPrimaryMarket.sol";
-import "./interfaces/ITwapOracle.sol";
-import "./interfaces/IFund.sol";
-import "./interfaces/ITrancheIndex.sol";
+import "../interfaces/IPrimaryMarket.sol";
+import "../interfaces/ITwapOracle.sol";
+import "../interfaces/IFund.sol";
+import "../interfaces/ITrancheIndex.sol";
 
 contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     event Created(address indexed account, uint256 underlying);
