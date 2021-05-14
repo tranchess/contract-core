@@ -72,7 +72,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     uint256 private _invTotalWeightIntegral;
 
     /// @dev Final `_invTotalWeightIntegral` before each rebalance.
-    uint256[] private _historyIntegrals;
+    uint256[] private _historicalIntegrals;
 
     /// @dev Timestamp when checkpoint() is called.
     uint256 private _checkpointTimestamp;
@@ -474,7 +474,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             }
 
             if (endTimestamp == rebalanceTimestamp) {
-                _historyIntegrals.push(integral);
+                _historicalIntegrals.push(integral);
 
                 integral = 0;
                 (totalSupplyM, totalSupplyA, totalSupplyB) = fund.doRebalance(
@@ -562,7 +562,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                     availableB.add(lockedB)
                 );
             rewards = rewards.add(
-                weight.multiplyDecimalRoundPrecise(_historyIntegrals[i].sub(userIntegral))
+                weight.multiplyDecimalRoundPrecise(_historicalIntegrals[i].sub(userIntegral))
             );
             if (availableM != 0 || availableA != 0 || availableB != 0) {
                 (availableM, availableA, availableB) = fund.doRebalance(

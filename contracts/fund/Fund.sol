@@ -110,25 +110,25 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     mapping(address => mapping(address => uint256)) private _allowanceVersions;
 
     /// @dev Mapping of trading day => NAV tuple.
-    mapping(uint256 => uint256[TRANCHE_COUNT]) private _historyNavs;
+    mapping(uint256 => uint256[TRANCHE_COUNT]) private _historicalNavs;
 
     /// @notice Mapping of trading day => total fund shares.
     ///
     ///         Key is the end timestamp of a trading day. Value is the total fund shares after
     ///         settlement of that trading day, as if all Token A and B are merged.
-    mapping(uint256 => uint256) public historyTotalShares;
+    mapping(uint256 => uint256) public historicalTotalShares;
 
     /// @notice Mapping of trading day => underlying assets in the fund.
     ///
     ///         Key is the end timestamp of a trading day. Value is the underlying assets in
     ///         the fund after settlement of that trading day.
-    mapping(uint256 => uint256) public historyUnderlying;
+    mapping(uint256 => uint256) public historicalUnderlying;
 
     /// @notice Mapping of trading week => interest rate of Token A.
     ///
     ///         Key is the end timestamp of a trading week. Value is the interest rate captured
     ///         after settlement of the first day of the trading week.
-    mapping(uint256 => uint256) public historyInterestRate;
+    mapping(uint256 => uint256) public historicalInterestRate;
 
     address[] private obsoletePrimaryMarkets;
     address[] private newPrimaryMarkets;
@@ -179,11 +179,11 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 lastDay = currentDay - 1 days;
         uint256 currentPrice = twapOracle.getTwap(lastDay);
         require(currentPrice != 0, "price n/a");
-        _historyNavs[lastDay][TRANCHE_M] = UNIT;
-        _historyNavs[lastDay][TRANCHE_A] = UNIT;
-        _historyNavs[lastDay][TRANCHE_B] = UNIT;
+        _historicalNavs[lastDay][TRANCHE_M] = UNIT;
+        _historicalNavs[lastDay][TRANCHE_A] = UNIT;
+        _historicalNavs[lastDay][TRANCHE_B] = UNIT;
 
-        historyInterestRate[endOfWeek(currentDay - 1 days)] = MAX_INTEREST_RATE.min(
+        historicalInterestRate[endOfWeek(currentDay - 1 days)] = MAX_INTEREST_RATE.min(
             aprOracle.capture()
         );
     }
@@ -264,7 +264,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Return NAV of Token M, A and B of the given trading day.
     /// @param day End timestamp of a trading day
     /// @return NAV of Token M, A and B
-    function historyNavs(uint256 day)
+    function historicalNavs(uint256 day)
         external
         view
         returns (
@@ -274,9 +274,9 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         )
     {
         return (
-            _historyNavs[day][TRANCHE_M],
-            _historyNavs[day][TRANCHE_A],
-            _historyNavs[day][TRANCHE_B]
+            _historicalNavs[day][TRANCHE_M],
+            _historicalNavs[day][TRANCHE_A],
+            _historicalNavs[day][TRANCHE_B]
         );
     }
 
@@ -304,7 +304,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         if (previousDay > timestamp) {
             previousDay = endOfDay(timestamp) - 1 days;
         }
-        uint256 previousShares = historyTotalShares[previousDay];
+        uint256 previousShares = historicalTotalShares[previousDay];
         uint256 navM = _extrapolateNavM(previousDay, previousShares, timestamp, price);
         uint256 navA = _extrapolateNavA(previousDay, previousShares, timestamp);
         uint256 navB = calculateNavB(navM, navA);
@@ -331,7 +331,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         if (previousDay > timestamp) {
             previousDay = endOfDay(timestamp) - 1 days;
         }
-        uint256 previousShares = historyTotalShares[previousDay];
+        uint256 previousShares = historicalTotalShares[previousDay];
         return _extrapolateNavM(previousDay, previousShares, timestamp, price);
     }
 
@@ -349,7 +349,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         if (previousDay > timestamp) {
             previousDay = endOfDay(timestamp) - 1 days;
         }
-        uint256 previousShares = historyTotalShares[previousDay];
+        uint256 previousShares = historicalTotalShares[previousDay];
         return _extrapolateNavA(previousDay, previousShares, timestamp);
     }
 
@@ -362,7 +362,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 navM;
         if (previousShares == 0) {
             // The fund is empty. Just return the previous recorded NAV.
-            navM = _historyNavs[previousDay][TRANCHE_M];
+            navM = _historicalNavs[previousDay][TRANCHE_M];
             if (navM == 0) {
                 // No NAV is recorded because the given timestamp is before the fund launches.
                 return UNIT;
@@ -371,7 +371,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             }
         }
         uint256 totalValue =
-            price.mul(historyUnderlying[previousDay].mul(underlyingDecimalMultiplier));
+            price.mul(historicalUnderlying[previousDay].mul(underlyingDecimalMultiplier));
         uint256 accruedFee =
             totalValue.multiplyDecimal(dailyProtocolFeeRate).mul(timestamp - previousDay).div(
                 1 days
@@ -385,7 +385,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 previousShares,
         uint256 timestamp
     ) private view returns (uint256) {
-        uint256 navA = _historyNavs[previousDay][TRANCHE_A];
+        uint256 navA = _historicalNavs[previousDay][TRANCHE_A];
         if (previousShares == 0) {
             // The fund is empty. Just return the previous recorded NAV.
             if (navA == 0) {
@@ -403,7 +403,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
                 UNIT.sub(dailyProtocolFeeRate.mul(timestamp - previousDay).div(1 days))
             )
                 .multiplyDecimal(
-                UNIT.add(historyInterestRate[week].mul(timestamp - previousDay).div(1 days))
+                UNIT.add(historicalInterestRate[week].mul(timestamp - previousDay).div(1 days))
             );
         return newNavA > navA ? newNavA : navA;
     }
@@ -777,16 +777,16 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         // Calculate NAV
         uint256 totalShares = getTotalShares();
         uint256 underlying = IERC20(tokenUnderlying).balanceOf(address(this));
-        uint256 navA = _historyNavs[day - 1 days][TRANCHE_A];
+        uint256 navA = _historicalNavs[day - 1 days][TRANCHE_A];
         uint256 navM;
         if (totalShares > 0) {
             navM = price.mul(underlying.mul(underlyingDecimalMultiplier)).div(totalShares);
-            if (historyTotalShares[day - 1 days] > 0) {
+            if (historicalTotalShares[day - 1 days] > 0) {
                 // Update NAV of Token A only when the fund is non-empty both before and after
                 // this settlement
                 uint256 newNavA =
                     navA.multiplyDecimal(UNIT.sub(dailyProtocolFeeRate)).multiplyDecimal(
-                        historyInterestRate[currentWeek].add(UNIT)
+                        historicalInterestRate[currentWeek].add(UNIT)
                     );
                 if (navA < newNavA) {
                     navA = newNavA;
@@ -794,7 +794,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             }
         } else {
             // If the fund is empty, use NAV of Token M in the last day
-            navM = _historyNavs[day - 1 days][TRANCHE_M];
+            navM = _historicalNavs[day - 1 days][TRANCHE_M];
         }
         uint256 navB = calculateNavB(navM, navA);
 
@@ -812,14 +812,14 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         }
 
         if (currentDay == currentWeek) {
-            historyInterestRate[currentWeek + 1 weeks] = _updateInterestRate(currentWeek);
+            historicalInterestRate[currentWeek + 1 weeks] = _updateInterestRate(currentWeek);
         }
 
-        historyTotalShares[day] = totalShares;
-        historyUnderlying[day] = underlying;
-        _historyNavs[day][TRANCHE_M] = navM;
-        _historyNavs[day][TRANCHE_A] = navA;
-        _historyNavs[day][TRANCHE_B] = navB;
+        historicalTotalShares[day] = totalShares;
+        historicalUnderlying[day] = underlying;
+        _historicalNavs[day][TRANCHE_M] = navM;
+        _historicalNavs[day][TRANCHE_A] = navA;
+        _historicalNavs[day][TRANCHE_B] = navB;
         currentDay = day + 1 days;
 
         if (obsoletePrimaryMarkets.length > 0) {
@@ -867,7 +867,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     function _settlePrimaryMarkets(uint256 day, uint256 price) private {
         uint256 totalShares = getTotalShares();
         uint256 underlying = IERC20(tokenUnderlying).balanceOf(address(this));
-        uint256 prevNavM = _historyNavs[day - 1 days][TRANCHE_M];
+        uint256 prevNavM = _historicalNavs[day - 1 days][TRANCHE_M];
         uint256 primaryMarketCount = getPrimaryMarketCount();
         for (uint256 i = 0; i < primaryMarketCount; i++) {
             uint256 price_ = price; // Fix the "stack too deep" error

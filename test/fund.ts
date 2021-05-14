@@ -386,7 +386,7 @@ describe("Fund", function () {
     describe("InterestRateBallot", function () {
         it("Should return the next settlement timestamp", async function () {
             expect(
-                await fund.historyInterestRate(await fund.endOfWeek(await fund.currentDay()))
+                await fund.historicalInterestRate(await fund.endOfWeek(await fund.currentDay()))
             ).to.equal(parseEther("0"));
             await interestRateBallot.mock.count.returns(parseEther("365"));
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
@@ -394,7 +394,7 @@ describe("Fund", function () {
             await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
             await advanceOneDayAndSettle();
             expect(
-                await fund.historyInterestRate(await fund.endOfWeek(await fund.currentDay()))
+                await fund.historicalInterestRate(await fund.endOfWeek(await fund.currentDay()))
             ).to.equal(parseEther("1"));
         });
     });
@@ -655,7 +655,7 @@ describe("Fund", function () {
                 .withArgs(startDay, parseEther("1"), parseEther("1"), parseEther("1"));
             expect(await fund.currentDay()).to.equal(startDay + DAY);
             expect(await fund.getRebalanceSize()).to.equal(0);
-            const navs = await fund.historyNavs(startDay);
+            const navs = await fund.historicalNavs(startDay);
             expect(navs[TRANCHE_M]).to.equal(parseEther("1"));
             expect(navs[TRANCHE_A]).to.equal(parseEther("1"));
             expect(navs[TRANCHE_B]).to.equal(parseEther("1"));
@@ -693,7 +693,7 @@ describe("Fund", function () {
             await wbtc.mint(primaryMarket.address, parseWbtc("1"));
             await primaryMarketSettle.returns(parseEther("1000"), 0, parseWbtc("1"), 0, 0);
             await fund.settle();
-            const navs = await fund.historyNavs(startDay);
+            const navs = await fund.historicalNavs(startDay);
             expect(navs[TRANCHE_M]).to.equal(parseEther("1.01"));
             expect(navs[TRANCHE_A]).to.equal(parseEther("1"));
             expect(navs[TRANCHE_B]).to.equal(parseEther("1.02"));
@@ -706,7 +706,7 @@ describe("Fund", function () {
             await primaryMarketSettle.returns(parseEther("500"), 0, parseWbtc("1"), 0, 0);
             await fund.settle();
             expect(await fund.getRebalanceSize()).to.equal(1);
-            const navs = await fund.historyNavs(startDay);
+            const navs = await fund.historicalNavs(startDay);
             expect(navs[TRANCHE_M]).to.equal(parseEther("1"));
             expect(navs[TRANCHE_A]).to.equal(parseEther("1"));
             expect(navs[TRANCHE_B]).to.equal(parseEther("1"));
@@ -790,7 +790,7 @@ describe("Fund", function () {
                 .withArgs(startDay + DAY, navM, navA, navB);
             expect(await fund.currentDay()).to.equal(startDay + DAY * 2);
             expect(await fund.getRebalanceSize()).to.equal(0);
-            const navs = await fund.historyNavs(startDay + DAY);
+            const navs = await fund.historicalNavs(startDay + DAY);
             expect(navs[TRANCHE_M]).to.equal(navM);
             expect(navs[TRANCHE_A]).to.equal(navA);
             expect(navs[TRANCHE_B]).to.equal(navB);
@@ -896,7 +896,7 @@ describe("Fund", function () {
             await expect(fund.settle())
                 .to.emit(fund, "Settled")
                 .withArgs(startDay + DAY, navM, navA, navB);
-            const navs = await fund.historyNavs(startDay + DAY);
+            const navs = await fund.historicalNavs(startDay + DAY);
             expect(navs[TRANCHE_M]).to.equal(navM);
             expect(navs[TRANCHE_A]).to.equal(navA);
             expect(navs[TRANCHE_B]).to.equal(navB);
@@ -910,7 +910,7 @@ describe("Fund", function () {
             expect(navM).to.be.lt(UPPER_THRESHOLD_M);
             await fund.settle();
             expect(await fund.getRebalanceSize()).to.equal(0);
-            const navs = await fund.historyNavs(startDay + DAY);
+            const navs = await fund.historicalNavs(startDay + DAY);
             expect(navs[TRANCHE_M]).to.equal(navM);
         });
 
@@ -922,7 +922,7 @@ describe("Fund", function () {
             expect(navM).to.be.gt(UPPER_THRESHOLD_M);
             await fund.settle();
             expect(await fund.getRebalanceSize()).to.equal(1);
-            const navs = await fund.historyNavs(startDay + DAY);
+            const navs = await fund.historicalNavs(startDay + DAY);
             expect(navs[TRANCHE_M]).to.equal(parseEther("1"));
         });
 
@@ -935,7 +935,7 @@ describe("Fund", function () {
             expect(navB).to.be.gt(LOWER_THRESHOLD_B);
             await fund.settle();
             expect(await fund.getRebalanceSize()).to.equal(0);
-            const navs = await fund.historyNavs(startDay + DAY);
+            const navs = await fund.historicalNavs(startDay + DAY);
             expect(navs[TRANCHE_B]).to.equal(navB);
         });
 
@@ -948,7 +948,7 @@ describe("Fund", function () {
             expect(navB).to.be.lt(LOWER_THRESHOLD_B);
             await fund.settle();
             expect(await fund.getRebalanceSize()).to.equal(1);
-            const navs = await fund.historyNavs(startDay + DAY);
+            const navs = await fund.historicalNavs(startDay + DAY);
             expect(navs[TRANCHE_B]).to.equal(parseEther("1"));
         });
     });
@@ -1187,7 +1187,7 @@ describe("Fund", function () {
             await wbtc.mint(fund.address, parseWbtc("1.5"));
             await advanceOneDayAndSettle();
             expect(await fund.getRebalanceSize()).to.equal(0);
-            const navs = await fund.historyNavs(startDay);
+            const navs = await fund.historicalNavs(startDay);
             expect(navs[TRANCHE_M]).to.equal(parseEther("1.5"));
         });
 
@@ -1196,7 +1196,7 @@ describe("Fund", function () {
             await wbtc.mint(fund.address, parseWbtc("0.75"));
             await advanceOneDayAndSettle();
             expect(await fund.getRebalanceSize()).to.equal(0);
-            const navs = await fund.historyNavs(startDay);
+            const navs = await fund.historicalNavs(startDay);
             expect(navs[TRANCHE_B]).to.equal(parseEther("0.5"));
         });
 
@@ -1209,7 +1209,7 @@ describe("Fund", function () {
 
             await advanceOneDayAndSettle();
             expect(await fund.getRebalanceSize()).to.equal(0);
-            const navs = await fund.historyNavs(startDay + DAY);
+            const navs = await fund.historicalNavs(startDay + DAY);
             expect(navs[TRANCHE_A]).to.equal(parseEther("1.1"));
         });
     });
@@ -1297,7 +1297,7 @@ describe("Fund", function () {
                 await preDefinedRebalance160();
                 const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
                 expect(await fund.getRebalanceSize()).to.equal(1);
-                const navs = await fund.historyNavs(startDay + DAY);
+                const navs = await fund.historicalNavs(startDay + DAY);
                 expect(navs[TRANCHE_M]).to.equal(parseEther("1"));
                 expect(navs[TRANCHE_A]).to.equal(parseEther("1"));
                 expect(navs[TRANCHE_B]).to.equal(parseEther("1"));
@@ -1324,7 +1324,7 @@ describe("Fund", function () {
                 const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
                 await advanceOneDayAndSettle();
                 expect(await fund.getRebalanceSize()).to.equal(1);
-                const navs = await fund.historyNavs(startDay + DAY * 2);
+                const navs = await fund.historicalNavs(startDay + DAY * 2);
                 expect(navs[TRANCHE_M]).to.equal(parseEther("1"));
                 expect(navs[TRANCHE_A]).to.equal(parseEther("1"));
                 expect(navs[TRANCHE_B]).to.equal(parseEther("1"));
@@ -1350,7 +1350,7 @@ describe("Fund", function () {
                 await preDefinedRebalance040();
                 const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
                 expect(await fund.getRebalanceSize()).to.equal(1);
-                const navs = await fund.historyNavs(startDay + DAY * 2);
+                const navs = await fund.historicalNavs(startDay + DAY * 2);
                 expect(navs[TRANCHE_M]).to.equal(parseEther("1"));
                 expect(navs[TRANCHE_A]).to.equal(parseEther("1"));
                 expect(navs[TRANCHE_B]).to.equal(parseEther("1"));
@@ -1379,7 +1379,7 @@ describe("Fund", function () {
                 // NAV before rebalance: (1, 1.21, 0.79)
                 await advanceOneDayAndSettle();
                 expect(await fund.getRebalanceSize()).to.equal(1);
-                const navs = await fund.historyNavs(startDay + DAY * 3);
+                const navs = await fund.historicalNavs(startDay + DAY * 3);
                 expect(navs[TRANCHE_M]).to.equal(parseEther("1"));
                 expect(navs[TRANCHE_A]).to.equal(parseEther("1"));
                 expect(navs[TRANCHE_B]).to.equal(parseEther("1"));
@@ -1414,7 +1414,7 @@ describe("Fund", function () {
                 await advanceOneDayAndSettle();
                 const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
                 expect(await fund.getRebalanceSize()).to.equal(1);
-                const navs = await fund.historyNavs(startDay + DAY * 3);
+                const navs = await fund.historicalNavs(startDay + DAY * 3);
                 expect(navs[TRANCHE_M]).to.equal(parseEther("1"));
                 expect(navs[TRANCHE_A]).to.equal(parseEther("1"));
                 expect(navs[TRANCHE_B]).to.equal(parseEther("1"));

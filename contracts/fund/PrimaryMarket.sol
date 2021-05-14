@@ -63,8 +63,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     uint256 public currentRedeemingShares;
     uint256 public currentFeeInShares;
 
-    mapping(uint256 => uint256) private _historyCreationRate;
-    mapping(uint256 => uint256) private _historyRedemptionRate;
+    mapping(uint256 => uint256) private _historicalCreationRate;
+    mapping(uint256 => uint256) private _historicalRedemptionRate;
 
     constructor(
         address fund_,
@@ -258,7 +258,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
                     .mul(fund.underlyingDecimalMultiplier())
                     .div(previousNav);
             }
-            _historyCreationRate[day] = sharesToMint.divideDecimal(creationUnderlying);
+            _historicalCreationRate[day] = sharesToMint.divideDecimal(creationUnderlying);
             fee = creationFee;
         }
 
@@ -268,7 +268,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
             uint256 underlying = sharesToBurn.mul(fundUnderlying).div(fundTotalShares);
             uint256 redemptionFee = underlying.multiplyDecimal(redemptionFeeRate);
             redemptionUnderlying = underlying.sub(redemptionFee);
-            _historyRedemptionRate[day] = redemptionUnderlying.divideDecimal(sharesToBurn);
+            _historicalRedemptionRate[day] = redemptionUnderlying.divideDecimal(sharesToBurn);
             fee = fee.add(redemptionFee);
         }
 
@@ -295,8 +295,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
         // This loop should never execute, because this function is called by Fund
         // for every day. We fill the gap just in case that something goes wrong in Fund.
         for (uint256 t = currentDay; t < day; t += 1 days) {
-            _historyCreationRate[t] = _historyCreationRate[day];
-            _historyRedemptionRate[t] = _historyRedemptionRate[day];
+            _historicalCreationRate[t] = _historicalCreationRate[day];
+            _historicalRedemptionRate[t] = _historicalRedemptionRate[day];
         }
 
         currentDay = day + 1 days;
@@ -323,7 +323,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
         if (oldDay < currentDay) {
             if (cr.creatingUnderlying > 0) {
                 cr.createdShares = cr.createdShares.add(
-                    cr.creatingUnderlying.multiplyDecimal(_historyCreationRate[oldDay])
+                    cr.creatingUnderlying.multiplyDecimal(_historicalCreationRate[oldDay])
                 );
                 cr.creatingUnderlying = 0;
             }
@@ -342,7 +342,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
             }
             if (cr.redeemingShares > 0) {
                 cr.redeemedUnderlying = cr.redeemedUnderlying.add(
-                    cr.redeemingShares.multiplyDecimal(_historyRedemptionRate[oldDay])
+                    cr.redeemingShares.multiplyDecimal(_historicalRedemptionRate[oldDay])
                 );
                 cr.redeemingShares = 0;
             }
