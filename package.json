@@ -5,7 +5,8 @@
         "fmt": "prettier --ignore-path .gitignore -w .",
         "lint": "eslint --ext .js,.ts --ignore-path .gitignore .",
         "test": "hardhat test",
-        "coverage": "hardhat coverage --solcoverjs ./.primary_market.solcover.js"
+        "coverage": "hardhat coverage --solcoverjs ./.core.solcover.js",
+        "cc": "hardhat clean && hardhat compile"
     },
     "devDependencies": {
         "@nomiclabs/hardhat-ethers": "^2.0.1",
@@ -32,7 +33,7 @@
         "hardhat-gas-reporter": "^1.0.4",
         "prettier": "^2.2.1",
         "prettier-plugin-solidity": "^1.0.0-beta.3",
-        "solidity-coverage": "^0.7.12",
+        "solidity-coverage": "^0.7.16",
         "ts-node": "^9.1.1",
         "typescript": "^4.1.5"
     }

@@ -30,7 +30,7 @@ Tranchess Protocol is a platform for crypto-backed synthetic assets capable of s
 Tranchess Fund Protocol is the set of contracts representing the primary market. In the primary market, the underlying asset could create tokenized shares in the corresponding Master Fund (Token P). Token P could further split into tokenized shares in Tranche A (Token A) and Tranche B (Token B) for different purposes. Holding Token A leads to income with a weekly floating interest rate determined by market performance and governance, whereas holding Token B implies the use of leverages with no liquidation risk and maximal capital efficiency. The Fund would perform periodic evaluation of the net asset values (NAVs) per share, and when one or more of NAVs are over the limitation, it triggers conversions to universally and proportionally rebases shares across every address.
 
 <div style="text-align: center;">
-<img src="./tranchess_primary_market.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
+<img src="./images/tranchess_primary_market.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
 </div>
 
 # Contracts
@@ -86,7 +86,7 @@ The primary way to participate in Tranchess Protocol is to create Token P of an 
 ### Creation
 
 <div style="text-align: center;">
-<img src="./create_tx1.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
+<img src="./images/create_tx1.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
 </div>
 
 #### Transaction #1
@@ -97,7 +97,7 @@ The primary way to participate in Tranchess Protocol is to create Token P of an 
 ### Redemption
 
 <div style="text-align: center;">
-<img src="./redeem_tx1.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
+<img src="./images/redeem_tx1.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
 </div>
 
 #### Transaction #1
@@ -109,7 +109,7 @@ The primary way to participate in Tranchess Protocol is to create Token P of an 
 ### Claim
 
 <div style="text-align: center;">
-<img src="./claim_tx1.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
+<img src="./images/claim_tx1.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
 </div>
 
 #### Transaction #1
@@ -125,7 +125,7 @@ At any time, token P could transform into token A and B, and vice versa. The rat
 ### Split
 
 <div style="text-align: center;">
-<img src="./split.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
+<img src="./images/split.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
 </div>
 
 #### Transaction #1
@@ -139,7 +139,7 @@ At any time, token P could transform into token A and B, and vice versa. The rat
 ### Merge
 
 <div style="text-align: center;">
-<img src="./split.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
+<img src="./images/split.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
 </div>
 
 #### Transaction #1
@@ -167,7 +167,7 @@ It also triggers a conversion at the end of a trading day when one of the follow
 ### Settle
 
 <div style="text-align: center;">
-<img src="./settle.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
+<img src="./images/settle.jpg" style="padding-bottom: 20px; padding-top: 20px;" width="500" />
 </div>
 
 #### Transaction #1

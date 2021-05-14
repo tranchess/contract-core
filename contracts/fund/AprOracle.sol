@@ -4,10 +4,10 @@ pragma solidity >=0.6.10 <0.8.0;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import "./interfaces/IAprOracle.sol";
-import "./utils/SafeDecimalMath.sol";
-import "./utils/Exponential.sol";
-import "./utils/CoreUtility.sol";
+import "../interfaces/IAprOracle.sol";
+import "../utils/SafeDecimalMath.sol";
+import "../utils/Exponential.sol";
+import "../utils/CoreUtility.sol";
 
 // Compound
 interface CTokenInterface {
