@@ -13,9 +13,9 @@ const TRANCHE_B = 2;
 const DAY = 86400;
 const HOUR = 3600;
 const SETTLEMENT_TIME = 3600 * 14; // UTC time 14:00 every day
-const UPPER_CONVERSION_THRESHOLD = parseEther("1.5");
-const LOWER_CONVERSION_THRESHOLD = parseEther("0.5");
-const FIXED_CONVERSION_THRESHOLD = parseEther("1.1");
+const UPPER_THRESHOLD_M = parseEther("1.5");
+const LOWER_THRESHOLD_B = parseEther("0.5");
+const UPPER_THRESHOLD_A = parseEther("1.1");
 const MAX_UINT256 = BigNumber.from(2).pow(256).sub(1);
 const SUB_MAX_UINT256 = MAX_UINT256.div(parseEther("1"));
 
@@ -109,9 +109,9 @@ describe("Share", function () {
         const Fund = await ethers.getContractFactory("Fund");
         const fund = await Fund.connect(owner).deploy(
             0,
-            UPPER_CONVERSION_THRESHOLD,
-            LOWER_CONVERSION_THRESHOLD,
-            FIXED_CONVERSION_THRESHOLD,
+            UPPER_THRESHOLD_M,
+            LOWER_THRESHOLD_B,
+            UPPER_THRESHOLD_A,
             twapOracle.address
         );
 

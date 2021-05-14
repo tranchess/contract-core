@@ -15,9 +15,9 @@ const HOUR = 3600;
 const SETTLEMENT_TIME = 3600 * 14; // UTC time 14:00 every day
 const POST_REBALANCE_DELAY_TIME = HOUR * 12;
 const DAILY_PROTOCOL_FEE_BPS = 1; // 0.01% per day, 3.65% per year
-const UPPER_CONVERSION_THRESHOLD = parseEther("1.5");
-const LOWER_CONVERSION_THRESHOLD = parseEther("0.5");
-const FIXED_CONVERSION_THRESHOLD = parseEther("1.1");
+const UPPER_THRESHOLD_M = parseEther("1.5");
+const LOWER_THRESHOLD_B = parseEther("0.5");
+const UPPER_THRESHOLD_A = parseEther("1.1");
 
 async function advanceBlockAtTime(time: number) {
     await ethers.provider.send("evm_mine", [time]);
@@ -98,9 +98,9 @@ describe("Fund", function () {
         const Fund = await ethers.getContractFactory("Fund");
         const fund = await Fund.connect(owner).deploy(
             parseEther("0.0001").mul(DAILY_PROTOCOL_FEE_BPS),
-            UPPER_CONVERSION_THRESHOLD,
-            LOWER_CONVERSION_THRESHOLD,
-            FIXED_CONVERSION_THRESHOLD,
+            UPPER_THRESHOLD_M,
+            LOWER_THRESHOLD_B,
+            UPPER_THRESHOLD_A,
             twapOracle.address
         );
         await primaryMarket.call(
@@ -907,7 +907,7 @@ describe("Fund", function () {
             await twapOracle.mock.getTwap.withArgs(startDay + DAY).returns(price);
             await primaryMarketSettleAtPrice(price).returns(0, 0, 0, 0, 0);
             const navM = wbtcInFund.mul(1e10).mul(price).div(parseEther("10000"));
-            expect(navM).to.be.lt(UPPER_CONVERSION_THRESHOLD);
+            expect(navM).to.be.lt(UPPER_THRESHOLD_M);
             await fund.settle();
             expect(await fund.getRebalanceSize()).to.equal(0);
             const navs = await fund.historyNavs(startDay + DAY);
@@ -919,7 +919,7 @@ describe("Fund", function () {
             await twapOracle.mock.getTwap.withArgs(startDay + DAY).returns(price);
             await primaryMarketSettleAtPrice(price).returns(0, 0, 0, 0, 0);
             const navM = wbtcInFund.mul(1e10).mul(price).div(parseEther("10000"));
-            expect(navM).to.be.gt(UPPER_CONVERSION_THRESHOLD);
+            expect(navM).to.be.gt(UPPER_THRESHOLD_M);
             await fund.settle();
             expect(await fund.getRebalanceSize()).to.equal(1);
             const navs = await fund.historyNavs(startDay + DAY);
@@ -932,7 +932,7 @@ describe("Fund", function () {
             await primaryMarketSettleAtPrice(price).returns(0, 0, 0, 0, 0);
             const navM = wbtcInFund.mul(1e10).mul(price).div(parseEther("10000"));
             const navB = navM.mul(2).sub(navA);
-            expect(navB).to.be.gt(LOWER_CONVERSION_THRESHOLD);
+            expect(navB).to.be.gt(LOWER_THRESHOLD_B);
             await fund.settle();
             expect(await fund.getRebalanceSize()).to.equal(0);
             const navs = await fund.historyNavs(startDay + DAY);
@@ -945,7 +945,7 @@ describe("Fund", function () {
             await primaryMarketSettleAtPrice(price).returns(0, 0, 0, 0, 0);
             const navM = wbtcInFund.mul(1e10).mul(price).div(parseEther("10000"));
             const navB = navM.mul(2).sub(navA);
-            expect(navB).to.be.lt(LOWER_CONVERSION_THRESHOLD);
+            expect(navB).to.be.lt(LOWER_THRESHOLD_B);
             await fund.settle();
             expect(await fund.getRebalanceSize()).to.equal(1);
             const navs = await fund.historyNavs(startDay + DAY);
@@ -1149,9 +1149,9 @@ describe("Fund", function () {
         const Fund = await ethers.getContractFactory("Fund");
         f.fund = await Fund.connect(f.wallets.owner).deploy(
             0, // Zero protocol fee
-            UPPER_CONVERSION_THRESHOLD,
-            LOWER_CONVERSION_THRESHOLD,
-            FIXED_CONVERSION_THRESHOLD,
+            UPPER_THRESHOLD_M,
+            LOWER_THRESHOLD_B,
+            UPPER_THRESHOLD_A,
             f.twapOracle.address
         );
         await f.fund.initialize(

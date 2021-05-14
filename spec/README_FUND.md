@@ -160,9 +160,9 @@ The protocol checks NAVs daily. For different tranche, the NAV is also calculate
 
 It also triggers a rebalance at the end of a trading day when one of the following conditions is met:
 
-1. NAV of M is more than `UPPER_CONVERSION`
-1. NAV of A is more than `FIXED_CONVERSION`
-1. NAV of B is less than `LOWER_CONVERSION`
+1. NAV of M is more than `Fund.upperThresholdM()`
+1. NAV of A is more than `Fund.upperThresholdA()`
+1. NAV of B is less than `Fund.lowerThresholdB()`
 
 ### Settle
 

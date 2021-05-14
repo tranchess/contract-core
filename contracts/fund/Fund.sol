@@ -35,14 +35,14 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Daily protocol fee rate.
     uint256 public dailyProtocolFeeRate;
 
-    /// @notice NAV threshold of Token M for a upper conversion.
-    uint256 public upperConversionThreshold;
+    /// @notice Upper bound of Token M's NAV to trigger a rebalance.
+    uint256 public upperThresholdM;
 
-    /// @notice NAV threshold of Token B for a lower conversion.
-    uint256 public lowerConversionThreshold;
+    /// @notice Lower bound of Token B's NAV to trigger a rebalance.
+    uint256 public lowerThresholdB;
 
-    /// @notice NAV threshold of Token A for a fixed conversion.
-    uint256 public fixedConversionThreshold;
+    /// @notice Upper bound of Token A's NAV to trigger a rebalance.
+    uint256 public upperThresholdA;
 
     /// @notice TwapOracle address for the underlying asset.
     ITwapOracle public override twapOracle;
@@ -135,15 +135,15 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
 
     constructor(
         uint256 dailyProtocolFeeRate_,
-        uint256 upperConversionThreshold_,
-        uint256 lowerConversionThreshold_,
-        uint256 fixedConversionThreshold_,
+        uint256 upperThresholdM_,
+        uint256 lowerThresholdB_,
+        uint256 upperThresholdA_,
         address twapOracle_
     ) public Ownable() FundRoles() {
         dailyProtocolFeeRate = dailyProtocolFeeRate_;
-        upperConversionThreshold = upperConversionThreshold_;
-        lowerConversionThreshold = lowerConversionThreshold_;
-        fixedConversionThreshold = fixedConversionThreshold_;
+        upperThresholdM = upperThresholdM_;
+        lowerThresholdB = lowerThresholdB_;
+        upperThresholdA = upperThresholdA_;
         twapOracle = ITwapOracle(twapOracle_);
         currentDay = endOfDay(block.timestamp);
         fundActivityStartTime = endOfDay(block.timestamp) - 1 days;
@@ -926,10 +926,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 navA,
         uint256 navBOrZero
     ) private view returns (bool) {
-        return
-            navM > upperConversionThreshold ||
-            navBOrZero < lowerConversionThreshold ||
-            navA > fixedConversionThreshold;
+        return navM > upperThresholdM || navBOrZero < lowerThresholdB || navA > upperThresholdA;
     }
 
     /// @dev Create a new rebalance that resets NAV of all tranches to 1. Total supplies are
