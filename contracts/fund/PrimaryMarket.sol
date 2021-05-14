@@ -148,7 +148,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     }
 
     function split(uint256 inM) external onlyActive {
-        (uint256 weightA, uint256 weightB) = fund.splitWeights();
+        (uint256 weightA, uint256 weightB) = fund.trancheWeights();
         // Charge splitting fee and round it to a multiple of (weightA + weightB)
         uint256 unit = inM.sub(inM.multiplyDecimal(splitFeeRate)) / (weightA + weightB);
         require(unit > 0, "Too little to split");
@@ -167,11 +167,11 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     }
 
     function merge(uint256 inA) external onlyActive {
-        (uint256 weightA, uint256 weightB) = fund.splitWeights();
-        // Round to share weights
+        (uint256 weightA, uint256 weightB) = fund.trancheWeights();
+        // Round to tranche weights
         uint256 unit = inA / weightA;
         require(unit > 0, "Too little to merge");
-        // Keep unmergable A shares unchanged.
+        // Keep unmergable Token A unchanged.
         inA = unit * weightA;
         uint256 inB = unit.mul(weightB);
         uint256 outPBeforeFee = inA.add(inB);
@@ -190,7 +190,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     /// @notice Settle ongoing creations and redemptions and also split and merge fees.
     ///
     ///         Creations and redemptions are settled according to the current shares and
-    ///         underlying assets in the fund. Split and merge fee charged as M shares are also
+    ///         underlying assets in the fund. Split and merge fee charged as Token M are also
     ///         redeemed at the same rate (without no redemption fee).
     ///
     ///         This function does not mint or burn shares, nor transfer underlying assets.
@@ -204,12 +204,12 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     ///         after management fee is collected and before conversion is triggered for the same
     ///         trading day.
     /// @param day The trading day to settle
-    /// @param fundTotalShares Total shares of the fund (as if all A and B shares are merged)
+    /// @param fundTotalShares Total shares of the fund (as if all Token A and B are merged)
     /// @param fundUnderlying Underlying assets in the fund
     /// @param underlyingPrice Price of the underlying assets at the end of the trading day
-    /// @param previousNav NAV of Share M of the previous trading day
-    /// @return sharesToMint Amount of Share M to mint for creations
-    /// @return sharesToBurn Amount of Share M to burn for redemptions and split/merge fee
+    /// @param previousNav NAV of Token M of the previous trading day
+    /// @return sharesToMint Amount of Token M to mint for creations
+    /// @return sharesToBurn Amount of Token M to burn for redemptions and split/merge fee
     /// @return creationUnderlying Underlying assets received for creations (including creation fee)
     /// @return redemptionUnderlying Underlying assets to be redeemed (excluding redemption fee)
     /// @return fee Total fee in underlying assets for the fund to transfer to the governance address,

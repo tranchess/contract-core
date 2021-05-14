@@ -815,7 +815,7 @@ describe("Staking", function () {
         });
 
         it("Should make a checkpoint on deposit()", async function () {
-            // Deposit some Share A to double the total reward weight
+            // Deposit some Token A to double the total reward weight
             await shareA.mock.transferFrom.returns(true);
             await setNextBlockTime(nextRateUpdateTime + 100);
             await staking.deposit(
@@ -830,7 +830,7 @@ describe("Staking", function () {
         });
 
         it("Should make a checkpoint on withdraw()", async function () {
-            // Withdraw some Share M to reduce 20% of the total reward weight,
+            // Withdraw some Token M to reduce 20% of the total reward weight,
             // assuming balance is enough
             await shareM.mock.transfer.returns(true);
             await setNextBlockTime(nextRateUpdateTime + 200);
@@ -843,7 +843,7 @@ describe("Staking", function () {
         });
 
         it("Should make a checkpoint on tradeAvailable()", async function () {
-            // Trade some Share M to reduce 20% of the total reward weight, assuming balance is enough
+            // Trade some Token M to reduce 20% of the total reward weight, assuming balance is enough
             await shareM.mock.transfer.returns(true);
             await setNextBlockTime(nextRateUpdateTime + 300);
             await staking.tradeAvailable(TRANCHE_M, addr1, TOTAL_WEIGHT.div(5));
@@ -855,7 +855,7 @@ describe("Staking", function () {
         });
 
         it("Should make a checkpoint on convertAndClearTrade()", async function () {
-            // Get some Share B by settling trade to double the total reward weight
+            // Get some Token B by settling trade to double the total reward weight
             await shareA.mock.transferFrom.returns(true);
             await setNextBlockTime(nextRateUpdateTime + 400);
             await staking.convertAndClearTrade(
@@ -897,7 +897,7 @@ describe("Staking", function () {
         });
 
         it("Should make a checkpoint on tradeLocked()", async function () {
-            // Trade some locked Share M to reduce 20% of the total reward weight
+            // Trade some locked Token M to reduce 20% of the total reward weight
             await shareM.mock.transfer.returns(true);
             await setNextBlockTime(nextRateUpdateTime + 789);
             await staking.lock(TRANCHE_M, addr1, USER1_M);
@@ -993,7 +993,7 @@ describe("Staking", function () {
         });
 
         it("Should handle multiple checkpoints in the same block correctly", async function () {
-            // Deposit some Share A to double the total reward weight, in three transactions
+            // Deposit some Token A to double the total reward weight, in three transactions
             const totalDeposit = TOTAL_WEIGHT.mul(REWARD_WEIGHT_M).div(REWARD_WEIGHT_A);
             const deposit1 = totalDeposit.div(4);
             const deposit2 = totalDeposit.div(3);
@@ -1038,7 +1038,7 @@ describe("Staking", function () {
         });
 
         it("Should be able to handle zero total supplies between two conversions", async function () {
-            // Withdraw all M and A shares (in a single block to make rewards calculation easy)
+            // Withdraw all Token M and A (in a single block to make rewards calculation easy)
             await shareM.mock.transfer.returns(true);
             await shareA.mock.transfer.returns(true);
             await shareM.mock.transferFrom.returns(true);
@@ -1053,7 +1053,7 @@ describe("Staking", function () {
             let user1Rewards = rate1.mul(100);
             let user2Rewards = rate2.mul(100);
 
-            // Convert any B shares to zero in the first conversion.
+            // Convert any Token B to zero in the first conversion.
             await fund.mock.getConversionSize.returns(2);
             await fund.mock.getConversionTimestamp.withArgs(0).returns(nextRateUpdateTime + 400);
             await fund.mock.getConversionTimestamp.withArgs(1).returns(nextRateUpdateTime + 1000);
@@ -1065,11 +1065,11 @@ describe("Staking", function () {
             user1Rewards = user1Rewards.add(parseEther("1").mul(300).mul(USER1_B).div(TOTAL_B));
             user2Rewards = user2Rewards.add(parseEther("1").mul(300).mul(USER2_B).div(TOTAL_B));
 
-            // User1 deposit some M shares
+            // User1 deposit some Token M
             await setNextBlockTime(nextRateUpdateTime + 2000);
             await staking.deposit(TRANCHE_M, parseEther("1"));
 
-            // User2 deposit some M shares
+            // User2 deposit some Token M
             await setNextBlockTime(nextRateUpdateTime + 3500);
             await staking.connect(user2).deposit(TRANCHE_M, parseEther("1"));
             // Add rewards before user2's deposit

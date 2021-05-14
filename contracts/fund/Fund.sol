@@ -35,13 +35,13 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Daily management fee rate.
     uint256 public dailyManagementFeeRate;
 
-    /// @notice NAV threshold of Share M for a upper conversion.
+    /// @notice NAV threshold of Token M for a upper conversion.
     uint256 public upperConversionThreshold;
 
-    /// @notice NAV threshold of Share B for a lower conversion.
+    /// @notice NAV threshold of Token B for a lower conversion.
     uint256 public lowerConversionThreshold;
 
-    /// @notice NAV threshold of Share A for a fixed conversion.
+    /// @notice NAV threshold of Token A for a fixed conversion.
     uint256 public fixedConversionThreshold;
 
     /// @notice TwapOracle address for the underlying asset.
@@ -59,13 +59,13 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Address of the underlying token.
     address public override tokenUnderlying;
 
-    /// @notice Address of the Share M token.
+    /// @notice Address of Token M.
     address public override tokenM;
 
-    /// @notice Address of the Share A token.
+    /// @notice Address of Token A.
     address public override tokenA;
 
-    /// @notice Address of the Share B token.
+    /// @notice Address of Token B.
     address public override tokenB;
 
     /// @notice A multipler that normalizes an underlying balance to 18 decimal places.
@@ -115,7 +115,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Mapping of trading day => total fund shares.
     ///
     ///         Key is the end timestamp of a trading day. Value is the total fund shares after
-    ///         settlement of that trading day, as if all A and B shares are merged.
+    ///         settlement of that trading day, as if all Token A and B are merged.
     mapping(uint256 => uint256) public historyTotalShares;
 
     /// @notice Mapping of trading day => underlying assets in the fund.
@@ -124,7 +124,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     ///         the fund after settlement of that trading day.
     mapping(uint256 => uint256) public historyUnderlying;
 
-    /// @notice Mapping of trading week => interest rate of Share A.
+    /// @notice Mapping of trading week => interest rate of Token A.
     ///
     ///         Key is the end timestamp of a trading week. Value is the interest rate captured
     ///         after settlement of the first day of the trading week.
@@ -188,10 +188,10 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         );
     }
 
-    /// @notice Return weights of Share A and B when splitting Share M.
-    /// @return weightA Weight of Share A
-    /// @return weightB Weight of Share B
-    function splitWeights() external pure override returns (uint256 weightA, uint256 weightB) {
+    /// @notice Return weights of Token A and B when splitting Token M.
+    /// @return weightA Weight of Token A
+    /// @return weightB Weight of Token B
+    function trancheWeights() external pure override returns (uint256 weightA, uint256 weightB) {
         return (WEIGHT_A, WEIGHT_B);
     }
 
@@ -234,7 +234,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         return (timestamp >= exchangeActivityStartTime && timestamp < (currentDay - 60 minutes));
     }
 
-    /// @notice Total shares of the fund, as if all A and B shares are merged.
+    /// @notice Total shares of the fund, as if all Token A and B are merged.
     function getTotalShares() public view override returns (uint256) {
         return
             _totalSupplies[TRANCHE_M].add(_totalSupplies[TRANCHE_A]).add(_totalSupplies[TRANCHE_B]);
@@ -261,9 +261,9 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         return _conversionSize;
     }
 
-    /// @notice Return NAV of Share M, A and B of the given trading day.
+    /// @notice Return NAV of Token M, A and B of the given trading day.
     /// @param day End timestamp of a trading day
-    /// @return NAV of Share M, A and B
+    /// @return NAV of Token M, A and B
     function historyNavs(uint256 day)
         external
         view
@@ -280,15 +280,15 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         );
     }
 
-    /// @notice Estimate NAV of all shares at a given timestamp, considering underlying price
+    /// @notice Estimate NAV of all tranches at a given timestamp, considering underlying price
     ///         change, accrued management fee and accrued interest since the previous settlement.
     ///
     ///         The extrapolation uses simple interest instead of daily compound interest in
-    ///         calculating management fee and Share A's interest. There may be significant error
+    ///         calculating management fee and Token A's interest. There may be significant error
     ///         in the returned values when `timestamp` is far beyond the last settlement.
     /// @param timestamp Timestamp to estimate
     /// @param price Price of the underlying asset (18 decimal places)
-    /// @return Estimated NAV of all shares
+    /// @return Estimated NAV of all tranches
     function extrapolateNav(uint256 timestamp, uint256 price)
         external
         view
@@ -311,15 +311,15 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         return (navM, navA, navB);
     }
 
-    /// @notice Estimate NAV of Share M at a given timestamp, considering underlying price
+    /// @notice Estimate NAV of Token M at a given timestamp, considering underlying price
     ///         change and accrued management fee since the previous settlement.
     ///
     ///         The extrapolation uses simple interest instead of daily compound interest in
-    ///         calculating management fee and Share A's interest. There may be significant error
+    ///         calculating management fee and Token A's interest. There may be significant error
     ///         in the returned value when `timestamp` is far beyond the last settlement.
     /// @param timestamp Timestamp to estimate
     /// @param price Price of the underlying asset (18 decimal places)
-    /// @return Estimated NAV of Share M
+    /// @return Estimated NAV of Token M
     function extrapolateNavM(uint256 timestamp, uint256 price)
         external
         view
@@ -335,14 +335,14 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         return _extrapolateNavM(previousDay, previousShares, timestamp, price);
     }
 
-    /// @notice Estimate NAV of Share A at a given timestamp, considering accrued interest
+    /// @notice Estimate NAV of Token A at a given timestamp, considering accrued interest
     ///         since the previous settlement.
     ///
     ///         The extrapolation uses simple interest instead of daily compound interest in
-    ///         calculating management fee and Share A's interest. There may be significant error
+    ///         calculating management fee and Token A's interest. There may be significant error
     ///         in the returned value when `timestamp` is far beyond the last settlement.
     /// @param timestamp Timestamp to estimate
-    /// @return Estimated NAV of Share A
+    /// @return Estimated NAV of Token A
     function extrapolateNavA(uint256 timestamp) external view override returns (uint256) {
         // Find the last settled trading day before the given timestamp.
         uint256 previousDay = currentDay - 1 days;
@@ -420,13 +420,13 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Transform share amounts according to the conversion at a given index.
     ///         This function performs no bounds checking on the given index. A non-existent
     ///         conversion transforms anything to a zero vector.
-    /// @param amountM Amount of Share M before conversion
-    /// @param amountA Amount of Share A before conversion
-    /// @param amountB Amount of Share B before conversion
+    /// @param amountM Amount of Token M before conversion
+    /// @param amountA Amount of Token A before conversion
+    /// @param amountB Amount of Token B before conversion
     /// @param index Conversion index
-    /// @return newAmountM Amount of Share M after conversion
-    /// @return newAmountA Amount of Share A after conversion
-    /// @return newAmountB Amount of Share B after conversion
+    /// @return newAmountM Amount of Token M after conversion
+    /// @return newAmountA Amount of Token A after conversion
+    /// @return newAmountB Amount of Token B after conversion
     function convert(
         uint256 amountM,
         uint256 amountA,
@@ -449,14 +449,14 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     ///         This function performs no bounds checking on the given indices. The original amounts
     ///         are returned if `fromIndex` is no less than `toIndex`. A zero vector is returned
     ///         if `toIndex` is greater than the number of existing conversions.
-    /// @param amountM Amount of Share M before conversion
-    /// @param amountA Amount of Share A before conversion
-    /// @param amountB Amount of Share B before conversion
+    /// @param amountM Amount of Token M before conversion
+    /// @param amountA Amount of Token A before conversion
+    /// @param amountB Amount of Token B before conversion
     /// @param fromIndex Starting of the conversion index range, inclusive
     /// @param toIndex End of the conversion index range, exclusive
-    /// @return newAmountM Amount of Share M after conversion
-    /// @return newAmountA Amount of Share A after conversion
-    /// @return newAmountB Amount of Share B after conversion
+    /// @return newAmountM Amount of Token M after conversion
+    /// @return newAmountA Amount of Token A after conversion
+    /// @return newAmountB Amount of Token B after conversion
     function batchConvert(
         uint256 amountM,
         uint256 amountA,
@@ -757,7 +757,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     ///         1. Transfer management fee of the day to the governance address.
     ///         2. Settle all pending creations and redemptions from all primary markets.
     ///         3. Calculate NAV of the day and trigger conversion if necessary.
-    ///         4. Capture new interest rate for Share A.
+    ///         4. Capture new interest rate for Token A.
     function settle() external nonReentrant {
         uint256 day = currentDay;
         uint256 currentWeek = endOfWeek(day - 1 days);
@@ -777,7 +777,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         if (totalShares > 0) {
             navM = price.mul(underlying.mul(underlyingDecimalMultiplier)).div(totalShares);
             if (historyTotalShares[day - 1 days] > 0) {
-                // Update NAV of Share A only when the fund is non-empty both before and after
+                // Update NAV of Token A only when the fund is non-empty both before and after
                 // this settlement
                 uint256 newNavA =
                     navA.multiplyDecimal(UNIT.sub(dailyManagementFeeRate)).multiplyDecimal(
@@ -788,7 +788,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
                 }
             }
         } else {
-            // If the fund is empty, use NAV of Share M in the last day
+            // If the fund is empty, use NAV of Token M in the last day
             navM = _historyNavs[day - 1 days][TRANCHE_M];
         }
         uint256 navB = calculateNavB(navM, navA);
@@ -909,12 +909,12 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @dev Check whether a new conversion should be triggered. Conversion is triggered if
     ///      one of the following conditions is met:
     ///
-    ///      1. NAV of Share M grows above a threshold.
-    ///      2. NAV of Share B drops below a threshold.
-    ///      3. NAV of Share A grows above a threshold.
-    /// @param navM NAV of Share M before conversion
-    /// @param navA NAV of Share A before conversion
-    /// @param navBOrZero NAV of Share B before conversion or zero if the NAV is negative
+    ///      1. NAV of Token M grows above a threshold.
+    ///      2. NAV of Token B drops below a threshold.
+    ///      3. NAV of Token A grows above a threshold.
+    /// @param navM NAV of Token M before conversion
+    /// @param navA NAV of Token A before conversion
+    /// @param navBOrZero NAV of Token B before conversion or zero if the NAV is negative
     /// @return Whether a new conversion should be triggered
     function _shouldTriggerConversion(
         uint256 navM,
@@ -927,12 +927,12 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             navA > fixedConversionThreshold;
     }
 
-    /// @dev Create a new conversion that converts NAV of all shares to 1. Total supplies are
+    /// @dev Create a new conversion that converts NAV of all tranches to 1. Total supplies are
     ///      converted immediately.
     /// @param day Trading day that triggers this conversion
-    /// @param navM NAV of Share M before conversion
-    /// @param navA NAV of Share A before conversion
-    /// @param navBOrZero NAV of Share B before conversion or zero if the NAV is negative
+    /// @param navM NAV of Token M before conversion
+    /// @param navA NAV of Token A before conversion
+    /// @param navBOrZero NAV of Token B before conversion or zero if the NAV is negative
     function _triggerConversion(
         uint256 day,
         uint256 navM,
@@ -965,14 +965,14 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         _refreshBalance(address(this), oldSize + 1);
     }
 
-    /// @dev Create a new conversion matrix that transforms given NAV of shares to (1, 1, 1).
+    /// @dev Create a new conversion matrix that transforms given NAVs to (1, 1, 1).
     ///
-    ///      Note that NAV of Share B can be negative before conversion when the underlying price
+    ///      Note that NAV of Token B can be negative before conversion when the underlying price
     ///      drops dramatically in a single trading day, in which case zero should be passed to
     ///      this function instead of the negative NAV.
-    /// @param navM NAV of Share M before conversion
-    /// @param navA NAV of Share A before conversion
-    /// @param navBOrZero NAV of Share B before conversion or zero if the NAV is negative
+    /// @param navM NAV of Token M before conversion
+    /// @param navA NAV of Token A before conversion
+    /// @param navBOrZero NAV of Token B before conversion or zero if the NAV is negative
     /// @return The conversion matrix
     function _calculateConversion(
         uint256 navM,

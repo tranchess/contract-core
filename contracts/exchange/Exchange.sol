@@ -138,9 +138,9 @@ contract Exchange is ExchangeRoles, Staking {
     /// @notice Settlement of pending trades of maker orders.
     /// @param account Account placing the related maker orders
     /// @param epoch Epoch of the settled trades
-    /// @param amountM Amount of Share M added to the account's available balance
-    /// @param amountA Amount of Share A added to the account's available balance
-    /// @param amountB Amount of Share B added to the account's available balance
+    /// @param amountM Amount of Token M added to the account's available balance
+    /// @param amountA Amount of Token A added to the account's available balance
+    /// @param amountB Amount of Token B added to the account's available balance
     /// @param quoteAmount Amount of quote asset transfered to the account, rounding precision to 18
     ///                    for quote assets with precision other than 18 decimal places
     event MakerSettled(
@@ -155,9 +155,9 @@ contract Exchange is ExchangeRoles, Staking {
     /// @notice Settlement of pending trades of taker orders.
     /// @param account Account placing the related taker orders
     /// @param epoch Epoch of the settled trades
-    /// @param amountM Amount of Share M added to the account's available balance
-    /// @param amountA Amount of Share A added to the account's available balance
-    /// @param amountB Amount of Share B added to the account's available balance
+    /// @param amountM Amount of Token M added to the account's available balance
+    /// @param amountA Amount of Token A added to the account's available balance
+    /// @param amountB Amount of Token B added to the account's available balance
     /// @param quoteAmount Amount of quote asset transfered to the account, rounding precision to 18
     ///                    for quote assets with precision other than 18 decimal places
     event TakerSettled(
@@ -277,11 +277,11 @@ contract Exchange is ExchangeRoles, Staking {
         fillable = order.fillable;
     }
 
-    /// @notice Get all shares' net asset values of a given time
+    /// @notice Get all tranches' net asset values of a given time
     /// @param timestamp Timestamp of the net asset value
-    /// @return estimatedNavM Share M's net asset value
-    /// @return estimatedNavA Share A's net asset value
-    /// @return estimatedNavB Share B's net asset value
+    /// @return estimatedNavM Token M's net asset value
+    /// @return estimatedNavA Token A's net asset value
+    /// @return estimatedNavB Token B's net asset value
     function estimateNavs(uint256 timestamp)
         public
         view
@@ -444,7 +444,7 @@ contract Exchange is ExchangeRoles, Staking {
         }
     }
 
-    /// @notice Buy share M
+    /// @notice Buy Token M
     /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
     /// @param maxPDLevel Maximal premium-discount level accepted
     /// @param quoteAmount Amount of quote assets (with 18 decimal places) willing to trade
@@ -457,7 +457,7 @@ contract Exchange is ExchangeRoles, Staking {
         _buy(conversionID, msg.sender, TRANCHE_M, maxPDLevel, estimatedNav, quoteAmount);
     }
 
-    /// @notice Buy share A
+    /// @notice Buy Token A
     /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
     /// @param maxPDLevel Maximal premium-discount level accepted
     /// @param quoteAmount Amount of quote assets (with 18 decimal places) willing to trade
@@ -470,7 +470,7 @@ contract Exchange is ExchangeRoles, Staking {
         _buy(conversionID, msg.sender, TRANCHE_A, maxPDLevel, estimatedNav, quoteAmount);
     }
 
-    /// @notice Buy share B
+    /// @notice Buy Token B
     /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
     /// @param maxPDLevel Maximal premium-discount level accepted
     /// @param quoteAmount Amount of quote assets (with 18 decimal places) willing to trade
@@ -483,10 +483,10 @@ contract Exchange is ExchangeRoles, Staking {
         _buy(conversionID, msg.sender, TRANCHE_B, maxPDLevel, estimatedNav, quoteAmount);
     }
 
-    /// @notice Sell share M
+    /// @notice Sell Token M
     /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
     /// @param minPDLevel Minimal premium-discount level accepted
-    /// @param baseAmount Amount of share M willing to trade
+    /// @param baseAmount Amount of Token M willing to trade
     function sellM(
         uint256 conversionID,
         uint256 minPDLevel,
@@ -496,10 +496,10 @@ contract Exchange is ExchangeRoles, Staking {
         _sell(conversionID, msg.sender, TRANCHE_M, minPDLevel, estimatedNav, baseAmount);
     }
 
-    /// @notice Sell share A
+    /// @notice Sell Token A
     /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
     /// @param minPDLevel Minimal premium-discount level accepted
-    /// @param baseAmount Amount of share A willing to trade
+    /// @param baseAmount Amount of Token A willing to trade
     function sellA(
         uint256 conversionID,
         uint256 minPDLevel,
@@ -509,10 +509,10 @@ contract Exchange is ExchangeRoles, Staking {
         _sell(conversionID, msg.sender, TRANCHE_A, minPDLevel, estimatedNav, baseAmount);
     }
 
-    /// @notice Sell share B
+    /// @notice Sell Token B
     /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
     /// @param minPDLevel Minimal premium-discount level accepted
-    /// @param baseAmount Amount of share B willing to trade
+    /// @param baseAmount Amount of Token B willing to trade
     function sellB(
         uint256 conversionID,
         uint256 minPDLevel,
@@ -525,17 +525,17 @@ contract Exchange is ExchangeRoles, Staking {
     /// @notice Settle trades of a specified epoch for makers
     /// @param account Address of the maker
     /// @param epoch A specified epoch's end timestamp
-    /// @return sharesM Share M amount added to msg.sender's available balance
-    /// @return sharesA Share A amount added to msg.sender's available balance
-    /// @return sharesB Share B amount added to msg.sender's available balance
+    /// @return amountM Token M amount added to msg.sender's available balance
+    /// @return amountA Token A amount added to msg.sender's available balance
+    /// @return amountB Token B amount added to msg.sender's available balance
     /// @return quoteAmount Quote asset amount transfered to msg.sender, rounding precison to 18
     ///                     for quote assets with precision other than 18 decimal places
     function settleMaker(address account, uint256 epoch)
         external
         returns (
-            uint256 sharesM,
-            uint256 sharesA,
-            uint256 sharesB,
+            uint256 amountM,
+            uint256 amountA,
+            uint256 amountB,
             uint256 quoteAmount
         )
     {
@@ -545,38 +545,38 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 quoteAmountM;
         uint256 quoteAmountA;
         uint256 quoteAmountB;
-        (sharesM, quoteAmountM) = _settleMaker(account, TRANCHE_M, estimatedNavM, epoch);
-        (sharesA, quoteAmountA) = _settleMaker(account, TRANCHE_A, estimatedNavA, epoch);
-        (sharesB, quoteAmountB) = _settleMaker(account, TRANCHE_B, estimatedNavB, epoch);
+        (amountM, quoteAmountM) = _settleMaker(account, TRANCHE_M, estimatedNavM, epoch);
+        (amountA, quoteAmountA) = _settleMaker(account, TRANCHE_A, estimatedNavA, epoch);
+        (amountB, quoteAmountB) = _settleMaker(account, TRANCHE_B, estimatedNavB, epoch);
 
         uint256 conversionID = mostRecentConversionPendingTrades[epoch];
-        (sharesM, sharesA, sharesB) = _convertAndClearTrade(
+        (amountM, amountA, amountB) = _convertAndClearTrade(
             account,
-            sharesM,
-            sharesA,
-            sharesB,
+            amountM,
+            amountA,
+            amountB,
             conversionID
         );
         quoteAmount = quoteAmountM.add(quoteAmountA).add(quoteAmountB);
         _transferQuote(account, quoteAmount);
 
-        emit MakerSettled(account, epoch, sharesM, sharesA, sharesB, quoteAmount);
+        emit MakerSettled(account, epoch, amountM, amountA, amountB, quoteAmount);
     }
 
     /// @notice Settle trades of a specified epoch for takers
     /// @param account Address of the maker
     /// @param epoch A specified epoch's end timestamp
-    /// @return sharesM Share M amount added to msg.sender's available balance
-    /// @return sharesA Share A amount added to msg.sender's available balance
-    /// @return sharesB Share B amount added to msg.sender's available balance
+    /// @return amountM Token M amount added to msg.sender's available balance
+    /// @return amountA Token A amount added to msg.sender's available balance
+    /// @return amountB Token B amount added to msg.sender's available balance
     /// @return quoteAmount Quote asset amount transfered to msg.sender, rounding precison to 18
     ///                     for quote assets with precision other than 18 decimal places
     function settleTaker(address account, uint256 epoch)
         external
         returns (
-            uint256 sharesM,
-            uint256 sharesA,
-            uint256 sharesB,
+            uint256 amountM,
+            uint256 amountA,
+            uint256 amountB,
             uint256 quoteAmount
         )
     {
@@ -586,22 +586,22 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 quoteAmountM;
         uint256 quoteAmountA;
         uint256 quoteAmountB;
-        (sharesM, quoteAmountM) = _settleTaker(account, TRANCHE_M, estimatedNavM, epoch);
-        (sharesA, quoteAmountA) = _settleTaker(account, TRANCHE_A, estimatedNavA, epoch);
-        (sharesB, quoteAmountB) = _settleTaker(account, TRANCHE_B, estimatedNavB, epoch);
+        (amountM, quoteAmountM) = _settleTaker(account, TRANCHE_M, estimatedNavM, epoch);
+        (amountA, quoteAmountA) = _settleTaker(account, TRANCHE_A, estimatedNavA, epoch);
+        (amountB, quoteAmountB) = _settleTaker(account, TRANCHE_B, estimatedNavB, epoch);
 
         uint256 conversionID = mostRecentConversionPendingTrades[epoch];
-        (sharesM, sharesA, sharesB) = _convertAndClearTrade(
+        (amountM, amountA, amountB) = _convertAndClearTrade(
             account,
-            sharesM,
-            sharesA,
-            sharesB,
+            amountM,
+            amountA,
+            amountB,
             conversionID
         );
         quoteAmount = quoteAmountM.add(quoteAmountA).add(quoteAmountB);
         _transferQuote(account, quoteAmount);
 
-        emit TakerSettled(account, epoch, sharesM, sharesA, sharesB, quoteAmount);
+        emit TakerSettled(account, epoch, amountM, amountA, amountB, quoteAmount);
     }
 
     /// @dev Buy share

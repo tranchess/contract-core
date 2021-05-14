@@ -13,7 +13,7 @@ interface IFund {
     ///             [ ratioB2M        0  ratioAB ]
     ///         ```
     ///
-    ///         Amounts of the three shares `m`, `a` and `b` can be converted by multiplying the matrix:
+    ///         Amounts of the three tranches `m`, `a` and `b` can be converted by multiplying the matrix:
     ///
     ///         ```
     ///         [ m', a', b' ] = [ m, a, b ] * C
@@ -26,7 +26,7 @@ interface IFund {
         uint256 timestamp;
     }
 
-    function splitWeights() external pure returns (uint256 weightA, uint256 weightB);
+    function trancheWeights() external pure returns (uint256 weightA, uint256 weightB);
 
     function tokenUnderlying() external view returns (address);
 

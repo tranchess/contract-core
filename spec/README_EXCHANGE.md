@@ -126,7 +126,7 @@ To receive rewards of governance token and participate in the secondary market, 
 
 ## Placing an order
 
-Bid and ask orders are created by makers to either buy or sell shares of Tranche M/A/B for the USD stablecoin. For each order placed, the maker is asked to provide the amount, PD level, conversion ID, and a custom order ID of the order. The order book is using a link list implementation and arranges all orders by PD levels (premium-discount level), which is ranged from 0 (-10%) to 80 (-10%) with a step size of 0.25%. Makers are also asked to lock up the equal value of USD stablecoin or shares based on the amount and the PD level of the order.
+Bid and ask orders are created by makers to either buy or sell shares of Token M/A/B for the USD stablecoin. For each order placed, the maker is asked to provide the amount, PD level, conversion ID, and a custom order ID of the order. The order book is using a link list implementation and arranges all orders by PD levels (premium-discount level), which is ranged from 0 (-10%) to 80 (-10%) with a step size of 0.25%. Makers are also asked to lock up the equal value of USD stablecoin or shares based on the amount and the PD level of the order.
 
 ### Bid order
 
@@ -418,7 +418,7 @@ Calling `placeAsk` will perform the following steps:
 ### buyM
 
 ```
-/// @notice Buy share M
+/// @notice Buy Token M
 /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
 /// @param maxPDLevel Maximal premium-discount level accepted
 /// @param quoteAmount Amount of quote assets willing to trade
@@ -461,10 +461,10 @@ Calling `buyM` will perform the following steps:
 ### sellM
 
 ```
-/// @notice Sell share M
+/// @notice Sell Token M
 /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
 /// @param minPDLevel Minimal premium-discount level accepted
-/// @param baseAmount Amount of share M willing to trade
+/// @param baseAmount Amount of Token M willing to trade
 function sellM(
     uint256 conversionID,
     uint256 minPDLevel,

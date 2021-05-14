@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
 
-/// @notice Amounts of Share M, A and B are sometimes stored in a `uint256[3]` array. This contract
+/// @notice Amounts of Token M, A and B are sometimes stored in a `uint256[3]` array. This contract
 ///         defines index of each tranche in this array.
 ///
 ///         Solidity does not allow constants to be defined in interfaces. So this contract follows

@@ -415,7 +415,7 @@ describe("Exchange", function () {
             .returns(f.startEpoch + EPOCH * 1000);
         await f.exchange.connect(u3).applyForMaker();
 
-        // Order book of Share M
+        // Order book of Token M
         // Ask:
         // +2%   60(user3)
         // +1%   20(user2)  30(user3)  50(user2)
@@ -441,7 +441,7 @@ describe("Exchange", function () {
             "Mock on the method is not initialized"
         );
 
-        // Order book of Share M
+        // Order book of Token M
         // Bid:
         //  0%  100(user2)
         // -1%   50(user3)  20(user2)  30(user2)
@@ -1220,9 +1220,9 @@ describe("Exchange", function () {
             usdcAmount: BigNumberish
         ) {
             const result = await exchange.callStatic[settleFuncName](user.address, epoch);
-            expect(result.sharesM).to.equal(amountM);
-            expect(result.sharesA).to.equal(amountA);
-            expect(result.sharesB).to.equal(amountB);
+            expect(result.amountM).to.equal(amountM);
+            expect(result.amountA).to.equal(amountA);
+            expect(result.amountB).to.equal(amountB);
             expect(result.quoteAmount).to.equal(usdcAmount);
 
             const oldM = await exchange.availableBalanceOf(TRANCHE_M, user.address);
@@ -1239,13 +1239,13 @@ describe("Exchange", function () {
                 ]
             );
             expect(await exchange.availableBalanceOf(TRANCHE_M, user.address)).to.equal(
-                oldM.add(result.sharesM)
+                oldM.add(result.amountM)
             );
             expect(await exchange.availableBalanceOf(TRANCHE_A, user.address)).to.equal(
-                oldA.add(result.sharesA)
+                oldA.add(result.amountA)
             );
             expect(await exchange.availableBalanceOf(TRANCHE_B, user.address)).to.equal(
-                oldB.add(result.sharesB)
+                oldB.add(result.amountB)
             );
         }
 

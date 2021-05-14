@@ -53,7 +53,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @dev Total amount of user shares, i.e. sum of all entries in `_availableBalances` and
     ///      `_lockedBalances`. Note that these values can be smaller than the amount of
     ///      share tokens held by this contract, because shares locked in pending trades
-    ///      are not inclued in total supplies or any user's balance.
+    ///      are not included in total supplies or any user's balance.
     uint256[TRANCHE_COUNT] private _totalSupplies;
 
     /// @dev Conversion version of `_totalSupplies`.
@@ -102,9 +102,9 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     }
 
     /// @notice Return weight of given balance with respect to rewards.
-    /// @param amountM Amount of Share M
-    /// @param amountA Amount of Share A
-    /// @param amountB Amount of Share B
+    /// @param amountM Amount of Token M
+    /// @param amountA Amount of Token A
+    /// @param amountB Amount of Token B
     /// @return Rewarding weight of the balance
     function rewardWeight(
         uint256 amountM,
@@ -237,7 +237,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         emit Deposited(tranche, msg.sender, amount);
     }
 
-    /// @dev Claim settled shares and deposit to get rewards
+    /// @dev Claim settled Token M from the primary market and deposit to get rewards
     /// @param primaryMarket The primary market to claim shares from
     function claimAndDeposit(address primaryMarket) external {
         (uint256 createdShares, ) = IPrimaryMarket(primaryMarket).claim(msg.sender);

@@ -79,7 +79,7 @@ describe("Share", function () {
 
         // Start at 12 hours after settlement time of the 6th day in a week, which makes sure that
         // the first settlement after the fund's deployment settles the last day in a week and
-        // starts a new week by updating interest rate of Share A. Many test cases in this file
+        // starts a new week by updating interest rate of Token A. Many test cases in this file
         // rely on this fact to change the interest rate.
         //
         // As Fund settles at 14:00 everyday and an Unix timestamp starts a week on Thursday,
@@ -123,9 +123,9 @@ describe("Share", function () {
         );
 
         const Share = await ethers.getContractFactory("Share");
-        const shareM = await Share.connect(owner).deploy("Share M", "M", fund.address, TRANCHE_M);
-        const shareA = await Share.connect(owner).deploy("Share A", "A", fund.address, TRANCHE_A);
-        const shareB = await Share.connect(owner).deploy("Share B", "B", fund.address, TRANCHE_B);
+        const shareM = await Share.connect(owner).deploy("Token M", "M", fund.address, TRANCHE_M);
+        const shareA = await Share.connect(owner).deploy("Token A", "A", fund.address, TRANCHE_A);
+        const shareB = await Share.connect(owner).deploy("Token B", "B", fund.address, TRANCHE_B);
 
         await fund.initialize(
             wbtc.address,
@@ -194,7 +194,7 @@ describe("Share", function () {
         fund = fixtureData.fund;
     });
 
-    // Trigger a new conversion at the given NAV of Share M
+    // Trigger a new conversion at the given NAV of Token M
     async function mockConversion(navM: BigNumber) {
         const lastPrice = await twapOracle.getTwap(0);
         const newPrice = lastPrice.mul(navM).div(parseEther("1"));

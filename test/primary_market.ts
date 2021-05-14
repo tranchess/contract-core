@@ -81,7 +81,7 @@ describe("PrimaryMarket", function () {
         const shareM = await deployMockForName(owner, "Share");
         const shareA = await deployMockForName(owner, "Share");
         const shareB = await deployMockForName(owner, "Share");
-        await fund.mock.splitWeights.returns(1, 1);
+        await fund.mock.trancheWeights.returns(1, 1);
         await fund.mock.tokenUnderlying.returns(wbtc.address);
         await fund.mock.tokenM.returns(shareM.address);
         await fund.mock.tokenA.returns(shareA.address);
@@ -273,7 +273,7 @@ describe("PrimaryMarket", function () {
         it("Should add unsplittable M shares to fee", async function () {
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            // The last 1 M share cannot be split and goes to fee
+            // The last 1 Token M cannot be split and goes to fee
             const inM = 10000 * 20 + 1;
             const feeM = SPLIT_FEE_BPS * 20 + 1;
             await primaryMarket.split(inM);
@@ -298,7 +298,7 @@ describe("PrimaryMarket", function () {
         });
 
         it("Should revert if too little to merge", async function () {
-            await fund.mock.splitWeights.returns(100, 1);
+            await fund.mock.trancheWeights.returns(100, 1);
             await expect(primaryMarket.merge(99)).to.be.revertedWith("Too little to merge");
         });
 
@@ -331,8 +331,8 @@ describe("PrimaryMarket", function () {
             expect(await primaryMarket.currentFeeInShares()).to.equal(MERGE_FEE_BPS * 10);
         });
 
-        it("Should keeps unmergable A shares unchanged", async function () {
-            await fund.mock.splitWeights.returns(100, 200);
+        it("Should keeps unmergable Token A unchanged", async function () {
+            await fund.mock.trancheWeights.returns(100, 200);
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
             const reason = "Mock func 'burn A 100' is called";

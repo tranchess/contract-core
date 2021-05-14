@@ -69,7 +69,7 @@ describe("Fund", function () {
 
         // Start at 12 hours after settlement time of the 6th day in a week, which makes sure that
         // the first settlement after the fund's deployment settles the last day in a week and
-        // starts a new week by updating interest rate of Share A. Many test cases in this file
+        // starts a new week by updating interest rate of Token A. Many test cases in this file
         // rely on this fact to change the interest rate.
         //
         // As Fund settles at 14:00 everyday and an Unix timestamp starts a week on Thursday,
@@ -689,7 +689,7 @@ describe("Fund", function () {
 
         it("Should update NAV according to creation", async function () {
             // Received 1 WBTC (1010 USD) and minted 1000 shares.
-            // NAV of Share M increases to 1010 / 1000 = 1.01.
+            // NAV of Token M increases to 1010 / 1000 = 1.01.
             await wbtc.mint(primaryMarket.address, parseWbtc("1"));
             await primaryMarketSettle.returns(parseEther("1000"), 0, parseWbtc("1"), 0, 0);
             await fund.settle();
@@ -701,7 +701,7 @@ describe("Fund", function () {
 
         it("Should trigger upper conversion on abnormal creation", async function () {
             // Received 1 WBTC (1010 USD) and minted 500 shares.
-            // NAV of Share M increases to 1010 / 500 = 2.02 and triggers conversion.
+            // NAV of Token M increases to 1010 / 500 = 2.02 and triggers conversion.
             await wbtc.mint(primaryMarket.address, parseWbtc("1"));
             await primaryMarketSettle.returns(parseEther("500"), 0, parseWbtc("1"), 0, 0);
             await fund.settle();
@@ -889,7 +889,7 @@ describe("Fund", function () {
             // Note that NAV drops below 1 after management fee but creation and redemption are
             // still executed at NAV = 1 in this case. Because creation is more than redemption
             // and split/merge fee, the final navM is a bit higher than that if nothing happened.
-            const navPLowerBound = wbtcInFund.mul(1e10).mul(1000).div(10000); // NAV of Share M if nothing happened
+            const navPLowerBound = wbtcInFund.mul(1e10).mul(1000).div(10000); // NAV of Token M if nothing happened
             expect(navM).to.be.gt(navPLowerBound);
             expect(navM).to.be.lt(parseEther("1"));
 
@@ -1113,9 +1113,9 @@ describe("Fund", function () {
             expect(navsAt1000[TRANCHE_B]).to.equal(expectedB);
         });
 
-        it("Should keep NAV of Share A non-decreasing", async function () {
+        it("Should keep NAV of Token A non-decreasing", async function () {
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
-            // Interest of Share A is smaller than management fee
+            // Interest of Token A is smaller than management fee
             await aprOracle.mock.capture.returns(
                 parseEther("0.0001").mul(DAILY_MANAGEMENT_FEE_BPS).div(2)
             );
@@ -1260,7 +1260,7 @@ describe("Fund", function () {
             currentFixture = outerFixture;
         });
 
-        // Trigger a new conversion at the given NAV of Share M
+        // Trigger a new conversion at the given NAV of Token M
         async function mockConversion(navM: BigNumber) {
             const lastPrice = await twapOracle.getTwap(0);
             const newPrice = lastPrice.mul(navM).div(parseEther("1"));
@@ -1346,7 +1346,7 @@ describe("Fund", function () {
                 expect(await fund.getTotalShares()).to.equal(parseEther("700"));
             });
 
-            it("Lower conversion with negative NAV of Share B", async function () {
+            it("Lower conversion with negative NAV of Token B", async function () {
                 await preDefinedConvert040();
                 const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
                 expect(await fund.getConversionSize()).to.equal(1);
