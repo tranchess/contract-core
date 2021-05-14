@@ -224,36 +224,36 @@ describe("Exchange", function () {
     describe("placeBid()", function () {
         it("Should check maker expiration", async function () {
             await expect(
-                exchange.connect(user3).placeBid(TRANCHE_P, 1, MIN_BID_AMOUNT, 0, 0)
+                exchange.connect(user3).placeBid(TRANCHE_P, 1, MIN_BID_AMOUNT, 0)
             ).to.be.revertedWith("Only maker");
             await advanceBlockAtTime(startEpoch + EPOCH * 1500);
-            await expect(exchange.placeBid(TRANCHE_P, 1, MIN_BID_AMOUNT, 0, 0)).to.be.revertedWith(
+            await expect(exchange.placeBid(TRANCHE_P, 1, MIN_BID_AMOUNT, 0)).to.be.revertedWith(
                 "Only maker"
             );
         });
 
         it("Should check min amount", async function () {
             await expect(
-                exchange.placeBid(TRANCHE_P, 1, MIN_BID_AMOUNT.sub(1), 0, 0)
+                exchange.placeBid(TRANCHE_P, 1, MIN_BID_AMOUNT.sub(1), 0)
             ).to.be.revertedWith("Quote amount too low");
         });
 
         it("Should check pd level", async function () {
-            await expect(exchange.placeBid(TRANCHE_P, 0, MIN_BID_AMOUNT, 0, 0)).to.be.revertedWith(
+            await expect(exchange.placeBid(TRANCHE_P, 0, MIN_BID_AMOUNT, 0)).to.be.revertedWith(
                 "Invalid premium-discount level"
             );
-            await expect(exchange.placeBid(TRANCHE_P, 82, MIN_BID_AMOUNT, 0, 0)).to.be.revertedWith(
+            await expect(exchange.placeBid(TRANCHE_P, 82, MIN_BID_AMOUNT, 0)).to.be.revertedWith(
                 "Invalid premium-discount level"
             );
 
-            await exchange.placeAsk(TRANCHE_P, 41, parseEther("1"), 0, 0);
-            await expect(exchange.placeBid(TRANCHE_P, 41, MIN_BID_AMOUNT, 0, 0)).to.be.revertedWith(
+            await exchange.placeAsk(TRANCHE_P, 41, parseEther("1"), 0);
+            await expect(exchange.placeBid(TRANCHE_P, 41, MIN_BID_AMOUNT, 0)).to.be.revertedWith(
                 "Invalid premium-discount level"
             );
         });
 
         it("Should check conversion ID", async function () {
-            await expect(exchange.placeBid(TRANCHE_P, 1, MIN_BID_AMOUNT, 1, 0)).to.be.revertedWith(
+            await expect(exchange.placeBid(TRANCHE_P, 1, MIN_BID_AMOUNT, 1)).to.be.revertedWith(
                 "Invalid conversion ID"
             );
         });
@@ -261,7 +261,7 @@ describe("Exchange", function () {
         it("Should transfer USDC", async function () {
             for (const { tranche } of tranche_list) {
                 await expect(() =>
-                    exchange.placeBid(tranche, 1, parseEther("100"), 0, 0)
+                    exchange.placeBid(tranche, 1, parseEther("100"), 0)
                 ).to.changeTokenBalances(
                     usdc,
                     [user1, exchange],
@@ -272,24 +272,24 @@ describe("Exchange", function () {
 
         it("Should update best bid premium-discount level", async function () {
             for (const { tranche } of tranche_list) {
-                await exchange.placeBid(tranche, 41, parseEther("100"), 0, 0);
+                await exchange.placeBid(tranche, 41, parseEther("100"), 0);
                 expect(await exchange.bestBids(0, tranche)).to.equal(41);
-                await exchange.placeBid(tranche, 61, parseEther("100"), 0, 0);
+                await exchange.placeBid(tranche, 61, parseEther("100"), 0);
                 expect(await exchange.bestBids(0, tranche)).to.equal(61);
-                await exchange.placeBid(tranche, 51, parseEther("100"), 0, 0);
+                await exchange.placeBid(tranche, 51, parseEther("100"), 0);
                 expect(await exchange.bestBids(0, tranche)).to.equal(61);
             }
         });
 
         it("Should append order to order queue", async function () {
             for (const { tranche } of tranche_list) {
-                await exchange.placeBid(tranche, 41, parseEther("100"), 0, 0);
+                await exchange.placeBid(tranche, 41, parseEther("100"), 0);
                 const order1 = await exchange.getBidOrder(0, tranche, 41, 1);
                 expect(order1.maker).to.equal(addr1);
                 expect(order1.amount).to.equal(parseEther("100"));
                 expect(order1.fillable).to.equal(parseEther("100"));
 
-                await exchange.connect(user2).placeBid(tranche, 41, parseEther("200"), 0, 0);
+                await exchange.connect(user2).placeBid(tranche, 41, parseEther("200"), 0);
                 const order2 = await exchange.getBidOrder(0, tranche, 41, 2);
                 expect(order2.maker).to.equal(addr2);
                 expect(order2.amount).to.equal(parseEther("200"));
@@ -298,88 +298,88 @@ describe("Exchange", function () {
         });
 
         it("Should emit event", async function () {
-            await expect(exchange.placeBid(TRANCHE_A, 41, parseEther("1"), 0, 0x12345678))
+            await expect(exchange.placeBid(TRANCHE_A, 41, parseEther("1"), 0))
                 .to.emit(exchange, "BidOrderPlaced")
-                .withArgs(addr1, TRANCHE_A, 41, parseEther("1"), 0, 0x12345678, 1);
+                .withArgs(addr1, TRANCHE_A, 41, parseEther("1"), 0, 1);
         });
     });
 
     describe("placeAsk()", function () {
         it("Should check maker expiration", async function () {
             await expect(
-                exchange.connect(user3).placeAsk(TRANCHE_P, 81, MIN_ASK_AMOUNT, 0, 0)
+                exchange.connect(user3).placeAsk(TRANCHE_P, 81, MIN_ASK_AMOUNT, 0)
             ).to.be.revertedWith("Only maker");
             await advanceBlockAtTime(startEpoch + EPOCH * 1000);
-            await expect(exchange.placeAsk(TRANCHE_P, 81, MIN_ASK_AMOUNT, 0, 0)).to.be.revertedWith(
+            await expect(exchange.placeAsk(TRANCHE_P, 81, MIN_ASK_AMOUNT, 0)).to.be.revertedWith(
                 "Only maker"
             );
         });
 
         it("Should check min amount", async function () {
             await expect(
-                exchange.placeAsk(TRANCHE_P, 81, MIN_ASK_AMOUNT.sub(1), 0, 0)
+                exchange.placeAsk(TRANCHE_P, 81, MIN_ASK_AMOUNT.sub(1), 0)
             ).to.be.revertedWith("Base amount too low");
         });
 
         it("Should check pd level", async function () {
-            await expect(exchange.placeAsk(TRANCHE_P, 0, MIN_ASK_AMOUNT, 0, 0)).to.be.revertedWith(
+            await expect(exchange.placeAsk(TRANCHE_P, 0, MIN_ASK_AMOUNT, 0)).to.be.revertedWith(
                 "Invalid premium-discount level"
             );
-            await expect(exchange.placeAsk(TRANCHE_P, 82, MIN_ASK_AMOUNT, 0, 0)).to.be.revertedWith(
+            await expect(exchange.placeAsk(TRANCHE_P, 82, MIN_ASK_AMOUNT, 0)).to.be.revertedWith(
                 "Invalid premium-discount level"
             );
 
-            await exchange.placeBid(TRANCHE_P, 41, parseEther("100"), 0, 0);
-            await expect(exchange.placeAsk(TRANCHE_P, 41, MIN_ASK_AMOUNT, 0, 0)).to.be.revertedWith(
+            await exchange.placeBid(TRANCHE_P, 41, parseEther("100"), 0);
+            await expect(exchange.placeAsk(TRANCHE_P, 41, MIN_ASK_AMOUNT, 0)).to.be.revertedWith(
                 "Invalid premium-discount level"
             );
         });
 
         it("Should check conversion ID", async function () {
-            await expect(exchange.placeAsk(TRANCHE_P, 81, MIN_ASK_AMOUNT, 1, 0)).to.be.revertedWith(
+            await expect(exchange.placeAsk(TRANCHE_P, 81, MIN_ASK_AMOUNT, 1)).to.be.revertedWith(
                 "Invalid conversion ID"
             );
         });
 
         it("Should lock share tokens", async function () {
             for (const { tranche } of tranche_list) {
-                await exchange.placeAsk(tranche, 81, parseEther("100"), 0, 0);
+                await exchange.placeAsk(tranche, 81, parseEther("100"), 0);
                 expect(await exchange.lockedBalanceOf(tranche, addr1)).to.equal(parseEther("100"));
             }
         });
 
         it("Should revert if balance is not enough", async function () {
-            await expect(exchange.placeAsk(TRANCHE_P, 81, USER1_P.add(1), 0, 0)).to.be.revertedWith(
+            await expect(exchange.placeAsk(TRANCHE_P, 81, USER1_P.add(1), 0)).to.be.revertedWith(
                 "Insufficient balance to lock"
             );
-            await expect(exchange.placeAsk(TRANCHE_A, 81, USER1_A.add(1), 0, 0)).to.be.revertedWith(
+            await expect(exchange.placeAsk(TRANCHE_A, 81, USER1_A.add(1), 0)).to.be.revertedWith(
                 "Insufficient balance to lock"
             );
-            await expect(exchange.placeAsk(TRANCHE_B, 81, USER1_B.add(1), 0, 0)).to.be.revertedWith(
+            await expect(exchange.placeAsk(TRANCHE_B, 81, USER1_B.add(1), 0)).to.be.revertedWith(
                 "Insufficient balance to lock"
             );
         });
 
         it("Should update best ask premium-discount level", async function () {
             for (const { tranche } of tranche_list) {
-                await exchange.placeAsk(tranche, 41, parseEther("1"), 0, 0);
+                await exchange.placeAsk(tranche, 41, parseEther("1"), 0);
                 expect(await exchange.bestAsks(0, tranche)).to.equal(41);
-                await exchange.placeAsk(tranche, 21, parseEther("1"), 0, 0);
+                await exchange.placeAsk(tranche, 21, parseEther("1"), 0);
                 expect(await exchange.bestAsks(0, tranche)).to.equal(21);
-                await exchange.placeAsk(tranche, 31, parseEther("1"), 0, 0);
+                await exchange.placeAsk(tranche, 31, parseEther("1"), 0);
                 expect(await exchange.bestAsks(0, tranche)).to.equal(21);
             }
         });
 
         it("Should append order to order queue", async function () {
             for (const { tranche } of tranche_list) {
-                await exchange.placeAsk(tranche, 41, parseEther("1"), 0, 0);
+                await exchange.placeAsk(tranche, 41, parseEther("1"), 0);
                 const order1 = await exchange.getAskOrder(0, tranche, 41, 1);
                 expect(order1.maker).to.equal(addr1);
                 expect(order1.amount).to.equal(parseEther("1"));
                 expect(order1.fillable).to.equal(parseEther("1"));
 
-                await exchange.connect(user2).placeAsk(tranche, 41, parseEther("2"), 0, 0);
+                await exchange.connect(user2).placeAsk(tranche, 41, parseEther("2"), 0);
                 const order2 = await exchange.getAskOrder(0, tranche, 41, 2);
                 expect(order2.maker).to.equal(addr2);
                 expect(order2.amount).to.equal(parseEther("2"));
@@ -388,9 +388,9 @@ describe("Exchange", function () {
         });
 
         it("Should emit event", async function () {
-            await expect(exchange.placeAsk(TRANCHE_A, 41, parseEther("1"), 0, 0x12345678))
+            await expect(exchange.placeAsk(TRANCHE_A, 41, parseEther("1"), 0))
                 .to.emit(exchange, "AskOrderPlaced")
-                .withArgs(addr1, TRANCHE_A, 41, parseEther("1"), 0, 0x12345678, 1);
+                .withArgs(addr1, TRANCHE_A, 41, parseEther("1"), 0, 1);
         });
     });
 
@@ -420,11 +420,11 @@ describe("Exchange", function () {
         // +2%   60(user3)
         // +1%   20(user2)  30(user3)  50(user2)
         //  0%  100(user2)
-        await f.exchange.connect(u3).placeAsk(TRANCHE_P, 49, ASK_1_PD_2, 0, 0);
-        await f.exchange.connect(u2).placeAsk(TRANCHE_P, 45, ASK_1_PD_1, 0, 0);
-        await f.exchange.connect(u3).placeAsk(TRANCHE_P, 45, ASK_2_PD_1, 0, 0);
-        await f.exchange.connect(u2).placeAsk(TRANCHE_P, 45, ASK_3_PD_1, 0, 0);
-        await f.exchange.connect(u2).placeAsk(TRANCHE_P, 41, ASK_1_PD_0, 0, 0);
+        await f.exchange.connect(u3).placeAsk(TRANCHE_P, 49, ASK_1_PD_2, 0);
+        await f.exchange.connect(u2).placeAsk(TRANCHE_P, 45, ASK_1_PD_1, 0);
+        await f.exchange.connect(u3).placeAsk(TRANCHE_P, 45, ASK_2_PD_1, 0);
+        await f.exchange.connect(u2).placeAsk(TRANCHE_P, 45, ASK_3_PD_1, 0);
+        await f.exchange.connect(u2).placeAsk(TRANCHE_P, 41, ASK_1_PD_0, 0);
 
         return f;
     }
@@ -446,11 +446,11 @@ describe("Exchange", function () {
         //  0%  100(user2)
         // -1%   50(user3)  20(user2)  30(user2)
         // -2%   80(user3)
-        await f.exchange.connect(u2).placeBid(TRANCHE_P, 41, BID_1_PD_0, 0, 0);
-        await f.exchange.connect(u3).placeBid(TRANCHE_P, 37, BID_1_PD_N1, 0, 0);
-        await f.exchange.connect(u2).placeBid(TRANCHE_P, 37, BID_2_PD_N1, 0, 0);
-        await f.exchange.connect(u2).placeBid(TRANCHE_P, 37, BID_3_PD_N1, 0, 0);
-        await f.exchange.connect(u3).placeBid(TRANCHE_P, 33, BID_1_PD_N2, 0, 0);
+        await f.exchange.connect(u2).placeBid(TRANCHE_P, 41, BID_1_PD_0, 0);
+        await f.exchange.connect(u3).placeBid(TRANCHE_P, 37, BID_1_PD_N1, 0);
+        await f.exchange.connect(u2).placeBid(TRANCHE_P, 37, BID_2_PD_N1, 0);
+        await f.exchange.connect(u2).placeBid(TRANCHE_P, 37, BID_3_PD_N1, 0);
+        await f.exchange.connect(u3).placeBid(TRANCHE_P, 33, BID_1_PD_N2, 0);
 
         return f;
     }
@@ -1181,12 +1181,12 @@ describe("Exchange", function () {
             // +10%   20(user2)
             // Bid:
             // -10%   50(user2)
-            await f.exchange.connect(u2).placeAsk(TRANCHE_P, 81, ASK_1_PD_1, 0, 0);
-            await f.exchange.connect(u2).placeAsk(TRANCHE_A, 81, ASK_1_PD_1, 0, 0);
-            await f.exchange.connect(u2).placeAsk(TRANCHE_B, 81, ASK_1_PD_1, 0, 0);
-            await f.exchange.connect(u2).placeBid(TRANCHE_P, 1, BID_1_PD_N1, 0, 0);
-            await f.exchange.connect(u2).placeBid(TRANCHE_A, 1, BID_1_PD_N1, 0, 0);
-            await f.exchange.connect(u2).placeBid(TRANCHE_B, 1, BID_1_PD_N1, 0, 0);
+            await f.exchange.connect(u2).placeAsk(TRANCHE_P, 81, ASK_1_PD_1, 0);
+            await f.exchange.connect(u2).placeAsk(TRANCHE_A, 81, ASK_1_PD_1, 0);
+            await f.exchange.connect(u2).placeAsk(TRANCHE_B, 81, ASK_1_PD_1, 0);
+            await f.exchange.connect(u2).placeBid(TRANCHE_P, 1, BID_1_PD_N1, 0);
+            await f.exchange.connect(u2).placeBid(TRANCHE_A, 1, BID_1_PD_N1, 0);
+            await f.exchange.connect(u2).placeBid(TRANCHE_B, 1, BID_1_PD_N1, 0);
 
             await f.fund.mock.extrapolateNav
                 .withArgs(f.startEpoch - EPOCH * 2, parseEther("1000"))
@@ -1491,9 +1491,9 @@ describe("Exchange", function () {
                 .withArgs(u3.address, MAKER_REQUIREMENT)
                 .returns(f.startEpoch + EPOCH * 9.5);
             await f.exchange.connect(u3).applyForMaker();
-            await f.exchange.connect(u3).placeAsk(TRANCHE_B, 41, parseEther("1"), 0, 0);
-            await f.exchange.connect(u2).placeAsk(TRANCHE_B, 41, parseEther("1"), 0, 0);
-            await f.exchange.connect(u3).placeAsk(TRANCHE_B, 41, parseEther("1"), 0, 0);
+            await f.exchange.connect(u3).placeAsk(TRANCHE_B, 41, parseEther("1"), 0);
+            await f.exchange.connect(u2).placeAsk(TRANCHE_B, 41, parseEther("1"), 0);
+            await f.exchange.connect(u3).placeAsk(TRANCHE_B, 41, parseEther("1"), 0);
             await f.fund.mock.extrapolateNav.returns(0, 0, parseEther("1"));
             // Buy something before user3's orders expire
             advanceBlockAtTime(f.startEpoch + EPOCH * 9);
@@ -1589,9 +1589,9 @@ describe("Exchange", function () {
                 .withArgs(u3.address, MAKER_REQUIREMENT)
                 .returns(f.startEpoch + EPOCH * 9.5);
             await f.exchange.connect(u3).applyForMaker();
-            await f.exchange.connect(u3).placeBid(TRANCHE_A, 41, parseEther("1"), 0, 0);
-            await f.exchange.connect(u2).placeBid(TRANCHE_A, 41, parseEther("1"), 0, 0);
-            await f.exchange.connect(u3).placeBid(TRANCHE_A, 41, parseEther("1"), 0, 0);
+            await f.exchange.connect(u3).placeBid(TRANCHE_A, 41, parseEther("1"), 0);
+            await f.exchange.connect(u2).placeBid(TRANCHE_A, 41, parseEther("1"), 0);
+            await f.exchange.connect(u3).placeBid(TRANCHE_A, 41, parseEther("1"), 0);
             await f.fund.mock.extrapolateNav.returns(0, parseEther("1"), 0);
             // Sell something before user3's orders expire
             advanceBlockAtTime(f.startEpoch + EPOCH * 9);
@@ -1702,8 +1702,8 @@ describe("Exchange", function () {
         });
 
         it("Should convert on cancellation", async function () {
-            await exchange.placeAsk(TRANCHE_A, 41, parseEther("1"), 1, 0);
-            await exchange.placeAsk(TRANCHE_A, 41, parseEther("2"), 1, 0);
+            await exchange.placeAsk(TRANCHE_A, 41, parseEther("1"), 1);
+            await exchange.placeAsk(TRANCHE_A, 41, parseEther("2"), 1);
 
             // Cancel the first order after two conversions
             advanceBlockAtTime(startEpoch + EPOCH * 30);
@@ -1751,7 +1751,7 @@ describe("Exchange", function () {
             const reservedA = parseEther("1").mul(MAKER_RESERVE_BPS).div(10000);
             const settledA = parseEther("1");
             await fund.mock.extrapolateNav.returns(0, parseEther("1"), 0);
-            await exchange.connect(user2).placeAsk(TRANCHE_A, 41, orderA, 1, 0);
+            await exchange.connect(user2).placeAsk(TRANCHE_A, 41, orderA, 1);
             await exchange.buyA(1, 41, frozenUsdc);
 
             // Settle the taker's trade after two conversions
@@ -1819,8 +1819,8 @@ describe("Exchange", function () {
 
         it("Should start a new order book after conversion", async function () {
             await fund.mock.extrapolateNav.returns(0, parseEther("1"), 0);
-            await exchange.connect(user2).placeAsk(TRANCHE_A, 45, parseEther("1"), 1, 0);
-            await exchange.connect(user2).placeBid(TRANCHE_A, 37, parseEther("1"), 1, 0);
+            await exchange.connect(user2).placeAsk(TRANCHE_A, 45, parseEther("1"), 1);
+            await exchange.connect(user2).placeBid(TRANCHE_A, 37, parseEther("1"), 1);
 
             advanceBlockAtTime(startEpoch + EPOCH * 30);
             await fund.mock.getConversionSize.returns(3);
@@ -1864,14 +1864,14 @@ describe("Exchange", function () {
             await mockUsdc.mock.transferFrom
                 .withArgs(addr1, exchange.address, parseUsdc("10"))
                 .returns(false);
-            await expect(
-                exchange.placeBid(TRANCHE_A, 41, parseEther("10"), 0, 0)
-            ).to.be.revertedWith("Failed to transfer quote asset from account");
+            await expect(exchange.placeBid(TRANCHE_A, 41, parseEther("10"), 0)).to.be.revertedWith(
+                "Failed to transfer quote asset from account"
+            );
         });
 
         it("Should check return value of transfer()", async function () {
             await mockUsdc.mock.transferFrom.returns(true);
-            await exchange.placeBid(TRANCHE_A, 41, parseEther("10"), 0, 0);
+            await exchange.placeBid(TRANCHE_A, 41, parseEther("10"), 0);
             await mockUsdc.mock.transfer.withArgs(addr1, parseUsdc("10")).returns(false);
             await expect(exchange.cancelBid(0, TRANCHE_A, 41, 1)).to.be.revertedWith(
                 "Failed to transfer quote asset"

@@ -25,12 +25,6 @@ contract Exchange is ExchangeRoles, Staking {
     using LibPendingBuyTrade for PendingBuyTrade;
     using LibPendingSellTrade for PendingSellTrade;
 
-    /// @notice Identifier of a pending order
-    struct OrderIdentifier {
-        uint256 pdLevel; // Premium-discount level
-        uint256 index; // Order queue index
-    }
-
     /// @notice A maker bid order is placed.
     /// @param maker Account placing the order
     /// @param tranche Tranche of the share to buy
@@ -38,7 +32,6 @@ contract Exchange is ExchangeRoles, Staking {
     /// @param quoteAmount Amount of quote asset in the order, rounding precision to 18
     ///                    for quote assets with precision other than 18 decimal places
     /// @param conversionID The latest conversion ID when the order is placed
-    /// @param clientOrderID Order ID specified by user
     /// @param orderIndex Index of the order in the order queue
     event BidOrderPlaced(
         address indexed maker,
@@ -46,7 +39,6 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 pdLevel,
         uint256 quoteAmount,
         uint256 conversionID,
-        uint256 clientOrderID,
         uint256 orderIndex
     );
 
@@ -56,7 +48,6 @@ contract Exchange is ExchangeRoles, Staking {
     /// @param pdLevel Premium-discount level
     /// @param baseAmount Amount of base asset in the order
     /// @param conversionID The latest conversion ID when the order is placed
-    /// @param clientOrderID Order ID specified by user
     /// @param orderIndex Index of the order in the order queue
     event AskOrderPlaced(
         address indexed maker,
@@ -64,7 +55,6 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 pdLevel,
         uint256 baseAmount,
         uint256 conversionID,
-        uint256 clientOrderID,
         uint256 orderIndex
     );
 
@@ -202,10 +192,6 @@ contract Exchange is ExchangeRoles, Staking {
     /// @dev A multipler that normalizes a quote asset balance to 18 decimal places.
     uint256 private immutable _quoteDecimalMultiplier;
 
-    /// @notice Mapping of conversion ID => tranche => account => self-assigned order ID => order identifier
-    mapping(uint256 => mapping(uint256 => mapping(address => mapping(uint256 => OrderIdentifier))))
-        public identifiers;
-
     /// @notice Mapping of conversion ID => tranche => an array of order queues
     mapping(uint256 => mapping(uint256 => OrderQueue[PD_LEVEL_COUNT + 1])) public bids;
     mapping(uint256 => mapping(uint256 => OrderQueue[PD_LEVEL_COUNT + 1])) public asks;
@@ -291,21 +277,6 @@ contract Exchange is ExchangeRoles, Staking {
         fillable = order.fillable;
     }
 
-    /// @notice Get the order identifier
-    /// @param conversionID Conversion ID when order was placed
-    /// @param tranche Tranche of the base asset that the order is trading with
-    /// @param account Maker address of the order
-    /// @param clientOrderID Self-assigned order ID
-    /// @return Identifier of the order
-    function getOrderIdentifier(
-        uint256 conversionID,
-        uint256 tranche,
-        address account,
-        uint256 clientOrderID
-    ) external view returns (OrderIdentifier memory) {
-        return identifiers[conversionID][tranche][account][clientOrderID];
-    }
-
     /// @notice Get all shares' net asset values of a given time
     /// @param timestamp Timestamp of the net asset value
     /// @return estimatedNavP Share P's net asset value
@@ -330,13 +301,11 @@ contract Exchange is ExchangeRoles, Staking {
     /// @param pdLevel Premium-discount level
     /// @param quoteAmount Quote asset amount with 18 decimal places
     /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
-    /// @param clientOrderID Optional self-assigned order ID. Index starting with 1
     function placeBid(
         uint256 tranche,
         uint256 pdLevel,
         uint256 quoteAmount,
-        uint256 conversionID,
-        uint256 clientOrderID
+        uint256 conversionID
     ) external onlyMaker {
         require(quoteAmount >= minBidAmount, "Quote amount too low");
         uint256 bestAsk = bestAsks[conversionID][tranche];
@@ -354,26 +323,7 @@ contract Exchange is ExchangeRoles, Staking {
             bestBids[conversionID][tranche] = pdLevel;
         }
 
-        if (clientOrderID != 0) {
-            require(
-                identifiers[conversionID][tranche][msg.sender][clientOrderID].index == 0,
-                "Client ID has already assigned an order"
-            );
-            identifiers[conversionID][tranche][msg.sender][clientOrderID] = OrderIdentifier({
-                pdLevel: pdLevel,
-                index: index
-            });
-        }
-
-        emit BidOrderPlaced(
-            msg.sender,
-            tranche,
-            pdLevel,
-            quoteAmount,
-            conversionID,
-            clientOrderID,
-            index
-        );
+        emit BidOrderPlaced(msg.sender, tranche, pdLevel, quoteAmount, conversionID, index);
     }
 
     /// @notice Place an ask order for makers
@@ -381,13 +331,11 @@ contract Exchange is ExchangeRoles, Staking {
     /// @param pdLevel Premium-discount level
     /// @param baseAmount Base asset amount
     /// @param conversionID Current conversion ID. Revert if conversion is triggered simultaneously
-    /// @param clientOrderID Optional self-assigned order ID. Index starting with 1
     function placeAsk(
         uint256 tranche,
         uint256 pdLevel,
         uint256 baseAmount,
-        uint256 conversionID,
-        uint256 clientOrderID
+        uint256 conversionID
     ) external onlyMaker {
         require(baseAmount >= minAskAmount, "Base amount too low");
         require(
@@ -407,47 +355,7 @@ contract Exchange is ExchangeRoles, Staking {
             bestAsks[conversionID][tranche] = pdLevel;
         }
 
-        if (clientOrderID != 0) {
-            require(
-                identifiers[conversionID][tranche][msg.sender][clientOrderID].index == 0,
-                "Client ID has already assigned an order"
-            );
-            identifiers[conversionID][tranche][msg.sender][clientOrderID] = OrderIdentifier({
-                pdLevel: pdLevel,
-                index: index
-            });
-        }
-
-        emit AskOrderPlaced(
-            msg.sender,
-            tranche,
-            pdLevel,
-            baseAmount,
-            conversionID,
-            clientOrderID,
-            index
-        );
-    }
-
-    /// @notice Cancel a bid order by client order ID
-    /// @param conversionID Order's conversion ID
-    /// @param tranche Tranche of the order's base asset
-    /// @param clientOrderID Self-assigned order ID
-    function cancelBidByClientOrderID(
-        uint256 conversionID,
-        uint256 tranche,
-        uint256 clientOrderID
-    ) external {
-        OrderIdentifier memory orderIdentifier =
-            identifiers[conversionID][tranche][msg.sender][clientOrderID];
-        _cancelBid(
-            conversionID,
-            tranche,
-            msg.sender,
-            orderIdentifier.pdLevel,
-            orderIdentifier.index
-        );
-        delete identifiers[conversionID][tranche][msg.sender][clientOrderID];
+        emit AskOrderPlaced(msg.sender, tranche, pdLevel, baseAmount, conversionID, index);
     }
 
     /// @notice Cancel a bid order by order identifier
@@ -462,27 +370,6 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 index
     ) external {
         _cancelBid(conversionID, tranche, msg.sender, pdLevel, index);
-    }
-
-    /// @notice Cancel an ask order by client order ID
-    /// @param conversionID Order's conversion ID
-    /// @param tranche Tranche of the order's base asset
-    /// @param clientOrderID Self-assigned order ID
-    function cancelAskByClientOrderID(
-        uint256 conversionID,
-        uint256 tranche,
-        uint256 clientOrderID
-    ) external {
-        OrderIdentifier memory orderIdentifier =
-            identifiers[conversionID][tranche][msg.sender][clientOrderID];
-        _cancelAsk(
-            conversionID,
-            tranche,
-            msg.sender,
-            orderIdentifier.pdLevel,
-            orderIdentifier.index
-        );
-        delete identifiers[conversionID][tranche][msg.sender][clientOrderID];
     }
 
     /// @notice Cancel an ask order by order identifier
