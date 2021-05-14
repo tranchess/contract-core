@@ -1880,9 +1880,6 @@ describe("Exchange", function () {
     describe("Miscellaneous", function () {
         it("Should be properly initialized in a proxy's point of view", async function () {
             expect(await exchange.fund()).to.equal(fund.address);
-            expect(await exchange.tokenP()).to.equal(shareP.address);
-            expect(await exchange.tokenA()).to.equal(shareA.address);
-            expect(await exchange.tokenB()).to.equal(shareB.address);
             expect(await exchange.minBidAmount()).to.equal(MIN_BID_AMOUNT);
             expect(await exchange.minAskAmount()).to.equal(MIN_ASK_AMOUNT);
             expect(await exchange.makerRequirement()).to.equal(MAKER_REQUIREMENT);
