@@ -1219,7 +1219,7 @@ describe("Exchange", function () {
             amountB: BigNumberish,
             usdcAmount: BigNumberish
         ) {
-            const result = await exchange.connect(user).callStatic[settleFuncName](epoch);
+            const result = await exchange.callStatic[settleFuncName](user.address, epoch);
             expect(result.sharesP).to.equal(amountP);
             expect(result.sharesA).to.equal(amountA);
             expect(result.sharesB).to.equal(amountB);
@@ -1229,7 +1229,7 @@ describe("Exchange", function () {
             const oldA = await exchange.availableBalanceOf(TRANCHE_A, user.address);
             const oldB = await exchange.availableBalanceOf(TRANCHE_B, user.address);
             await expect(() =>
-                exchange.connect(user)[settleFuncName](epoch)
+                exchange[settleFuncName](user.address, epoch)
             ).to.changeTokenBalances(
                 usdc,
                 [user, exchange],
@@ -1251,10 +1251,10 @@ describe("Exchange", function () {
 
         it("Should revert if price is not available", async function () {
             await twapOracle.mock.getTwap.withArgs(startEpoch + EPOCH).returns(0);
-            await expect(exchange.settleMaker(startEpoch)).to.be.revertedWith(
+            await expect(exchange.settleMaker(addr1, startEpoch)).to.be.revertedWith(
                 "Price is not available"
             );
-            await expect(exchange.settleTaker(startEpoch)).to.be.revertedWith(
+            await expect(exchange.settleTaker(addr1, startEpoch)).to.be.revertedWith(
                 "Price is not available"
             );
         });
@@ -1266,7 +1266,7 @@ describe("Exchange", function () {
                 parseEther("1")
             );
             await expect(() =>
-                exchange.connect(user3).settleMaker(startEpoch - EPOCH)
+                exchange.settleMaker(addr3, startEpoch - EPOCH)
             ).to.changeTokenBalance(usdc, user3, 0);
             expect(await exchange.availableBalanceOf(TRANCHE_P, addr3)).to.equal(USER3_P);
             expect(await exchange.availableBalanceOf(TRANCHE_A, addr3)).to.equal(USER3_A);
@@ -1314,10 +1314,10 @@ describe("Exchange", function () {
             });
 
             it("Should emit event", async function () {
-                await expect(exchange.settleTaker(startEpoch))
+                await expect(exchange.settleTaker(addr1, startEpoch))
                     .to.emit(exchange, "TakerSettled")
                     .withArgs(addr1, startEpoch, settledP, settledA, 0, settledUsdcForB);
-                await expect(exchange.connect(user2).settleMaker(startEpoch))
+                await expect(exchange.settleMaker(addr2, startEpoch))
                     .to.emit(exchange, "MakerSettled")
                     .withArgs(
                         addr2,
@@ -1761,7 +1761,7 @@ describe("Exchange", function () {
                 .withArgs(TOTAL_P, TOTAL_A.sub(reservedA), TOTAL_B, 1)
                 .returns(11111, 2222, 333);
             await fund.mock.convert.withArgs(11111, 2222, 333, 2).returns(10000, 2000, 300);
-            await expect(() => exchange.settleTaker(startEpoch + EPOCH * 10)).to.callMocks(
+            await expect(() => exchange.settleTaker(addr1, startEpoch + EPOCH * 10)).to.callMocks(
                 {
                     // Convert available balance from version 1 to 2
                     func: fund.mock.convert.withArgs(USER1_P, USER1_A, USER1_B, 1),
@@ -1783,9 +1783,7 @@ describe("Exchange", function () {
             expect(await exchange.availableBalanceOf(TRANCHE_B, addr1)).to.equal(60 + 9);
 
             // Settle the maker's trade after two conversions
-            await expect(() =>
-                exchange.connect(user2).settleMaker(startEpoch + EPOCH * 10)
-            ).to.callMocks(
+            await expect(() => exchange.settleMaker(addr2, startEpoch + EPOCH * 10)).to.callMocks(
                 {
                     // Convert available balance from version 1 to 2
                     func: fund.mock.convert.withArgs(USER2_P, USER2_A.sub(orderA), USER2_B, 1),

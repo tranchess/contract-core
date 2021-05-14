@@ -465,13 +465,14 @@ contract Exchange is ExchangeRoles, Staking {
     }
 
     /// @notice Settle trades of a specified epoch for makers
+    /// @param account Address of the maker
     /// @param epoch A specified epoch's end timestamp
     /// @return sharesP Share P amount added to msg.sender's available balance
     /// @return sharesA Share A amount added to msg.sender's available balance
     /// @return sharesB Share B amount added to msg.sender's available balance
     /// @return quoteAmount Quote asset amount transfered to msg.sender, rounding precison to 18
     ///                     for quote assets with precision other than 18 decimal places
-    function settleMaker(uint256 epoch)
+    function settleMaker(address account, uint256 epoch)
         external
         returns (
             uint256 sharesP,
@@ -486,32 +487,33 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 quoteAmountP;
         uint256 quoteAmountA;
         uint256 quoteAmountB;
-        (sharesP, quoteAmountP) = _settleMaker(msg.sender, TRANCHE_P, estimatedNavP, epoch);
-        (sharesA, quoteAmountA) = _settleMaker(msg.sender, TRANCHE_A, estimatedNavA, epoch);
-        (sharesB, quoteAmountB) = _settleMaker(msg.sender, TRANCHE_B, estimatedNavB, epoch);
+        (sharesP, quoteAmountP) = _settleMaker(account, TRANCHE_P, estimatedNavP, epoch);
+        (sharesA, quoteAmountA) = _settleMaker(account, TRANCHE_A, estimatedNavA, epoch);
+        (sharesB, quoteAmountB) = _settleMaker(account, TRANCHE_B, estimatedNavB, epoch);
 
         uint256 conversionID = mostRecentConversionPendingTrades[epoch];
         (sharesP, sharesA, sharesB) = _convertAndClearTrade(
-            msg.sender,
+            account,
             sharesP,
             sharesA,
             sharesB,
             conversionID
         );
         quoteAmount = quoteAmountP.add(quoteAmountA).add(quoteAmountB);
-        _transferQuote(msg.sender, quoteAmount);
+        _transferQuote(account, quoteAmount);
 
-        emit MakerSettled(msg.sender, epoch, sharesP, sharesA, sharesB, quoteAmount);
+        emit MakerSettled(account, epoch, sharesP, sharesA, sharesB, quoteAmount);
     }
 
     /// @notice Settle trades of a specified epoch for takers
+    /// @param account Address of the maker
     /// @param epoch A specified epoch's end timestamp
     /// @return sharesP Share P amount added to msg.sender's available balance
     /// @return sharesA Share A amount added to msg.sender's available balance
     /// @return sharesB Share B amount added to msg.sender's available balance
     /// @return quoteAmount Quote asset amount transfered to msg.sender, rounding precison to 18
     ///                     for quote assets with precision other than 18 decimal places
-    function settleTaker(uint256 epoch)
+    function settleTaker(address account, uint256 epoch)
         external
         returns (
             uint256 sharesP,
@@ -526,22 +528,22 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 quoteAmountP;
         uint256 quoteAmountA;
         uint256 quoteAmountB;
-        (sharesP, quoteAmountP) = _settleTaker(msg.sender, TRANCHE_P, estimatedNavP, epoch);
-        (sharesA, quoteAmountA) = _settleTaker(msg.sender, TRANCHE_A, estimatedNavA, epoch);
-        (sharesB, quoteAmountB) = _settleTaker(msg.sender, TRANCHE_B, estimatedNavB, epoch);
+        (sharesP, quoteAmountP) = _settleTaker(account, TRANCHE_P, estimatedNavP, epoch);
+        (sharesA, quoteAmountA) = _settleTaker(account, TRANCHE_A, estimatedNavA, epoch);
+        (sharesB, quoteAmountB) = _settleTaker(account, TRANCHE_B, estimatedNavB, epoch);
 
         uint256 conversionID = mostRecentConversionPendingTrades[epoch];
         (sharesP, sharesA, sharesB) = _convertAndClearTrade(
-            msg.sender,
+            account,
             sharesP,
             sharesA,
             sharesB,
             conversionID
         );
         quoteAmount = quoteAmountP.add(quoteAmountA).add(quoteAmountB);
-        _transferQuote(msg.sender, quoteAmount);
+        _transferQuote(account, quoteAmount);
 
-        emit TakerSettled(msg.sender, epoch, sharesP, sharesA, sharesB, quoteAmount);
+        emit TakerSettled(account, epoch, sharesP, sharesA, sharesB, quoteAmount);
     }
 
     /// @dev Cancel a bid order
