@@ -201,7 +201,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     ///         3. Transfer fee in underlying assets to the governance address.
     ///
     ///         This function can only be called from the Fund contract. It should be called
-    ///         after management fee is collected and before conversion is triggered for the same
+    ///         after protocol fee is collected and before conversion is triggered for the same
     ///         trading day.
     /// @param day The trading day to settle
     /// @param fundTotalShares Total shares of the fund (as if all Token A and B are merged)

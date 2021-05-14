@@ -54,12 +54,12 @@ The [`Share`](../contracts/Share.sol) contract is the main entrance to all stand
 
 ## Fund
 
-The [`Fund`](../contracts/Fund.sol) contract contains the bulk of the business logic within Tranchess protocol. The `Fund` implements its ingenious NAV calculation and share conversion logic, which would be invoked daily with public access. The `Fund` is also responsible for storing most of the underlying asset and collects the management fee against the underlying asset daily. Although Token M, A, and B are exposed as three independent contracts with ERC20 interfaces, the `Fund` manages all three token balances and total supplies under the hood for smooth conversions.
+The [`Fund`](../contracts/Fund.sol) contract contains the bulk of the business logic within Tranchess protocol. The `Fund` implements its ingenious NAV calculation and share conversion logic, which would be invoked daily with public access. The `Fund` is also responsible for storing most of the underlying asset and collects the protocol fee against the underlying asset daily. Although Token M, A, and B are exposed as three independent contracts with ERC20 interfaces, the `Fund` manages all three token balances and total supplies under the hood for smooth conversions.
 
 1. Mint/Burn/Transfer Token M/A/B
 1. Calculate NAVs of Token M/A/B
 1. Trigger new conversion
-1. Collect management fee
+1. Collect protocol fee
 1. Calculate per-account balances/allowances from current conversion number to any more recent conversion number
 
 ## APR Oracle
@@ -325,7 +325,7 @@ Calling `merge` will perform the following steps:
 /// @notice Settle the current trading day. Settlement includes the following changes
 ///         to the fund.
 ///
-///         1. Transfer management fee of the day to the governance address.
+///         1. Transfer protocol fee of the day to the governance address.
 ///         2. Settle all pending creations and redemptions from all primary markets.
 ///         3. Calculate NAV of the day and trigger conversion if necessary.
 ///         4. Capture new interest rate for Share A.
@@ -338,7 +338,7 @@ Calling `settle` will perform the following steps:
 
 1. Revert if the current day does not end yet
 1. Get the TWAP price from `TwapOracle` contract, and revert if the price is not ready yet
-1. Collect management fee based on current underlying asset stored in `Fund` contract
+1. Collect protocol fee based on current underlying asset stored in `Fund` contract
 1. Settle each `PrimaryMarket` contract:
     1. Calculate the amount of token M created in the current day and the total creation fee
     1. Calculate the amount of underlying asset redeemed in the current day and the total redemption fee

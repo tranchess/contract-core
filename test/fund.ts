@@ -14,7 +14,7 @@ const DAY = 86400;
 const HOUR = 3600;
 const SETTLEMENT_TIME = 3600 * 14; // UTC time 14:00 every day
 const POST_CONVERSION_DELAY_TIME = HOUR * 12;
-const DAILY_MANAGEMENT_FEE_BPS = 1; // 0.01% per day, 3.65% per year
+const DAILY_PROTOCOL_FEE_BPS = 1; // 0.01% per day, 3.65% per year
 const UPPER_CONVERSION_THRESHOLD = parseEther("1.5");
 const LOWER_CONVERSION_THRESHOLD = parseEther("0.5");
 const FIXED_CONVERSION_THRESHOLD = parseEther("1.1");
@@ -97,7 +97,7 @@ describe("Fund", function () {
 
         const Fund = await ethers.getContractFactory("Fund");
         const fund = await Fund.connect(owner).deploy(
-            parseEther("0.0001").mul(DAILY_MANAGEMENT_FEE_BPS),
+            parseEther("0.0001").mul(DAILY_PROTOCOL_FEE_BPS),
             UPPER_CONVERSION_THRESHOLD,
             LOWER_CONVERSION_THRESHOLD,
             FIXED_CONVERSION_THRESHOLD,
@@ -720,7 +720,7 @@ describe("Fund", function () {
     describe("Settlement of a non-empty fund", function () {
         let outerFixture: Fixture<FixtureData>;
 
-        let managementFee: BigNumber;
+        let protocolFee: BigNumber;
         let wbtcInFund: BigNumber;
         let navA: BigNumber;
         let primaryMarketSettle: Stub;
@@ -773,15 +773,15 @@ describe("Fund", function () {
         });
 
         beforeEach(async function () {
-            managementFee = parseWbtc("10").mul(DAILY_MANAGEMENT_FEE_BPS).div(10000);
-            wbtcInFund = parseWbtc("10").sub(managementFee);
+            protocolFee = parseWbtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
+            wbtcInFund = parseWbtc("10").sub(protocolFee);
             navA = parseEther("1.001")
-                .mul(10000 - DAILY_MANAGEMENT_FEE_BPS)
+                .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
             primaryMarketSettle = primaryMarketSettleAtPrice(parseEther("1000"));
         });
 
-        it("Should charge management fee and interest when nothing happened", async function () {
+        it("Should charge protocol fee and interest when nothing happened", async function () {
             await primaryMarketSettle.returns(0, 0, 0, 0, 0);
             const navM = wbtcInFund.mul(1e10).mul(1000).div(10000); // wbtc * price(1000) / share(10000)
             const navB = navM.mul(2).sub(navA);
@@ -796,10 +796,10 @@ describe("Fund", function () {
             expect(navs[TRANCHE_B]).to.equal(navB);
         });
 
-        it("Should transfer management fee to governance", async function () {
+        it("Should transfer protocol fee to governance", async function () {
             await primaryMarketSettle.returns(0, 0, 0, 0, 0);
             await fund.settle();
-            expect(await wbtc.balanceOf(governance.address)).to.equal(managementFee);
+            expect(await wbtc.balanceOf(governance.address)).to.equal(protocolFee);
         });
 
         it("Should net shares and underlying (creation > redemption)", async function () {
@@ -816,7 +816,7 @@ describe("Fund", function () {
             await expect(() => fund.settle()).to.changeTokenBalances(
                 wbtc,
                 [fund, primaryMarket],
-                [parseWbtc("0.6").sub(managementFee), parseWbtc("-0.6")]
+                [parseWbtc("0.6").sub(protocolFee), parseWbtc("-0.6")]
             );
             expect(await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
                 oldM.add(parseEther("600"))
@@ -837,7 +837,7 @@ describe("Fund", function () {
             await expect(() => fund.settle()).to.changeTokenBalances(
                 wbtc,
                 [fund, primaryMarket],
-                [parseWbtc("-3").sub(managementFee), parseWbtc("3")]
+                [parseWbtc("-3").sub(protocolFee), parseWbtc("3")]
             );
             expect(await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
                 oldM.sub(parseEther("3000"))
@@ -862,9 +862,9 @@ describe("Fund", function () {
                 wbtc,
                 [fund, primaryMarket, governance],
                 [
-                    parseWbtc("-2.6").sub(totalFee).sub(managementFee),
+                    parseWbtc("-2.6").sub(totalFee).sub(protocolFee),
                     parseWbtc("2.6"),
-                    totalFee.add(managementFee),
+                    totalFee.add(protocolFee),
                 ]
             );
         });
@@ -886,7 +886,7 @@ describe("Fund", function () {
             const newWbtcInFund = wbtcInFund.add(parseWbtc("6.4")).sub(totalFee);
             const navM = newWbtcInFund.mul(1e10).mul(1000).div(14500);
             const navB = navM.mul(2).sub(navA);
-            // Note that NAV drops below 1 after management fee but creation and redemption are
+            // Note that NAV drops below 1 after protocol fee but creation and redemption are
             // still executed at NAV = 1 in this case. Because creation is more than redemption
             // and split/merge fee, the final navM is a bit higher than that if nothing happened.
             const navPLowerBound = wbtcInFund.mul(1e10).mul(1000).div(10000); // NAV of Token M if nothing happened
@@ -977,7 +977,7 @@ describe("Fund", function () {
             // All shares redeemed on settlement
             const emptyDay = (await fund.currentDay()).toNumber();
             const redeemedWbtc = (await wbtc.balanceOf(fund.address))
-                .mul(10000 - DAILY_MANAGEMENT_FEE_BPS)
+                .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
             await primaryMarket.mock.settle.returns(0, parseEther("1000"), 0, redeemedWbtc, 0);
             await advanceOneDayAndSettle();
@@ -986,10 +986,10 @@ describe("Fund", function () {
             await advanceOneDayAndSettle();
 
             const expectedM = parseEther("1")
-                .mul(10000 - DAILY_MANAGEMENT_FEE_BPS)
+                .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
             const expectedA = parseEther("1.001")
-                .mul(10000 - DAILY_MANAGEMENT_FEE_BPS)
+                .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
             const expectedB = expectedM.mul(2).sub(expectedA);
             expect(await fund.extrapolateNavM(emptyDay, parseEther("8000"))).to.eq(expectedM);
@@ -1020,10 +1020,10 @@ describe("Fund", function () {
             await advanceOneDayAndSettle();
 
             const expectedA = parseEther("1.001")
-                .mul(10000 - DAILY_MANAGEMENT_FEE_BPS)
+                .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
             const expectedP1000 = parseEther("1")
-                .mul(10000 - DAILY_MANAGEMENT_FEE_BPS)
+                .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
             const expectedB1000 = expectedP1000.mul(2).sub(expectedA);
             expect(await fund.extrapolateNavM(day, parseEther("1000"))).to.equal(expectedP1000);
@@ -1034,7 +1034,7 @@ describe("Fund", function () {
             expect(navsAt1000[TRANCHE_B]).to.equal(expectedB1000);
 
             const expectedP2000 = parseEther("2")
-                .mul(10000 - DAILY_MANAGEMENT_FEE_BPS)
+                .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
             const expectedB2000 = expectedP2000.mul(2).sub(expectedA);
             expect(await fund.extrapolateNavM(day, parseEther("2000"))).to.equal(expectedP2000);
@@ -1045,7 +1045,7 @@ describe("Fund", function () {
             expect(navsAt2000[TRANCHE_B]).to.equal(expectedB2000);
         });
 
-        it("Should accrue management fee and interest", async function () {
+        it("Should accrue protocol fee and interest", async function () {
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
             await wbtc.mint(primaryMarket.address, parseWbtc("1"));
@@ -1057,16 +1057,16 @@ describe("Fund", function () {
             await advanceOneDayAndSettle();
 
             const navPAtDay = parseEther("1")
-                .mul(10000 - DAILY_MANAGEMENT_FEE_BPS)
+                .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
-            const expectedM = navPAtDay.mul(20000 - DAILY_MANAGEMENT_FEE_BPS).div(20000);
+            const expectedM = navPAtDay.mul(20000 - DAILY_PROTOCOL_FEE_BPS).div(20000);
             const navAAtDay = parseEther("1.001")
-                .mul(10000 - DAILY_MANAGEMENT_FEE_BPS)
+                .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
             const expectedA = navAAtDay
                 .mul(10005)
                 .div(10000)
-                .mul(20000 - DAILY_MANAGEMENT_FEE_BPS)
+                .mul(20000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(20000);
             const expectedB = expectedM.mul(2).sub(expectedA);
             expect(await fund.extrapolateNavM(day + DAY / 2, parseEther("1000"))).to.equal(
@@ -1091,16 +1091,16 @@ describe("Fund", function () {
             await advanceOneDayAndSettle();
 
             const navPAtDay = parseEther("1")
-                .mul(10000 - DAILY_MANAGEMENT_FEE_BPS)
+                .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
-            const expectedM = navPAtDay.mul(10000 - DAILY_MANAGEMENT_FEE_BPS * 10).div(10000);
+            const expectedM = navPAtDay.mul(10000 - DAILY_PROTOCOL_FEE_BPS * 10).div(10000);
             const navAAtDay = parseEther("1.001")
-                .mul(10000 - DAILY_MANAGEMENT_FEE_BPS)
+                .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
             const expectedA = navAAtDay
                 .mul(101)
                 .div(100)
-                .mul(10000 - DAILY_MANAGEMENT_FEE_BPS * 10)
+                .mul(10000 - DAILY_PROTOCOL_FEE_BPS * 10)
                 .div(10000);
             const expectedB = expectedM.mul(2).sub(expectedA);
             expect(await fund.extrapolateNavM(day + DAY * 10, parseEther("1000"))).to.equal(
@@ -1115,9 +1115,9 @@ describe("Fund", function () {
 
         it("Should keep NAV of Token A non-decreasing", async function () {
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
-            // Interest of Token A is smaller than management fee
+            // Interest of Token A is smaller than protocol fee
             await aprOracle.mock.capture.returns(
-                parseEther("0.0001").mul(DAILY_MANAGEMENT_FEE_BPS).div(2)
+                parseEther("0.0001").mul(DAILY_PROTOCOL_FEE_BPS).div(2)
             );
             await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
             await advanceOneDayAndSettle();
@@ -1145,10 +1145,10 @@ describe("Fund", function () {
         await f.aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
         await f.primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
 
-        // Overwrite the fund with a new one with zero management fee
+        // Overwrite the fund with a new one with zero protocol fee
         const Fund = await ethers.getContractFactory("Fund");
         f.fund = await Fund.connect(f.wallets.owner).deploy(
-            0, // Zero management fee
+            0, // Zero protocol fee
             UPPER_CONVERSION_THRESHOLD,
             LOWER_CONVERSION_THRESHOLD,
             FIXED_CONVERSION_THRESHOLD,

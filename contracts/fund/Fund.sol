@@ -32,8 +32,8 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     uint256 private constant WEIGHT_B = 1;
     uint256 private constant WEIGHT_M = WEIGHT_A + WEIGHT_B;
 
-    /// @notice Daily management fee rate.
-    uint256 public dailyManagementFeeRate;
+    /// @notice Daily protocol fee rate.
+    uint256 public dailyProtocolFeeRate;
 
     /// @notice NAV threshold of Token M for a upper conversion.
     uint256 public upperConversionThreshold;
@@ -134,13 +134,13 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     address[] private newPrimaryMarkets;
 
     constructor(
-        uint256 dailyManagementFeeRate_,
+        uint256 dailyProtocolFeeRate_,
         uint256 upperConversionThreshold_,
         uint256 lowerConversionThreshold_,
         uint256 fixedConversionThreshold_,
         address twapOracle_
     ) public Ownable() FundRoles() {
-        dailyManagementFeeRate = dailyManagementFeeRate_;
+        dailyProtocolFeeRate = dailyProtocolFeeRate_;
         upperConversionThreshold = upperConversionThreshold_;
         lowerConversionThreshold = lowerConversionThreshold_;
         fixedConversionThreshold = fixedConversionThreshold_;
@@ -281,10 +281,10 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     }
 
     /// @notice Estimate NAV of all tranches at a given timestamp, considering underlying price
-    ///         change, accrued management fee and accrued interest since the previous settlement.
+    ///         change, accrued protocol fee and accrued interest since the previous settlement.
     ///
     ///         The extrapolation uses simple interest instead of daily compound interest in
-    ///         calculating management fee and Token A's interest. There may be significant error
+    ///         calculating protocol fee and Token A's interest. There may be significant error
     ///         in the returned values when `timestamp` is far beyond the last settlement.
     /// @param timestamp Timestamp to estimate
     /// @param price Price of the underlying asset (18 decimal places)
@@ -312,10 +312,10 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     }
 
     /// @notice Estimate NAV of Token M at a given timestamp, considering underlying price
-    ///         change and accrued management fee since the previous settlement.
+    ///         change and accrued protocol fee since the previous settlement.
     ///
     ///         The extrapolation uses simple interest instead of daily compound interest in
-    ///         calculating management fee and Token A's interest. There may be significant error
+    ///         calculating protocol fee and Token A's interest. There may be significant error
     ///         in the returned value when `timestamp` is far beyond the last settlement.
     /// @param timestamp Timestamp to estimate
     /// @param price Price of the underlying asset (18 decimal places)
@@ -339,7 +339,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     ///         since the previous settlement.
     ///
     ///         The extrapolation uses simple interest instead of daily compound interest in
-    ///         calculating management fee and Token A's interest. There may be significant error
+    ///         calculating protocol fee and Token A's interest. There may be significant error
     ///         in the returned value when `timestamp` is far beyond the last settlement.
     /// @param timestamp Timestamp to estimate
     /// @return Estimated NAV of Token A
@@ -373,7 +373,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 totalValue =
             price.mul(historyUnderlying[previousDay].mul(underlyingDecimalMultiplier));
         uint256 accruedFee =
-            totalValue.multiplyDecimal(dailyManagementFeeRate).mul(timestamp - previousDay).div(
+            totalValue.multiplyDecimal(dailyProtocolFeeRate).mul(timestamp - previousDay).div(
                 1 days
             );
         navM = (totalValue - accruedFee).div(previousShares);
@@ -400,7 +400,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 newNavA =
             navA
                 .multiplyDecimal(
-                UNIT.sub(dailyManagementFeeRate.mul(timestamp - previousDay).div(1 days))
+                UNIT.sub(dailyProtocolFeeRate.mul(timestamp - previousDay).div(1 days))
             )
                 .multiplyDecimal(
                 UNIT.add(historyInterestRate[week].mul(timestamp - previousDay).div(1 days))
@@ -754,7 +754,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Settle the current trading day. Settlement includes the following changes
     ///         to the fund.
     ///
-    ///         1. Transfer management fee of the day to the governance address.
+    ///         1. Transfer protocol fee of the day to the governance address.
     ///         2. Settle all pending creations and redemptions from all primary markets.
     ///         3. Calculate NAV of the day and trigger conversion if necessary.
     ///         4. Capture new interest rate for Token A.
@@ -780,7 +780,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
                 // Update NAV of Token A only when the fund is non-empty both before and after
                 // this settlement
                 uint256 newNavA =
-                    navA.multiplyDecimal(UNIT.sub(dailyManagementFeeRate)).multiplyDecimal(
+                    navA.multiplyDecimal(UNIT.sub(dailyProtocolFeeRate)).multiplyDecimal(
                         historyInterestRate[currentWeek].add(UNIT)
                     );
                 if (navA < newNavA) {
@@ -844,12 +844,12 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         newPrimaryMarkets.push(newPrimaryMarket);
     }
 
-    /// @dev Transfer management fee of the current trading day to the governance address.
+    /// @dev Transfer protocol fee of the current trading day to the governance address.
     ///      This function should be called before creation and redemption on the same day
     ///      are settled.
     function _collectFee() private {
         uint256 currentUnderlying = IERC20(tokenUnderlying).balanceOf(address(this));
-        uint256 fee = currentUnderlying.multiplyDecimal(dailyManagementFeeRate);
+        uint256 fee = currentUnderlying.multiplyDecimal(dailyProtocolFeeRate);
         if (fee > 0) {
             require(
                 IERC20(tokenUnderlying).transfer(address(governance), fee),
