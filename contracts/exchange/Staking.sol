@@ -52,7 +52,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
 
     /// @dev Total amount of user shares, i.e. sum of all entries in `_availableBalances` and
     ///      `_lockedBalances`. Note that these values can be smaller than the amount of
-    ///      share tokens held by this contract, because shares locked in pending trades
+    ///      share tokens held by this contract, because shares locked in unsettled trades
     ///      are not included in total supplies or any user's balance.
     uint256[TRANCHE_COUNT] private _totalSupplies;
 

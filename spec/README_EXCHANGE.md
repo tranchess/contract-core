@@ -69,7 +69,7 @@ The [`Exchange`](../contracts/Exchange.sol) contract is the main entrance to all
 1. Fill ask orders
 1. Cancel bid order
 1. Cancel ask order
-1. Settle the pending trades
+1. Settle the unsettled trades
 
 ## Exchange Roles
 
@@ -233,7 +233,7 @@ Makers could cancel a previous order at any time, even if the account is no long
 
 ## Settlement
 
-All the matches are stored as pending trades in the exchange protocol, waiting for the settlement. Each individual could call either `settleMaker` or `settleTaker` to clear the pending trades of a specified epoch.
+All the matches are stored as unsettled trades in the exchange protocol, waiting for the settlement. Each individual could call either `settleMaker` or `settleTaker` to clear the unsettled trades of a specified epoch.
 
 ### Settle for maker
 
@@ -437,14 +437,14 @@ Calling `buyM` will perform the following steps:
     1. Loop through the order queue in each pd level:
         1. Skip the order if order creator is no longer qualified for maker
         1. Update the global states of the order queue
-        1. Update the maker's pending trades
+        1. Update the maker's unsettled trades
         1. Invoke global and per-user reward checkpoint, and rebalance the total supplies and locked/available balances to the latest version
         1. Unfreeze and transfer the on-hold amount of shares to `Exchange` contract
         1. Remove the order if maker is completely filled
         1. Go to next order until the taker is completely filled
     1. Update the global states of the ask orderbook
 1. Transfer the amount of USD stablecoin frozen for the trade to `Exchange` contract
-1. Update the taker's pending trades
+1. Update the taker's unsettled trades
 
 #### Error
 
@@ -480,12 +480,12 @@ Calling `sellM` will perform the following steps:
     1. Loop through the order queue in each pd level:
         1. Skip the order if order creator is no longer qualified for maker
         1. Update the global states of the order queue
-        1. Update the maker's pending trades
+        1. Update the maker's unsettled trades
         1. Remove the order if maker is completely filled
         1. Go to next order until the taker is completely filled
     1. Update the global states of the bid orderbook
 1. Transfer the amount of USD stablecoin frozen for the trade to `Exchange` contract
-1. Update the taker's pending trades
+1. Update the taker's unsettled trades
 
 #### Error
 

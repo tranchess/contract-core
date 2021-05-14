@@ -4,7 +4,7 @@ pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {PendingTrade} from "../exchange/LibPendingTrade.sol";
+import {UnsettledTrade} from "../exchange/LibUnsettledTrade.sol";
 import "../interfaces/IFund.sol";
 import "../interfaces/ITrancheIndex.sol";
 
@@ -17,11 +17,11 @@ interface IExchange {
 
     function lockedBalanceOf(uint256 tranche, address account) external view returns (uint256);
 
-    function pendingTrades(
+    function unsettledTrades(
         address account,
         uint256 tranche,
         uint256 epoch
-    ) external view returns (PendingTrade memory);
+    ) external view returns (UnsettledTrade memory);
 
     function totalSupply(uint256 tranche) external view returns (uint256);
 
@@ -101,7 +101,7 @@ contract AccountData is ITrancheIndex {
         totalDepositedB = exchange.totalSupply(TRANCHE_B);
     }
 
-    function getPendingTrades(
+    function getUnsettledTrades(
         address exchangeAddress,
         address account,
         uint256[] memory epochs
@@ -109,19 +109,19 @@ contract AccountData is ITrancheIndex {
         external
         view
         returns (
-            PendingTrade[] memory pendingTradeM,
-            PendingTrade[] memory pendingTradeA,
-            PendingTrade[] memory pendingTradeB
+            UnsettledTrade[] memory unsettledTradeM,
+            UnsettledTrade[] memory unsettledTradeA,
+            UnsettledTrade[] memory unsettledTradeB
         )
     {
         IExchange exchange = IExchange(exchangeAddress);
-        pendingTradeM = new PendingTrade[](epochs.length);
-        pendingTradeA = new PendingTrade[](epochs.length);
-        pendingTradeB = new PendingTrade[](epochs.length);
+        unsettledTradeM = new UnsettledTrade[](epochs.length);
+        unsettledTradeA = new UnsettledTrade[](epochs.length);
+        unsettledTradeB = new UnsettledTrade[](epochs.length);
         for (uint256 i = 0; i < epochs.length; i++) {
-            pendingTradeM[i] = exchange.pendingTrades(account, TRANCHE_M, epochs[i]);
-            pendingTradeA[i] = exchange.pendingTrades(account, TRANCHE_A, epochs[i]);
-            pendingTradeB[i] = exchange.pendingTrades(account, TRANCHE_B, epochs[i]);
+            unsettledTradeM[i] = exchange.unsettledTrades(account, TRANCHE_M, epochs[i]);
+            unsettledTradeA[i] = exchange.unsettledTrades(account, TRANCHE_A, epochs[i]);
+            unsettledTradeB[i] = exchange.unsettledTrades(account, TRANCHE_B, epochs[i]);
         }
     }
 }

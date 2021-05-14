@@ -6,12 +6,12 @@ import "../utils/SafeDecimalMath.sol";
 
 import {Order, OrderQueue, LibOrderQueue} from "./LibOrderQueue.sol";
 import {
-    PendingBuyTrade,
-    PendingSellTrade,
-    PendingTrade,
-    LibPendingBuyTrade,
-    LibPendingSellTrade
-} from "./LibPendingTrade.sol";
+    UnsettledBuyTrade,
+    UnsettledSellTrade,
+    UnsettledTrade,
+    LibUnsettledBuyTrade,
+    LibUnsettledSellTrade
+} from "./LibUnsettledTrade.sol";
 
 import "./ExchangeRoles.sol";
 import "./Staking.sol";
@@ -22,8 +22,8 @@ import "./Staking.sol";
 contract Exchange is ExchangeRoles, Staking {
     using SafeDecimalMath for uint256;
     using LibOrderQueue for OrderQueue;
-    using LibPendingBuyTrade for PendingBuyTrade;
-    using LibPendingSellTrade for PendingSellTrade;
+    using LibUnsettledBuyTrade for UnsettledBuyTrade;
+    using LibUnsettledSellTrade for UnsettledSellTrade;
 
     /// @notice A maker bid order is placed.
     /// @param maker Account placing the order
@@ -135,7 +135,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 lastMatchedQuoteAmount
     );
 
-    /// @notice Settlement of pending trades of maker orders.
+    /// @notice Settlement of unsettled trades of maker orders.
     /// @param account Account placing the related maker orders
     /// @param epoch Epoch of the settled trades
     /// @param amountM Amount of Token M added to the account's available balance
@@ -152,7 +152,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 quoteAmount
     );
 
-    /// @notice Settlement of pending trades of taker orders.
+    /// @notice Settlement of unsettled trades of taker orders.
     /// @param account Account placing the related taker orders
     /// @param epoch Epoch of the settled trades
     /// @param amountM Amount of Token M added to the account's available balance
@@ -204,8 +204,9 @@ contract Exchange is ExchangeRoles, Staking {
     ///         Zero or `PD_LEVEL_COUNT + 1` indicates that there is no ask order.
     mapping(uint256 => uint256[TRANCHE_COUNT]) public bestAsks;
 
-    /// @notice Mapping of account => tranche => epoch ID => pending trade
-    mapping(address => mapping(uint256 => mapping(uint256 => PendingTrade))) public pendingTrades;
+    /// @notice Mapping of account => tranche => epoch ID => unsettled trade
+    mapping(address => mapping(uint256 => mapping(uint256 => UnsettledTrade)))
+        public unsettledTrades;
 
     /// @dev Mapping of epoch => rebalance version
     mapping(uint256 => uint256) private _epochVersions;
@@ -603,7 +604,7 @@ contract Exchange is ExchangeRoles, Staking {
         require(maxPDLevel > 0 && maxPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
         require(version == fund.getRebalanceSize(), "Invalid version");
 
-        PendingBuyTrade memory totalTrade;
+        UnsettledBuyTrade memory totalTrade;
         uint256 epoch = endOfEpoch(block.timestamp);
 
         // Record rebalance version in the first transaction in the epoch
@@ -611,7 +612,7 @@ contract Exchange is ExchangeRoles, Staking {
             _epochVersions[epoch] = version;
         }
 
-        PendingBuyTrade memory currentTrade;
+        UnsettledBuyTrade memory currentTrade;
         uint256 orderIndex = 0;
         uint256 pdLevel = bestAsks[version][tranche];
         if (pdLevel == 0) {
@@ -659,7 +660,7 @@ contract Exchange is ExchangeRoles, Staking {
                     currentTrade.effectiveQuote
                 );
                 totalTrade.reservedBase = totalTrade.reservedBase.add(currentTrade.reservedBase);
-                pendingTrades[order.maker][tranche][epoch].makerSell.add(currentTrade);
+                unsettledTrades[order.maker][tranche][epoch].makerSell.add(currentTrade);
 
                 // There is no need to rebalance for maker; the fact that the order could
                 // be filled here indicates that the maker is in the latest version
@@ -711,7 +712,7 @@ contract Exchange is ExchangeRoles, Staking {
             "Nothing can be bought at the given premium-discount level"
         );
         _transferQuoteFrom(taker, totalTrade.frozenQuote);
-        pendingTrades[taker][tranche][epoch].takerBuy.add(totalTrade);
+        unsettledTrades[taker][tranche][epoch].takerBuy.add(totalTrade);
     }
 
     /// @dev Sell share
@@ -732,7 +733,7 @@ contract Exchange is ExchangeRoles, Staking {
         require(minPDLevel > 0 && minPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
         require(version == fund.getRebalanceSize(), "Invalid version");
 
-        PendingSellTrade memory totalTrade;
+        UnsettledSellTrade memory totalTrade;
         uint256 epoch = endOfEpoch(block.timestamp);
 
         // Record rebalance version in the first transaction in the epoch
@@ -740,7 +741,7 @@ contract Exchange is ExchangeRoles, Staking {
             _epochVersions[epoch] = version;
         }
 
-        PendingSellTrade memory currentTrade;
+        UnsettledSellTrade memory currentTrade;
         uint256 orderIndex;
         uint256 pdLevel = bestBids[version][tranche];
         for (; pdLevel >= minPDLevel; pdLevel--) {
@@ -783,7 +784,7 @@ contract Exchange is ExchangeRoles, Staking {
                 totalTrade.frozenBase = totalTrade.frozenBase.add(currentTrade.frozenBase);
                 totalTrade.effectiveBase = totalTrade.effectiveBase.add(currentTrade.effectiveBase);
                 totalTrade.reservedQuote = totalTrade.reservedQuote.add(currentTrade.reservedQuote);
-                pendingTrades[order.maker][tranche][epoch].makerBuy.add(currentTrade);
+                unsettledTrades[order.maker][tranche][epoch].makerBuy.add(currentTrade);
 
                 uint256 orderNewFillable = order.fillable.sub(currentTrade.reservedQuote);
                 if (orderNewFillable > 0) {
@@ -831,7 +832,7 @@ contract Exchange is ExchangeRoles, Staking {
             "Nothing can be sold at the given premium-discount level"
         );
         _tradeAvailable(tranche, taker, totalTrade.frozenBase);
-        pendingTrades[taker][tranche][epoch].takerSell.add(totalTrade);
+        unsettledTrades[taker][tranche][epoch].takerSell.add(totalTrade);
     }
 
     /// @dev Settle both buy and sell trades of a specified epoch for takers
@@ -845,10 +846,10 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 estimatedNav,
         uint256 epoch
     ) internal returns (uint256 baseAmount, uint256 quoteAmount) {
-        PendingTrade storage pendingTrade = pendingTrades[account][tranche][epoch];
+        UnsettledTrade storage unsettledTrade = unsettledTrades[account][tranche][epoch];
 
         // Settle buy trade
-        PendingBuyTrade memory takerBuy = pendingTrade.takerBuy;
+        UnsettledBuyTrade memory takerBuy = unsettledTrade.takerBuy;
         if (takerBuy.frozenQuote > 0) {
             (uint256 executionQuote, uint256 executionBase) =
                 _buyTradeResult(takerBuy, estimatedNav);
@@ -858,11 +859,11 @@ contract Exchange is ExchangeRoles, Staking {
             quoteAmount = quoteAmount.add(refundQuote);
 
             // Delete by zeroing it out
-            delete pendingTrade.takerBuy;
+            delete unsettledTrade.takerBuy;
         }
 
         // Settle sell trade
-        PendingSellTrade memory takerSell = pendingTrade.takerSell;
+        UnsettledSellTrade memory takerSell = unsettledTrade.takerSell;
         if (takerSell.frozenBase > 0) {
             (uint256 executionQuote, uint256 executionBase) =
                 _sellTradeResult(takerSell, estimatedNav);
@@ -872,7 +873,7 @@ contract Exchange is ExchangeRoles, Staking {
             baseAmount = baseAmount.add(refundBase);
 
             // Delete by zeroing it out
-            delete pendingTrade.takerSell;
+            delete unsettledTrade.takerSell;
         }
     }
 
@@ -887,10 +888,10 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 estimatedNav,
         uint256 epoch
     ) internal returns (uint256 baseAmount, uint256 quoteAmount) {
-        PendingTrade storage pendingTrade = pendingTrades[account][tranche][epoch];
+        UnsettledTrade storage unsettledTrade = unsettledTrades[account][tranche][epoch];
 
         // Settle buy trade
-        PendingSellTrade memory makerBuy = pendingTrade.makerBuy;
+        UnsettledSellTrade memory makerBuy = unsettledTrade.makerBuy;
         if (makerBuy.frozenBase > 0) {
             (uint256 executionQuote, uint256 executionBase) =
                 _sellTradeResult(makerBuy, estimatedNav);
@@ -900,11 +901,11 @@ contract Exchange is ExchangeRoles, Staking {
             quoteAmount = quoteAmount.add(refundQuote);
 
             // Delete by zeroing it out
-            delete pendingTrade.makerBuy;
+            delete unsettledTrade.makerBuy;
         }
 
         // Settle sell trade
-        PendingBuyTrade memory makerSell = pendingTrade.makerSell;
+        UnsettledBuyTrade memory makerSell = unsettledTrade.makerSell;
         if (makerSell.frozenQuote > 0) {
             (uint256 executionQuote, uint256 executionBase) =
                 _buyTradeResult(makerSell, estimatedNav);
@@ -914,16 +915,16 @@ contract Exchange is ExchangeRoles, Staking {
             baseAmount = baseAmount.add(refundBase);
 
             // Delete by zeroing it out
-            delete pendingTrade.makerSell;
+            delete unsettledTrade.makerSell;
         }
     }
 
-    /// @dev Calculate the result of a pending buy trade with a given NAV
+    /// @dev Calculate the result of a unsettled buy trade with a given NAV
     /// @param buyTrade Buy trade result of this particular epoch
     /// @param nav Net asset value for the base asset
     /// @return executionQuote Real amount of quote asset waiting for settlment
     /// @return executionBase Real amount of base asset waiting for settlment
-    function _buyTradeResult(PendingBuyTrade memory buyTrade, uint256 nav)
+    function _buyTradeResult(UnsettledBuyTrade memory buyTrade, uint256 nav)
         internal
         pure
         returns (uint256 executionQuote, uint256 executionBase)
@@ -942,12 +943,12 @@ contract Exchange is ExchangeRoles, Staking {
         }
     }
 
-    /// @dev Calculate the result of a pending sell trade with a given NAV
+    /// @dev Calculate the result of a unsettled sell trade with a given NAV
     /// @param sellTrade Sell trade result of this particular epoch
     /// @param nav Net asset value for the base asset
     /// @return executionQuote Real amount of quote asset waiting for settlment
     /// @return executionBase Real amount of base asset waiting for settlment
-    function _sellTradeResult(PendingSellTrade memory sellTrade, uint256 nav)
+    function _sellTradeResult(UnsettledSellTrade memory sellTrade, uint256 nav)
         internal
         pure
         returns (uint256 executionQuote, uint256 executionBase)

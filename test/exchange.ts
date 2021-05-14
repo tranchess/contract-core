@@ -547,12 +547,12 @@ describe("Exchange", function () {
                 expect(order.fillable).to.equal(ASK_1_PD_0.sub(matchedShares));
             });
 
-            it("Should update pending trade", async function () {
+            it("Should update unsettled trade", async function () {
                 await buyTxBuilder();
-                const takerTrade = await exchange.pendingTrades(addr1, TRANCHE_M, startEpoch);
+                const takerTrade = await exchange.unsettledTrades(addr1, TRANCHE_M, startEpoch);
                 expect(takerTrade.takerBuy.frozenQuote).to.equal(matchedUsdc);
                 expect(takerTrade.takerBuy.reservedBase).to.equal(matchedShares);
-                const makerTrade = await exchange.pendingTrades(addr2, TRANCHE_M, startEpoch);
+                const makerTrade = await exchange.unsettledTrades(addr2, TRANCHE_M, startEpoch);
                 expect(makerTrade.makerSell.frozenQuote).to.equal(matchedUsdc);
                 expect(makerTrade.makerSell.reservedBase).to.equal(matchedShares);
             });
@@ -606,12 +606,12 @@ describe("Exchange", function () {
                 expect(order.fillable).to.equal(0);
             });
 
-            it("Should update pending trade", async function () {
+            it("Should update unsettled trade", async function () {
                 await buyTxBuilder();
-                const takerTrade = await exchange.pendingTrades(addr1, TRANCHE_M, startEpoch);
+                const takerTrade = await exchange.unsettledTrades(addr1, TRANCHE_M, startEpoch);
                 expect(takerTrade.takerBuy.frozenQuote).to.equal(matchedUsdc);
                 expect(takerTrade.takerBuy.reservedBase).to.equal(matchedShares);
-                const makerTrade = await exchange.pendingTrades(addr2, TRANCHE_M, startEpoch);
+                const makerTrade = await exchange.unsettledTrades(addr2, TRANCHE_M, startEpoch);
                 expect(makerTrade.makerSell.frozenQuote).to.equal(matchedUsdc);
                 expect(makerTrade.makerSell.reservedBase).to.equal(matchedShares);
             });
@@ -686,21 +686,21 @@ describe("Exchange", function () {
                 expect(order.fillable).to.equal(ASK_1_PD_2.sub(matchedSharesAt2));
             });
 
-            it("Should update pending trade", async function () {
+            it("Should update unsettled trade", async function () {
                 await buyTxBuilder();
-                const takerTrade = await exchange.pendingTrades(addr1, TRANCHE_M, startEpoch);
+                const takerTrade = await exchange.unsettledTrades(addr1, TRANCHE_M, startEpoch);
                 expect(takerTrade.takerBuy.frozenQuote).to.equal(matchedUsdc);
                 expect(takerTrade.takerBuy.reservedBase).to.equal(
                     ASK_1_PD_0.add(ASK_1_PD_1).add(ASK_2_PD_1).add(ASK_3_PD_1).add(matchedSharesAt2)
                 );
-                const maker2Trade = await exchange.pendingTrades(addr2, TRANCHE_M, startEpoch);
+                const maker2Trade = await exchange.unsettledTrades(addr2, TRANCHE_M, startEpoch);
                 expect(maker2Trade.makerSell.frozenQuote).to.equal(
                     matchedUsdcAt0.add(matchedUsdcOrder1At1).add(matchedUsdcOrder3At1)
                 );
                 expect(maker2Trade.makerSell.reservedBase).to.equal(
                     ASK_1_PD_0.add(ASK_1_PD_1).add(ASK_3_PD_1)
                 );
-                const maker3Trade = await exchange.pendingTrades(addr3, TRANCHE_M, startEpoch);
+                const maker3Trade = await exchange.unsettledTrades(addr3, TRANCHE_M, startEpoch);
                 expect(maker3Trade.makerSell.frozenQuote).to.equal(
                     matchedUsdcOrder2At1.add(matchedUsdcAt2)
                 );
@@ -901,12 +901,12 @@ describe("Exchange", function () {
                 expect(order.fillable).to.equal(BID_1_PD_0.sub(matchedUsdc));
             });
 
-            it("Should update pending trade", async function () {
+            it("Should update unsettled trade", async function () {
                 await sellTxBuilder();
-                const takerTrade = await exchange.pendingTrades(addr1, TRANCHE_M, startEpoch);
+                const takerTrade = await exchange.unsettledTrades(addr1, TRANCHE_M, startEpoch);
                 expect(takerTrade.takerSell.frozenBase).to.equal(matchedShares);
                 expect(takerTrade.takerSell.reservedQuote).to.equal(matchedUsdc);
-                const makerTrade = await exchange.pendingTrades(addr2, TRANCHE_M, startEpoch);
+                const makerTrade = await exchange.unsettledTrades(addr2, TRANCHE_M, startEpoch);
                 expect(makerTrade.makerBuy.frozenBase).to.equal(matchedShares);
                 expect(makerTrade.makerBuy.reservedQuote).to.equal(matchedUsdc);
             });
@@ -958,12 +958,12 @@ describe("Exchange", function () {
                 expect(order.fillable).to.equal(0);
             });
 
-            it("Should update pending trade", async function () {
+            it("Should update unsettled trade", async function () {
                 await sellTxBuilder();
-                const takerTrade = await exchange.pendingTrades(addr1, TRANCHE_M, startEpoch);
+                const takerTrade = await exchange.unsettledTrades(addr1, TRANCHE_M, startEpoch);
                 expect(takerTrade.takerSell.frozenBase).to.equal(matchedShares);
                 expect(takerTrade.takerSell.reservedQuote).to.equal(matchedUsdc);
-                const makerTrade = await exchange.pendingTrades(addr2, TRANCHE_M, startEpoch);
+                const makerTrade = await exchange.unsettledTrades(addr2, TRANCHE_M, startEpoch);
                 expect(makerTrade.makerBuy.frozenBase).to.equal(matchedShares);
                 expect(makerTrade.makerBuy.reservedQuote).to.equal(matchedUsdc);
             });
@@ -1036,9 +1036,9 @@ describe("Exchange", function () {
                 expect(order.fillable).to.equal(BID_1_PD_N2.sub(matchedUsdcAtN2));
             });
 
-            it("Should update pending trade", async function () {
+            it("Should update unsettled trade", async function () {
                 await sellTxBuilder();
-                const takerTrade = await exchange.pendingTrades(addr1, TRANCHE_M, startEpoch);
+                const takerTrade = await exchange.unsettledTrades(addr1, TRANCHE_M, startEpoch);
                 expect(takerTrade.takerSell.frozenBase).to.equal(matchedShares);
                 expect(takerTrade.takerSell.reservedQuote).to.equal(
                     BID_1_PD_0.add(BID_1_PD_N1)
@@ -1046,14 +1046,14 @@ describe("Exchange", function () {
                         .add(BID_3_PD_N1)
                         .add(matchedUsdcAtN2)
                 );
-                const maker2Trade = await exchange.pendingTrades(addr2, TRANCHE_M, startEpoch);
+                const maker2Trade = await exchange.unsettledTrades(addr2, TRANCHE_M, startEpoch);
                 expect(maker2Trade.makerBuy.frozenBase).to.equal(
                     matchedSharesAt0.add(matchedSharesOrder2AtN1).add(matchedSharesOrder3AtN1)
                 );
                 expect(maker2Trade.makerBuy.reservedQuote).to.equal(
                     BID_1_PD_0.add(BID_2_PD_N1).add(BID_3_PD_N1)
                 );
-                const maker3Trade = await exchange.pendingTrades(addr3, TRANCHE_M, startEpoch);
+                const maker3Trade = await exchange.unsettledTrades(addr3, TRANCHE_M, startEpoch);
                 expect(maker3Trade.makerBuy.frozenBase).to.equal(
                     matchedSharesOrder1AtN1.add(matchedSharesAtN2)
                 );
@@ -1518,7 +1518,7 @@ describe("Exchange", function () {
         it("Should skip expired order", async function () {
             expect(await exchange.isMaker(addr3)).to.equal(false);
             expect((await exchange.asks(0, TRANCHE_B, 41)).head).to.equal(2);
-            const user3Trade = await exchange.pendingTrades(
+            const user3Trade = await exchange.unsettledTrades(
                 addr3,
                 TRANCHE_B,
                 startEpoch + EPOCH * 10
@@ -1536,7 +1536,7 @@ describe("Exchange", function () {
             // User3's order at index 1 has been skipped and cannot be matched forever.
             await exchange.buyB(0, 41, 300);
             expect((await exchange.asks(0, TRANCHE_B, 41)).head).to.equal(2);
-            const user3Trade = await exchange.pendingTrades(
+            const user3Trade = await exchange.unsettledTrades(
                 addr3,
                 TRANCHE_B,
                 startEpoch + EPOCH * 10
@@ -1555,7 +1555,7 @@ describe("Exchange", function () {
             // for a short period of time.
             await exchange.buyB(0, 41, parseEther("100"));
             expect(await exchange.bestAsks(0, TRANCHE_B)).to.equal(82);
-            const user3Trade = await exchange.pendingTrades(
+            const user3Trade = await exchange.unsettledTrades(
                 addr3,
                 TRANCHE_B,
                 startEpoch + EPOCH * 10
@@ -1616,7 +1616,7 @@ describe("Exchange", function () {
         it("Should skip expired order", async function () {
             expect(await exchange.isMaker(addr3)).to.equal(false);
             expect((await exchange.bids(0, TRANCHE_A, 41)).head).to.equal(2);
-            const user3Trade = await exchange.pendingTrades(
+            const user3Trade = await exchange.unsettledTrades(
                 addr3,
                 TRANCHE_A,
                 startEpoch + EPOCH * 10
@@ -1634,7 +1634,7 @@ describe("Exchange", function () {
             // User3's order at index 1 has been skipped and cannot be matched forever.
             await exchange.sellA(0, 41, 300);
             expect((await exchange.bids(0, TRANCHE_A, 41)).head).to.equal(2);
-            const user3Trade = await exchange.pendingTrades(
+            const user3Trade = await exchange.unsettledTrades(
                 addr3,
                 TRANCHE_A,
                 startEpoch + EPOCH * 10
@@ -1653,7 +1653,7 @@ describe("Exchange", function () {
             // for a short period of time.
             await exchange.sellA(0, 41, parseEther("100"));
             expect(await exchange.bestBids(0, TRANCHE_A)).to.equal(0);
-            const user3Trade = await exchange.pendingTrades(
+            const user3Trade = await exchange.unsettledTrades(
                 addr3,
                 TRANCHE_A,
                 startEpoch + EPOCH * 10
