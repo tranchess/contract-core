@@ -116,7 +116,7 @@ contract Chess is IChess, Ownable, ERC20, ChessRoles, CoreUtility {
         _mint(account, amount);
     }
 
-    function addMinter(address account) external onlyOwner {
+    function addMinter(address account) external override onlyOwner {
         _addMinter(account);
     }
 
