@@ -27,7 +27,9 @@ Assertion.addMethod("callMocks", async function (...calls: MockCall[]): Promise<
     // Expect the transaction reverts on each mock call one by one
     for (let i = 0; i < calls.length; i++) {
         const { func, rets } = calls[i];
+        const snapshot = await ethers.provider.send("evm_snapshot", []);
         await expect(txBuilder()).to.be.revertedWith(reason(i));
+        await ethers.provider.send("evm_revert", [snapshot]);
         if (rets === undefined) {
             await func.returns();
         } else {
@@ -55,7 +57,9 @@ Assertion.addMethod("callMocksDebug", async function (...calls: MockCall[]): Pro
     for (let i = 0; i < calls.length; i++) {
         const { func, rets } = calls[i];
         try {
+            const snapshot = await ethers.provider.send("evm_snapshot", []);
             await expect(txBuilder()).to.be.revertedWith(reason(i));
+            await ethers.provider.send("evm_revert", [snapshot]);
         } catch (e) {
             console.trace(`Mock function ${i + 1}/${calls.length} is not called as expected`);
             await txBuilder();
