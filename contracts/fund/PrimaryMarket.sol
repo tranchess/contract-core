@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../utils/SafeDecimalMath.sol";
 
@@ -14,7 +15,7 @@ import "../interfaces/ITwapOracle.sol";
 import "../interfaces/IFund.sol";
 import "../interfaces/ITrancheIndex.sol";
 
-contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
+contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownable {
     event Created(address indexed account, uint256 underlying);
     event Redeemed(address indexed account, uint256 shares);
     event Split(address indexed account, uint256 inM, uint256 outA, uint256 outB);
@@ -48,9 +49,12 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
         uint256 version;
     }
 
+    uint256 private constant MAX_REDEMPTION_FEE_RATE = 0.01e18; // 1% redemption rate
+    uint256 private constant MAX_SPLIT_FEE_RATE = 0.01e18; // 1% split rate
+    uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18; // 1% split rate
+
     IFund public fund;
 
-    uint256 public creationFeeRate;
     uint256 public redemptionFeeRate;
     uint256 public splitFeeRate;
     uint256 public mergeFeeRate;
@@ -68,14 +72,12 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
 
     constructor(
         address fund_,
-        uint256 creationFeeRate_,
         uint256 redemptionFeeRate_,
         uint256 splitFeeRate_,
         uint256 mergeFeeRate_,
         uint256 minCreationUnderlying_
-    ) public {
+    ) public Ownable() {
         fund = IFund(fund_);
-        creationFeeRate = creationFeeRate_;
         redemptionFeeRate = redemptionFeeRate_;
         splitFeeRate = splitFeeRate_;
         mergeFeeRate = mergeFeeRate_;
@@ -238,11 +240,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
         // Creation
         creationUnderlying = currentCreatingUnderlying;
         if (creationUnderlying > 0) {
-            uint256 creationFee = creationUnderlying.multiplyDecimal(creationFeeRate);
             if (fundUnderlying > 0) {
-                sharesToMint = creationUnderlying.sub(creationFee).mul(fundTotalShares).div(
-                    fundUnderlying
-                );
+                sharesToMint = creationUnderlying.mul(fundTotalShares).div(fundUnderlying);
             } else {
                 // NAV is rounded down. Computing creations using NAV results in rounded up shares,
                 // which is unfair to existing share holders. We only do that when there are
@@ -253,13 +252,11 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
                 );
                 require(previousNav > 0, "Cannot create shares at zero NAV");
                 sharesToMint = creationUnderlying
-                    .sub(creationFee)
                     .mul(underlyingPrice)
                     .mul(fund.underlyingDecimalMultiplier())
                     .div(previousNav);
             }
             _historicalCreationRate[day] = sharesToMint.divideDecimal(creationUnderlying);
-            fee = creationFee;
         }
 
         // Redemption
@@ -269,7 +266,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
             uint256 redemptionFee = underlying.multiplyDecimal(redemptionFeeRate);
             redemptionUnderlying = underlying.sub(redemptionFee);
             _historicalRedemptionRate[day] = redemptionUnderlying.divideDecimal(sharesToBurn);
-            fee = fee.add(redemptionFee);
+            fee = redemptionFee;
         }
 
         // Redeem split and merge fee
@@ -311,6 +308,25 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
             redemptionUnderlying,
             fee
         );
+    }
+
+    function updateRedemptionFeeRate(uint256 newRedemptionFeeRate) external onlyOwner {
+        require(newRedemptionFeeRate <= MAX_REDEMPTION_FEE_RATE, "Exceed max redemption fee rate");
+        redemptionFeeRate = newRedemptionFeeRate;
+    }
+
+    function updateSplitFeeRate(uint256 newSplitFeeRate) external onlyOwner {
+        require(newSplitFeeRate <= MAX_SPLIT_FEE_RATE, "Exceed max split fee rate");
+        splitFeeRate = newSplitFeeRate;
+    }
+
+    function updateMergeFeeRate(uint256 newMergeFeeRate) external onlyOwner {
+        require(newMergeFeeRate <= MAX_MERGE_FEE_RATE, "Exceed max split fee rate");
+        mergeFeeRate = newMergeFeeRate;
+    }
+
+    function updateMinCreationUnderlying(uint256 newMinCreationUnderlying) external onlyOwner {
+        minCreationUnderlying = newMinCreationUnderlying;
     }
 
     function _currentCreationRedemption(address account)

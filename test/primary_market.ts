@@ -10,7 +10,6 @@ import { deployMockForName } from "./mock";
 const TRANCHE_M = 0;
 const TRANCHE_A = 1;
 const TRANCHE_B = 2;
-const CREATION_FEE_BPS = 3000;
 const REDEMPTION_FEE_BPS = 3500;
 const SPLIT_FEE_BPS = 4000;
 const MERGE_FEE_BPS = 4500;
@@ -92,7 +91,6 @@ describe("PrimaryMarket", function () {
         const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
         const primaryMarket = await PrimaryMarket.connect(owner).deploy(
             fund.address,
-            parseUnits(CREATION_FEE_BPS.toString(), 18 - 4),
             parseUnits(REDEMPTION_FEE_BPS.toString(), 18 - 4),
             parseUnits(SPLIT_FEE_BPS.toString(), 18 - 4),
             parseUnits(MERGE_FEE_BPS.toString(), 18 - 4),
@@ -372,14 +370,11 @@ describe("PrimaryMarket", function () {
         it("Should settle creation using price and NAV when fund was empty", async function () {
             // Create with 1 WBTC at price 30000 and NAV 0.5
             const inWbtc = parseWbtc("1");
-            const feeM = inWbtc.mul(CREATION_FEE_BPS).div(10000);
-            const outM = parseEther("60000")
-                .mul(10000 - CREATION_FEE_BPS)
-                .div(10000);
+            const outM = parseEther("60000");
             await primaryMarket.create(inWbtc);
             await expect(settleWithNav(START_DAY, parseEther("30000"), parseEther("0.5")))
                 .to.emit(primaryMarket, "Settled")
-                .withArgs(START_DAY, outM, 0, inWbtc, 0, feeM);
+                .withArgs(START_DAY, outM, 0, inWbtc, 0, 0);
             expect(await wbtc.allowance(primaryMarket.address, fund.address)).to.equal(inWbtc);
         });
 
@@ -401,14 +396,11 @@ describe("PrimaryMarket", function () {
             // Fund had 10 WBTC and 10000 shares
             // Create with 1 WBTC
             const inWbtc = parseWbtc("1");
-            const feeM = inWbtc.mul(CREATION_FEE_BPS).div(10000);
-            const outM = parseEther("1000")
-                .mul(10000 - CREATION_FEE_BPS)
-                .div(10000);
+            const outM = parseEther("1000");
             await primaryMarket.create(inWbtc);
             await expect(settleWithShare(START_DAY, parseEther("10000"), parseWbtc("10")))
                 .to.emit(primaryMarket, "Settled")
-                .withArgs(START_DAY, outM, 0, inWbtc, 0, feeM);
+                .withArgs(START_DAY, outM, 0, inWbtc, 0, 0);
             expect(await wbtc.allowance(primaryMarket.address, fund.address)).to.equal(inWbtc);
         });
 
@@ -416,11 +408,11 @@ describe("PrimaryMarket", function () {
             // Fund had 25 underlying units and 16 share units
             // Create with 9 underlying units
             await primaryMarket.create(9);
-            // Fee: 9 * 0.3 = 2
-            // Created shares: (9 - 2) * 16 / 25 = 4
+            // Fee: 0
+            // Created shares: 9 * 16 / 25 = 5
             await expect(settleWithShare(START_DAY, 16, 25))
                 .to.emit(primaryMarket, "Settled")
-                .withArgs(START_DAY, 4, 0, 9, 0, 2);
+                .withArgs(START_DAY, 5, 0, 9, 0, 0);
         });
 
         it("Should settle redemption using last shares and underlying", async function () {
@@ -514,10 +506,7 @@ describe("PrimaryMarket", function () {
             await fund.mock.mint.returns();
             // Create with 1 WBTC
             await primaryMarket.connect(user2).create(parseWbtc("1"));
-            const createdShares = parseEther("1000")
-                .mul(10000 - CREATION_FEE_BPS)
-                .div(10000);
-            const creationFee = parseWbtc("1").mul(CREATION_FEE_BPS).div(10000);
+            const createdShares = parseEther("1000");
             // Redeem 1000 shares
             await primaryMarket.redeem(parseEther("1000"));
             const redemptionFee = parseWbtc("1").mul(REDEMPTION_FEE_BPS).div(10000);
@@ -535,7 +524,7 @@ describe("PrimaryMarket", function () {
             expect(event.sharesToBurn).to.equal(parseEther("1000").add(feeInShares));
             expect(event.creationUnderlying).to.equal(parseWbtc("1"));
             expect(event.redemptionUnderlying).to.equal(redeemedWbtc);
-            expect(event.fee).to.equal(creationFee.add(redemptionFee).add(feeInWbtc));
+            expect(event.fee).to.equal(redemptionFee.add(feeInWbtc));
             // Net underlying (creation - redemption) to be transfered to fund
             const netWbtc = parseWbtc("1").sub(redeemedWbtc);
             expect(await wbtc.allowance(primaryMarket.address, fund.address)).to.equal(netWbtc);
@@ -568,9 +557,7 @@ describe("PrimaryMarket", function () {
                 0,
                 0
             );
-            const createdShares = parseEther("1000")
-                .mul(10000 - CREATION_FEE_BPS)
-                .div(10000);
+            const createdShares = parseEther("1000");
             const redeemedWbtc = parseWbtc("1")
                 .mul(10000 - REDEMPTION_FEE_BPS)
                 .div(10000);
@@ -614,9 +601,7 @@ describe("PrimaryMarket", function () {
             await primaryMarket.create(parseWbtc("4"));
             // Day (START_DAY + DAY) is not settled
             await settleWithShare(START_DAY + DAY * 2, parseEther("20000"), parseWbtc("40"));
-            const createdAgain = parseEther("2000")
-                .mul(10000 - CREATION_FEE_BPS)
-                .div(10000);
+            const createdAgain = parseEther("2000");
             await expect(() => primaryMarket.claim(user1.address)).to.callMocks({
                 func: shareM.mock.transfer.withArgs(user1.address, createdShares.add(createdAgain)),
                 rets: [true],
