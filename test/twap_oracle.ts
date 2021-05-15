@@ -350,6 +350,96 @@ describe("TwapOracle", function () {
         });
     });
 
+    describe("minPrimaryMessageCountToUpdate()", function () {
+        let incompletePrices: BigNumber[];
+
+        beforeEach(function () {
+            if (BATCH_SIZE < 10 || MAX_MESSAGE_DISTANCE < 3) this.skip();
+            incompletePrices = PRICES.slice();
+            incompletePrices[0] = BigNumber.from(0);
+            incompletePrices[2] = BigNumber.from(0);
+            incompletePrices[3] = BigNumber.from(0);
+            incompletePrices[BATCH_SIZE - 3] = BigNumber.from(0);
+            incompletePrices[BATCH_SIZE - 2] = BigNumber.from(0);
+        });
+
+        it("Should return one for uninitialized epochs", async function () {
+            const t1 = startTimestamp - EPOCH * 10;
+            expect(await contract.minPrimaryMessageCountToUpdate(t1)).to.equal(1);
+            const t2 = startTimestamp;
+            expect(await contract.minPrimaryMessageCountToUpdate(t2)).to.equal(1);
+            const t3 = startTimestamp + EPOCH * 10;
+            expect(await contract.minPrimaryMessageCountToUpdate(t3)).to.equal(1);
+        });
+
+        it("Should return acceptable message count before publishing delay", async function () {
+            const t = startTimestamp + EPOCH * 10;
+            advanceBlockAtTime(t + PUBLISHING_DELAY - 30);
+            await callPrimary(t, incompletePrices);
+            expect(await contract.minPrimaryMessageCountToUpdate(t)).to.equal(BATCH_SIZE - 4);
+            await callPrimary(t, PRICES);
+            expect(await contract.minPrimaryMessageCountToUpdate(t)).to.equal(BATCH_SIZE + 1);
+        });
+
+        it("Should return batch size plus one after publishing delay", async function () {
+            const t = startTimestamp + EPOCH * 10;
+            advanceBlockAtTime(t);
+            await callPrimary(t, incompletePrices);
+            advanceBlockAtTime(t + PUBLISHING_DELAY);
+            expect(await contract.minPrimaryMessageCountToUpdate(t)).to.equal(BATCH_SIZE + 1);
+        });
+    });
+
+    describe("minSecondaryMessageCountToUpdate()", function () {
+        let incompletePrices: BigNumber[];
+
+        beforeEach(function () {
+            if (BATCH_SIZE < 10 || MAX_MESSAGE_DISTANCE < 3) this.skip();
+            incompletePrices = PRICES.slice();
+            incompletePrices[0] = BigNumber.from(0);
+            incompletePrices[2] = BigNumber.from(0);
+            incompletePrices[3] = BigNumber.from(0);
+            incompletePrices[BATCH_SIZE - 3] = BigNumber.from(0);
+            incompletePrices[BATCH_SIZE - 2] = BigNumber.from(0);
+        });
+
+        it("Should return batch size plus one before the secondary delay expires", async function () {
+            const t = startTimestamp + EPOCH;
+            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY - 30);
+            expect(await contract.minSecondaryMessageCountToUpdate(t)).to.equal(BATCH_SIZE + 1);
+        });
+
+        it("Should return one for uninitialized epochs", async function () {
+            const t = startTimestamp + EPOCH;
+            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
+            expect(await contract.minSecondaryMessageCountToUpdate(t)).to.equal(1);
+        });
+
+        it("Should return acceptable message count before publishing delay", async function () {
+            const t = startTimestamp + EPOCH;
+            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY - 30);
+            await callSecondary(t, incompletePrices);
+            expect(await contract.minSecondaryMessageCountToUpdate(t)).to.equal(BATCH_SIZE - 4);
+            await callSecondary(t, PRICES);
+            expect(await contract.minSecondaryMessageCountToUpdate(t)).to.equal(BATCH_SIZE + 1);
+        });
+
+        it("Should return batch size plus one for epoch updated from primary source", async function () {
+            const t = startTimestamp + EPOCH;
+            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY - 30);
+            await callPrimary(t, incompletePrices);
+            expect(await contract.minSecondaryMessageCountToUpdate(t)).to.equal(BATCH_SIZE + 1);
+        });
+
+        it("Should return batch size plus one after publishing delay", async function () {
+            const t = startTimestamp + EPOCH;
+            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
+            await callSecondary(t, incompletePrices);
+            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY);
+            expect(await contract.minSecondaryMessageCountToUpdate(t)).to.equal(BATCH_SIZE + 1);
+        });
+    });
+
     describe("Updating the same epoch", function () {
         let existingEpoch: number;
         let incompletePrices: BigNumber[];
@@ -370,7 +460,7 @@ describe("TwapOracle", function () {
             incompleteMorePrices[BATCH_SIZE - 4] = BigNumber.from(0);
         });
 
-        describe("Intialized by primary source", function () {
+        describe("Initialized by primary source", function () {
             beforeEach(async function () {
                 advanceBlockAtTime(existingEpoch);
                 await callPrimary(existingEpoch, incompletePrices);
@@ -417,7 +507,7 @@ describe("TwapOracle", function () {
             });
         });
 
-        describe("Intialized by secondary source", function () {
+        describe("Initialized by secondary source", function () {
             beforeEach(async function () {
                 advanceBlockAtTime(existingEpoch + SECONDARY_SOURCE_DELAY);
                 await callSecondary(existingEpoch, incompletePrices);

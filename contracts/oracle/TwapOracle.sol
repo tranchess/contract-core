@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.0;
+pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -23,14 +23,18 @@ contract TwapOracle is ITwapOracle, Ownable {
     uint256 private constant PRICE_UNIT = 1e12;
     uint256 private constant PRICE_MASK = 0xffffffffffffffff;
 
-    address public primarySource;
-    address public secondarySource;
-    string public symbol;
-    uint256 private _startTimestamp;
+    enum UpdateType {PRIMARY, SECONDARY, OWNER}
 
-    uint256 public lastPrimaryMessageCount;
-    uint256 public lastSecondaryTimestamp;
-    uint256 public lastSecondaryMessageCount;
+    event Update(uint256 timestamp, uint256 price, UpdateType updateType);
+
+    address public immutable primarySource;
+    address public immutable secondarySource;
+    uint256 private immutable _startTimestamp;
+    string public symbol;
+
+    uint256 private _lastPrimaryMessageCount;
+    uint256 private _lastSecondaryTimestamp;
+    uint256 private _lastSecondaryMessageCount;
 
     /// @dev Mapping of epoch end timestamp => TWAP
     mapping(uint256 => uint256) private _prices;
@@ -55,7 +59,7 @@ contract TwapOracle is ITwapOracle, Ownable {
     /// @param timestamp End Timestamp in seconds of the epoch
     /// @return TWAP (18 decimal places) in the epoch, or zero if the epoch is not initialized yet
     ///         or can still be updated with more messages from the same source.
-    function getTwap(uint256 timestamp) public view override returns (uint256) {
+    function getTwap(uint256 timestamp) external view override returns (uint256) {
         // Check whether the stored price can be updated in the future
         if (
             // Case 1: it can still be updated by more messages from the primary source
@@ -64,11 +68,50 @@ contract TwapOracle is ITwapOracle, Ownable {
             // by more messages from that source
             (timestamp <= block.timestamp - SECONDARY_SOURCE_DELAY &&
                 timestamp > block.timestamp - SECONDARY_SOURCE_DELAY - PUBLISHING_DELAY &&
-                timestamp == lastSecondaryTimestamp)
+                timestamp == _lastSecondaryTimestamp)
         ) {
             return 0;
         } else {
             return _prices[timestamp];
+        }
+    }
+
+    /// @notice Return minimum acceptable message count from the primary source
+    ///         to update a given epoch.
+    /// @param timestamp End timestamp in seconds of the epoch to update
+    /// @return Minimum acceptable message count, or `MESSAGE_BATCH_SIZE + 1` if the epoch
+    ///         cannot be updated now
+    function minPrimaryMessageCountToUpdate(uint256 timestamp) external view returns (uint256) {
+        if (_prices[timestamp] != 0) {
+            if (timestamp > block.timestamp - PUBLISHING_DELAY) {
+                return _lastPrimaryMessageCount + 1;
+            } else {
+                return MESSAGE_BATCH_SIZE + 1;
+            }
+        } else {
+            return 1;
+        }
+    }
+
+    /// @notice Return minimum acceptable message count from the secondary source
+    ///         to update a given epoch.
+    /// @param timestamp End timestamp in seconds of the epoch to update
+    /// @return Minimum acceptable message count, or `MESSAGE_BATCH_SIZE + 1` if the epoch
+    ///         cannot be updated now
+    function minSecondaryMessageCountToUpdate(uint256 timestamp) external view returns (uint256) {
+        if (timestamp > block.timestamp - SECONDARY_SOURCE_DELAY || timestamp <= _startTimestamp) {
+            return MESSAGE_BATCH_SIZE + 1;
+        } else if (_prices[timestamp] != 0) {
+            if (
+                timestamp == _lastSecondaryTimestamp &&
+                timestamp > block.timestamp - SECONDARY_SOURCE_DELAY - PUBLISHING_DELAY
+            ) {
+                return _lastSecondaryMessageCount + 1;
+            } else {
+                return MESSAGE_BATCH_SIZE + 1;
+            }
+        } else {
+            return 1;
         }
     }
 
@@ -97,7 +140,7 @@ contract TwapOracle is ITwapOracle, Ownable {
                 timestamp > block.timestamp - PUBLISHING_DELAY,
                 "Too late for the primary source to update an existing epoch"
             );
-            lastMessageCount = lastPrimaryMessageCount;
+            lastMessageCount = _lastPrimaryMessageCount;
         }
         uint256 newMessageCount =
             _updateTwapFromSource(
@@ -111,7 +154,7 @@ contract TwapOracle is ITwapOracle, Ownable {
                 UpdateType.PRIMARY
             );
         if (timestamp > block.timestamp - PUBLISHING_DELAY) {
-            lastPrimaryMessageCount = newMessageCount;
+            _lastPrimaryMessageCount = newMessageCount;
         }
     }
 
@@ -142,11 +185,11 @@ contract TwapOracle is ITwapOracle, Ownable {
         uint256 lastMessageCount = 0;
         if (_prices[timestamp] != 0) {
             require(
-                timestamp == lastSecondaryTimestamp &&
+                timestamp == _lastSecondaryTimestamp &&
                     timestamp > block.timestamp - SECONDARY_SOURCE_DELAY - PUBLISHING_DELAY,
                 "Too late for the secondary source to update an existing epoch"
             );
-            lastMessageCount = lastSecondaryMessageCount;
+            lastMessageCount = _lastSecondaryMessageCount;
         }
         uint256 newMessageCount =
             _updateTwapFromSource(
@@ -160,8 +203,8 @@ contract TwapOracle is ITwapOracle, Ownable {
                 UpdateType.SECONDARY
             );
         if (timestamp > block.timestamp - SECONDARY_SOURCE_DELAY - PUBLISHING_DELAY) {
-            lastSecondaryTimestamp = timestamp;
-            lastSecondaryMessageCount = newMessageCount;
+            _lastSecondaryTimestamp = timestamp;
+            _lastSecondaryMessageCount = newMessageCount;
         }
     }
 
