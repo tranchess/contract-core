@@ -40,7 +40,7 @@ interface IFund {
 
     function twapOracle() external view returns (ITwapOracle);
 
-    function governance() external view returns (address);
+    function feeCollector() external view returns (address);
 
     function endOfDay(uint256 timestamp) external pure returns (uint256);
 

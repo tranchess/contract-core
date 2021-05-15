@@ -27,6 +27,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
 
     uint256 private constant UNIT = 1e18;
     uint256 private constant MAX_INTEREST_RATE = 0.5e18; // 50% APR
+    uint256 private constant MAX_DAILY_PROTOCOL_FEE_RATE = 0.05e18; // 5% daily rate
 
     uint256 private constant WEIGHT_A = 1;
     uint256 private constant WEIGHT_B = 1;
@@ -44,8 +45,8 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice TwapOracle address for the underlying asset.
     ITwapOracle public override twapOracle;
 
-    /// @notice Governance address.
-    address public override governance;
+    /// @notice Fee Collector address.
+    address public override feeCollector;
 
     /// @notice AprOracle address.
     IAprOracle public aprOracle;
@@ -136,6 +137,10 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 lowerRebalanceThreshold_,
         address twapOracle_
     ) public Ownable() FundRoles() {
+        require(
+            dailyProtocolFeeRate <= MAX_DAILY_PROTOCOL_FEE_RATE,
+            "Exceed max protocol fee rate"
+        );
         dailyProtocolFeeRate = dailyProtocolFeeRate_;
         upperRebalanceThreshold = upperRebalanceThreshold_;
         lowerRebalanceThreshold = lowerRebalanceThreshold_;
@@ -154,7 +159,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address aprOracle_,
         address ballot_,
         address primaryMarket_,
-        address governance_
+        address feeCollector_
     ) external onlyOwner {
         require(tokenUnderlying == address(0), "already initialized");
         require(tokenUnderlying_ != address(0), "Underlying token address cannot be zero");
@@ -164,7 +169,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         tokenB = tokenB_;
         ballot = IBallot(ballot_);
         aprOracle = IAprOracle(aprOracle_);
-        governance = governance_;
+        feeCollector = feeCollector_;
 
         require(underlyingDecimals_ <= 18, "Underlying decimals larger than 18");
         underlyingDecimalMultiplier = 10**(18 - underlyingDecimals_);
@@ -754,7 +759,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Settle the current trading day. Settlement includes the following changes
     ///         to the fund.
     ///
-    ///         1. Transfer protocol fee of the day to the governance address.
+    ///         1. Transfer protocol fee of the day to the fee collector.
     ///         2. Settle all pending creations and redemptions from all primary markets.
     ///         3. Calculate NAV of the day and trigger rebalance if necessary.
     ///         4. Capture new interest rate for Token A.
@@ -844,7 +849,27 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         newPrimaryMarkets.push(newPrimaryMarket);
     }
 
-    /// @dev Transfer protocol fee of the current trading day to the governance address.
+    function updateDailyProtocolFeeRate(uint256 newDailyProtocolFeeRate) external onlyOwner {
+        require(
+            newDailyProtocolFeeRate <= MAX_DAILY_PROTOCOL_FEE_RATE,
+            "Exceed max protocol fee rate"
+        );
+        dailyProtocolFeeRate = newDailyProtocolFeeRate;
+    }
+
+    function updateTwapOracle(address newTwapOracle) external onlyOwner {
+        twapOracle = ITwapOracle(newTwapOracle);
+    }
+
+    function updateAprOracle(address newAprOracle) external onlyOwner {
+        aprOracle = IAprOracle(newAprOracle);
+    }
+
+    function updateFeeCollector(address newFeeCollector) external onlyOwner {
+        feeCollector = newFeeCollector;
+    }
+
+    /// @dev Transfer protocol fee of the current trading day to the fee collector.
     ///      This function should be called before creation and redemption on the same day
     ///      are settled.
     function _collectFee() private {
@@ -852,7 +877,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 fee = currentUnderlying.multiplyDecimal(dailyProtocolFeeRate);
         if (fee > 0) {
             require(
-                IERC20(tokenUnderlying).transfer(address(governance), fee),
+                IERC20(tokenUnderlying).transfer(address(feeCollector), fee),
                 "tokenUnderlying failed transfer"
             );
         }
@@ -899,7 +924,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             }
             if (fee > 0) {
                 require(
-                    IERC20(tokenUnderlying).transfer(address(governance), fee),
+                    IERC20(tokenUnderlying).transfer(address(feeCollector), fee),
                     "tokenUnderlying failed transferFrom"
                 );
             }

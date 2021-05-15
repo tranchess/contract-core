@@ -166,7 +166,6 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
     const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
     const primaryMarket = await PrimaryMarket.deploy(
         fund.address,
-        parseEther("0"),
         parseEther("0.001"),
         parseEther("0.0005"),
         parseEther("0.0005"),
