@@ -35,14 +35,11 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Daily protocol fee rate.
     uint256 public dailyProtocolFeeRate;
 
-    /// @notice Upper bound of Token M's NAV to trigger a rebalance.
-    uint256 public upperThresholdM;
+    /// @notice Upper bound of `NAV_B / NAV_A` to trigger a rebalance.
+    uint256 public upperRebalanceThreshold;
 
-    /// @notice Lower bound of Token B's NAV to trigger a rebalance.
-    uint256 public lowerThresholdB;
-
-    /// @notice Upper bound of Token A's NAV to trigger a rebalance.
-    uint256 public upperThresholdA;
+    /// @notice Lower bound of `NAV_B / NAV_A` to trigger a rebalance.
+    uint256 public lowerRebalanceThreshold;
 
     /// @notice TwapOracle address for the underlying asset.
     ITwapOracle public override twapOracle;
@@ -135,15 +132,13 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
 
     constructor(
         uint256 dailyProtocolFeeRate_,
-        uint256 upperThresholdM_,
-        uint256 lowerThresholdB_,
-        uint256 upperThresholdA_,
+        uint256 upperRebalanceThreshold_,
+        uint256 lowerRebalanceThreshold_,
         address twapOracle_
     ) public Ownable() FundRoles() {
         dailyProtocolFeeRate = dailyProtocolFeeRate_;
-        upperThresholdM = upperThresholdM_;
-        lowerThresholdB = lowerThresholdB_;
-        upperThresholdA = upperThresholdA_;
+        upperRebalanceThreshold = upperRebalanceThreshold_;
+        lowerRebalanceThreshold = lowerRebalanceThreshold_;
         twapOracle = ITwapOracle(twapOracle_);
         currentDay = endOfDay(block.timestamp);
         fundActivityStartTime = endOfDay(block.timestamp) - 1 days;
@@ -798,7 +793,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         }
         uint256 navB = calculateNavB(navM, navA);
 
-        if (_shouldTriggerRebalance(navM, navA, navB)) {
+        if (_shouldTriggerRebalance(navA, navB)) {
             _triggerRebalance(day, navM, navA, navB);
             navM = UNIT;
             navA = UNIT;
@@ -917,16 +912,12 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     ///      1. NAV of Token M grows above a threshold.
     ///      2. NAV of Token B drops below a threshold.
     ///      3. NAV of Token A grows above a threshold.
-    /// @param navM NAV of Token M before the rebalance
     /// @param navA NAV of Token A before the rebalance
     /// @param navBOrZero NAV of Token B before the rebalance or zero if the NAV is negative
     /// @return Whether a new rebalance should be triggered
-    function _shouldTriggerRebalance(
-        uint256 navM,
-        uint256 navA,
-        uint256 navBOrZero
-    ) private view returns (bool) {
-        return navM > upperThresholdM || navBOrZero < lowerThresholdB || navA > upperThresholdA;
+    function _shouldTriggerRebalance(uint256 navA, uint256 navBOrZero) private view returns (bool) {
+        uint256 bOverA = navBOrZero.divideDecimal(navA);
+        return bOverA < lowerRebalanceThreshold || bOverA > upperRebalanceThreshold;
     }
 
     /// @dev Create a new rebalance that resets NAV of all tranches to 1. Total supplies are
