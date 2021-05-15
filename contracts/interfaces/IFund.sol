@@ -5,32 +5,32 @@ pragma experimental ABIEncoderV2;
 import "./ITwapOracle.sol";
 
 interface IFund {
-    /// @notice A linear transformation matrix that represents a conversion.
+    /// @notice A linear transformation matrix that represents a rebalance.
     ///
     ///         ```
-    ///             [ ratioP          0        0 ]
-    ///         C = [ ratioA2P  ratioAB        0 ]
-    ///             [ ratioB2P        0  ratioAB ]
+    ///             [ ratioM          0        0 ]
+    ///         C = [ ratioA2M  ratioAB        0 ]
+    ///             [ ratioB2M        0  ratioAB ]
     ///         ```
     ///
-    ///         Amounts of the three shares `p`, `a` and `b` can be converted by multiplying the matrix:
+    ///         Amounts of the three tranches `m`, `a` and `b` can be rebalanced by multiplying the matrix:
     ///
     ///         ```
-    ///         [ p', a', b' ] = [ p, a, b ] * C
+    ///         [ m', a', b' ] = [ m, a, b ] * C
     ///         ```
-    struct Conversion {
-        uint256 ratioP;
-        uint256 ratioA2P;
-        uint256 ratioB2P;
+    struct Rebalance {
+        uint256 ratioM;
+        uint256 ratioA2M;
+        uint256 ratioB2M;
         uint256 ratioAB;
         uint256 timestamp;
     }
 
-    function splitWeights() external pure returns (uint256 weightA, uint256 weightB);
+    function trancheWeights() external pure returns (uint256 weightA, uint256 weightB);
 
     function tokenUnderlying() external view returns (address);
 
-    function tokenP() external view returns (address);
+    function tokenM() external view returns (address);
 
     function tokenA() external view returns (address);
 
@@ -67,11 +67,11 @@ interface IFund {
 
     function shareAllowanceVersion(address owner, address spender) external view returns (uint256);
 
-    function getConversionSize() external view returns (uint256);
+    function getRebalanceSize() external view returns (uint256);
 
-    function getConversion(uint256 index) external view returns (Conversion memory);
+    function getRebalance(uint256 index) external view returns (Rebalance memory);
 
-    function getConversionTimestamp(uint256 index) external view returns (uint256);
+    function getRebalanceTimestamp(uint256 index) external view returns (uint256);
 
     function currentDay() external view returns (uint256);
 
@@ -99,14 +99,14 @@ interface IFund {
             uint256
         );
 
-    function extrapolateNavP(uint256 timestamp, uint256 price) external view returns (uint256);
+    function extrapolateNavM(uint256 timestamp, uint256 price) external view returns (uint256);
 
     function extrapolateNavA(uint256 timestamp) external view returns (uint256);
 
-    function calculateNavB(uint256 navP, uint256 navA) external pure returns (uint256);
+    function calculateNavB(uint256 navM, uint256 navA) external pure returns (uint256);
 
-    function convert(
-        uint256 amountP,
+    function doRebalance(
+        uint256 amountM,
         uint256 amountA,
         uint256 amountB,
         uint256 index
@@ -114,13 +114,13 @@ interface IFund {
         external
         view
         returns (
-            uint256 newAmountP,
+            uint256 newAmountM,
             uint256 newAmountA,
             uint256 newAmountB
         );
 
-    function batchConvert(
-        uint256 amountP,
+    function batchRebalance(
+        uint256 amountM,
         uint256 amountA,
         uint256 amountB,
         uint256 fromIndex,
@@ -129,7 +129,7 @@ interface IFund {
         external
         view
         returns (
-            uint256 newAmountP,
+            uint256 newAmountM,
             uint256 newAmountA,
             uint256 newAmountB
         );
@@ -190,14 +190,14 @@ interface IFund {
         uint256 amount
     ) external;
 
-    event ConversionTriggered(
+    event RebalanceTriggered(
         uint256 indexed index,
         uint256 indexed day,
-        uint256 ratioP,
-        uint256 ratioA2P,
-        uint256 ratioB2P,
+        uint256 ratioM,
+        uint256 ratioA2M,
+        uint256 ratioB2M,
         uint256 ratioAB
     );
-    event Settled(uint256 indexed day, uint256 navP, uint256 navA, uint256 navB);
+    event Settled(uint256 indexed day, uint256 navM, uint256 navA, uint256 navB);
     event InterestRateUpdated(uint256 baseInterestRate, uint256 floatingInterestRate);
 }

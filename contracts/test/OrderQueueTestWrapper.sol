@@ -22,9 +22,9 @@ contract OrderQueueTestWrapper {
     function append(
         address maker,
         uint256 amount,
-        uint256 conversionID
+        uint256 version
     ) external {
-        lastReturn = queue.append(maker, amount, conversionID);
+        lastReturn = queue.append(maker, amount, version);
     }
 
     function cancel(uint256 index) external {

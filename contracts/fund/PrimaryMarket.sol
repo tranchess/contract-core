@@ -17,8 +17,8 @@ import "../interfaces/ITrancheIndex.sol";
 contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     event Created(address indexed account, uint256 underlying);
     event Redeemed(address indexed account, uint256 shares);
-    event Split(address indexed account, uint256 inP, uint256 outA, uint256 outB);
-    event Merged(address indexed account, uint256 outP, uint256 inA, uint256 inB);
+    event Split(address indexed account, uint256 inM, uint256 outA, uint256 outB);
+    event Merged(address indexed account, uint256 outM, uint256 inA, uint256 inB);
     event Claimed(address indexed account, uint256 createdShares, uint256 redeemedUnderlying);
     event Settled(
         uint256 indexed day,
@@ -38,14 +38,14 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     /// @param redeemingShares Shares that will be redeemed at the end of this day.
     /// @param createdShares Shares already created in previous days.
     /// @param redeemedUnderlying Underlying already redeemed in previous days.
-    /// @param conversionIndex Conversion index before the end of this day.
+    /// @param version Rebalance version before the end of this trading day.
     struct CreationRedemption {
         uint256 day;
         uint256 creatingUnderlying;
         uint256 redeemingShares;
         uint256 createdShares;
         uint256 redeemedUnderlying;
-        uint256 conversionIndex;
+        uint256 version;
     }
 
     IFund public fund;
@@ -63,8 +63,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     uint256 public currentRedeemingShares;
     uint256 public currentFeeInShares;
 
-    mapping(uint256 => uint256) private _historyCreationRate;
-    mapping(uint256 => uint256) private _historyRedemptionRate;
+    mapping(uint256 => uint256) private _historicalCreationRate;
+    mapping(uint256 => uint256) private _historicalRedemptionRate;
 
     constructor(
         address fund_,
@@ -110,8 +110,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     function redeem(uint256 shares) external onlyActive {
         require(shares != 0, "Zero shares");
         // Use burn and mint to simulate a transfer, so that we don't need a special transferFrom()
-        fund.burn(TRANCHE_P, msg.sender, shares);
-        fund.mint(TRANCHE_P, address(this), shares);
+        fund.burn(TRANCHE_M, msg.sender, shares);
+        fund.mint(TRANCHE_M, address(this), shares);
 
         CreationRedemption memory cr = _currentCreationRedemption(msg.sender);
         cr.redeemingShares = cr.redeemingShares.add(shares);
@@ -132,7 +132,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
         redeemedUnderlying = cr.redeemedUnderlying;
 
         if (createdShares > 0) {
-            IERC20(fund.tokenP()).transfer(account, createdShares);
+            IERC20(fund.tokenM()).transfer(account, createdShares);
             cr.createdShares = 0;
         }
         if (redeemedUnderlying > 0) {
@@ -147,50 +147,50 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
         emit Claimed(account, createdShares, redeemedUnderlying);
     }
 
-    function split(uint256 inP) external onlyActive {
-        (uint256 weightA, uint256 weightB) = fund.splitWeights();
+    function split(uint256 inM) external onlyActive {
+        (uint256 weightA, uint256 weightB) = fund.trancheWeights();
         // Charge splitting fee and round it to a multiple of (weightA + weightB)
-        uint256 unit = inP.sub(inP.multiplyDecimal(splitFeeRate)) / (weightA + weightB);
+        uint256 unit = inM.sub(inM.multiplyDecimal(splitFeeRate)) / (weightA + weightB);
         require(unit > 0, "Too little to split");
         uint256 inPAfterFee = unit * (weightA + weightB);
         uint256 outA = unit * weightA;
         uint256 outB = inPAfterFee - outA;
-        uint256 feeP = inP - inPAfterFee;
+        uint256 feeM = inM - inPAfterFee;
 
-        fund.burn(TRANCHE_P, msg.sender, inP);
+        fund.burn(TRANCHE_M, msg.sender, inM);
         fund.mint(TRANCHE_A, msg.sender, outA);
         fund.mint(TRANCHE_B, msg.sender, outB);
-        fund.mint(TRANCHE_P, address(this), feeP);
+        fund.mint(TRANCHE_M, address(this), feeM);
 
-        currentFeeInShares = currentFeeInShares.add(feeP);
-        emit Split(msg.sender, inP, outA, outA);
+        currentFeeInShares = currentFeeInShares.add(feeM);
+        emit Split(msg.sender, inM, outA, outA);
     }
 
     function merge(uint256 inA) external onlyActive {
-        (uint256 weightA, uint256 weightB) = fund.splitWeights();
-        // Round to share weights
+        (uint256 weightA, uint256 weightB) = fund.trancheWeights();
+        // Round to tranche weights
         uint256 unit = inA / weightA;
         require(unit > 0, "Too little to merge");
-        // Keep unmergable A shares unchanged.
+        // Keep unmergable Token A unchanged.
         inA = unit * weightA;
         uint256 inB = unit.mul(weightB);
         uint256 outPBeforeFee = inA.add(inB);
-        uint256 feeP = outPBeforeFee.multiplyDecimal(mergeFeeRate);
-        uint256 outP = outPBeforeFee.sub(feeP);
+        uint256 feeM = outPBeforeFee.multiplyDecimal(mergeFeeRate);
+        uint256 outM = outPBeforeFee.sub(feeM);
 
         fund.burn(TRANCHE_A, msg.sender, inA);
         fund.burn(TRANCHE_B, msg.sender, inB);
-        fund.mint(TRANCHE_P, msg.sender, outP);
-        fund.mint(TRANCHE_P, address(this), feeP);
+        fund.mint(TRANCHE_M, msg.sender, outM);
+        fund.mint(TRANCHE_M, address(this), feeM);
 
-        currentFeeInShares = currentFeeInShares.add(feeP);
-        emit Merged(msg.sender, outP, inA, inB);
+        currentFeeInShares = currentFeeInShares.add(feeM);
+        emit Merged(msg.sender, outM, inA, inB);
     }
 
     /// @notice Settle ongoing creations and redemptions and also split and merge fees.
     ///
     ///         Creations and redemptions are settled according to the current shares and
-    ///         underlying assets in the fund. Split and merge fee charged as P shares are also
+    ///         underlying assets in the fund. Split and merge fee charged as Token M are also
     ///         redeemed at the same rate (without no redemption fee).
     ///
     ///         This function does not mint or burn shares, nor transfer underlying assets.
@@ -201,15 +201,15 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
     ///         3. Transfer fee in underlying assets to the governance address.
     ///
     ///         This function can only be called from the Fund contract. It should be called
-    ///         after management fee is collected and before conversion is triggered for the same
+    ///         after protocol fee is collected and before rebalance is triggered for the same
     ///         trading day.
     /// @param day The trading day to settle
-    /// @param fundTotalShares Total shares of the fund (as if all A and B shares are merged)
+    /// @param fundTotalShares Total shares of the fund (as if all Token A and B are merged)
     /// @param fundUnderlying Underlying assets in the fund
     /// @param underlyingPrice Price of the underlying assets at the end of the trading day
-    /// @param previousNav NAV of Share P of the previous trading day
-    /// @return sharesToMint Amount of Share P to mint for creations
-    /// @return sharesToBurn Amount of Share P to burn for redemptions and split/merge fee
+    /// @param previousNav NAV of Token M of the previous trading day
+    /// @return sharesToMint Amount of Token M to mint for creations
+    /// @return sharesToBurn Amount of Token M to burn for redemptions and split/merge fee
     /// @return creationUnderlying Underlying assets received for creations (including creation fee)
     /// @return redemptionUnderlying Underlying assets to be redeemed (excluding redemption fee)
     /// @return fee Total fee in underlying assets for the fund to transfer to the governance address,
@@ -258,7 +258,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
                     .mul(fund.underlyingDecimalMultiplier())
                     .div(previousNav);
             }
-            _historyCreationRate[day] = sharesToMint.divideDecimal(creationUnderlying);
+            _historicalCreationRate[day] = sharesToMint.divideDecimal(creationUnderlying);
             fee = creationFee;
         }
 
@@ -268,7 +268,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
             uint256 underlying = sharesToBurn.mul(fundUnderlying).div(fundTotalShares);
             uint256 redemptionFee = underlying.multiplyDecimal(redemptionFeeRate);
             redemptionUnderlying = underlying.sub(redemptionFee);
-            _historyRedemptionRate[day] = redemptionUnderlying.divideDecimal(sharesToBurn);
+            _historicalRedemptionRate[day] = redemptionUnderlying.divideDecimal(sharesToBurn);
             fee = fee.add(redemptionFee);
         }
 
@@ -295,8 +295,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
         // This loop should never execute, because this function is called by Fund
         // for every day. We fill the gap just in case that something goes wrong in Fund.
         for (uint256 t = currentDay; t < day; t += 1 days) {
-            _historyCreationRate[t] = _historyCreationRate[day];
-            _historyRedemptionRate[t] = _historyRedemptionRate[day];
+            _historicalCreationRate[t] = _historicalCreationRate[day];
+            _historicalRedemptionRate[t] = _historicalRedemptionRate[day];
         }
 
         currentDay = day + 1 days;
@@ -323,26 +323,26 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
         if (oldDay < currentDay) {
             if (cr.creatingUnderlying > 0) {
                 cr.createdShares = cr.createdShares.add(
-                    cr.creatingUnderlying.multiplyDecimal(_historyCreationRate[oldDay])
+                    cr.creatingUnderlying.multiplyDecimal(_historicalCreationRate[oldDay])
                 );
                 cr.creatingUnderlying = 0;
             }
             if (cr.createdShares > 0) {
-                uint256 conversionSize = fund.getConversionSize();
-                if (conversionSize > cr.conversionIndex) {
-                    (cr.createdShares, , ) = fund.batchConvert(
+                uint256 rebalanceSize = fund.getRebalanceSize();
+                if (rebalanceSize > cr.version) {
+                    (cr.createdShares, , ) = fund.batchRebalance(
                         cr.createdShares,
                         0,
                         0,
-                        cr.conversionIndex,
-                        conversionSize
+                        cr.version,
+                        rebalanceSize
                     );
-                    cr.conversionIndex = conversionSize;
+                    cr.version = rebalanceSize;
                 }
             }
             if (cr.redeemingShares > 0) {
                 cr.redeemedUnderlying = cr.redeemedUnderlying.add(
-                    cr.redeemingShares.multiplyDecimal(_historyRedemptionRate[oldDay])
+                    cr.redeemingShares.multiplyDecimal(_historicalRedemptionRate[oldDay])
                 );
                 cr.redeemingShares = 0;
             }
@@ -367,8 +367,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex {
         if (old.redeemedUnderlying != cr.redeemedUnderlying) {
             old.redeemedUnderlying = cr.redeemedUnderlying;
         }
-        if (old.conversionIndex != cr.conversionIndex) {
-            old.conversionIndex = cr.conversionIndex;
+        if (old.version != cr.version) {
+            old.version = cr.version;
         }
     }
 

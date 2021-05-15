@@ -9,14 +9,14 @@ pragma solidity >=0.6.10 <0.8.0;
 /// @param maker Account placing this order
 /// @param amount Original amount of the order, which is amount of quote asset with 18 decimal places
 ///               for a bid order, or amount of base asset for an ask order
-/// @param conversionID Conversion ID when the order is placed
+/// @param version Rebalance version when the order is placed
 /// @param fillable Currently fillable amount
 struct Order {
     uint256 prev;
     uint256 next;
     address maker;
     uint256 amount;
-    uint256 conversionID;
+    uint256 version;
     uint256 fillable;
 }
 
@@ -48,13 +48,13 @@ library LibOrderQueue {
     /// @param queue Order queue
     /// @param maker Maker address
     /// @param amount Amount to place in the order with 18 decimal places
-    /// @param conversionID Current conversion ID
+    /// @param version Current rebalance version
     /// @return Index of the order in the order queue
     function append(
         OrderQueue storage queue,
         address maker,
         uint256 amount,
-        uint256 conversionID
+        uint256 version
     ) internal returns (uint256) {
         uint256 index = queue.counter + 1;
         queue.counter = index;
@@ -64,7 +64,7 @@ library LibOrderQueue {
             next: 0,
             maker: maker,
             amount: amount,
-            conversionID: conversionID,
+            version: version,
             fillable: amount
         });
         if (tail == 0) {

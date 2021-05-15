@@ -19,14 +19,14 @@ contract StakingTestWrapper is Staking {
         _tradeAvailable(tranche, sender, amount);
     }
 
-    function convertAndClearTrade(
+    function rebalanceAndClearTrade(
         address account,
-        uint256 amountP,
+        uint256 amountM,
         uint256 amountA,
         uint256 amountB,
         uint256 amountVersion
     ) external {
-        _convertAndClearTrade(account, amountP, amountA, amountB, amountVersion);
+        _rebalanceAndClearTrade(account, amountM, amountA, amountB, amountVersion);
     }
 
     function lock(
@@ -37,14 +37,14 @@ contract StakingTestWrapper is Staking {
         _lock(tranche, account, amount);
     }
 
-    function convertAndUnlock(
+    function rebalanceAndUnlock(
         address account,
-        uint256 amountP,
+        uint256 amountM,
         uint256 amountA,
         uint256 amountB,
         uint256 amountVersion
     ) external {
-        _convertAndUnlock(account, amountP, amountA, amountB, amountVersion);
+        _rebalanceAndUnlock(account, amountM, amountA, amountB, amountVersion);
     }
 
     function tradeLocked(
