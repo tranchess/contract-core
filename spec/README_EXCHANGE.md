@@ -23,9 +23,7 @@
         1.  [buyM](#buyM)
         1.  [sellM](#sellM)
         1.  [cancelBid](#cancelBid)
-        1.  [cancelBidByClientOrderID](#cancelBidByClientOrderID)
         1.  [cancelAsk](#cancelAsk)
-        1.  [cancelAskByClientOrderID](#cancelAskByClientOrderID)
     1.  [ExchangeRoles Contract](#exchangeroles-contract)
         1.  [applyForMaker](#applyForMaker)
 
@@ -136,7 +134,7 @@ Bid and ask orders are created by makers to either buy or sell shares of Token M
 
 #### Transaction #1
 
-1. Exchange.placeBid(tranche, pdLevel, quoteAmount, version, clientOrderID)
+1. Exchange.placeBid(tranche, pdLevel, quoteAmount, version)
 1. ERC20Token(stableCoin).transferFrom(maker, address(this), quoteAmount)
 
 ### Ask Order
@@ -147,7 +145,7 @@ Bid and ask orders are created by makers to either buy or sell shares of Token M
 
 #### Transaction #1
 
-1. Exchange.placeAsk(tranche, pdLevel, quoteAmount, version, clientOrderID)
+1. Exchange.placeAsk(tranche, pdLevel, quoteAmount, version)
 
 ## Filling orders
 
