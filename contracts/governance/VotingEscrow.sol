@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../interfaces/IVotingEscrow.sol";
 
@@ -14,7 +15,7 @@ interface ISmartWalletChecker {
     function check(address account) external view returns (bool);
 }
 
-contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
+contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     using SafeMath for uint256;
 
     uint256 public immutable override maxTime;
@@ -36,7 +37,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         string memory _name,
         string memory _symbol,
         uint256 _maxTime
-    ) public {
+    ) public Ownable() {
         name = _name;
         symbol = _symbol;
         token = _token;
@@ -145,6 +146,14 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard {
         IERC20(token).transfer(msg.sender, amount);
 
         emit Withdrawn(msg.sender, amount);
+    }
+
+    function updateChecker(address newChecker) external onlyOwner {
+        require(
+            newChecker == address(0) || Address.isContract(newChecker),
+            "Smart contract checker has to be null or a contract"
+        );
+        checker = newChecker;
     }
 
     // -------------------------------------------------------------------------
