@@ -12,13 +12,13 @@ task("initialize_fund", "Initialize fund")
 
         const [deployer] = await ethers.getSigners();
         const fund = await ethers.getContractAt("Fund", addresses.fund);
-        const wbtc = await ethers.getContractAt("MockToken", addresses.wbtc);
-        const wbtcDecimals = await wbtc.decimals();
+        const btc = await ethers.getContractAt("MockToken", addresses.btc);
+        const btcDecimals = await btc.decimals();
 
         console.log("Initializing Fund");
         await fund.initialize(
-            addresses.wbtc,
-            wbtcDecimals,
+            addresses.btc,
+            btcDecimals,
             addresses.share_p,
             addresses.share_a,
             addresses.share_b,

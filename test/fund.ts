@@ -4,7 +4,7 @@ import type { Fixture, MockContract, MockProvider, Stub } from "ethereum-waffle"
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
-const parseWbtc = (value: string) => parseUnits(value, 8);
+const parseBtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
 
 const TRANCHE_M = 0;
@@ -32,7 +32,7 @@ describe("Fund", function () {
         readonly startDay: number;
         readonly startTimestamp: number;
         readonly twapOracle: MockContract;
-        readonly wbtc: Contract;
+        readonly btc: Contract;
         readonly aprOracle: MockContract;
         readonly interestRateBallot: MockContract;
         readonly primaryMarket: MockContract;
@@ -54,7 +54,7 @@ describe("Fund", function () {
     let addr1: string;
     let addr2: string;
     let twapOracle: MockContract;
-    let wbtc: Contract;
+    let btc: Contract;
     let aprOracle: MockContract;
     let interestRateBallot: MockContract;
     let primaryMarket: MockContract;
@@ -84,7 +84,7 @@ describe("Fund", function () {
         await twapOracle.mock.getTwap.withArgs(lastDay).returns(parseEther("1000"));
 
         const MockToken = await ethers.getContractFactory("MockToken");
-        const wbtc = await MockToken.connect(owner).deploy("Wrapped BTC", "WBTC", 8);
+        const btc = await MockToken.connect(owner).deploy("Wrapped BTC", "BTC", 8);
 
         const aprOracle = await deployMockForName(owner, "IAprOracle");
         await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
@@ -101,15 +101,10 @@ describe("Fund", function () {
             LOWER_REBALANCE_THRESHOLD,
             twapOracle.address
         );
-        await primaryMarket.call(
-            wbtc,
-            "approve",
-            fund.address,
-            BigNumber.from("2").pow(256).sub(1)
-        );
+        await primaryMarket.call(btc, "approve", fund.address, BigNumber.from("2").pow(256).sub(1));
 
         await fund.initialize(
-            wbtc.address,
+            btc.address,
             8,
             shareM.address,
             shareA.address,
@@ -125,7 +120,7 @@ describe("Fund", function () {
             startDay,
             startTimestamp,
             twapOracle,
-            wbtc,
+            btc,
             aprOracle,
             interestRateBallot,
             primaryMarket,
@@ -156,7 +151,7 @@ describe("Fund", function () {
         startDay = fixtureData.startDay;
         startTimestamp = fixtureData.startTimestamp;
         twapOracle = fixtureData.twapOracle;
-        wbtc = fixtureData.wbtc;
+        btc = fixtureData.btc;
         aprOracle = fixtureData.aprOracle;
         interestRateBallot = fixtureData.interestRateBallot;
         primaryMarket = fixtureData.primaryMarket;
@@ -203,10 +198,10 @@ describe("Fund", function () {
         });
 
         it("Should return the activity window with rebalance", async function () {
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
+            await btc.mint(primaryMarket.address, parseBtc("1"));
             await twapOracle.mock.getTwap.returns(parseEther("1510"));
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
-            await primaryMarket.mock.settle.returns(parseEther("500"), 0, parseWbtc("1"), 0, 0);
+            await primaryMarket.mock.settle.returns(parseEther("500"), 0, parseBtc("1"), 0, 0);
             await advanceOneDayAndSettle();
 
             expect(await fund.fundActivityStartTime()).to.equal(
@@ -249,10 +244,10 @@ describe("Fund", function () {
         });
 
         it("Should return the activity window with rebalance", async function () {
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
+            await btc.mint(primaryMarket.address, parseBtc("1"));
             await twapOracle.mock.getTwap.returns(parseEther("1510"));
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
-            await primaryMarket.mock.settle.returns(parseEther("500"), 0, parseWbtc("1"), 0, 0);
+            await primaryMarket.mock.settle.returns(parseEther("500"), 0, parseBtc("1"), 0, 0);
             await advanceOneDayAndSettle();
 
             expect(await fund.fundActivityStartTime()).to.equal(
@@ -291,10 +286,10 @@ describe("Fund", function () {
         });
 
         it("Should return the activity window with rebalance", async function () {
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
+            await btc.mint(primaryMarket.address, parseBtc("1"));
             await twapOracle.mock.getTwap.returns(parseEther("1510"));
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
-            await primaryMarket.mock.settle.returns(parseEther("500"), 0, parseWbtc("1"), 0, 0);
+            await primaryMarket.mock.settle.returns(parseEther("500"), 0, parseBtc("1"), 0, 0);
             await advanceOneDayAndSettle();
 
             expect(await fund.exchangeActivityStartTime()).to.equal(
@@ -662,13 +657,13 @@ describe("Fund", function () {
         it("Should transfer no fee to governance", async function () {
             await primaryMarketSettle.returns(0, 0, 0, 0, 0);
             await fund.settle();
-            expect(await wbtc.balanceOf(governance.address)).to.equal(0);
+            expect(await btc.balanceOf(governance.address)).to.equal(0);
         });
 
         it("Should mint created shares", async function () {
-            // Create 1010 shares with 1 WBTC
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
-            await primaryMarketSettle.returns(parseEther("1010"), 0, parseWbtc("1"), 0, 0);
+            // Create 1010 shares with 1 BTC
+            await btc.mint(primaryMarket.address, parseBtc("1"));
+            await primaryMarketSettle.returns(parseEther("1010"), 0, parseBtc("1"), 0, 0);
             await fund.settle();
             expect(await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
                 parseEther("1010")
@@ -676,20 +671,20 @@ describe("Fund", function () {
         });
 
         it("Should transfer creation fee to governance", async function () {
-            // Create 909 shares with 1 WBTC (10% fee)
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
-            const fee = parseWbtc("0.1");
-            await primaryMarketSettle.returns(parseEther("909"), 0, parseWbtc("1"), 0, fee);
+            // Create 909 shares with 1 BTC (10% fee)
+            await btc.mint(primaryMarket.address, parseBtc("1"));
+            const fee = parseBtc("0.1");
+            await primaryMarketSettle.returns(parseEther("909"), 0, parseBtc("1"), 0, fee);
             await fund.settle();
-            expect(await wbtc.balanceOf(governance.address)).to.equal(fee);
-            expect(await wbtc.balanceOf(fund.address)).to.equal(parseWbtc("1").sub(fee));
+            expect(await btc.balanceOf(governance.address)).to.equal(fee);
+            expect(await btc.balanceOf(fund.address)).to.equal(parseBtc("1").sub(fee));
         });
 
         it("Should update NAV according to creation", async function () {
-            // Received 1 WBTC (1010 USD) and minted 1000 shares.
+            // Received 1 BTC (1010 USD) and minted 1000 shares.
             // NAV of Token M increases to 1010 / 1000 = 1.01.
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
-            await primaryMarketSettle.returns(parseEther("1000"), 0, parseWbtc("1"), 0, 0);
+            await btc.mint(primaryMarket.address, parseBtc("1"));
+            await primaryMarketSettle.returns(parseEther("1000"), 0, parseBtc("1"), 0, 0);
             await fund.settle();
             const navs = await fund.historicalNavs(startDay);
             expect(navs[TRANCHE_M]).to.equal(parseEther("1.01"));
@@ -698,10 +693,10 @@ describe("Fund", function () {
         });
 
         it("Should trigger upper rebalance on abnormal creation", async function () {
-            // Received 1 WBTC (1010 USD) and minted 500 shares.
+            // Received 1 BTC (1010 USD) and minted 500 shares.
             // NAV of Token M increases to 1010 / 500 = 2.02 and triggers rebalance.
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
-            await primaryMarketSettle.returns(parseEther("500"), 0, parseWbtc("1"), 0, 0);
+            await btc.mint(primaryMarket.address, parseBtc("1"));
+            await primaryMarketSettle.returns(parseEther("500"), 0, parseBtc("1"), 0, 0);
             await fund.settle();
             expect(await fund.getRebalanceSize()).to.equal(1);
             const navs = await fund.historicalNavs(startDay);
@@ -719,7 +714,7 @@ describe("Fund", function () {
         let outerFixture: Fixture<FixtureData>;
 
         let protocolFee: BigNumber;
-        let wbtcInFund: BigNumber;
+        let btcInFund: BigNumber;
         let navA: BigNumber;
         let primaryMarketSettle: Stub;
 
@@ -727,22 +722,16 @@ describe("Fund", function () {
             const f = await loadFixture(deployFixture);
             await f.aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
 
-            // Create 10000 shares with 10 WBTC on the first day.
+            // Create 10000 shares with 10 BTC on the first day.
             await f.twapOracle.mock.getTwap.withArgs(f.startDay).returns(parseEther("1000"));
-            await f.wbtc.mint(f.primaryMarket.address, parseWbtc("10"));
-            await f.primaryMarket.mock.settle.returns(
-                parseEther("10000"),
-                0,
-                parseWbtc("10"),
-                0,
-                0
-            );
+            await f.btc.mint(f.primaryMarket.address, parseBtc("10"));
+            await f.primaryMarket.mock.settle.returns(parseEther("10000"), 0, parseBtc("10"), 0, 0);
             await advanceBlockAtTime(f.startDay);
             await f.fund.settle();
             await f.primaryMarket.mock.settle.revertsWithReason("Mock function is reset");
 
             // Total shares: 10000
-            // WBTC in the fund: 10
+            // BTC in the fund: 10
             // NAV of (M, A, B): (1, 1, 1)
             await f.twapOracle.mock.getTwap.withArgs(f.startDay + DAY).returns(parseEther("1000"));
             await advanceBlockAtTime(f.startDay + DAY);
@@ -753,7 +742,7 @@ describe("Fund", function () {
             return primaryMarket.mock.settle.withArgs(
                 startDay + DAY,
                 parseEther("10000"),
-                wbtcInFund,
+                btcInFund,
                 price,
                 parseEther("1")
             );
@@ -771,8 +760,8 @@ describe("Fund", function () {
         });
 
         beforeEach(async function () {
-            protocolFee = parseWbtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
-            wbtcInFund = parseWbtc("10").sub(protocolFee);
+            protocolFee = parseBtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
+            btcInFund = parseBtc("10").sub(protocolFee);
             navA = parseEther("1.001")
                 .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
@@ -781,7 +770,7 @@ describe("Fund", function () {
 
         it("Should charge protocol fee and interest when nothing happened", async function () {
             await primaryMarketSettle.returns(0, 0, 0, 0, 0);
-            const navM = wbtcInFund.mul(1e10).mul(1000).div(10000); // wbtc * price(1000) / share(10000)
+            const navM = btcInFund.mul(1e10).mul(1000).div(10000); // btc * price(1000) / share(10000)
             const navB = navM.mul(2).sub(navA);
             await expect(fund.settle())
                 .to.emit(fund, "Settled")
@@ -797,24 +786,24 @@ describe("Fund", function () {
         it("Should transfer protocol fee to governance", async function () {
             await primaryMarketSettle.returns(0, 0, 0, 0, 0);
             await fund.settle();
-            expect(await wbtc.balanceOf(governance.address)).to.equal(protocolFee);
+            expect(await btc.balanceOf(governance.address)).to.equal(protocolFee);
         });
 
         it("Should net shares and underlying (creation > redemption)", async function () {
-            // Create 1000 shares with 1 WBTC and redeem 400 shares for 0.4 WBTC
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
+            // Create 1000 shares with 1 BTC and redeem 400 shares for 0.4 BTC
+            await btc.mint(primaryMarket.address, parseBtc("1"));
             await primaryMarketSettle.returns(
                 parseEther("1000"),
                 parseEther("400"),
-                parseWbtc("1"),
-                parseWbtc("0.4"),
+                parseBtc("1"),
+                parseBtc("0.4"),
                 0
             );
             const oldM = await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address);
             await expect(() => fund.settle()).to.changeTokenBalances(
-                wbtc,
+                btc,
                 [fund, primaryMarket],
-                [parseWbtc("0.6").sub(protocolFee), parseWbtc("-0.6")]
+                [parseBtc("0.6").sub(protocolFee), parseBtc("-0.6")]
             );
             expect(await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
                 oldM.add(parseEther("600"))
@@ -822,20 +811,20 @@ describe("Fund", function () {
         });
 
         it("Should net shares and underlying (creation < redemption)", async function () {
-            // Create 1000 shares with 1 WBTC and redeem 4000 shares for 4 WBTC
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
+            // Create 1000 shares with 1 BTC and redeem 4000 shares for 4 BTC
+            await btc.mint(primaryMarket.address, parseBtc("1"));
             await primaryMarketSettle.returns(
                 parseEther("1000"),
                 parseEther("4000"),
-                parseWbtc("1"),
-                parseWbtc("4"),
+                parseBtc("1"),
+                parseBtc("4"),
                 0
             );
             const oldM = await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address);
             await expect(() => fund.settle()).to.changeTokenBalances(
-                wbtc,
+                btc,
                 [fund, primaryMarket],
-                [parseWbtc("-3").sub(protocolFee), parseWbtc("3")]
+                [parseBtc("-3").sub(protocolFee), parseBtc("3")]
             );
             expect(await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
                 oldM.sub(parseEther("3000"))
@@ -843,51 +832,51 @@ describe("Fund", function () {
         });
 
         it("Should transfer all fee to governance", async function () {
-            // Create 900 shares with 1 WBTC (10% fee)
-            // Redeem 4000 shares for 3.6 WBTC (10% fee)
-            // There's also 50 shares (0.05 WBTC) charged as split and merge fee.
+            // Create 900 shares with 1 BTC (10% fee)
+            // Redeem 4000 shares for 3.6 BTC (10% fee)
+            // There's also 50 shares (0.05 BTC) charged as split and merge fee.
             // Fee: 0.1 from creation, 0.4 from redemption, 0.05 from split and merge
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
-            const totalFee = parseWbtc("0.55");
+            await btc.mint(primaryMarket.address, parseBtc("1"));
+            const totalFee = parseBtc("0.55");
             await primaryMarketSettle.returns(
                 parseEther("900"),
                 parseEther("4050"),
-                parseWbtc("1"),
-                parseWbtc("3.6"),
+                parseBtc("1"),
+                parseBtc("3.6"),
                 totalFee
             );
             await expect(() => fund.settle()).to.changeTokenBalances(
-                wbtc,
+                btc,
                 [fund, primaryMarket, governance],
                 [
-                    parseWbtc("-2.6").sub(totalFee).sub(protocolFee),
-                    parseWbtc("2.6"),
+                    parseBtc("-2.6").sub(totalFee).sub(protocolFee),
+                    parseBtc("2.6"),
                     totalFee.add(protocolFee),
                 ]
             );
         });
 
         it("Should update NAV according to primary market operations", async function () {
-            // Create 9000 shares with 10 WBTC (10% fee)
-            // Redeem 4000 shares for 3.6 WBTC (10% fee)
-            // There's also 500 shares (0.5 WBTC) charged as split and merge fee.
+            // Create 9000 shares with 10 BTC (10% fee)
+            // Redeem 4000 shares for 3.6 BTC (10% fee)
+            // There's also 500 shares (0.5 BTC) charged as split and merge fee.
             // Fee: 1 from creation, 0.4 from redemption, 0.5 from split and merge
-            await wbtc.mint(primaryMarket.address, parseWbtc("10"));
-            const totalFee = parseWbtc("1.9");
+            await btc.mint(primaryMarket.address, parseBtc("10"));
+            const totalFee = parseBtc("1.9");
             await primaryMarketSettle.returns(
                 parseEther("9000"),
                 parseEther("4500"),
-                parseWbtc("10"),
-                parseWbtc("3.6"),
+                parseBtc("10"),
+                parseBtc("3.6"),
                 totalFee
             );
-            const newWbtcInFund = wbtcInFund.add(parseWbtc("6.4")).sub(totalFee);
-            const navM = newWbtcInFund.mul(1e10).mul(1000).div(14500);
+            const newBtcInFund = btcInFund.add(parseBtc("6.4")).sub(totalFee);
+            const navM = newBtcInFund.mul(1e10).mul(1000).div(14500);
             const navB = navM.mul(2).sub(navA);
             // Note that NAV drops below 1 after protocol fee but creation and redemption are
             // still executed at NAV = 1 in this case. Because creation is more than redemption
             // and split/merge fee, the final navM is a bit higher than that if nothing happened.
-            const navPLowerBound = wbtcInFund.mul(1e10).mul(1000).div(10000); // NAV of Token M if nothing happened
+            const navPLowerBound = btcInFund.mul(1e10).mul(1000).div(10000); // NAV of Token M if nothing happened
             expect(navM).to.be.gt(navPLowerBound);
             expect(navM).to.be.lt(parseEther("1"));
 
@@ -904,7 +893,7 @@ describe("Fund", function () {
             const price = parseEther("1500");
             await twapOracle.mock.getTwap.withArgs(startDay + DAY).returns(price);
             await primaryMarketSettleAtPrice(price).returns(0, 0, 0, 0, 0);
-            const navM = wbtcInFund.mul(1e10).mul(price).div(parseEther("10000"));
+            const navM = btcInFund.mul(1e10).mul(price).div(parseEther("10000"));
             const navB = navM.mul(2).sub(navA);
             const navBOverA = navB.mul(parseEther("1")).div(navA);
             expect(navBOverA).to.be.lt(UPPER_REBALANCE_THRESHOLD);
@@ -918,7 +907,7 @@ describe("Fund", function () {
             const price = parseEther("1510");
             await twapOracle.mock.getTwap.withArgs(startDay + DAY).returns(price);
             await primaryMarketSettleAtPrice(price).returns(0, 0, 0, 0, 0);
-            const navM = wbtcInFund.mul(1e10).mul(price).div(parseEther("10000"));
+            const navM = btcInFund.mul(1e10).mul(price).div(parseEther("10000"));
             const navB = navM.mul(2).sub(navA);
             const navBOverA = navB.mul(parseEther("1")).div(navA);
             expect(navBOverA).to.be.gt(UPPER_REBALANCE_THRESHOLD);
@@ -932,7 +921,7 @@ describe("Fund", function () {
             const price = parseEther("755");
             await twapOracle.mock.getTwap.withArgs(startDay + DAY).returns(price);
             await primaryMarketSettleAtPrice(price).returns(0, 0, 0, 0, 0);
-            const navM = wbtcInFund.mul(1e10).mul(price).div(parseEther("10000"));
+            const navM = btcInFund.mul(1e10).mul(price).div(parseEther("10000"));
             const navB = navM.mul(2).sub(navA);
             const navBOverA = navB.mul(parseEther("1")).div(navA);
             expect(navBOverA).to.be.gt(LOWER_REBALANCE_THRESHOLD);
@@ -946,7 +935,7 @@ describe("Fund", function () {
             const price = parseEther("750");
             await twapOracle.mock.getTwap.withArgs(startDay + DAY).returns(price);
             await primaryMarketSettleAtPrice(price).returns(0, 0, 0, 0, 0);
-            const navM = wbtcInFund.mul(1e10).mul(price).div(parseEther("10000"));
+            const navM = btcInFund.mul(1e10).mul(price).div(parseEther("10000"));
             const navB = navM.mul(2).sub(navA);
             const navBOverA = navB.mul(parseEther("1")).div(navA);
             expect(navBOverA).to.be.lt(LOWER_REBALANCE_THRESHOLD);
@@ -972,21 +961,21 @@ describe("Fund", function () {
         it("Should return the previous settlement if fund is empty", async function () {
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
-            await primaryMarket.mock.settle.returns(parseEther("1000"), 0, parseWbtc("1"), 0, 0);
+            await btc.mint(primaryMarket.address, parseBtc("1"));
+            await primaryMarket.mock.settle.returns(parseEther("1000"), 0, parseBtc("1"), 0, 0);
             await advanceOneDayAndSettle();
 
             await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
             await advanceOneDayAndSettle();
             // All shares redeemed on settlement
             const emptyDay = (await fund.currentDay()).toNumber();
-            const redeemedWbtc = (await wbtc.balanceOf(fund.address))
+            const redeemedBtc = (await btc.balanceOf(fund.address))
                 .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
-            await primaryMarket.mock.settle.returns(0, parseEther("1000"), 0, redeemedWbtc, 0);
+            await primaryMarket.mock.settle.returns(0, parseEther("1000"), 0, redeemedBtc, 0);
             await advanceOneDayAndSettle();
             // Create the shares again
-            await primaryMarket.mock.settle.returns(parseEther("1000"), 0, redeemedWbtc, 0, 0);
+            await primaryMarket.mock.settle.returns(parseEther("1000"), 0, redeemedBtc, 0, 0);
             await advanceOneDayAndSettle();
 
             const expectedM = parseEther("1")
@@ -1015,8 +1004,8 @@ describe("Fund", function () {
         it("Should use the price", async function () {
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
-            await primaryMarket.mock.settle.returns(parseEther("1000"), 0, parseWbtc("1"), 0, 0);
+            await btc.mint(primaryMarket.address, parseBtc("1"));
+            await primaryMarket.mock.settle.returns(parseEther("1000"), 0, parseBtc("1"), 0, 0);
             await advanceOneDayAndSettle();
             await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
 
@@ -1052,8 +1041,8 @@ describe("Fund", function () {
         it("Should accrue protocol fee and interest", async function () {
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
-            await primaryMarket.mock.settle.returns(parseEther("1000"), 0, parseWbtc("1"), 0, 0);
+            await btc.mint(primaryMarket.address, parseBtc("1"));
+            await primaryMarket.mock.settle.returns(parseEther("1000"), 0, parseBtc("1"), 0, 0);
             await advanceOneDayAndSettle();
             await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
 
@@ -1086,8 +1075,8 @@ describe("Fund", function () {
         it("Should predict NAV in the future", async function () {
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
-            await wbtc.mint(primaryMarket.address, parseWbtc("1"));
-            await primaryMarket.mock.settle.returns(parseEther("1000"), 0, parseWbtc("1"), 0, 0);
+            await btc.mint(primaryMarket.address, parseBtc("1"));
+            await primaryMarket.mock.settle.returns(parseEther("1000"), 0, parseBtc("1"), 0, 0);
             await advanceOneDayAndSettle();
             await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
 
@@ -1128,7 +1117,7 @@ describe("Fund", function () {
 
             const day = (await fund.currentDay()).toNumber();
             await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, parseEther("1000"));
-            await wbtc.mint(fund.address, parseWbtc("1"));
+            await btc.mint(fund.address, parseBtc("1"));
             await advanceOneDayAndSettle();
 
             expect(await fund.extrapolateNavA(day + DAY / 2)).to.equal(parseEther("1"));
@@ -1158,7 +1147,7 @@ describe("Fund", function () {
             f.twapOracle.address
         );
         await f.fund.initialize(
-            f.wbtc.address,
+            f.btc.address,
             8,
             f.wallets.shareM.address,
             f.wallets.shareA.address,
@@ -1187,7 +1176,7 @@ describe("Fund", function () {
 
         it("Should not trigger at exactly upper rebalance threshold", async function () {
             await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, parseEther("1000"));
-            await wbtc.mint(fund.address, parseWbtc("1.5"));
+            await btc.mint(fund.address, parseBtc("1.5"));
             await advanceOneDayAndSettle();
             expect(await fund.getRebalanceSize()).to.equal(0);
             const navs = await fund.historicalNavs(startDay);
@@ -1196,7 +1185,7 @@ describe("Fund", function () {
 
         it("Should not trigger at exactly lower rebalance threshold", async function () {
             await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, parseEther("1000"));
-            await wbtc.mint(fund.address, parseWbtc("0.75"));
+            await btc.mint(fund.address, parseBtc("0.75"));
             await advanceOneDayAndSettle();
             expect(await fund.getRebalanceSize()).to.equal(0);
             const navs = await fund.historicalNavs(startDay);
@@ -1207,7 +1196,7 @@ describe("Fund", function () {
             // Set daily interest rate to 10%
             await aprOracle.mock.capture.returns(parseEther("0.1"));
             await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, parseEther("1000"));
-            await wbtc.mint(fund.address, parseWbtc("1"));
+            await btc.mint(fund.address, parseBtc("1"));
             await advanceOneDayAndSettle();
 
             await advanceOneDayAndSettle();
@@ -1230,7 +1219,7 @@ describe("Fund", function () {
         const INIT_P_2 = parseEther("0");
         const INIT_A_2 = parseEther("200");
         const INIT_B_2 = parseEther("300");
-        const INIT_WBTC = parseWbtc("1");
+        const INIT_BTC = parseBtc("1");
 
         async function rebalanceFixture(): Promise<FixtureData> {
             const f = await loadFixture(zeroFeeFixture);
@@ -1246,7 +1235,7 @@ describe("Fund", function () {
             await f.primaryMarket.call(f.fund, "mint", TRANCHE_M, addr2, INIT_P_2);
             await f.primaryMarket.call(f.fund, "mint", TRANCHE_A, addr2, INIT_A_2);
             await f.primaryMarket.call(f.fund, "mint", TRANCHE_B, addr2, INIT_B_2);
-            await f.wbtc.mint(f.fund.address, INIT_WBTC);
+            await f.btc.mint(f.fund.address, INIT_BTC);
             await advanceBlockAtTime(f.startDay + DAY);
             await f.fund.settle();
             return f;
