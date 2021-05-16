@@ -4,7 +4,7 @@ import type { Fixture, MockContract, MockProvider, Stub } from "ethereum-waffle"
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
-const parseWbtc = (value: string) => parseUnits(value, 8);
+const parseBtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
 
 const TRANCHE_M = 0;
@@ -34,7 +34,7 @@ describe("Share", function () {
         readonly twapOracle: MockContract;
         readonly aprOracle: MockContract;
         readonly interestRateBallot: MockContract;
-        readonly wbtc: Contract;
+        readonly btc: Contract;
         readonly shareM: Contract;
         readonly shareA: Contract;
         readonly shareB: Contract;
@@ -51,7 +51,7 @@ describe("Share", function () {
     const INIT_P_2 = parseEther("0");
     const INIT_A_2 = parseEther("200");
     const INIT_B_2 = parseEther("300");
-    const INIT_WBTC = parseWbtc("1");
+    const INIT_BTC = parseBtc("1");
 
     let currentFixture: Fixture<FixtureData>;
     let fixtureData: FixtureData;
@@ -67,7 +67,7 @@ describe("Share", function () {
     let addr1: string;
     let addr2: string;
     let twapOracle: MockContract;
-    let wbtc: Contract;
+    let btc: Contract;
     let fund: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
@@ -94,7 +94,7 @@ describe("Share", function () {
         await twapOracle.mock.getTwap.returns(parseEther("1000"));
 
         const MockToken = await ethers.getContractFactory("MockToken");
-        const wbtc = await MockToken.connect(owner).deploy("Wrapped BTC", "WBTC", 8);
+        const btc = await MockToken.connect(owner).deploy("Wrapped BTC", "BTC", 8);
 
         const aprOracle = await deployMockForName(owner, "IAprOracle");
         await aprOracle.mock.capture.returns(parseEther("0.1"));
@@ -113,12 +113,7 @@ describe("Share", function () {
             twapOracle.address
         );
 
-        await primaryMarket.call(
-            wbtc,
-            "approve",
-            fund.address,
-            BigNumber.from("2").pow(256).sub(1)
-        );
+        await primaryMarket.call(btc, "approve", fund.address, BigNumber.from("2").pow(256).sub(1));
 
         const Share = await ethers.getContractFactory("Share");
         const shareM = await Share.connect(owner).deploy("Token M", "M", fund.address, TRANCHE_M);
@@ -126,7 +121,7 @@ describe("Share", function () {
         const shareB = await Share.connect(owner).deploy("Token B", "B", fund.address, TRANCHE_B);
 
         await fund.initialize(
-            wbtc.address,
+            btc.address,
             8,
             shareM.address,
             shareA.address,
@@ -147,7 +142,7 @@ describe("Share", function () {
         await primaryMarket.call(fund, "mint", TRANCHE_M, addr2, INIT_P_2);
         await primaryMarket.call(fund, "mint", TRANCHE_A, addr2, INIT_A_2);
         await primaryMarket.call(fund, "mint", TRANCHE_B, addr2, INIT_B_2);
-        await wbtc.mint(fund.address, INIT_WBTC);
+        await btc.mint(fund.address, INIT_BTC);
         await advanceBlockAtTime(startDay + DAY);
         await fund.settle();
 
@@ -158,7 +153,7 @@ describe("Share", function () {
             twapOracle,
             aprOracle,
             interestRateBallot,
-            wbtc,
+            btc,
             shareM: shareM.connect(user1),
             shareA: shareA.connect(user1),
             shareB: shareB.connect(user1),
@@ -187,7 +182,7 @@ describe("Share", function () {
         addr2 = user2.address;
         startDay = fixtureData.startDay;
         startTimestamp = fixtureData.startTimestamp;
-        wbtc = fixtureData.wbtc;
+        btc = fixtureData.btc;
         twapOracle = fixtureData.twapOracle;
         fund = fixtureData.fund;
     });

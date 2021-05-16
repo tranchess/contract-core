@@ -5,12 +5,12 @@ import editJsonFile = require("edit-json-file");
 import {
     TEST_TWAP_ORACLE,
     TEST_APR_ORACLE,
-    TEST_WBTC,
+    TEST_BTC,
     TEST_USDC,
     TEST_MIN_CREATION,
     STAGING_TWAP_ORACLE,
     STAGING_APR_ORACLE,
-    STAGING_WBTC,
+    STAGING_BTC,
     STAGING_USDC,
     STAGING_MIN_CREATION,
     BSC_TESTNET_VUSDC_ADDRESS,
@@ -46,19 +46,19 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
 
     let twapOracleAddress;
     let aprOracleAddress;
-    let wbtcAddress;
+    let btcAddress;
     let usdcAddress;
     let minCreation;
     if (hre.network.name === "test" || hre.network.name === "hardhat") {
         twapOracleAddress = TEST_TWAP_ORACLE;
         aprOracleAddress = TEST_APR_ORACLE;
-        wbtcAddress = TEST_WBTC;
+        btcAddress = TEST_BTC;
         usdcAddress = TEST_USDC;
         minCreation = TEST_MIN_CREATION;
     } else if (hre.network.name === "staging") {
         twapOracleAddress = STAGING_TWAP_ORACLE;
         aprOracleAddress = STAGING_APR_ORACLE;
-        wbtcAddress = STAGING_WBTC;
+        btcAddress = STAGING_BTC;
         usdcAddress = STAGING_USDC;
         minCreation = STAGING_MIN_CREATION;
     } else {
@@ -77,18 +77,18 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
     addressFile.set("twap_oracle", twapOracleAddress);
 
     const MockToken = await ethers.getContractFactory("MockToken");
-    let wbtc;
-    if (!wbtcAddress) {
-        wbtc = await MockToken.deploy("Mock WBTC", "WBTC", 8);
-        await wbtc.mint(deployer.address, 1000000e8);
-        wbtcAddress = wbtc.address;
-        addressFile.set("mock_wbtc", wbtcAddress);
-        console.log("WBTC:", wbtcAddress);
+    let btc;
+    if (!btcAddress) {
+        btc = await MockToken.deploy("Mock BTC", "BTC", 8);
+        await btc.mint(deployer.address, 1000000e8);
+        btcAddress = btc.address;
+        addressFile.set("mock_btc", btcAddress);
+        console.log("BTC:", btcAddress);
     } else {
-        wbtc = await MockToken.attach(wbtcAddress);
+        btc = await MockToken.attach(btcAddress);
     }
-    addressFile.set("wbtc", wbtcAddress);
-    const wbtcDecimals = await wbtc.decimals();
+    addressFile.set("btc", btcAddress);
+    const btcDecimals = await btc.decimals();
     if (!usdcAddress) {
         const usdc = await MockToken.deploy("Mock USDC", "USDC", 6);
         await usdc.mint(deployer.address, 1000000e6);
@@ -146,15 +146,15 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
     console.log("VotingEscrow:", votingEscrow.address);
 
     const Share = await ethers.getContractFactory("Share");
-    const shareM = await Share.deploy("Tranchess WBTC Class M", "tWBTC.M", fund.address, 0);
+    const shareM = await Share.deploy("Tranchess BTC Class M", "tBTC.M", fund.address, 0);
     addressFile.set("share_m", shareM.address);
     console.log("ShareM:", shareM.address);
 
-    const shareA = await Share.deploy("Tranchess WBTC Class A", "tWBTC.A", fund.address, 1);
+    const shareA = await Share.deploy("Tranchess BTC Class A", "tBTC.A", fund.address, 1);
     addressFile.set("share_a", shareA.address);
     console.log("ShareA:", shareA.address);
 
-    const shareB = await Share.deploy("Tranchess WBTC Class B", "tWBTC.B", fund.address, 2);
+    const shareB = await Share.deploy("Tranchess BTC Class B", "tBTC.B", fund.address, 2);
     addressFile.set("share_b", shareB.address);
     console.log("ShareB:", shareB.address);
 
@@ -169,7 +169,7 @@ task("deploy", "Deploy contracts", async (_args, hre) => {
         parseEther("0.001"),
         parseEther("0.0005"),
         parseEther("0.0005"),
-        parseUnits(minCreation, wbtcDecimals)
+        parseUnits(minCreation, btcDecimals)
     );
     addressFile.set("primary_market", primaryMarket.address);
     console.log("PrimaryMarket:", primaryMarket.address);
