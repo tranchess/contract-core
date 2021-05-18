@@ -74,7 +74,7 @@ describe("Share", function () {
         // Initiating transactions from a Waffle mock contract doesn't work well in Hardhat
         // and may fail with gas estimating errors. We use EOAs for the shares to make
         // test development easier.
-        const [user1, user2, owner, governance] = provider.getWallets();
+        const [user1, user2, owner, feeCollector] = provider.getWallets();
 
         // Start at 12 hours after settlement time of the 6th day in a week, which makes sure that
         // the first settlement after the fund's deployment settles the last day in a week and
@@ -107,10 +107,15 @@ describe("Share", function () {
 
         const Fund = await ethers.getContractFactory("Fund");
         const fund = await Fund.connect(owner).deploy(
+            btc.address,
+            8,
             0,
             UPPER_REBALANCE_THRESHOLD,
             LOWER_REBALANCE_THRESHOLD,
-            twapOracle.address
+            twapOracle.address,
+            aprOracle.address,
+            interestRateBallot.address,
+            feeCollector.address
         );
 
         await primaryMarket.call(btc, "approve", fund.address, BigNumber.from("2").pow(256).sub(1));
@@ -121,15 +126,10 @@ describe("Share", function () {
         const shareB = await Share.connect(owner).deploy("Token B", "B", fund.address, TRANCHE_B);
 
         await fund.initialize(
-            btc.address,
-            8,
             shareM.address,
             shareA.address,
             shareB.address,
-            aprOracle.address,
-            interestRateBallot.address,
-            primaryMarket.address,
-            governance.address
+            primaryMarket.address
         );
 
         await advanceBlockAtTime(startDay);

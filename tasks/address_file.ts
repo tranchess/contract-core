@@ -4,8 +4,13 @@ import { execSync } from "child_process";
 import { questionInt } from "readline-sync";
 import editJsonFile = require("edit-json-file");
 import { ETH_CHAIN_ID } from "../config";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
 
 const ADDRESS_FILE_DIR = path.join(__dirname, "..", "deploy");
+
+export function getAddressDir(hre: HardhatRuntimeEnvironment): string {
+    return path.join(ADDRESS_FILE_DIR, `${hre.network.name}_${hre.network.config.chainId}`);
+}
 
 export function getAddressFilename(module: string): string {
     const now = new Date();
@@ -17,11 +22,15 @@ export function getAddressFilename(module: string): string {
     return `${module}_address_${s}.json`;
 }
 
-export function createAddressFile(module: string): editJsonFile.JsonEditor {
-    if (!fs.existsSync(ADDRESS_FILE_DIR)) {
-        fs.mkdirSync(ADDRESS_FILE_DIR);
+export function createAddressFile(
+    hre: HardhatRuntimeEnvironment,
+    module: string
+): editJsonFile.JsonEditor {
+    const dir = getAddressDir(hre);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
     }
-    const filename = path.join(ADDRESS_FILE_DIR, getAddressFilename(module));
+    const filename = path.join(dir, getAddressFilename(module));
     if (fs.existsSync(filename)) {
         throw new Error(`Address file '${filename}' already exists`);
     }
@@ -42,9 +51,9 @@ export function createAddressFile(module: string): editJsonFile.JsonEditor {
     return addressFile;
 }
 
-export function listAddressFile(module: string): string[] {
-    if (fs.existsSync(ADDRESS_FILE_DIR) && fs.lstatSync(ADDRESS_FILE_DIR).isDirectory()) {
-        const filenames = fs.readdirSync(ADDRESS_FILE_DIR);
+export function listAddressFile(directory: string, module: string): string[] {
+    if (fs.existsSync(directory) && fs.lstatSync(directory).isDirectory()) {
+        const filenames = fs.readdirSync(directory);
         return filenames
             .filter((f) => f.endsWith(".json"))
             .filter((f) => f.startsWith(module + "_address_"))
@@ -55,16 +64,18 @@ export function listAddressFile(module: string): string[] {
 }
 
 export async function selectAddressFile(
+    hre: HardhatRuntimeEnvironment,
     module: string,
     filename: string
 ): Promise<{ readonly [contract: string]: string }> {
     if (filename === "" || filename === "latest") {
-        const candidates = listAddressFile(module);
+        const dir = getAddressDir(hre);
+        const candidates = listAddressFile(dir, module);
         if (candidates.length === 0) {
             throw new Error(`No address file of module '${module}' is found`);
         }
         if (filename === "latest") {
-            filename = path.join(ADDRESS_FILE_DIR, candidates[candidates.length - 1]);
+            filename = path.join(dir, candidates[candidates.length - 1]);
         } else {
             while (true) {
                 // Ask user to select an address file
@@ -82,7 +93,7 @@ export async function selectAddressFile(
                     }
                 );
                 if (index > 0 && index <= candidates.length) {
-                    filename = path.join(ADDRESS_FILE_DIR, candidates[index - 1]);
+                    filename = path.join(dir, candidates[index - 1]);
                     break;
                 }
                 console.log("Error: index out of range");

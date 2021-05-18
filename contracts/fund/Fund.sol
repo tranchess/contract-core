@@ -33,14 +33,23 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     uint256 private constant WEIGHT_B = 1;
     uint256 private constant WEIGHT_M = WEIGHT_A + WEIGHT_B;
 
-    /// @notice Daily protocol fee rate.
-    uint256 public dailyProtocolFeeRate;
-
     /// @notice Upper bound of `NAV_B / NAV_A` to trigger a rebalance.
-    uint256 public upperRebalanceThreshold;
+    uint256 public immutable upperRebalanceThreshold;
 
     /// @notice Lower bound of `NAV_B / NAV_A` to trigger a rebalance.
-    uint256 public lowerRebalanceThreshold;
+    uint256 public immutable lowerRebalanceThreshold;
+
+    /// @notice Address of the interest rate ballot.
+    IBallot public immutable ballot;
+
+    /// @notice Address of the underlying token.
+    address public immutable override tokenUnderlying;
+
+    /// @notice A multipler that normalizes an underlying balance to 18 decimal places.
+    uint256 public immutable override underlyingDecimalMultiplier;
+
+    /// @notice Daily protocol fee rate.
+    uint256 public dailyProtocolFeeRate;
 
     /// @notice TwapOracle address for the underlying asset.
     ITwapOracle public override twapOracle;
@@ -51,12 +60,6 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice AprOracle address.
     IAprOracle public aprOracle;
 
-    // Ballot
-    IBallot public ballot;
-
-    /// @notice Address of the underlying token.
-    address public override tokenUnderlying;
-
     /// @notice Address of Token M.
     address public override tokenM;
 
@@ -65,9 +68,6 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
 
     /// @notice Address of Token B.
     address public override tokenB;
-
-    /// @notice A multipler that normalizes an underlying balance to 18 decimal places.
-    uint256 public override underlyingDecimalMultiplier;
 
     /// @notice End timestamp of the current trading day.
     ///         A trading day starts at UTC time `SETTLEMENT_TIME` of a day (inclusive)
@@ -132,11 +132,19 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     address[] private newPrimaryMarkets;
 
     constructor(
+        address tokenUnderlying_,
+        uint256 underlyingDecimals_,
         uint256 dailyProtocolFeeRate_,
         uint256 upperRebalanceThreshold_,
         uint256 lowerRebalanceThreshold_,
-        address twapOracle_
+        address twapOracle_,
+        address aprOracle_,
+        address ballot_,
+        address feeCollector_
     ) public Ownable() FundRoles() {
+        tokenUnderlying = tokenUnderlying_;
+        require(underlyingDecimals_ <= 18, "Underlying decimals larger than 18");
+        underlyingDecimalMultiplier = 10**(18 - underlyingDecimals_);
         require(
             dailyProtocolFeeRate <= MAX_DAILY_PROTOCOL_FEE_RATE,
             "Exceed max protocol fee rate"
@@ -145,47 +153,33 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         upperRebalanceThreshold = upperRebalanceThreshold_;
         lowerRebalanceThreshold = lowerRebalanceThreshold_;
         twapOracle = ITwapOracle(twapOracle_);
-        currentDay = endOfDay(block.timestamp);
-        fundActivityStartTime = endOfDay(block.timestamp) - 1 days;
-        exchangeActivityStartTime = endOfDay(block.timestamp) - 1 days + 30 minutes;
-    }
-
-    function initialize(
-        address tokenUnderlying_,
-        uint256 underlyingDecimals_,
-        address tokenM_,
-        address tokenA_,
-        address tokenB_,
-        address aprOracle_,
-        address ballot_,
-        address primaryMarket_,
-        address feeCollector_
-    ) external onlyOwner {
-        require(tokenUnderlying == address(0), "already initialized");
-        require(tokenUnderlying_ != address(0), "Underlying token address cannot be zero");
-        tokenUnderlying = tokenUnderlying_;
-        tokenM = tokenM_;
-        tokenA = tokenA_;
-        tokenB = tokenB_;
         ballot = IBallot(ballot_);
         aprOracle = IAprOracle(aprOracle_);
         feeCollector = feeCollector_;
 
-        require(underlyingDecimals_ <= 18, "Underlying decimals larger than 18");
-        underlyingDecimalMultiplier = 10**(18 - underlyingDecimals_);
-
-        _initializeRoles(tokenM_, tokenA_, tokenB_, primaryMarket_);
-
+        currentDay = endOfDay(block.timestamp);
         uint256 lastDay = currentDay - 1 days;
         uint256 currentPrice = twapOracle.getTwap(lastDay);
         require(currentPrice != 0, "price n/a");
         _historicalNavs[lastDay][TRANCHE_M] = UNIT;
         _historicalNavs[lastDay][TRANCHE_A] = UNIT;
         _historicalNavs[lastDay][TRANCHE_B] = UNIT;
+        historicalInterestRate[endOfWeek(lastDay)] = MAX_INTEREST_RATE.min(aprOracle.capture());
+        fundActivityStartTime = lastDay;
+        exchangeActivityStartTime = lastDay + 30 minutes;
+    }
 
-        historicalInterestRate[endOfWeek(currentDay - 1 days)] = MAX_INTEREST_RATE.min(
-            aprOracle.capture()
-        );
+    function initialize(
+        address tokenM_,
+        address tokenA_,
+        address tokenB_,
+        address primaryMarket_
+    ) external onlyOwner {
+        require(tokenM == address(0) && tokenM_ != address(0), "Already initialized");
+        tokenM = tokenM_;
+        tokenA = tokenA_;
+        tokenB = tokenB_;
+        _initializeRoles(tokenM_, tokenA_, tokenB_, primaryMarket_);
     }
 
     /// @notice Return weights of Token A and B when splitting Token M.

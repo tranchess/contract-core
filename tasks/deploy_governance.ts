@@ -8,7 +8,7 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
 
     await hre.run("compile");
     const [deployer] = await ethers.getSigners();
-    const addressFile = createAddressFile("governance");
+    const addressFile = createAddressFile(hre, "governance");
 
     const Chess = await ethers.getContractFactory("Chess");
     const chess = await Chess.deploy(GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP);
@@ -27,7 +27,10 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     addressFile.set("votingEscrow", votingEscrow.address);
 
     const InterestRateBallot = await ethers.getContractFactory("InterestRateBallot");
-    const interestRateBallot = await InterestRateBallot.deploy(votingEscrow.address);
+    const interestRateBallot = await InterestRateBallot.deploy(
+        votingEscrow.address,
+        { gasLimit: 2e6 } // Gas estimation may fail
+    );
     console.log(`InterestRateBallot: ${interestRateBallot.address}`);
     addressFile.set("interestRateBallot", interestRateBallot.address);
 

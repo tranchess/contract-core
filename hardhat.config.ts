@@ -7,7 +7,6 @@ import "./tasks/deploy_exchange";
 import "./tasks/deploy_governance";
 import "./tasks/deploy_mock";
 import "./tasks/deploy_oracle";
-import "./tasks/initialize_fund";
 import "./tasks/initialize_timelock";
 import "./tasks/test_deploy";
 import { DEPLOYER_PK, ETH_RPC, ETH_CHAIN_ID } from "./config";

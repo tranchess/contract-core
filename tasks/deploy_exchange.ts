@@ -11,9 +11,9 @@ task("deploy_exchange", "Deploy exchange contracts")
 
         await hre.run("compile");
         const [deployer] = await ethers.getSigners();
-        const addressFile = createAddressFile("exchange");
-        const governanceAddresses = await selectAddressFile("governance", args.governance);
-        const fundAddresses = await selectAddressFile("fund", args.fund);
+        const addressFile = createAddressFile(hre, "exchange");
+        const governanceAddresses = await selectAddressFile(hre, "governance", args.governance);
+        const fundAddresses = await selectAddressFile(hre, "fund", args.fund);
 
         const quoteToken = await ethers.getContractAt("ERC20", EXCHANGE_CONFIG.QUOTE_ADDRESS);
         const quoteDecimals = await quoteToken.decimals();
