@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { BigNumber, BigNumberish, Contract, Wallet } from "ethers";
+import { BigNumberish, Contract, Wallet } from "ethers";
 import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
@@ -7,7 +7,6 @@ const { parseEther, parseUnits } = ethers.utils;
 const parseUsdc = (value: string) => parseUnits(value, 6);
 import { deployMockForName } from "./mock";
 
-const MAX_UINT = BigNumber.from("2").pow(256).sub(1);
 const EPOCH = 1800; // 30 min
 const USDC_TO_ETHER = parseUnits("1", 12);
 const MAKER_RESERVE_BPS = 11000; // 110%
