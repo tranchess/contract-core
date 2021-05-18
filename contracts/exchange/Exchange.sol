@@ -854,11 +854,7 @@ contract Exchange is ExchangeRoles, Staking {
             (uint256 executionQuote, uint256 executionBase) =
                 _buyTradeResult(takerBuy, estimatedNav);
             baseAmount = baseAmount.add(executionBase);
-
-            uint256 refundQuote = takerBuy.frozenQuote.sub(executionQuote);
-            quoteAmount = quoteAmount.add(refundQuote);
-
-            // Delete by zeroing it out
+            quoteAmount = takerBuy.frozenQuote.sub(executionQuote);
             delete unsettledTrade.takerBuy;
         }
 
@@ -868,11 +864,7 @@ contract Exchange is ExchangeRoles, Staking {
             (uint256 executionQuote, uint256 executionBase) =
                 _sellTradeResult(takerSell, estimatedNav);
             quoteAmount = quoteAmount.add(executionQuote);
-
-            uint256 refundBase = takerSell.frozenBase.sub(executionBase);
-            baseAmount = baseAmount.add(refundBase);
-
-            // Delete by zeroing it out
+            baseAmount = baseAmount.add(takerSell.frozenBase.sub(executionBase));
             delete unsettledTrade.takerSell;
         }
     }
@@ -895,12 +887,8 @@ contract Exchange is ExchangeRoles, Staking {
         if (makerBuy.frozenBase > 0) {
             (uint256 executionQuote, uint256 executionBase) =
                 _sellTradeResult(makerBuy, estimatedNav);
-            baseAmount = baseAmount.add(executionBase);
-
-            uint256 refundQuote = makerBuy.reservedQuote.sub(executionQuote);
-            quoteAmount = quoteAmount.add(refundQuote);
-
-            // Delete by zeroing it out
+            baseAmount = executionBase;
+            quoteAmount = makerBuy.reservedQuote.sub(executionQuote);
             delete unsettledTrade.makerBuy;
         }
 
@@ -910,11 +898,7 @@ contract Exchange is ExchangeRoles, Staking {
             (uint256 executionQuote, uint256 executionBase) =
                 _buyTradeResult(makerSell, estimatedNav);
             quoteAmount = quoteAmount.add(executionQuote);
-
-            uint256 refundBase = makerSell.reservedBase.sub(executionBase);
-            baseAmount = baseAmount.add(refundBase);
-
-            // Delete by zeroing it out
+            baseAmount = baseAmount.add(makerSell.reservedBase.sub(executionBase));
             delete unsettledTrade.makerSell;
         }
     }
