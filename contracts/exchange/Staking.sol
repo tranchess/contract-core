@@ -469,7 +469,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                     rate
                         .mul(endTimestamp.sub(timestamp_))
                         .multiplyDecimal(weeklyPercentage)
-                        .divideDecimalRoundPrecise(weight)
+                        .divideDecimalPrecise(weight)
                 );
             }
 
@@ -562,7 +562,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                     availableB.add(lockedB)
                 );
             rewards = rewards.add(
-                weight.multiplyDecimalRoundPrecise(_historicalIntegrals[i].sub(userIntegral))
+                weight.multiplyDecimalPrecise(_historicalIntegrals[i].sub(userIntegral))
             );
             if (availableM != 0 || availableA != 0 || availableB != 0) {
                 (availableM, availableA, availableB) = fund.doRebalance(
@@ -579,7 +579,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         }
         uint256 weight =
             rewardWeight(availableM.add(lockedM), availableA.add(lockedA), availableB.add(lockedB));
-        rewards = rewards.add(weight.multiplyDecimalRoundPrecise(integral.sub(userIntegral)));
+        rewards = rewards.add(weight.multiplyDecimalPrecise(integral.sub(userIntegral)));
         address account_ = account; // Fix the "stack too deep" error
         _claimableRewards[account_] = rewards;
         _userIntegrals[account_] = integral;
