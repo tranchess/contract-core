@@ -150,12 +150,11 @@ describe("Ballot", function () {
             await votingEscrow.mock.getLockedBalance.returns([parseEther("1"), unlockTime]);
             await ballot.cast(0);
             await ballot.connect(user2).cast(1);
-            await ballot.connect(owner).cast(2);
 
-            expect(await ballot.count(startWeek)).to.equal(parseEther("0.02"));
-            expect(await ballot.count(startWeek + WEEK * 50)).to.equal(parseEther("0.02"));
-            expect(await ballot.count(startWeek + WEEK * 99)).to.equal(parseEther("0.02"));
-            expect(await ballot.count(startWeek + WEEK * 100)).to.equal(0);
+            expect(await ballot.count(startWeek)).to.equal(parseEther("0.01"));
+            expect(await ballot.count(startWeek + WEEK * 50)).to.equal(parseEther("0.01"));
+            expect(await ballot.count(startWeek + WEEK * 99)).to.equal(parseEther("0.01"));
+            expect(await ballot.count(startWeek + WEEK * 100)).to.equal(parseEther("0.02"));
         });
 
         it("Should count with multiple voters", async function () {

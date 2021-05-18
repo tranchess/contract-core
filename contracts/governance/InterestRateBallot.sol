@@ -163,7 +163,7 @@ contract InterestRateBallot is IBallot {
         }
 
         if (total == 0) {
-            return 0;
+            return getWeight(maxOption.sub(1) / 2);
         }
         return sum / total;
     }
