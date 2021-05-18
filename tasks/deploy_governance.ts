@@ -27,7 +27,10 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     addressFile.set("votingEscrow", votingEscrow.address);
 
     const InterestRateBallot = await ethers.getContractFactory("InterestRateBallot");
-    const interestRateBallot = await InterestRateBallot.deploy(votingEscrow.address);
+    const interestRateBallot = await InterestRateBallot.deploy(
+        votingEscrow.address,
+        { gasLimit: 2e6 } // Gas estimation may fail
+    );
     console.log(`InterestRateBallot: ${interestRateBallot.address}`);
     addressFile.set("interestRateBallot", interestRateBallot.address);
 

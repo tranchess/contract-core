@@ -32,7 +32,8 @@ task("deploy_fund", "Deploy fund contracts")
             FUND_CONFIG.TWAP_ORACLE_ADDRESS,
             FUND_CONFIG.APR_ORACLE_ADDRESS,
             governanceAddresses.interestRateBallot,
-            deployer.address // FIXME read from configuration
+            deployer.address, // FIXME read from configuration
+            { gasLimit: 5e6 } // Gas estimation may fail
         );
         console.log(`Fund: ${fund.address}`);
         addressFile.set("fund", fund.address);
