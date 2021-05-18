@@ -32,7 +32,7 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     FUND_CONFIG.TWAP_ORACLE_ADDRESS = mockAddresses.mockTwapOracle;
     FUND_CONFIG.APR_ORACLE_ADDRESS = mockAddresses.mockAprOracle;
     FUND_CONFIG.MIN_CREATION = "0.1";
-    await hre.run("deploy_fund");
+    await hre.run("deploy_fund", { governance: "latest" });
 
     console.log();
     console.log("[+] Deploying exchange contracts");
@@ -40,8 +40,4 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     EXCHANGE_CONFIG.MIN_ORDER_AMOUNT = "0.1";
     EXCHANGE_CONFIG.MAKER_REQUIREMENT = "0";
     await hre.run("deploy_exchange", { governance: "latest", fund: "latest" });
-
-    console.log();
-    console.log("[+] Initializing the fund");
-    await hre.run("initialize_fund", { governance: "latest", fund: "latest" });
 });

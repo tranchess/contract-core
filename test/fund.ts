@@ -50,7 +50,7 @@ describe("Fund", function () {
     let shareM: Wallet;
     let shareA: Wallet;
     let shareB: Wallet;
-    let governance: Wallet;
+    let feeCollector: Wallet;
     let addr1: string;
     let addr2: string;
     let twapOracle: MockContract;
@@ -64,7 +64,7 @@ describe("Fund", function () {
         // Initiating transactions from a Waffle mock contract doesn't work well in Hardhat
         // and may fail with gas estimating errors. We use EOAs for the shares to make
         // test development easier.
-        const [user1, user2, owner, shareM, shareA, shareB, governance] = provider.getWallets();
+        const [user1, user2, owner, shareM, shareA, shareB, feeCollector] = provider.getWallets();
 
         // Start at 12 hours after settlement time of the 6th day in a week, which makes sure that
         // the first settlement after the fund's deployment settles the last day in a week and
@@ -96,27 +96,27 @@ describe("Fund", function () {
 
         const Fund = await ethers.getContractFactory("Fund");
         const fund = await Fund.connect(owner).deploy(
+            btc.address,
+            8,
             parseEther("0.0001").mul(DAILY_PROTOCOL_FEE_BPS),
             UPPER_REBALANCE_THRESHOLD,
             LOWER_REBALANCE_THRESHOLD,
-            twapOracle.address
+            twapOracle.address,
+            aprOracle.address,
+            interestRateBallot.address,
+            feeCollector.address
         );
         await primaryMarket.call(btc, "approve", fund.address, BigNumber.from("2").pow(256).sub(1));
 
         await fund.initialize(
-            btc.address,
-            8,
             shareM.address,
             shareA.address,
             shareB.address,
-            aprOracle.address,
-            interestRateBallot.address,
-            primaryMarket.address,
-            governance.address
+            primaryMarket.address
         );
 
         return {
-            wallets: { user1, user2, owner, shareM, shareA, shareB, governance },
+            wallets: { user1, user2, owner, shareM, shareA, shareB, feeCollector },
             startDay,
             startTimestamp,
             twapOracle,
@@ -145,7 +145,7 @@ describe("Fund", function () {
         shareM = fixtureData.wallets.shareM;
         shareA = fixtureData.wallets.shareA;
         shareB = fixtureData.wallets.shareB;
-        governance = fixtureData.wallets.governance;
+        feeCollector = fixtureData.wallets.feeCollector;
         addr1 = user1.address;
         addr2 = user2.address;
         startDay = fixtureData.startDay;
@@ -654,10 +654,10 @@ describe("Fund", function () {
             expect(navs[TRANCHE_B]).to.equal(parseEther("1"));
         });
 
-        it("Should transfer no fee to governance", async function () {
+        it("Should transfer no fee to the fee collector", async function () {
             await primaryMarketSettle.returns(0, 0, 0, 0, 0);
             await fund.settle();
-            expect(await btc.balanceOf(governance.address)).to.equal(0);
+            expect(await btc.balanceOf(feeCollector.address)).to.equal(0);
         });
 
         it("Should mint created shares", async function () {
@@ -670,13 +670,13 @@ describe("Fund", function () {
             );
         });
 
-        it("Should transfer creation fee to governance", async function () {
+        it("Should transfer creation fee to the fee collector", async function () {
             // Create 909 shares with 1 BTC (10% fee)
             await btc.mint(primaryMarket.address, parseBtc("1"));
             const fee = parseBtc("0.1");
             await primaryMarketSettle.returns(parseEther("909"), 0, parseBtc("1"), 0, fee);
             await fund.settle();
-            expect(await btc.balanceOf(governance.address)).to.equal(fee);
+            expect(await btc.balanceOf(feeCollector.address)).to.equal(fee);
             expect(await btc.balanceOf(fund.address)).to.equal(parseBtc("1").sub(fee));
         });
 
@@ -783,10 +783,10 @@ describe("Fund", function () {
             expect(navs[TRANCHE_B]).to.equal(navB);
         });
 
-        it("Should transfer protocol fee to governance", async function () {
+        it("Should transfer protocol fee to the fee collector", async function () {
             await primaryMarketSettle.returns(0, 0, 0, 0, 0);
             await fund.settle();
-            expect(await btc.balanceOf(governance.address)).to.equal(protocolFee);
+            expect(await btc.balanceOf(feeCollector.address)).to.equal(protocolFee);
         });
 
         it("Should net shares and underlying (creation > redemption)", async function () {
@@ -831,7 +831,7 @@ describe("Fund", function () {
             );
         });
 
-        it("Should transfer all fee to governance", async function () {
+        it("Should transfer all fee to the fee collector", async function () {
             // Create 900 shares with 1 BTC (10% fee)
             // Redeem 4000 shares for 3.6 BTC (10% fee)
             // There's also 50 shares (0.05 BTC) charged as split and merge fee.
@@ -847,7 +847,7 @@ describe("Fund", function () {
             );
             await expect(() => fund.settle()).to.changeTokenBalances(
                 btc,
-                [fund, primaryMarket, governance],
+                [fund, primaryMarket, feeCollector],
                 [
                     parseBtc("-2.6").sub(totalFee).sub(protocolFee),
                     parseBtc("2.6"),
@@ -1141,21 +1141,21 @@ describe("Fund", function () {
         // Overwrite the fund with a new one with zero protocol fee
         const Fund = await ethers.getContractFactory("Fund");
         f.fund = await Fund.connect(f.wallets.owner).deploy(
+            f.btc.address,
+            8,
             0, // Zero protocol fee
             UPPER_REBALANCE_THRESHOLD,
             LOWER_REBALANCE_THRESHOLD,
-            f.twapOracle.address
+            f.twapOracle.address,
+            f.aprOracle.address,
+            f.interestRateBallot.address,
+            f.wallets.feeCollector.address
         );
         await f.fund.initialize(
-            f.btc.address,
-            8,
             f.wallets.shareM.address,
             f.wallets.shareA.address,
             f.wallets.shareB.address,
-            f.aprOracle.address,
-            f.interestRateBallot.address,
-            f.primaryMarket.address,
-            f.wallets.governance.address
+            f.primaryMarket.address
         );
         return f;
     }

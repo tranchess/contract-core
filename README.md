@@ -22,12 +22,21 @@ Tranchess core.
 
 ## Deploy Contracts
 
+### Deployed Contract Address
+
+Each of the following deployment tasks creates a JSON file under the `deploy` directory,
+writing address of all deployed contracts in it. Some tasks need to read address files
+created by other tasks, in which case you can choose address files interactively, or use
+command line arguments `--<module> <file>` to specify them, where `<module>` is the suffix
+of a task name (e.g. `governance` or `fund`) and `<file>` can be either `latest` or
+relative path to a concrete file (e.g. `deploy/fund_address_XXX.json`).
+
 ### Configuration
 
 Copy the file `.env.example` to `.env` and modify configurations in the file.
 
 This project depends on a few external contracts. On a public blockchain, please update
-their addresses in `.env`. On a private blockchain, deploy mocking contracts using the following
+their addresses in `.env`. On a private blockchain, deploy mock contracts using the following
 command.
 
 `npx hardhat deploy_mock --network remote`
@@ -36,7 +45,8 @@ command.
 
 `npx hardhat deploy_oracle --network remote`
 
-On a private blockchain, you may want to use mocked oracles.
+On a private blockchain, you may want to use mock oracles instead of contracts deployed
+by this task.
 
 ### Governance Contracts
 
@@ -46,19 +56,19 @@ On a private blockchain, you may want to use mocked oracles.
 
 `npx hardhat deploy_fund --network remote`
 
+It needs governance contract addresses. Use the optional argument `--governance <file>`
+to specify an address file.
+
 ### Exchange Contracts
 
 `npx hardhat deploy_exchange --network remote`
 
-Exchange depends on governance and fund contracts. The above command reads address of
-these contracts from address files, which are created in the `deploy` directory when
-those contracts are created. You can select the address files interactively, or use
-command line arguments `--governance <file>` and `--fund <file>` to specify them,
-where `<file>` can be either `latest` or relative path to a concrete file (e.g.
-`deploy/fund_address_XXX.json`).
+It needs governance and fund contract addresses. Use the optional arguments `--governance <file>`
+and `--fund <file>` to specify address files.
 
-### Initialize the Fund
+### Test the Deployment Tasks
 
-`npx hardhat initialize_fund --network remote`
+The Hardhat task `test_deploy` runs all the above deployment tasks on a temporary local
+Hardhat network. It can be used as a preliminary test.
 
-Like `deploy_exchange`, this command also needs governance and fund contract addresses.
+`npx hardhat test_deploy`
