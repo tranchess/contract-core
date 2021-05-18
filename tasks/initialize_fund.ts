@@ -1,30 +1,30 @@
 import { task } from "hardhat/config";
-import fs = require("fs");
+import { selectAddressFile } from "./address_file";
 
 task("initialize_fund", "Initialize fund")
-    .addParam(
-        "deploy",
-        "Path to the JSON file created by the deploy task, usually in the 'cache' directory"
-    )
+    .addOptionalParam("governance", "Path to the governance address file", "")
+    .addOptionalParam("fund", "Path to the fund address file", "")
     .setAction(async function (args, hre) {
         const { ethers } = hre;
-        const addresses = JSON.parse(fs.readFileSync(args.deploy, "utf-8"));
 
         const [deployer] = await ethers.getSigners();
-        const fund = await ethers.getContractAt("Fund", addresses.fund);
-        const btc = await ethers.getContractAt("MockToken", addresses.btc);
-        const btcDecimals = await btc.decimals();
+        const governanceAddresses = await selectAddressFile("governance", args.governance);
+        const fundAddresses = await selectAddressFile("fund", args.fund);
+
+        const fund = await ethers.getContractAt("Fund", fundAddresses.fund);
+        const underlying = await ethers.getContractAt("ERC20", fundAddresses.underlying);
+        const underlyingDecimals = await underlying.decimals();
 
         console.log("Initializing Fund");
         await fund.initialize(
-            addresses.btc,
-            btcDecimals,
-            addresses.share_p,
-            addresses.share_a,
-            addresses.share_b,
-            addresses.apr_oracle,
-            addresses.interest_rate_ballot,
-            addresses.primary_market,
+            fundAddresses.underlying,
+            underlyingDecimals,
+            fundAddresses.shareM,
+            fundAddresses.shareA,
+            fundAddresses.shareB,
+            fundAddresses.aprOracle,
+            governanceAddresses.interestRateBallot,
+            fundAddresses.primaryMarket,
             deployer.address // FIXME read from configuration
         );
     });
