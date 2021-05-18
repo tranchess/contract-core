@@ -1,19 +1,15 @@
 import { expect } from "chai";
-import { BigNumber, constants, Contract, Wallet } from "ethers";
-import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
+import { Contract, Wallet } from "ethers";
+import type { Fixture, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
-const { parseEther } = ethers.utils;
-import { deployMockForName } from "./mock";
+const { parseEther, parseUnits } = ethers.utils;
+const parsePrecise = (value: string) => parseUnits(value, 27);
 
 const WEEK = 7 * 86400;
 
 async function advanceBlockAtTime(time: number) {
     await ethers.provider.send("evm_mine", [time]);
-}
-
-async function setNextBlockTime(time: number) {
-    await ethers.provider.send("evm_setNextBlockTimestamp", [time]);
 }
 
 /**
@@ -184,7 +180,7 @@ describe("Staking", function () {
             );
             expect(await staking.lastTimestamp()).to.equal(currentTimestamp);
             expect(await staking.globalIntegral()).to.equal(
-                parseEther("1")
+                parsePrecise("1")
                     .mul(parseEther((currentTimestamp - startTimestamp).toString()))
                     .div(TOTAL_AMOUNT)
             );
@@ -198,7 +194,7 @@ describe("Staking", function () {
             );
             expect(await staking.lastTimestamp()).to.equal(currentTimestamp);
             expect(await staking.globalIntegral()).to.equal(
-                parseEther("1")
+                parsePrecise("1")
                     .mul(parseEther((currentTimestamp - startTimestamp).toString()))
                     .div(TOTAL_AMOUNT)
             );
@@ -208,11 +204,12 @@ describe("Staking", function () {
             const USER1_AMOUNT = parseEther("30");
             const USER2_AMOUNT = parseEther("10");
             const TOTAL_AMOUNT = USER1_AMOUNT.add(USER2_AMOUNT);
+
+            await setAutomine(false);
             await staking.connect(user1).deposit(USER1_AMOUNT);
             await staking.connect(user2).deposit(USER2_AMOUNT);
-            advanceBlockAtTime(startTimestamp + 10);
-            await staking.userCheckpoint(addr1);
-            await staking.userCheckpoint(addr2);
+            advanceBlockAtTime(startTimestamp);
+            await setAutomine(true);
 
             advanceBlockAtTime(startTimestamp + WEEK);
             await staking.userCheckpoint(addr1);
@@ -230,7 +227,7 @@ describe("Staking", function () {
             );
             expect(await staking.lastTimestamp()).to.equal(currentTimestamp);
             expect(await staking.globalIntegral()).to.equal(
-                parseEther("1")
+                parsePrecise("1")
                     .mul(parseEther((currentTimestamp - startTimestamp).toString()))
                     .div(TOTAL_AMOUNT)
             );
@@ -242,9 +239,6 @@ describe("Staking", function () {
             const TOTAL_AMOUNT = USER1_AMOUNT.add(USER2_AMOUNT);
             await staking.connect(user1).deposit(USER1_AMOUNT);
             await staking.connect(user2).deposit(USER2_AMOUNT);
-            advanceBlockAtTime(startTimestamp + 10 * WEEK);
-            await staking.userCheckpoint(addr1);
-            await staking.userCheckpoint(addr2);
 
             advanceBlockAtTime(startTimestamp + 11 * WEEK);
             await staking.userCheckpoint(addr1);
@@ -262,7 +256,7 @@ describe("Staking", function () {
             );
             expect(await staking.lastTimestamp()).to.equal(endTimestamp);
             expect(await staking.globalIntegral()).to.equal(
-                parseEther("1")
+                parsePrecise("1")
                     .mul(parseEther((endTimestamp - startTimestamp).toString()))
                     .div(TOTAL_AMOUNT)
             );
@@ -304,7 +298,7 @@ describe("Staking", function () {
             );
             expect(await staking.lastTimestamp()).to.equal(currentTimestamp);
             expect(await staking.globalIntegral()).to.equal(
-                parseEther("1")
+                parsePrecise("1")
                     .mul(parseEther((currentTimestamp - startTimestamp).toString()))
                     .div(TOTAL_AMOUNT)
             );
@@ -387,7 +381,14 @@ describe("Staking", function () {
             expect(await staking.connect(user3).callStatic["claimRewards"]()).to.equal(user3Reward);
             expect(await staking.connect(user4).callStatic["claimRewards"]()).to.equal(user4Reward);
 
+            await setAutomine(false);
+            await staking.connect(user1).claimRewards();
+            await staking.connect(user2).claimRewards();
+            await staking.connect(user3).claimRewards();
+            await staking.connect(user4).claimRewards();
             await advanceBlockAtTime(startTimestamp + 3 * WEEK);
+            await setAutomine(true);
+
             user1Reward = user1Reward.add(0);
             user2Reward = user2Reward.add(
                 parseEther(WEEK.toString())
@@ -405,10 +406,33 @@ describe("Staking", function () {
                     .div(TOTAL_AMOUNT)
             );
 
-            expect(await staking.connect(user1).callStatic["claimRewards"]()).to.equal(user1Reward);
-            expect(await staking.connect(user2).callStatic["claimRewards"]()).to.equal(user2Reward);
-            expect(await staking.connect(user3).callStatic["claimRewards"]()).to.equal(user3Reward);
-            expect(await staking.connect(user4).callStatic["claimRewards"]()).to.equal(user4Reward);
+            expect(await rewardToken.balanceOf(addr1)).to.equal(user1Reward);
+            expect(await rewardToken.balanceOf(addr2)).to.equal(user2Reward);
+            expect(await rewardToken.balanceOf(addr3)).to.equal(user3Reward);
+            expect(await rewardToken.balanceOf(addr4)).to.equal(user4Reward);
+        });
+    });
+
+    describe("exit()", function () {
+        beforeEach(async function () {
+            await staking.initialize(parseEther("1"));
+            await staking.connect(user1).deposit(parseEther("10"));
+            await staking.connect(user2).deposit(parseEther("20"));
+        });
+
+        it("Should exit", async function () {
+            await advanceBlockAtTime(startTimestamp + WEEK);
+
+            await staking.connect(user1).exit();
+            const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+
+            expect(await staking.totalStakes()).to.equal(parseEther("20"));
+            expect(await stakedToken.balanceOf(addr1)).to.equal(parseEther("100"));
+            expect(await rewardToken.balanceOf(addr1)).to.equal(
+                parseEther((currentTimestamp - startTimestamp).toString())
+                    .mul(parseEther("10"))
+                    .div(parseEther("30"))
+            );
         });
     });
 });

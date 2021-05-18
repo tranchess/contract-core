@@ -40,6 +40,7 @@ contract LiquidityStaking {
     }
 
     function initialize(uint256 rate_) external {
+        require(rate == 0 && rate_ != 0, "Should not initialize twice");
         require(startTimestamp >= block.timestamp, "Start cannot be in the past");
 
         uint256 amount = rate_.mul(endTimestamp.sub(startTimestamp));
@@ -69,18 +70,30 @@ contract LiquidityStaking {
 
     function withdraw(uint256 amount) external {
         userCheckpoint(msg.sender);
-
-        require(IERC20(stakedToken).transfer(msg.sender, amount), "Transfer failed");
-        totalStakes = totalStakes.sub(amount, "Exceed staked balances");
-        stakes[msg.sender] = stakes[msg.sender].sub(amount, "Exceed staked balances");
+        _withdraw(msg.sender, amount);
     }
 
     function claimRewards() public returns (uint256 rewards) {
         userCheckpoint(msg.sender);
+        rewards = _claimRewards(msg.sender);
+    }
 
-        rewards = claimableRewards[msg.sender];
-        require(IERC20(rewardToken).transfer(msg.sender, rewards), "Transfer failed");
-        delete claimableRewards[msg.sender];
+    function exit() external returns (uint256 rewards) {
+        userCheckpoint(msg.sender);
+        _withdraw(msg.sender, stakes[msg.sender]);
+        rewards = _claimRewards(msg.sender);
+    }
+
+    function _withdraw(address account, uint256 amount) private {
+        require(IERC20(stakedToken).transfer(account, amount), "Transfer failed");
+        totalStakes = totalStakes.sub(amount, "Exceed staked balances");
+        stakes[account] = stakes[account].sub(amount, "Exceed staked balances");
+    }
+
+    function _claimRewards(address account) private returns (uint256 rewards) {
+        rewards = claimableRewards[account];
+        require(IERC20(rewardToken).transfer(account, rewards), "Transfer failed");
+        delete claimableRewards[account];
     }
 
     function _checkpoint() private {
@@ -97,7 +110,7 @@ contract LiquidityStaking {
             if (totalStakes_ != 0) {
                 // calculate global integral till now
                 globalIntegral = globalIntegral.add(
-                    rate.mul(timeLapse).divideDecimal(totalStakes_)
+                    rate.mul(timeLapse).divideDecimalPrecise(totalStakes_)
                 );
             }
 
@@ -109,7 +122,7 @@ contract LiquidityStaking {
     function _rewardCheckpoint(address account) private {
         // claim rewards till now
         uint256 claimableReward =
-            stakes[account].multiplyDecimal(globalIntegral.sub(integrals[account]));
+            stakes[account].multiplyDecimalPrecise(globalIntegral.sub(integrals[account]));
         claimableRewards[account] = claimableRewards[account].add(claimableReward);
 
         // update per-user state
