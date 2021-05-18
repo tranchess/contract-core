@@ -1487,7 +1487,7 @@ describe("Exchange", function () {
     describe("Expired ask order", function () {
         let outerFixture: Fixture<FixtureData>;
         const frozenUsdc = parseEther("0.1");
-        const reservedB = frozenUsdc.mul(11).div(10);
+        const reservedB = frozenUsdc.mul(MAKER_RESERVE_BPS).div(10000);
 
         async function expiredAskOrderFixture(): Promise<FixtureData> {
             const f = await loadFixture(deployFixture);
@@ -1585,7 +1585,7 @@ describe("Exchange", function () {
     describe("Expired bid order", function () {
         let outerFixture: Fixture<FixtureData>;
         const frozenA = parseEther("0.1");
-        const reservedUsdc = frozenA.mul(11).div(10);
+        const reservedUsdc = frozenA.mul(MAKER_RESERVE_BPS).div(10000);
 
         async function expiredBidOrderFixture(): Promise<FixtureData> {
             const f = await loadFixture(deployFixture);
