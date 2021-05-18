@@ -1166,11 +1166,14 @@ describe("Exchange", function () {
     describe("settleMaker() and settleTaker()", function () {
         let outerFixture: Fixture<FixtureData>;
         const frozenUsdcForM = parseEther("1");
-        const reservedM = frozenUsdcForM.mul(MAKER_RESERVE_BPS).div(10000).mul(10).div(11);
+        const effectiveUsdcForM = frozenUsdcForM.mul(100).div(105);
+        const reservedM = frozenUsdcForM.mul(MAKER_RESERVE_BPS).div(10000).mul(100).div(105);
         const frozenUsdcForA = parseEther("2");
-        const reservedA = frozenUsdcForA.mul(MAKER_RESERVE_BPS).div(10000).mul(10).div(11);
+        const effectiveUsdcForA = frozenUsdcForA.mul(100).div(105);
+        const reservedA = frozenUsdcForA.mul(MAKER_RESERVE_BPS).div(10000).mul(100).div(105);
         const frozenB = parseEther("3");
-        const reservedUsdcForB = frozenB.mul(MAKER_RESERVE_BPS).div(10000).mul(9).div(10);
+        const effectiveB = frozenB.mul(95).div(100);
+        const reservedUsdcForB = frozenB.mul(MAKER_RESERVE_BPS).div(10000).mul(95).div(100);
 
         async function tradeFixture(): Promise<FixtureData> {
             const f = await loadFixture(deployFixture);
@@ -1181,20 +1184,20 @@ describe("Exchange", function () {
             // +10%   20(user2)
             // Bid:
             // -10%   50(user2)
-            await f.exchange.connect(u2).placeAsk(TRANCHE_M, 81, ASK_1_PD_1, 0);
-            await f.exchange.connect(u2).placeAsk(TRANCHE_A, 81, ASK_1_PD_1, 0);
-            await f.exchange.connect(u2).placeAsk(TRANCHE_B, 81, ASK_1_PD_1, 0);
-            await f.exchange.connect(u2).placeBid(TRANCHE_M, 1, BID_1_PD_N1, 0);
-            await f.exchange.connect(u2).placeBid(TRANCHE_A, 1, BID_1_PD_N1, 0);
-            await f.exchange.connect(u2).placeBid(TRANCHE_B, 1, BID_1_PD_N1, 0);
+            await f.exchange.connect(u2).placeAsk(TRANCHE_M, 61, ASK_1_PD_1, 0);
+            await f.exchange.connect(u2).placeAsk(TRANCHE_A, 61, ASK_1_PD_1, 0);
+            await f.exchange.connect(u2).placeAsk(TRANCHE_B, 61, ASK_1_PD_1, 0);
+            await f.exchange.connect(u2).placeBid(TRANCHE_M, 21, BID_1_PD_N1, 0);
+            await f.exchange.connect(u2).placeBid(TRANCHE_A, 21, BID_1_PD_N1, 0);
+            await f.exchange.connect(u2).placeBid(TRANCHE_B, 21, BID_1_PD_N1, 0);
 
             await f.fund.mock.extrapolateNav
                 .withArgs(f.startEpoch - EPOCH * 2, parseEther("1000"))
                 .returns(parseEther("1"), parseEther("1"), parseEther("1"));
             // User 1 buys M and A and sells B
-            await f.exchange.buyM(0, 81, frozenUsdcForM);
-            await f.exchange.buyA(0, 81, frozenUsdcForA);
-            await f.exchange.sellB(0, 1, frozenB);
+            await f.exchange.buyM(0, 61, frozenUsdcForM);
+            await f.exchange.buyA(0, 61, frozenUsdcForA);
+            await f.exchange.sellB(0, 21, frozenB);
 
             return f;
         }
@@ -1274,19 +1277,18 @@ describe("Exchange", function () {
         });
 
         describe("Settle at exactly the estimated NAV", function () {
-            const settledM = frozenUsdcForM.mul(10).div(11);
-            const settledA = frozenUsdcForA.mul(10).div(11);
+            const navM = parseEther("1");
+            const navA = parseEther("1");
+            const navB = parseEther("1");
+            const settledM = effectiveUsdcForM.mul(parseEther("1")).div(navM);
+            const settledA = effectiveUsdcForA.mul(parseEther("1")).div(navA);
             const settledB = frozenB;
             const settledUsdcForM = frozenUsdcForM;
             const settledUsdcForA = frozenUsdcForA;
-            const settledUsdcForB = frozenB.mul(9).div(10);
+            const settledUsdcForB = effectiveB.mul(navB).div(parseEther("1"));
 
             beforeEach(async function () {
-                await fund.mock.extrapolateNav.returns(
-                    parseEther("1"),
-                    parseEther("1"),
-                    parseEther("1")
-                );
+                await fund.mock.extrapolateNav.returns(navM, navA, navB);
             });
 
             it("SettleTaker()", async function () {
@@ -1337,9 +1339,11 @@ describe("Exchange", function () {
             const navM = parseEther("1.2");
             const navA = parseEther("1.05");
             const navB = parseEther("1.35");
-            const settledM = frozenUsdcForM.mul(10).div(11).mul(parseEther("1")).div(navM);
-            const settledA = frozenUsdcForA.mul(10).div(11).mul(parseEther("1")).div(navA);
-            const settledB = reservedUsdcForB.mul(parseEther("1")).div(navB.mul(9).div(10));
+            const settledM = effectiveUsdcForM.mul(parseEther("1")).div(navM);
+            const settledA = effectiveUsdcForA.mul(parseEther("1")).div(navA);
+            const settledB = frozenB
+                .mul(reservedUsdcForB)
+                .div(effectiveB.mul(navB).div(parseEther("1")));
             const settledUsdcForM = frozenUsdcForM;
             const settledUsdcForA = frozenUsdcForA;
             const settledUsdcForB = reservedUsdcForB;
@@ -1378,11 +1382,13 @@ describe("Exchange", function () {
             const navA = parseEther("1.05");
             const navB = parseEther("0.55");
             const settledM = reservedM;
-            const settledA = frozenUsdcForA.mul(parseEther("1")).div(navA).mul(10).div(11);
+            const settledA = effectiveUsdcForA.mul(parseEther("1")).div(navA);
             const settledB = frozenB;
-            const settledUsdcForM = reservedM.mul(navM).div(parseEther("1")).mul(11).div(10);
+            const settledUsdcForM = frozenUsdcForM
+                .mul(reservedM.mul(navM).div(parseEther("1")))
+                .div(effectiveUsdcForM);
             const settledUsdcForA = frozenUsdcForA;
-            const settledUsdcForB = frozenB.mul(navB).div(parseEther("1")).mul(9).div(10);
+            const settledUsdcForB = effectiveB.mul(navB).div(parseEther("1"));
 
             beforeEach(async function () {
                 await fund.mock.extrapolateNav.returns(navM, navA, navB);
