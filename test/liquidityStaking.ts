@@ -216,7 +216,7 @@ describe("Staking", function () {
 
             advanceBlockAtTime(startTimestamp + WEEK);
             await staking.userCheckpoint(addr1);
-            let currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+            const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
 
             expect(await staking.connect(user1).callStatic["claimRewards"]()).to.equal(
                 parseEther((currentTimestamp - startTimestamp).toString())
@@ -294,7 +294,7 @@ describe("Staking", function () {
 
             advanceBlockAtTime(startTimestamp + 10);
             await staking.connect(user1).withdraw(parseEther("10"));
-            let currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+            const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
 
             expect(await stakedToken.balanceOf(staking.address)).to.equal(parseEther("30"));
             expect(await staking.connect(user1).callStatic["claimRewards"]()).to.equal(
@@ -319,11 +319,11 @@ describe("Staking", function () {
         });
 
         it("Should claim rewards", async function () {
-            let USER1_AMOUNT = parseEther("10");
-            let USER2_AMOUNT = parseEther("20");
-            let USER3_AMOUNT = parseEther("30");
-            let USER4_AMOUNT = parseEther("40");
-            let TOTAL_AMOUNT = USER1_AMOUNT.add(USER2_AMOUNT).add(USER3_AMOUNT).add(USER4_AMOUNT);
+            const USER1_AMOUNT = parseEther("10");
+            const USER2_AMOUNT = parseEther("20");
+            const USER3_AMOUNT = parseEther("30");
+            const USER4_AMOUNT = parseEther("40");
+            const TOTAL_AMOUNT = USER1_AMOUNT.add(USER2_AMOUNT).add(USER3_AMOUNT).add(USER4_AMOUNT);
 
             await setAutomine(false);
             await staking.connect(user1).deposit(USER1_AMOUNT);
