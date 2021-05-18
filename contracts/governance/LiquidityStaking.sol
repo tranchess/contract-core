@@ -104,9 +104,8 @@ contract LiquidityStaking {
 
         uint256 nextTimestamp = endTimestamp.min(block.timestamp);
         uint256 timeLapse = nextTimestamp.sub(lastTimestamp);
-        uint256 totalStakes_ = totalStakes;
-
         if (timeLapse != 0) {
+            uint256 totalStakes_ = totalStakes;
             if (totalStakes_ != 0) {
                 // calculate global integral till now
                 globalIntegral = globalIntegral.add(

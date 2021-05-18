@@ -157,7 +157,7 @@ describe("Staking", function () {
             expect(await staking.stakes(addr1)).to.equal(parseEther("10"));
         });
 
-        it("Should deposit at start timestamp", async function () {
+        it("Should deposit before start timestamp and start accumulating rewards after start timestamp", async function () {
             const USER1_AMOUNT = parseEther("30");
             const USER2_AMOUNT = parseEther("10");
             const TOTAL_AMOUNT = USER1_AMOUNT.add(USER2_AMOUNT);
@@ -200,7 +200,7 @@ describe("Staking", function () {
             );
         });
 
-        it("Should deposit", async function () {
+        it("Should deposit and accumulate rewards after start timestamp", async function () {
             const USER1_AMOUNT = parseEther("30");
             const USER2_AMOUNT = parseEther("10");
             const TOTAL_AMOUNT = USER1_AMOUNT.add(USER2_AMOUNT);
@@ -233,7 +233,7 @@ describe("Staking", function () {
             );
         });
 
-        it("Should deposit after end timestamp", async function () {
+        it("Should deposit but receive no more rewards after end timestamp", async function () {
             const USER1_AMOUNT = parseEther("30");
             const USER2_AMOUNT = parseEther("10");
             const TOTAL_AMOUNT = USER1_AMOUNT.add(USER2_AMOUNT);
@@ -281,7 +281,7 @@ describe("Staking", function () {
             expect(await staking.stakes(addr1)).to.equal(parseEther("20"));
         });
 
-        it("Should withdraw at start timestamp", async function () {
+        it("Should withdraw deposits deposited before start timestamp", async function () {
             const USER1_AMOUNT = parseEther("30");
             const USER2_AMOUNT = parseEther("10");
             const TOTAL_AMOUNT = USER1_AMOUNT.add(USER2_AMOUNT);
