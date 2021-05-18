@@ -14,7 +14,7 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     console.log();
     console.log("[+] Deploying mock contracts");
     await hre.run("deploy_mock");
-    const mockAddresses = await selectAddressFile("mock", "latest");
+    const mockAddresses = await selectAddressFile(hre, "mock", "latest");
 
     console.log();
     console.log("[+] Deploying oracle contracts");

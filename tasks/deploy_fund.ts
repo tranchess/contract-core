@@ -10,8 +10,8 @@ task("deploy_fund", "Deploy fund contracts")
 
         await hre.run("compile");
         const [deployer] = await ethers.getSigners();
-        const addressFile = createAddressFile("fund");
-        const governanceAddresses = await selectAddressFile("governance", args.governance);
+        const addressFile = createAddressFile(hre, "fund");
+        const governanceAddresses = await selectAddressFile(hre, "governance", args.governance);
 
         const underlyingToken = await ethers.getContractAt("ERC20", FUND_CONFIG.UNDERLYING_ADDRESS);
         const underlyingDecimals = await underlyingToken.decimals();

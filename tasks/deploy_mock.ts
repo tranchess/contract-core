@@ -7,7 +7,7 @@ task("deploy_mock", "Deploy mock contracts", async (_args, hre) => {
     const { deployMockContract } = waffle;
     await hre.run("compile");
     const [deployer] = await ethers.getSigners();
-    const addressFile = createAddressFile("mock");
+    const addressFile = createAddressFile(hre, "mock");
 
     const MockTwapOracle = await ethers.getContractAt("ITwapOracle", ethers.constants.AddressZero);
     const mockTwapOracle = await deployMockContract(

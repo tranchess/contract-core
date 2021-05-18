@@ -6,7 +6,7 @@ task("deploy_oracle", "Deploy oracle contracts", async (_args, hre) => {
     const { ethers } = hre;
 
     await hre.run("compile");
-    const addressFile = createAddressFile("oracle");
+    const addressFile = createAddressFile(hre, "oracle");
 
     const TwapOracle = await ethers.getContractFactory("TwapOracle");
     const twapOracle = await TwapOracle.deploy(

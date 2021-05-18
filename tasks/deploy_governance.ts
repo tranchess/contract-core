@@ -8,7 +8,7 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
 
     await hre.run("compile");
     const [deployer] = await ethers.getSigners();
-    const addressFile = createAddressFile("governance");
+    const addressFile = createAddressFile(hre, "governance");
 
     const Chess = await ethers.getContractFactory("Chess");
     const chess = await Chess.deploy(GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP);
