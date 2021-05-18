@@ -1918,4 +1918,35 @@ describe("Exchange", function () {
             );
         });
     });
+
+    describe.skip("Gas used", function () {
+        let estimatedGasInBuy: BigNumberish;
+        let estimatedGasInSell: BigNumberish;
+        let gasInBuy: BigNumberish;
+        let gasInSell: BigNumberish;
+
+        it("Measures gas used in matching 25 maker orders", async function () {
+            this.timeout(300000); // 5 minutes
+            for (let i = 0; i < 5; i++) {
+                for (let j = 0; j < 5; j++) {
+                    await exchange.connect(user2).placeAsk(TRANCHE_B, 42 + i, parseEther("1"), 0);
+                    await exchange.connect(user2).placeBid(TRANCHE_B, 40 - i, parseEther("1"), 0);
+                }
+            }
+            await fund.mock.extrapolateNav.returns(0, 0, parseEther("1"));
+
+            estimatedGasInBuy = await exchange.estimateGas.buyB(0, 71, parseEther("10000"));
+            const buyTx = await exchange.buyB(0, 71, parseEther("10000"));
+            gasInBuy = (await ethers.provider.getTransactionReceipt(buyTx.hash)).gasUsed;
+
+            estimatedGasInSell = await exchange.estimateGas.sellB(0, 11, parseEther("10000"));
+            const sellTx = await exchange.sellB(0, 11, parseEther("10000"));
+            gasInSell = (await ethers.provider.getTransactionReceipt(sellTx.hash)).gasUsed;
+        });
+
+        after(function () {
+            console.log(`Gas used in buy: estimated ${estimatedGasInBuy}, actual ${gasInBuy}`);
+            console.log(`Gas used in sell: estimated ${estimatedGasInSell}, actual ${gasInSell}`);
+        });
+    });
 });
