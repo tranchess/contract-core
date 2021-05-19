@@ -3,7 +3,7 @@ pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-contract CoreUtility {
+abstract contract CoreUtility {
     using SafeMath for uint256;
 
     /// @notice UTC time of a day when the fund settles.
