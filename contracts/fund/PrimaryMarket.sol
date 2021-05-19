@@ -11,7 +11,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../utils/SafeDecimalMath.sol";
 
 import "../interfaces/IPrimaryMarket.sol";
-import "../interfaces/ITwapOracle.sol";
 import "../interfaces/IFund.sol";
 import "../interfaces/ITrancheIndex.sol";
 

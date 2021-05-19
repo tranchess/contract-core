@@ -2,13 +2,10 @@
 pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
 
 import "../interfaces/IFund.sol";
 
 contract Share is IERC20 {
-    using SafeMath for uint256;
-
     uint8 public constant decimals = 18;
 
     string public name;
