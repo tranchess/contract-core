@@ -33,8 +33,10 @@ task("deploy_exchange", "Deploy exchange contracts")
         console.log(`Exchange implementation: ${exchangeImpl.address}`);
         addressFile.set("exchangeImpl", exchangeImpl.address);
 
-        const TranchessProxy = await ethers.getContractFactory("TranchessProxy");
-        const exchangeProxy = await TranchessProxy.deploy(
+        const TransparentUpgradeableProxy = await ethers.getContractFactory(
+            "TransparentUpgradeableProxy"
+        );
+        const exchangeProxy = await TransparentUpgradeableProxy.deploy(
             exchangeImpl.address,
             deployer.address,
             "0x",
