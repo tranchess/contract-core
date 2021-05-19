@@ -172,11 +172,13 @@ describe("Fund", function () {
 
     describe("isFundActive()", function () {
         it("Should revert transfer when inactive", async function () {
-            expect(await fund.isFundActive(startDay - DAY + HOUR * 12)).to.equal(true);
-            await fund.connect(shareM).transfer(TRANCHE_M, addr1, addr2, 0);
-            await advanceBlockAtTime(startDay + DAY);
+            await btc.mint(primaryMarket.address, parseBtc("1"));
+            await twapOracle.mock.getTwap.returns(parseEther("1510"));
+            await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
+            await primaryMarket.mock.settle.returns(parseEther("500"), 0, parseBtc("1"), 0, 0);
+            await advanceOneDayAndSettle();
 
-            expect(await fund.isFundActive(startDay + DAY)).to.equal(false);
+            expect(await fund.isFundActive(startDay + HOUR * 12 - 1)).to.equal(false);
             await expect(
                 fund.connect(shareM).transfer(TRANCHE_M, addr1, addr2, 0)
             ).to.be.revertedWith("Transfer is inactive");
