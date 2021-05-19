@@ -7,7 +7,7 @@ task("deploy_exchange", "Deploy exchange contracts")
     .addOptionalParam("fund", "Path to the fund address file", "")
     .setAction(async function (args, hre) {
         const { ethers } = hre;
-        const { parseEther, parseUnits } = ethers.utils;
+        const { parseEther } = ethers.utils;
 
         await hre.run("compile");
         const [deployer] = await ethers.getSigners();
@@ -26,7 +26,7 @@ task("deploy_exchange", "Deploy exchange contracts")
             quoteToken.address,
             quoteDecimals,
             governanceAddresses.votingEscrow,
-            parseUnits(EXCHANGE_CONFIG.MIN_ORDER_AMOUNT, quoteDecimals),
+            parseEther(EXCHANGE_CONFIG.MIN_ORDER_AMOUNT),
             parseEther(EXCHANGE_CONFIG.MIN_ORDER_AMOUNT),
             parseEther(EXCHANGE_CONFIG.MAKER_REQUIREMENT)
         );
