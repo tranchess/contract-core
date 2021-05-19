@@ -204,7 +204,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @param timestamp Timestamp to assess
     /// @return True if the fund contract is active
     function isFundActive(uint256 timestamp) public view override returns (bool) {
-        return (timestamp >= fundActivityStartTime);
+        return timestamp >= fundActivityStartTime;
     }
 
     /// @notice Return the status of a given primary market contract.
@@ -217,9 +217,10 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         override
         returns (bool)
     {
-        return (isPrimaryMarket(primaryMarket) &&
-            (timestamp >= fundActivityStartTime) &&
-            (timestamp < currentDay));
+        return
+            isPrimaryMarket(primaryMarket) &&
+            timestamp >= fundActivityStartTime &&
+            timestamp < currentDay;
     }
 
     /// @notice Return the status of the exchange. Unlike the primary market, exchange is
