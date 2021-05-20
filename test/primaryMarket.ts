@@ -684,7 +684,7 @@ describe("PrimaryMarket", function () {
         let currentTimestamp: number;
 
         beforeEach(async function () {
-            let owner = fixtureData.wallets.owner;
+            const owner = fixtureData.wallets.owner;
             currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
 
             const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
