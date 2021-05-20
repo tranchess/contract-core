@@ -22,6 +22,7 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
     bool public canDisable;
 
     uint256 public initialLocked;
+    uint256 public vestedAtStart;
     uint256 public totalClaimed;
     uint256 public disabledAt;
 
@@ -39,13 +40,14 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
         canDisable = canDisable_;
     }
 
-    function initialize(uint256 amount) external {
-        require(amount != 0, "Zero amount");
+    function initialize(uint256 amount, uint256 vestedAtStart_) external {
+        require(amount != 0 && amount >= vestedAtStart_, "Invalid amount or vestedAtStart");
         require(initialLocked == 0, "Already initialized");
 
         IERC20(token).transferFrom(msg.sender, address(this), amount);
 
         initialLocked = amount;
+        vestedAtStart = vestedAtStart_;
         emit Fund(amount);
     }
 
@@ -114,6 +116,8 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
         } else if (timestamp > end) {
             return locked;
         }
-        return locked.mul(timestamp - start).div(end - start);
+        uint256 vestedAtStart_ = vestedAtStart;
+        return
+            locked.sub(vestedAtStart_).mul(timestamp - start).div(end - start).add(vestedAtStart_);
     }
 }
