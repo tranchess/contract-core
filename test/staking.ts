@@ -116,6 +116,7 @@ describe("Staking", function () {
 
         const chess = await deployMockForName(owner, "IChess");
         await chess.mock.getRate.returns(0);
+        await chess.mock.startTimestamp.returns(startEpoch);
 
         const chessController = await deployMockForName(owner, "IChessController");
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
@@ -128,7 +129,8 @@ describe("Staking", function () {
             fund.address,
             chess.address,
             chessController.address,
-            usdc.address
+            usdc.address,
+            0
         );
 
         // Deposit initial shares

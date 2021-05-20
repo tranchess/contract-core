@@ -42,6 +42,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @notice The CHESS token contract.
     IChess public immutable chess;
 
+    uint256 public immutable launchCapEndTime;
+
     uint256 private _rate;
 
     /// @notice The controller contract.
@@ -87,7 +89,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         address fund_,
         address chess_,
         address chessController_,
-        address quoteAssetAddress_
+        address quoteAssetAddress_,
+        uint256 launchCapEndTime_
     ) public {
         fund = IFund(fund_);
         tokenM = IERC20(IFund(fund_).tokenM());
@@ -96,7 +99,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         chess = IChess(chess_);
         chessController = IChessController(chessController_);
         quoteAssetAddress = quoteAssetAddress_;
-        _checkpointTimestamp = block.timestamp;
+        _checkpointTimestamp = IChess(chess_).startTimestamp();
+        launchCapEndTime = launchCapEndTime_;
 
         _rate = IChess(chess_).getRate(block.timestamp);
     }
@@ -299,6 +303,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @notice Claim the rewards for an account.
     /// @param account Account to claim its rewards
     function claimRewards(address account) external {
+        require(launchCapEndTime <= block.timestamp, "Cannot claim before the start timestamp");
         uint256 rebalanceSize = fund.getRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);

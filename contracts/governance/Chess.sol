@@ -23,7 +23,7 @@ contract Chess is IChess, Ownable, ERC20, ChessRoles, CoreUtility {
         hex"00000000000000000000000000000000000000000000000A4CC799563C380000"
         hex"00000000000000000000000000000000000000000000000AD78EBC5AC6200000";
 
-    uint256 public immutable startTimestamp;
+    uint256 public immutable override startTimestamp;
 
     constructor(uint256 startTimestamp_) public ERC20("Chess", "CHESS") ChessRoles() {
         require(startTimestamp_ > block.timestamp, "Start timestamp is not in future");

@@ -8,8 +8,9 @@ contract StakingTestWrapper is Staking {
         address fund_,
         address chess_,
         address chessController_,
-        address quoteAssetAddress_
-    ) public Staking(fund_, chess_, chessController_, quoteAssetAddress_) {}
+        address quoteAssetAddress_,
+        uint256 launchCapEndTime_
+    ) public Staking(fund_, chess_, chessController_, quoteAssetAddress_, launchCapEndTime_) {}
 
     function tradeAvailable(
         uint256 tranche,

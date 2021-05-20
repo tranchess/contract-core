@@ -103,6 +103,7 @@ describe("Exchange", function () {
 
         const chess = await deployMockForName(owner, "IChess");
         await chess.mock.getRate.returns(0);
+        await chess.mock.startTimestamp.returns(startEpoch);
 
         const chessController = await deployMockForName(owner, "IChessController");
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
@@ -121,8 +122,11 @@ describe("Exchange", function () {
             6,
             votingEscrow.address,
             MIN_BID_AMOUNT,
+            MIN_BID_AMOUNT,
             MIN_ASK_AMOUNT,
-            MAKER_REQUIREMENT
+            MAKER_REQUIREMENT,
+            0,
+            0
         );
         const TranchessProxy = await ethers.getContractFactory("TranchessProxy");
         const exchangeProxy = await TranchessProxy.connect(owner).deploy(
@@ -1473,7 +1477,10 @@ describe("Exchange", function () {
                 6,
                 votingEscrow.address,
                 MIN_BID_AMOUNT,
+                MIN_BID_AMOUNT,
                 MIN_ASK_AMOUNT,
+                0,
+                0,
                 0
             );
             await expect(exchange.connect(user3).applyForMaker()).to.be.revertedWith(
@@ -1853,8 +1860,11 @@ describe("Exchange", function () {
                 6,
                 votingEscrow.address,
                 MIN_BID_AMOUNT,
+                MIN_BID_AMOUNT,
                 MIN_ASK_AMOUNT,
-                MAKER_REQUIREMENT
+                MAKER_REQUIREMENT,
+                0,
+                0
             );
             exchange = exchange.connect(user1);
             await votingEscrow.mock.getTimestampDropBelow
@@ -1901,8 +1911,11 @@ describe("Exchange", function () {
                     19,
                     votingEscrow.address,
                     MIN_BID_AMOUNT,
+                    MIN_BID_AMOUNT,
                     MIN_ASK_AMOUNT,
-                    MAKER_REQUIREMENT
+                    MAKER_REQUIREMENT,
+                    0,
+                    0
                 )
             ).to.be.revertedWith("Quote asset decimals larger than 18");
         });

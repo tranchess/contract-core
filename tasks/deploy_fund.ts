@@ -1,6 +1,6 @@
 import { task } from "hardhat/config";
 import { createAddressFile, selectAddressFile } from "./address_file";
-import { FUND_CONFIG } from "../config";
+import { LAUNCH_CAP_END_TIME, FUND_CONFIG } from "../config";
 
 task("deploy_fund", "Deploy fund contracts")
     .addOptionalParam("governance", "Path to the governance address file", "")
@@ -72,7 +72,9 @@ task("deploy_fund", "Deploy fund contracts")
             parseEther("0.001"),
             parseEther("0.0005"),
             parseEther("0.0005"),
-            parseUnits(FUND_CONFIG.MIN_CREATION, underlyingDecimals)
+            parseUnits(FUND_CONFIG.MIN_CREATION, underlyingDecimals),
+            LAUNCH_CAP_END_TIME, // launchCapEndTime
+            FUND_CONFIG.SPLIT_START_TIME // splitStartTime
         );
         console.log(`PrimaryMarket: ${primaryMarket.address}`);
         addressFile.set("primaryMarket", primaryMarket.address);

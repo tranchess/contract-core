@@ -53,6 +53,12 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     uint256 private constant MAX_SPLIT_FEE_RATE = 0.01e18; // 1% split rate
     uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18; // 1% split rate
 
+    uint256 public immutable splitStartTime;
+    uint256 public immutable launchCapEndTime;
+    uint256 public totalCreationCap;
+    uint256 public individualCreationCap;
+    mapping(address => uint256) public individualCreations;
+
     IFund public fund;
 
     uint256 public redemptionFeeRate;
@@ -75,13 +81,17 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         uint256 redemptionFeeRate_,
         uint256 splitFeeRate_,
         uint256 mergeFeeRate_,
-        uint256 minCreationUnderlying_
+        uint256 minCreationUnderlying_,
+        uint256 launchCapEndTime_,
+        uint256 splitStartTime_
     ) public Ownable() {
         fund = IFund(fund_);
         redemptionFeeRate = redemptionFeeRate_;
         splitFeeRate = splitFeeRate_;
         mergeFeeRate = mergeFeeRate_;
         minCreationUnderlying = minCreationUnderlying_;
+        launchCapEndTime = launchCapEndTime_;
+        splitStartTime = splitStartTime_;
         currentDay = fund.currentDay();
     }
 
@@ -105,6 +115,21 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         _updateCreationRedemption(msg.sender, cr);
 
         currentCreatingUnderlying = currentCreatingUnderlying.add(underlying);
+
+        // Guarded launch
+        if (block.timestamp < launchCapEndTime) {
+            individualCreations[msg.sender] = individualCreations[msg.sender].add(underlying);
+            require(
+                IERC20(fund.tokenUnderlying()).balanceOf(address(fund)).add(
+                    currentCreatingUnderlying
+                ) < totalCreationCap,
+                "exceed total creation cap"
+            );
+            require(
+                individualCreations[msg.sender] < individualCreationCap,
+                "exceed individual creation cap"
+            );
+        }
 
         emit Created(msg.sender, underlying);
     }
@@ -150,6 +175,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     }
 
     function split(uint256 inM) external onlyActive {
+        require(block.timestamp >= splitStartTime, "Split not ready yet");
         (uint256 weightA, uint256 weightB) = fund.trancheWeights();
         // Charge splitting fee and round it to a multiple of (weightA + weightB)
         uint256 unit = inM.sub(inM.multiplyDecimal(splitFeeRate)) / (weightA + weightB);
@@ -308,6 +334,14 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
             redemptionUnderlying,
             fee
         );
+    }
+
+    function updateCreationCap(uint256 newTotalCreationCap, uint256 newIndividualCreationCap)
+        external
+        onlyOwner
+    {
+        totalCreationCap = newTotalCreationCap;
+        individualCreationCap = newIndividualCreationCap;
     }
 
     function updateRedemptionFeeRate(uint256 newRedemptionFeeRate) external onlyOwner {

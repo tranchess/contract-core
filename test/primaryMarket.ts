@@ -16,6 +16,7 @@ const MERGE_FEE_BPS = 4500;
 const MIN_CREATION_AMOUNT = 5;
 
 const DAY = 86400; // 1 day
+const WEEK = 7 * DAY; // 1 week
 const START_DAY = 1609556400; // 2021-01-02 03:00:00
 
 async function parseEvent(tx: Transaction, contract: Contract, eventName: string) {
@@ -30,6 +31,10 @@ async function parseEvent(tx: Transaction, contract: Contract, eventName: string
         }
     }
     throw new AssertionError(`Cannot find event ${eventName}`);
+}
+
+async function advanceBlockAtTime(time: number) {
+    await ethers.provider.send("evm_mine", [time]);
 }
 
 describe("PrimaryMarket", function () {
@@ -94,7 +99,9 @@ describe("PrimaryMarket", function () {
             parseUnits(REDEMPTION_FEE_BPS.toString(), 18 - 4),
             parseUnits(SPLIT_FEE_BPS.toString(), 18 - 4),
             parseUnits(MERGE_FEE_BPS.toString(), 18 - 4),
-            MIN_CREATION_AMOUNT
+            MIN_CREATION_AMOUNT,
+            0,
+            0
         );
 
         // Set initial state
@@ -104,7 +111,7 @@ describe("PrimaryMarket", function () {
         await btc.connect(user2).approve(primaryMarket.address, parseBtc("10000"));
 
         return {
-            wallets: { user1, user2 },
+            wallets: { user1, user2, owner },
             btc,
             fund,
             shareM,
@@ -669,6 +676,57 @@ describe("PrimaryMarket", function () {
                     func: shareM.mock.transfer.withArgs(user1.address, parseEther("7000")),
                     rets: [true],
                 }
+            );
+        });
+    });
+
+    describe("guarded launch", function () {
+        let currentTimestamp: number;
+
+        beforeEach(async function () {
+            let owner = fixtureData.wallets.owner;
+            currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+
+            const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
+            primaryMarket = await PrimaryMarket.connect(owner).deploy(
+                fund.address,
+                parseUnits(REDEMPTION_FEE_BPS.toString(), 18 - 4),
+                parseUnits(SPLIT_FEE_BPS.toString(), 18 - 4),
+                parseUnits(MERGE_FEE_BPS.toString(), 18 - 4),
+                MIN_CREATION_AMOUNT,
+                currentTimestamp + 4 * WEEK, // capEndTime
+                0
+            );
+
+            await btc.connect(user1).approve(primaryMarket.address, parseBtc("10000"));
+            await btc.connect(user2).approve(primaryMarket.address, parseBtc("10000"));
+        });
+
+        it("Should revert when cap is zero", async function () {
+            await fund.mock.isPrimaryMarketActive.returns(true);
+            await expect(primaryMarket.connect(user1).create(parseBtc("1"))).to.be.revertedWith(
+                "exceed total creation cap"
+            );
+        });
+
+        it("Should revert when creation amount exceeds individual or total cap", async function () {
+            await fund.mock.isPrimaryMarketActive.returns(true);
+            await primaryMarket.updateCreationCap(parseBtc("100"), parseBtc("0.5"));
+
+            await expect(primaryMarket.connect(user1).create(parseBtc("100"))).to.be.revertedWith(
+                "exceed total creation cap"
+            );
+            await expect(primaryMarket.connect(user1).create(parseBtc("0.5"))).to.be.revertedWith(
+                "exceed individual creation cap"
+            );
+
+            await primaryMarket.connect(user1).create(parseBtc("0.4"));
+            expect(await primaryMarket.individualCreations(user1.address)).to.equal(
+                parseBtc("0.4")
+            );
+
+            await expect(primaryMarket.connect(user1).create(parseBtc("0.1"))).to.be.revertedWith(
+                "exceed individual creation cap"
             );
         });
     });
