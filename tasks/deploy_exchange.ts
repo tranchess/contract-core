@@ -1,6 +1,6 @@
 import { task } from "hardhat/config";
 import { createAddressFile, selectAddressFile } from "./address_file";
-import { LAUNCH_CAP_END_TIME, EXCHANGE_CONFIG } from "../config";
+import { GOVERNANCE_CONFIG, FUND_CONFIG, EXCHANGE_CONFIG } from "../config";
 
 task("deploy_exchange", "Deploy exchange contracts")
     .addOptionalParam("governance", "Path to the governance address file", "")
@@ -26,12 +26,11 @@ task("deploy_exchange", "Deploy exchange contracts")
             quoteToken.address,
             quoteDecimals,
             governanceAddresses.votingEscrow,
-            parseUnits(EXCHANGE_CONFIG.INITIAL_MIN_ORDER_AMOUNT, quoteDecimals),
-            parseUnits(EXCHANGE_CONFIG.MIN_ORDER_AMOUNT, quoteDecimals),
+            parseEther(EXCHANGE_CONFIG.MIN_ORDER_AMOUNT),
             parseEther(EXCHANGE_CONFIG.MIN_ORDER_AMOUNT),
             parseEther(EXCHANGE_CONFIG.MAKER_REQUIREMENT),
-            EXCHANGE_CONFIG.ORDER_PLACING_START_TIME,
-            LAUNCH_CAP_END_TIME
+            FUND_CONFIG.GUARDED_LAUNCH ? GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP : 0,
+            parseEther(EXCHANGE_CONFIG.GUARDED_LAUNCH_MIN_ORDER_AMOUNT)
         );
         console.log(`Exchange implementation: ${exchangeImpl.address}`);
         addressFile.set("exchangeImpl", exchangeImpl.address);

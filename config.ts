@@ -1,9 +1,8 @@
 import * as dotenv from "dotenv";
 dotenv.config();
 
-const DAY = 86400;
-const WEEK = DAY * 7;
 export function endOfWeek(timestamp: number): number {
+    const WEEK = 86400 * 7;
     const SETTLEMENT_TIME = 3600 * 14;
     return Math.floor((timestamp + WEEK - SETTLEMENT_TIME) / WEEK) * WEEK + SETTLEMENT_TIME;
 }
@@ -34,20 +33,17 @@ export const GOVERNANCE_CONFIG = {
     ),
 };
 
-export const LAUNCH_CAP_END_TIME = GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP + 4 * WEEK ?? "";
-
 export const FUND_CONFIG = {
     UNDERLYING_ADDRESS: process.env.FUND_UNDERLYING_ADDRESS ?? "",
     TWAP_ORACLE_ADDRESS: process.env.FUND_TWAP_ORACLE_ADDRESS ?? "",
     APR_ORACLE_ADDRESS: process.env.FUND_APR_ORACLE_ADDRESS ?? "",
     MIN_CREATION: process.env.FUND_MIN_CREATION ?? "",
-    SPLIT_START_TIME: GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP + 2 * WEEK ?? "",
+    GUARDED_LAUNCH: process.env.FUND_GUARDED_LAUNCH === "TRUE",
 };
 
 export const EXCHANGE_CONFIG = {
     QUOTE_ADDRESS: process.env.EXCHANGE_QUOTE_ADDRESS ?? "",
-    INITIAL_MIN_ORDER_AMOUNT: process.env.EXCHANGE_MIN_ORDER_AMOUNT ?? "2000",
-    MIN_ORDER_AMOUNT: process.env.EXCHANGE_MIN_ORDER_AMOUNT ?? "50000",
+    MIN_ORDER_AMOUNT: process.env.EXCHANGE_MIN_ORDER_AMOUNT ?? "",
+    GUARDED_LAUNCH_MIN_ORDER_AMOUNT: process.env.EXCHANGE_GUARDED_LAUNCH_MIN_ORDER_AMOUNT ?? "",
     MAKER_REQUIREMENT: process.env.EXCHANGE_MAKER_REQUIREMENT ?? "",
-    ORDER_PLACING_START_TIME: GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP + 2 * WEEK + 2 * DAY ?? "",
 };
