@@ -189,12 +189,11 @@ contract Exchange is ExchangeRoles, Staking {
     /// @notice Minumum base amount of maker ask orders
     uint256 public immutable minAskAmount;
 
-    uint256 public immutable initialMinAmount;
+    /// @notice Minumum base or quote amount of maker orders during guarded launch
+    uint256 public immutable guardedLaunchMinOrderAmount;
 
     /// @dev A multipler that normalizes a quote asset balance to 18 decimal places.
     uint256 private immutable _quoteDecimalMultiplier;
-
-    uint256 private immutable startTimestamp;
 
     /// @notice Mapping of rebalance version => tranche => an array of order queues
     mapping(uint256 => mapping(uint256 => OrderQueue[PD_LEVEL_COUNT + 1])) public bids;
@@ -222,23 +221,21 @@ contract Exchange is ExchangeRoles, Staking {
         address quoteAssetAddress_,
         uint256 quoteDecimals_,
         address votingEscrow_,
-        uint256 initialMinAmount_,
         uint256 minBidAmount_,
         uint256 minAskAmount_,
         uint256 makerRequirement_,
-        uint256 startTimestamp_,
-        uint256 launchCapEndTime_
+        uint256 guardedLaunchStart_,
+        uint256 guardedLaunchMinOrderAmount_
     )
         public
         ExchangeRoles(votingEscrow_, makerRequirement_)
-        Staking(fund_, chess_, chessController_, quoteAssetAddress_, launchCapEndTime_)
+        Staking(fund_, chess_, chessController_, quoteAssetAddress_, guardedLaunchStart_)
     {
-        initialMinAmount = initialMinAmount_;
         minBidAmount = minBidAmount_;
         minAskAmount = minAskAmount_;
+        guardedLaunchMinOrderAmount = guardedLaunchMinOrderAmount_;
         require(quoteDecimals_ <= 18, "Quote asset decimals larger than 18");
         _quoteDecimalMultiplier = 10**(18 - quoteDecimals_);
-        startTimestamp = startTimestamp_;
     }
 
     /// @notice Return end timestamp of the epoch containing a given timestamp.
@@ -318,9 +315,9 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 quoteAmount,
         uint256 version
     ) external onlyMaker {
-        require(block.timestamp >= startTimestamp, "Placing order not ready yet");
-        if (block.timestamp < launchCapEndTime) {
-            require(quoteAmount >= initialMinAmount, "Quote amount too low");
+        require(block.timestamp >= guardedLaunchStart + 8 days, "Guarded launch: market closed");
+        if (block.timestamp < guardedLaunchStart + 4 weeks) {
+            require(quoteAmount >= guardedLaunchMinOrderAmount, "Guarded launch: amount too low");
         } else {
             require(quoteAmount >= minBidAmount, "Quote amount too low");
         }
@@ -352,9 +349,9 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 baseAmount,
         uint256 version
     ) external onlyMaker {
-        require(block.timestamp >= startTimestamp, "Placing order not ready yet");
-        if (block.timestamp < launchCapEndTime) {
-            require(baseAmount >= initialMinAmount, "Base amount too low");
+        require(block.timestamp >= guardedLaunchStart + 8 days, "Guarded launch: market closed");
+        if (block.timestamp < guardedLaunchStart + 4 weeks) {
+            require(baseAmount >= guardedLaunchMinOrderAmount, "Guarded launch: amount too low");
         } else {
             require(baseAmount >= minAskAmount, "Base amount too low");
         }

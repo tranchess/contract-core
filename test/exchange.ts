@@ -103,7 +103,6 @@ describe("Exchange", function () {
 
         const chess = await deployMockForName(owner, "IChess");
         await chess.mock.getRate.returns(0);
-        await chess.mock.startTimestamp.returns(startEpoch);
 
         const chessController = await deployMockForName(owner, "IChessController");
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
@@ -121,7 +120,6 @@ describe("Exchange", function () {
             usdc.address,
             6,
             votingEscrow.address,
-            MIN_BID_AMOUNT,
             MIN_BID_AMOUNT,
             MIN_ASK_AMOUNT,
             MAKER_REQUIREMENT,
@@ -1479,7 +1477,6 @@ describe("Exchange", function () {
                 6,
                 votingEscrow.address,
                 MIN_BID_AMOUNT,
-                MIN_BID_AMOUNT,
                 MIN_ASK_AMOUNT,
                 0,
                 0,
@@ -1862,7 +1859,6 @@ describe("Exchange", function () {
                 6,
                 votingEscrow.address,
                 MIN_BID_AMOUNT,
-                MIN_BID_AMOUNT,
                 MIN_ASK_AMOUNT,
                 MAKER_REQUIREMENT,
                 0,
@@ -1912,7 +1908,6 @@ describe("Exchange", function () {
                     usdc.address,
                     19,
                     votingEscrow.address,
-                    MIN_BID_AMOUNT,
                     MIN_BID_AMOUNT,
                     MIN_ASK_AMOUNT,
                     MAKER_REQUIREMENT,

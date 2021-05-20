@@ -52,11 +52,10 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     uint256 private constant MAX_SPLIT_FEE_RATE = 0.01e18; // 1% split rate
     uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18; // 1% split rate
 
-    uint256 public immutable splitStartTime;
-    uint256 public immutable launchCapEndTime;
-    uint256 public totalCreationCap;
-    uint256 public individualCreationCap;
-    mapping(address => uint256) public individualCreations;
+    uint256 public immutable guardedLaunchStart;
+    uint256 public guardedLaunchTotalCap;
+    uint256 public guardedLaunchIndividualCap;
+    mapping(address => uint256) public guardedLaunchCreations;
 
     IFund public fund;
 
@@ -77,20 +76,18 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
 
     constructor(
         address fund_,
+        uint256 guardedLaunchStart_,
         uint256 redemptionFeeRate_,
         uint256 splitFeeRate_,
         uint256 mergeFeeRate_,
-        uint256 minCreationUnderlying_,
-        uint256 launchCapEndTime_,
-        uint256 splitStartTime_
+        uint256 minCreationUnderlying_
     ) public Ownable() {
         fund = IFund(fund_);
+        guardedLaunchStart = guardedLaunchStart_;
         redemptionFeeRate = redemptionFeeRate_;
         splitFeeRate = splitFeeRate_;
         mergeFeeRate = mergeFeeRate_;
         minCreationUnderlying = minCreationUnderlying_;
-        launchCapEndTime = launchCapEndTime_;
-        splitStartTime = splitStartTime_;
         currentDay = fund.currentDay();
     }
 
@@ -115,18 +112,17 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
 
         currentCreatingUnderlying = currentCreatingUnderlying.add(underlying);
 
-        // Guarded launch
-        if (block.timestamp < launchCapEndTime) {
-            individualCreations[msg.sender] = individualCreations[msg.sender].add(underlying);
+        if (block.timestamp < guardedLaunchStart + 4 weeks) {
+            guardedLaunchCreations[msg.sender] = guardedLaunchCreations[msg.sender].add(underlying);
             require(
                 IERC20(fund.tokenUnderlying()).balanceOf(address(fund)).add(
                     currentCreatingUnderlying
-                ) < totalCreationCap,
-                "exceed total creation cap"
+                ) <= guardedLaunchTotalCap,
+                "Guarded launch: exceed total cap"
             );
             require(
-                individualCreations[msg.sender] < individualCreationCap,
-                "exceed individual creation cap"
+                guardedLaunchCreations[msg.sender] <= guardedLaunchIndividualCap,
+                "Guarded launch: exceed individual cap"
             );
         }
 
@@ -174,7 +170,10 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     }
 
     function split(uint256 inM) external onlyActive {
-        require(block.timestamp >= splitStartTime, "Split not ready yet");
+        require(
+            block.timestamp >= guardedLaunchStart + 2 weeks,
+            "Guarded launch: split not ready yet"
+        );
         (uint256 weightA, uint256 weightB) = fund.trancheWeights();
         // Charge splitting fee and round it to a multiple of (weightA + weightB)
         uint256 unit = inM.sub(inM.multiplyDecimal(splitFeeRate)) / (weightA + weightB);
@@ -335,12 +334,12 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         );
     }
 
-    function updateCreationCap(uint256 newTotalCreationCap, uint256 newIndividualCreationCap)
+    function updateGuardedLaunchCap(uint256 newTotalCap, uint256 newIndividualCap)
         external
         onlyOwner
     {
-        totalCreationCap = newTotalCreationCap;
-        individualCreationCap = newIndividualCreationCap;
+        guardedLaunchTotalCap = newTotalCap;
+        guardedLaunchIndividualCap = newIndividualCap;
     }
 
     function updateRedemptionFeeRate(uint256 newRedemptionFeeRate) external onlyOwner {

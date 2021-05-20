@@ -116,7 +116,6 @@ describe("Staking", function () {
 
         const chess = await deployMockForName(owner, "IChess");
         await chess.mock.getRate.returns(0);
-        await chess.mock.startTimestamp.returns(startEpoch);
 
         const chessController = await deployMockForName(owner, "IChessController");
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
