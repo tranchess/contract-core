@@ -18,6 +18,10 @@ const MIN_CREATION_AMOUNT = 5;
 const DAY = 86400; // 1 day
 const START_DAY = 1609556400; // 2021-01-02 03:00:00
 
+async function advanceBlockAtTime(time: number) {
+    await ethers.provider.send("evm_mine", [time]);
+}
+
 async function parseEvent(tx: Transaction, contract: Contract, eventName: string) {
     const receipt = await contract.provider.waitForTransaction(tx.hash as string);
     const topic = contract.interface.getEventTopic(eventName);
@@ -744,6 +748,19 @@ describe("PrimaryMarket", function () {
 
             await primaryMarket.connect(user2).create(parseBtc("1"));
             await primaryMarket.create(parseBtc("0.4"));
+        });
+
+        it("Should allow splitting after 2 weeks", async function () {
+            await fund.mock.burn.returns();
+            await fund.mock.mint.returns();
+
+            advanceBlockAtTime(currentTimestamp + DAY * 14 - 100);
+            await expect(primaryMarket.split(parseEther("1"))).to.be.revertedWith(
+                "Guarded launch: split not ready yet"
+            );
+
+            advanceBlockAtTime(currentTimestamp + DAY * 14);
+            await primaryMarket.split(parseEther("1"));
         });
     });
 });

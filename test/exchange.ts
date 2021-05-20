@@ -8,6 +8,8 @@ const parseUsdc = (value: string) => parseUnits(value, 6);
 import { deployMockForName } from "./mock";
 
 const EPOCH = 1800; // 30 min
+const DAY = 86400;
+const WEEK = DAY * 7;
 const USDC_TO_ETHER = parseUnits("1", 12);
 const MAKER_RESERVE_BPS = 11000; // 110%
 const TRANCHE_M = 0;
@@ -1926,6 +1928,71 @@ describe("Exchange", function () {
             await expect(exchange.buyB(0, 81, 1)).to.be.revertedWith(
                 "Nothing can be bought at the given premium-discount level"
             );
+        });
+    });
+
+    describe("Guarded launch", function () {
+        const guardedLaunchMinOrderAmount = MIN_BID_AMOUNT.lt(MIN_ASK_AMOUNT)
+            ? MIN_BID_AMOUNT.div(2)
+            : MIN_ASK_AMOUNT.div(2);
+        let guardedLaunchStart: number;
+
+        beforeEach(async function () {
+            guardedLaunchStart = startEpoch + 12345;
+
+            const Exchange = await ethers.getContractFactory("Exchange");
+            exchange = await Exchange.connect(owner).deploy(
+                fund.address,
+                chess.address,
+                chessController.address,
+                usdc.address,
+                6,
+                votingEscrow.address,
+                MIN_BID_AMOUNT,
+                MIN_ASK_AMOUNT,
+                0,
+                guardedLaunchStart,
+                guardedLaunchMinOrderAmount
+            );
+            exchange = exchange.connect(user1);
+
+            await shareM.mock.transferFrom.returns(true);
+            await exchange.connect(user1).deposit(TRANCHE_M, USER1_M);
+            await usdc.connect(user1).approve(exchange.address, USER1_USDC.div(USDC_TO_ETHER));
+        });
+
+        it("Should allow placing maker orders after 8 days", async function () {
+            await advanceBlockAtTime(guardedLaunchStart + DAY * 8 - 100);
+            await expect(exchange.placeBid(TRANCHE_M, 40, parseEther("1"), 0)).to.be.revertedWith(
+                "Guarded launch: market closed"
+            );
+            await expect(exchange.placeAsk(TRANCHE_M, 42, parseEther("1"), 0)).to.be.revertedWith(
+                "Guarded launch: market closed"
+            );
+
+            await advanceBlockAtTime(guardedLaunchStart + DAY * 8);
+            await exchange.placeBid(TRANCHE_M, 40, parseEther("1"), 0);
+            await exchange.placeAsk(TRANCHE_M, 42, parseEther("1"), 0);
+        });
+
+        it("Should check min order amount", async function () {
+            await advanceBlockAtTime(guardedLaunchStart + WEEK * 4 - 100);
+            await expect(
+                exchange.placeBid(TRANCHE_M, 40, guardedLaunchMinOrderAmount.sub(1), 0)
+            ).to.be.revertedWith("Guarded launch: amount too low");
+            await expect(
+                exchange.placeAsk(TRANCHE_M, 42, guardedLaunchMinOrderAmount.sub(1), 0)
+            ).to.be.revertedWith("Guarded launch: amount too low");
+            await exchange.placeBid(TRANCHE_M, 40, guardedLaunchMinOrderAmount, 0);
+            await exchange.placeAsk(TRANCHE_M, 42, guardedLaunchMinOrderAmount, 0);
+
+            await advanceBlockAtTime(guardedLaunchStart + WEEK * 4);
+            await expect(
+                exchange.placeBid(TRANCHE_M, 40, guardedLaunchMinOrderAmount, 0)
+            ).to.be.revertedWith("Quote amount too low");
+            await expect(
+                exchange.placeAsk(TRANCHE_M, 42, guardedLaunchMinOrderAmount, 0)
+            ).to.be.revertedWith("Base amount too low");
         });
     });
 

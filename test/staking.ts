@@ -1084,4 +1084,36 @@ describe("Staking", function () {
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(user2Rewards);
         });
     });
+
+    describe("Guarded launch", function () {
+        let guardedLaunchStart: number;
+
+        beforeEach(async function () {
+            await chess.mock.getRate.returns(parseEther("1"));
+            guardedLaunchStart = (await ethers.provider.getBlock("latest")).timestamp + 10000;
+            const Staking = await ethers.getContractFactory("StakingTestWrapper");
+            staking = await Staking.connect(owner).deploy(
+                fund.address,
+                chess.address,
+                chessController.address,
+                usdc.address,
+                guardedLaunchStart
+            );
+            staking = staking.connect(user1);
+        });
+
+        it("Should allow claiming after guarded launch ends", async function () {
+            await shareM.mock.transferFrom.returns(true);
+            await staking.deposit(TRANCHE_M, USER1_M);
+
+            await advanceBlockAtTime(guardedLaunchStart + WEEK * 4 - 100);
+            await expect(staking.claimRewards(addr1)).to.be.revertedWith(
+                "Cannot claim during guarded launch"
+            );
+
+            await advanceBlockAtTime(guardedLaunchStart + WEEK * 4);
+            await chess.mock.mint.returns();
+            await staking.claimRewards(addr1);
+        });
+    });
 });
