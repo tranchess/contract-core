@@ -35,16 +35,29 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     addressFile.set("interestRateBallot", interestRateBallot.address);
 
     const ChessController = await ethers.getContractFactory("ChessController");
-    const chessController = await ChessController.deploy();
+    const chessControllerImpl = await ChessController.deploy();
+    console.log(`ChessController implementation: ${chessControllerImpl.address}`);
+    addressFile.set("chessControllerImpl", chessControllerImpl.address);
+
+    const TransparentUpgradeableProxy = await ethers.getContractFactory(
+        "TransparentUpgradeableProxy"
+    );
+    const chessControllerProxy = await TransparentUpgradeableProxy.deploy(
+        chessControllerImpl.address,
+        deployer.address,
+        "0x",
+        { gasLimit: 1e6 } // Gas estimation may fail
+    );
+    const chessController = ChessController.attach(chessControllerProxy.address);
     console.log(`ChessController: ${chessController.address}`);
     addressFile.set("chessController", chessController.address);
 
-    const Timelock = await ethers.getContractFactory("Timelock");
-    const timelock = await Timelock.deploy(
+    const TimelockController = await ethers.getContractFactory("TimelockController");
+    const timelockController = await TimelockController.deploy(
         GOVERNANCE_CONFIG.TIMELOCK_DELAY,
         [deployer.address], // proposers
         [ethers.constants.AddressZero] // executor
     );
-    console.log(`Timelock: ${timelock.address}`);
-    addressFile.set("timelock", timelock.address);
+    console.log(`TimelockController: ${timelockController.address}`);
+    addressFile.set("timelockController", timelockController.address);
 });

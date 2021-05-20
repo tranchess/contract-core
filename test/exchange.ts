@@ -128,8 +128,10 @@ describe("Exchange", function () {
             0,
             0
         );
-        const TranchessProxy = await ethers.getContractFactory("TranchessProxy");
-        const exchangeProxy = await TranchessProxy.connect(owner).deploy(
+        const TransparentUpgradeableProxy = await ethers.getContractFactory(
+            "TransparentUpgradeableProxy"
+        );
+        const exchangeProxy = await TransparentUpgradeableProxy.connect(owner).deploy(
             exchangeImpl.address,
             owner.address,
             "0x"

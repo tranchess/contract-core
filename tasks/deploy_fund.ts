@@ -52,7 +52,7 @@ task("deploy_fund", "Deploy fund contracts")
             `Tranchess ${underlyingSymbol} Class A`,
             `t${underlyingSymbol}.A`,
             fund.address,
-            0
+            1
         );
         console.log(`ShareA: ${shareA.address}`);
         addressFile.set("shareA", shareA.address);
@@ -61,7 +61,7 @@ task("deploy_fund", "Deploy fund contracts")
             `Tranchess ${underlyingSymbol} Class B`,
             `t${underlyingSymbol}.B`,
             fund.address,
-            0
+            2
         );
         console.log(`ShareB: ${shareB.address}`);
         addressFile.set("shareB", shareB.address);

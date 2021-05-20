@@ -3,7 +3,7 @@ pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 
-contract ChessRoles {
+abstract contract ChessRoles {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     EnumerableSet.AddressSet private _minterMembers;

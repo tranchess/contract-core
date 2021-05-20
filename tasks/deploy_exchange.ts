@@ -7,7 +7,7 @@ task("deploy_exchange", "Deploy exchange contracts")
     .addOptionalParam("fund", "Path to the fund address file", "")
     .setAction(async function (args, hre) {
         const { ethers } = hre;
-        const { parseEther, parseUnits } = ethers.utils;
+        const { parseEther } = ethers.utils;
 
         await hre.run("compile");
         const [deployer] = await ethers.getSigners();
@@ -36,8 +36,10 @@ task("deploy_exchange", "Deploy exchange contracts")
         console.log(`Exchange implementation: ${exchangeImpl.address}`);
         addressFile.set("exchangeImpl", exchangeImpl.address);
 
-        const TranchessProxy = await ethers.getContractFactory("TranchessProxy");
-        const exchangeProxy = await TranchessProxy.deploy(
+        const TransparentUpgradeableProxy = await ethers.getContractFactory(
+            "TransparentUpgradeableProxy"
+        );
+        const exchangeProxy = await TransparentUpgradeableProxy.deploy(
             exchangeImpl.address,
             deployer.address,
             "0x",
