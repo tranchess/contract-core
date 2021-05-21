@@ -336,9 +336,9 @@ describe("PrimaryMarket", function () {
             await fund.mock.trancheWeights.returns(100, 200);
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            const reason = "Mock func 'burn A 100' is called";
-            await fund.mock.burn.withArgs(TRANCHE_A, user1.address, 100).revertsWithReason(reason);
-            await expect(primaryMarket.merge(199)).to.be.revertedWith(reason);
+            await expect(() => primaryMarket.merge(199)).to.callMocks({
+                func: fund.mock.burn.withArgs(TRANCHE_A, user1.address, 100),
+            });
         });
 
         it("Should emit an event", async function () {
