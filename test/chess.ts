@@ -259,7 +259,7 @@ describe("Chess", function () {
             Math.floor((startTimestamp + WEEK - SETTLEMENT_TIME) / WEEK) * WEEK + SETTLEMENT_TIME;
 
         const Chess = await ethers.getContractFactory("Chess");
-        const chess = await Chess.connect(owner).deploy(startTimestamp);
+        const chess = await Chess.connect(owner).deploy(startWeek);
         await chess.addMinter(owner.address);
 
         return {

@@ -46,8 +46,12 @@ contract Chess is IChess, Ownable, ERC20, ChessRoles, CoreUtility {
 
     constructor(uint256 startTimestamp_) public ERC20("Chess", "CHESS") ChessRoles() {
         require(startTimestamp_ > block.timestamp, "Start timestamp is not in future");
+        require(
+            endOfWeek(startTimestamp_ - 1) == startTimestamp_,
+            "Start timestamp is not start of a trading week"
+        );
         _mint(msg.sender, getCumulativeSupply(0));
-        startTimestamp = endOfWeek(startTimestamp_);
+        startTimestamp = startTimestamp_;
     }
 
     /// @notice Get length of the supply schedule
