@@ -51,9 +51,4 @@ task("deploy_exchange", "Deploy exchange contracts")
         const chess = await ethers.getContractAt("Chess", governanceAddresses.chess);
         await chess.addMinter(exchange.address);
         console.log("Exchange is a CHESS minter now");
-
-        const ProtocolDataProvider = await ethers.getContractFactory("ProtocolDataProvider");
-        const protocolDataProvider = await ProtocolDataProvider.deploy();
-        console.log(`ProtocolDataProvider: ${protocolDataProvider.address}`);
-        addressFile.set("protocolDataProvider", protocolDataProvider.address);
     });

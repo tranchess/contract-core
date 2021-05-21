@@ -5,6 +5,7 @@ import "./tasks/accounts";
 import "./tasks/deploy_fund";
 import "./tasks/deploy_exchange";
 import "./tasks/deploy_governance";
+import "./tasks/deploy_misc";
 import "./tasks/deploy_mock";
 import "./tasks/deploy_oracle";
 import "./tasks/test_deploy";
