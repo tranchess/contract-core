@@ -23,8 +23,8 @@ contract InterestRateBallot is IBallot {
     mapping(uint256 => uint256) public scheduledUnlock;
     mapping(uint256 => uint256) public scheduledWeightedUnlock;
 
-    constructor(address _votingEscrow) public {
-        votingEscrow = IVotingEscrow(_votingEscrow);
+    constructor(address votingEscrow_) public {
+        votingEscrow = IVotingEscrow(votingEscrow_);
         maxTime = votingEscrow.maxTime();
     }
 

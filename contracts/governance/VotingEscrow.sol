@@ -31,17 +31,17 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     mapping(uint256 => uint256) public scheduledUnlock;
 
     constructor(
-        address _token,
-        address _checker,
-        string memory _name,
-        string memory _symbol,
-        uint256 _maxTime
+        address token_,
+        address checker_,
+        string memory name_,
+        string memory symbol_,
+        uint256 maxTime_
     ) public Ownable() {
-        name = _name;
-        symbol = _symbol;
-        token = _token;
-        checker = _checker;
-        maxTime = _maxTime;
+        name = name_;
+        symbol = symbol_;
+        token = token_;
+        checker = checker_;
+        maxTime = maxTime_;
     }
 
     function getTimestampDropBelow(address account, uint256 threshold)

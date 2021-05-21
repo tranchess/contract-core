@@ -30,10 +30,10 @@ contract BscAprOracle is IAprOracle, Exponential, CoreUtility {
     uint256 public timestamp;
     uint256 public currentDailyRate;
 
-    constructor(string memory _name, address _vUsdc) public {
-        name = _name;
-        vUsdc = _vUsdc;
-        venusBorrowIndex = getVenusBorrowIndex(_vUsdc);
+    constructor(string memory name_, address vUsdc_) public {
+        name = name_;
+        vUsdc = vUsdc_;
+        venusBorrowIndex = getVenusBorrowIndex(vUsdc_);
         timestamp = block.timestamp;
     }
 
