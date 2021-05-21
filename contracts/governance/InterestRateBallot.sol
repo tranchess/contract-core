@@ -33,7 +33,7 @@ contract InterestRateBallot is IBallot {
         return minRange.add(delta);
     }
 
-    function getReceipt(address account) public view returns (Voter memory) {
+    function getReceipt(address account) external view returns (Voter memory) {
         return voters[account];
     }
 
@@ -98,16 +98,6 @@ contract InterestRateBallot is IBallot {
             unlockTime: lockedBalance.unlockTime,
             weight: weight
         });
-    }
-
-    function updateBallotParameters(
-        uint256 _stepSize,
-        uint256 _minRange,
-        uint256 _maxOption
-    ) public {
-        stepSize = _stepSize;
-        minRange = _minRange;
-        maxOption = _maxOption;
     }
 
     // -------------------------------------------------------------------------
