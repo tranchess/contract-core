@@ -42,4 +42,8 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     EXCHANGE_CONFIG.GUARDED_LAUNCH_MIN_ORDER_AMOUNT = "0.01";
     EXCHANGE_CONFIG.MAKER_REQUIREMENT = "0";
     await hre.run("deploy_exchange", { governance: "latest", fund: "latest" });
+
+    console.log();
+    console.log("[+] Deploying misc contracts");
+    await hre.run("deploy_misc");
 });
