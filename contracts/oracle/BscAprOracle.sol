@@ -30,10 +30,10 @@ contract BscAprOracle is IAprOracle, Exponential, CoreUtility {
     uint256 public timestamp;
     uint256 public currentDailyRate;
 
-    constructor(string memory _name, address _vUsdc) public {
-        name = _name;
-        vUsdc = _vUsdc;
-        venusBorrowIndex = getVenusBorrowIndex(_vUsdc);
+    constructor(string memory name_, address vUsdc_) public {
+        name = name_;
+        vUsdc = vUsdc_;
+        venusBorrowIndex = getVenusBorrowIndex(vUsdc_);
         timestamp = block.timestamp;
     }
 
@@ -41,7 +41,7 @@ contract BscAprOracle is IAprOracle, Exponential, CoreUtility {
     function getVenusBorrowIndex(address vToken) public view returns (uint256 newBorrowIndex) {
         /* Calculate the current borrow interest rate */
         uint256 borrowRateMantissa = VTokenInterfaces(vToken).borrowRatePerBlock();
-        require(borrowRateMantissa <= VENUS_BORROW_MAX_MANTISSA, "borrow rate is absurdly high");
+        require(borrowRateMantissa <= VENUS_BORROW_MAX_MANTISSA, "Borrow rate is absurdly high");
 
         uint256 borrowIndexPrior = VTokenInterfaces(vToken).borrowIndex();
         uint256 accrualBlockNumber = VTokenInterfaces(vToken).accrualBlockNumber();

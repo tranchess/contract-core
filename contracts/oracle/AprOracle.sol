@@ -48,17 +48,17 @@ contract AprOracle is IAprOracle, Exponential, CoreUtility {
     uint256 public currentDailyRate;
 
     constructor(
-        string memory _name,
-        address _usdc,
-        address _aaveUsdcLendingPool,
-        address _cUsdc
+        string memory name_,
+        address usdc_,
+        address aaveUsdcLendingPool_,
+        address cUsdc_
     ) public {
-        name = _name;
-        usdc = _usdc;
-        aaveUsdcLendingPool = _aaveUsdcLendingPool;
-        cUsdc = _cUsdc;
-        compoundBorrowIndex = getCompoundBorrowIndex(_cUsdc);
-        aaveBorrowIndex = getAaveBorrowIndex(_aaveUsdcLendingPool, _usdc);
+        name = name_;
+        usdc = usdc_;
+        aaveUsdcLendingPool = aaveUsdcLendingPool_;
+        cUsdc = cUsdc_;
+        compoundBorrowIndex = getCompoundBorrowIndex(cUsdc_);
+        aaveBorrowIndex = getAaveBorrowIndex(aaveUsdcLendingPool_, usdc_);
         timestamp = block.timestamp;
     }
 
@@ -66,7 +66,7 @@ contract AprOracle is IAprOracle, Exponential, CoreUtility {
     function getCompoundBorrowIndex(address cToken) public view returns (uint256 newBorrowIndex) {
         /* Calculate the current borrow interest rate */
         uint256 borrowRateMantissa = CTokenInterface(cToken).borrowRatePerBlock();
-        require(borrowRateMantissa <= COMPOUND_BORROW_MAX_MANTISSA, "borrow rate is absurdly high");
+        require(borrowRateMantissa <= COMPOUND_BORROW_MAX_MANTISSA, "Borrow rate is absurdly high");
 
         uint256 borrowIndexPrior = CTokenInterface(cToken).borrowIndex();
         uint256 accrualBlockNumber = CTokenInterface(cToken).accrualBlockNumber();

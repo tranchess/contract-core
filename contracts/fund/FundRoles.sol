@@ -26,7 +26,7 @@ abstract contract FundRoles {
     }
 
     modifier onlyPrimaryMarket() {
-        require(isPrimaryMarket(msg.sender), "Only primary market");
+        require(isPrimaryMarket(msg.sender), "FundRoles: only primary market");
         _;
     }
 

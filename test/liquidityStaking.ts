@@ -5,25 +5,9 @@ import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 const parsePrecise = (value: string) => parseUnits(value, 27);
-
-const WEEK = 7 * 86400;
-
-async function advanceBlockAtTime(time: number) {
-    await ethers.provider.send("evm_mine", [time]);
-}
-
-/**
- * Note that failed transactions are silently ignored when automining is disabled.
- */
-async function setAutomine(flag: boolean) {
-    await ethers.provider.send("evm_setAutomine", [flag]);
-}
+import { WEEK, FixtureWalletMap, advanceBlockAtTime, setAutomine } from "./utils";
 
 describe("Staking", function () {
-    interface FixtureWalletMap {
-        readonly [name: string]: Wallet;
-    }
-
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly startTimestamp: number;
@@ -40,7 +24,6 @@ describe("Staking", function () {
     let user2: Wallet;
     let user3: Wallet;
     let user4: Wallet;
-    let owner: Wallet;
     let addr1: string;
     let addr2: string;
     let addr3: string;
@@ -83,7 +66,7 @@ describe("Staking", function () {
         await stakedToken.connect(user4).approve(staking.address, parseEther("100"));
 
         return {
-            wallets: { user1, user2, user3, user4, owner },
+            wallets: { user1, user2, user3, user4 },
             startTimestamp: startTimestamp,
             endTimestamp: endTimestamp,
             rewardToken: rewardToken,
@@ -104,7 +87,6 @@ describe("Staking", function () {
         user2 = fixtureData.wallets.user2;
         user3 = fixtureData.wallets.user3;
         user4 = fixtureData.wallets.user4;
-        owner = fixtureData.wallets.owner;
         addr1 = user1.address;
         addr2 = user2.address;
         addr3 = user3.address;

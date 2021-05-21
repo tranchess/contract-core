@@ -23,8 +23,8 @@ contract InterestRateBallot is IBallot {
     mapping(uint256 => uint256) public scheduledUnlock;
     mapping(uint256 => uint256) public scheduledWeightedUnlock;
 
-    constructor(address _votingEscrow) public {
-        votingEscrow = IVotingEscrow(_votingEscrow);
+    constructor(address votingEscrow_) public {
+        votingEscrow = IVotingEscrow(votingEscrow_);
         maxTime = votingEscrow.maxTime();
     }
 
@@ -67,13 +67,13 @@ contract InterestRateBallot is IBallot {
 
     // -------------------------------------------------------------------------
     function cast(uint256 option) public {
-        require(option < maxOption, "invalid option");
+        require(option < maxOption, "Invalid option");
 
         IVotingEscrow.LockedBalance memory lockedBalance =
             votingEscrow.getLockedBalance(msg.sender);
         Voter memory voter = voters[msg.sender];
         uint256 weight = getWeight(option);
-        require(lockedBalance.amount > 0, "zero value");
+        require(lockedBalance.amount > 0, "Zero value");
 
         // update scheduled unlock
         scheduledUnlock[voter.unlockTime] -= voter.amount;
@@ -106,7 +106,7 @@ contract InterestRateBallot is IBallot {
         view
         returns (uint256)
     {
-        require(timestamp >= block.timestamp, "must be current or future time");
+        require(timestamp >= block.timestamp, "Must be current or future time");
         Voter memory voter = voters[account];
         if (timestamp > voter.unlockTime) {
             return 0;

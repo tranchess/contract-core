@@ -19,7 +19,10 @@ import "./Staking.sol";
 /// @title Tranchess's Exchange Contract
 /// @notice A decentralized exchange to match premium-discount orders and clear trades
 /// @author Tranchess
-contract Exchange is ExchangeRoles, Staking {
+contract Exchange is Staking, ExchangeRoles {
+    /// @dev Reserved storage slots for future base contract upgrades
+    uint256[32] private _reservedSlots;
+
     using SafeDecimalMath for uint256;
     using LibOrderQueue for OrderQueue;
     using LibUnsettledBuyTrade for UnsettledBuyTrade;

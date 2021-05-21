@@ -160,7 +160,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         currentDay = endOfDay(block.timestamp);
         uint256 lastDay = currentDay - 1 days;
         uint256 currentPrice = twapOracle.getTwap(lastDay);
-        require(currentPrice != 0, "price n/a");
+        require(currentPrice != 0, "Price not available");
         _historicalNavs[lastDay][TRANCHE_M] = UNIT;
         _historicalNavs[lastDay][TRANCHE_A] = UNIT;
         _historicalNavs[lastDay][TRANCHE_B] = UNIT;
@@ -875,7 +875,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         if (fee > 0) {
             require(
                 IERC20(tokenUnderlying).transfer(address(feeCollector), fee),
-                "tokenUnderlying failed transfer"
+                "Underlying transfer failed"
             );
         }
     }
@@ -908,7 +908,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
                         address(this),
                         creationUnderlying - redemptionUnderlying
                     ),
-                    "tokenUnderlying failed transferFrom"
+                    "Underlying transferFrom failed"
                 );
             } else if (redemptionUnderlying > creationUnderlying) {
                 require(
@@ -916,13 +916,13 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
                         address(pm),
                         redemptionUnderlying - creationUnderlying
                     ),
-                    "tokenUnderlying failed transfer"
+                    "Underlying transfer failed"
                 );
             }
             if (fee > 0) {
                 require(
                     IERC20(tokenUnderlying).transfer(address(feeCollector), fee),
-                    "tokenUnderlying failed transferFrom"
+                    "Underlying transferFrom failed"
                 );
             }
         }

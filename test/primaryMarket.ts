@@ -6,21 +6,21 @@ const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
+import {
+    TRANCHE_M,
+    TRANCHE_A,
+    TRANCHE_B,
+    DAY,
+    FixtureWalletMap,
+    advanceBlockAtTime,
+} from "./utils";
 
-const TRANCHE_M = 0;
-const TRANCHE_A = 1;
-const TRANCHE_B = 2;
 const REDEMPTION_FEE_BPS = 3500;
 const SPLIT_FEE_BPS = 4000;
 const MERGE_FEE_BPS = 4500;
 const MIN_CREATION_AMOUNT = 5;
 
-const DAY = 86400; // 1 day
 const START_DAY = 1609556400; // 2021-01-02 03:00:00
-
-async function advanceBlockAtTime(time: number) {
-    await ethers.provider.send("evm_mine", [time]);
-}
 
 async function parseEvent(tx: Transaction, contract: Contract, eventName: string) {
     const receipt = await contract.provider.waitForTransaction(tx.hash as string);
@@ -37,10 +37,6 @@ async function parseEvent(tx: Transaction, contract: Contract, eventName: string
 }
 
 describe("PrimaryMarket", function () {
-    interface FixtureWalletMap {
-        readonly [name: string]: Wallet;
-    }
-
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly btc: Contract;
@@ -137,14 +133,14 @@ describe("PrimaryMarket", function () {
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
             await expect(primaryMarket.create(parseBtc("1"))).to.be.revertedWith(
-                "only when active"
+                "Only when active"
             );
         });
 
         it("Should check minimum creation amount", async function () {
             // TODO this value should be configurable on initialization
             await expect(primaryMarket.create(MIN_CREATION_AMOUNT - 1)).to.be.revertedWith(
-                "min amount"
+                "Min amount"
             );
             await primaryMarket.create(MIN_CREATION_AMOUNT);
         });
@@ -185,7 +181,7 @@ describe("PrimaryMarket", function () {
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
             await expect(primaryMarket.redeem(parseEther("1"))).to.be.revertedWith(
-                "only when active"
+                "Only when active"
             );
         });
 
@@ -238,7 +234,7 @@ describe("PrimaryMarket", function () {
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
             await expect(primaryMarket.split(parseEther("1"))).to.be.revertedWith(
-                "only when active"
+                "Only when active"
             );
         });
 
@@ -298,7 +294,7 @@ describe("PrimaryMarket", function () {
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
             await expect(primaryMarket.merge(parseEther("1"))).to.be.revertedWith(
-                "only when active"
+                "Only when active"
             );
         });
 
@@ -340,9 +336,9 @@ describe("PrimaryMarket", function () {
             await fund.mock.trancheWeights.returns(100, 200);
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            const reason = "Mock func 'burn A 100' is called";
-            await fund.mock.burn.withArgs(TRANCHE_A, user1.address, 100).revertsWithReason(reason);
-            await expect(primaryMarket.merge(199)).to.be.revertedWith(reason);
+            await expect(() => primaryMarket.merge(199)).to.callMocks({
+                func: fund.mock.burn.withArgs(TRANCHE_A, user1.address, 100),
+            });
         });
 
         it("Should emit an event", async function () {
@@ -357,7 +353,7 @@ describe("PrimaryMarket", function () {
     describe("settle()", function () {
         it("Should revert if not called from Fund", async function () {
             await expect(primaryMarket.settle(START_DAY, 0, 0, 1, 1)).to.be.revertedWith(
-                "only fund"
+                "Only fund"
             );
         });
 

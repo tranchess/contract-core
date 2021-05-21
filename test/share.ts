@@ -1,40 +1,31 @@
 import { expect } from "chai";
 import { BigNumber, Contract, Wallet } from "ethers";
-import type { Fixture, MockContract, MockProvider, Stub } from "ethereum-waffle";
+import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
+import {
+    TRANCHE_M,
+    TRANCHE_A,
+    TRANCHE_B,
+    DAY,
+    HOUR,
+    SETTLEMENT_TIME,
+    FixtureWalletMap,
+    advanceBlockAtTime,
+} from "./utils";
 
-const TRANCHE_M = 0;
-const TRANCHE_A = 1;
-const TRANCHE_B = 2;
-const DAY = 86400;
-const HOUR = 3600;
-const SETTLEMENT_TIME = 3600 * 14; // UTC time 14:00 every day
 const UPPER_REBALANCE_THRESHOLD = parseEther("2");
 const LOWER_REBALANCE_THRESHOLD = parseEther("0.5");
 const MAX_UINT256 = BigNumber.from(2).pow(256).sub(1);
 const SUB_MAX_UINT256 = MAX_UINT256.div(parseEther("1"));
 
-async function advanceBlockAtTime(time: number) {
-    await ethers.provider.send("evm_mine", [time]);
-}
-
 describe("Share", function () {
-    interface FixtureWalletMap {
-        readonly [name: string]: Wallet;
-    }
-
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
-        readonly startDay: number;
-        readonly startTimestamp: number;
         readonly twapOracle: MockContract;
-        readonly aprOracle: MockContract;
-        readonly interestRateBallot: MockContract;
-        readonly btc: Contract;
         readonly shareM: Contract;
         readonly shareA: Contract;
         readonly shareB: Contract;
@@ -56,39 +47,22 @@ describe("Share", function () {
     let currentFixture: Fixture<FixtureData>;
     let fixtureData: FixtureData;
 
-    let startDay: number;
-    let startTimestamp: number;
     let user1: Wallet;
     let user2: Wallet;
-    let owner: Wallet;
     let shareM: Contract;
     let shareA: Contract;
     let shareB: Contract;
     let addr1: string;
     let addr2: string;
     let twapOracle: MockContract;
-    let btc: Contract;
     let fund: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
-        // Initiating transactions from a Waffle mock contract doesn't work well in Hardhat
-        // and may fail with gas estimating errors. We use EOAs for the shares to make
-        // test development easier.
         const [user1, user2, owner, feeCollector] = provider.getWallets();
 
-        // Start at 12 hours after settlement time of the 6th day in a week, which makes sure that
-        // the first settlement after the fund's deployment settles the last day in a week and
-        // starts a new week by updating interest rate of Token A. Many test cases in this file
-        // rely on this fact to change the interest rate.
-        //
-        // As Fund settles at 14:00 everyday and an Unix timestamp starts a week on Thursday,
-        // the test cases starts at 2:00 on Thursday (`startTimestamp`) and the first day settles
-        // at 14:00 on Thursday (`startDay`).
-        let startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
-        const lastDay = Math.ceil(startTimestamp / DAY / 7) * DAY * 7 + DAY * 6 + SETTLEMENT_TIME;
-        const startDay = lastDay + DAY;
-        startTimestamp = lastDay + 3600 * 12;
-        await advanceBlockAtTime(startTimestamp);
+        const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+        const startDay = Math.floor(startTimestamp / DAY) * DAY + DAY * 10 + SETTLEMENT_TIME;
+        await advanceBlockAtTime(startDay - DAY / 2);
 
         const twapOracle = await deployMockForName(owner, "ITwapOracle");
         await twapOracle.mock.getTwap.returns(parseEther("1000"));
@@ -147,13 +121,8 @@ describe("Share", function () {
         await fund.settle();
 
         return {
-            wallets: { user1, user2, owner },
-            startDay,
-            startTimestamp,
+            wallets: { user1, user2 },
             twapOracle,
-            aprOracle,
-            interestRateBallot,
-            btc,
             shareM: shareM.connect(user1),
             shareA: shareA.connect(user1),
             shareB: shareB.connect(user1),
@@ -174,15 +143,11 @@ describe("Share", function () {
         fixtureData = await loadFixture(currentFixture);
         user1 = fixtureData.wallets.user1;
         user2 = fixtureData.wallets.user2;
-        owner = fixtureData.wallets.owner;
         shareM = fixtureData.shareM;
         shareA = fixtureData.shareA;
         shareB = fixtureData.shareB;
         addr1 = user1.address;
         addr2 = user2.address;
-        startDay = fixtureData.startDay;
-        startTimestamp = fixtureData.startTimestamp;
-        btc = fixtureData.btc;
         twapOracle = fixtureData.twapOracle;
         fund = fixtureData.fund;
     });

@@ -4,10 +4,7 @@ import type { Fixture, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther } = ethers.utils;
-
-const DAY = 86400;
-const WEEK = DAY * 7;
-const SETTLEMENT_TIME = 3600 * 14; // UTC time 14:00 every day
+import { DAY, WEEK, SETTLEMENT_TIME, FixtureWalletMap, advanceBlockAtTime } from "./utils";
 
 const CUMULATIVE_SUPPLY_SCHEDULE: BigNumber[] = [
     parseEther("180000000"),
@@ -227,15 +224,7 @@ for (let i = 0; i < CUMULATIVE_SUPPLY_SCHEDULE.length - 1; i++) {
     );
 }
 
-async function advanceBlockAtTime(time: number) {
-    await ethers.provider.send("evm_mine", [time]);
-}
-
 describe("Chess", function () {
-    interface FixtureWalletMap {
-        readonly [name: string]: Wallet;
-    }
-
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly startWeek: number;
