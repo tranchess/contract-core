@@ -41,7 +41,7 @@ contract BscAprOracle is IAprOracle, Exponential, CoreUtility {
     function getVenusBorrowIndex(address vToken) public view returns (uint256 newBorrowIndex) {
         /* Calculate the current borrow interest rate */
         uint256 borrowRateMantissa = VTokenInterfaces(vToken).borrowRatePerBlock();
-        require(borrowRateMantissa <= VENUS_BORROW_MAX_MANTISSA, "borrow rate is absurdly high");
+        require(borrowRateMantissa <= VENUS_BORROW_MAX_MANTISSA, "Borrow rate is absurdly high");
 
         uint256 borrowIndexPrior = VTokenInterfaces(vToken).borrowIndex();
         uint256 accrualBlockNumber = VTokenInterfaces(vToken).accrualBlockNumber();

@@ -46,7 +46,7 @@ contract LiquidityStaking {
         uint256 amount = rate_.mul(endTimestamp.sub(startTimestamp));
         require(
             IERC20(rewardToken).transferFrom(msg.sender, address(this), amount),
-            "TransferFrom failed"
+            "Reward transferFrom failed"
         );
 
         rate = rate_;
@@ -62,7 +62,7 @@ contract LiquidityStaking {
 
         require(
             IERC20(stakedToken).transferFrom(msg.sender, address(this), amount),
-            "TransferFrom failed"
+            "Staked transferFrom failed"
         );
         totalStakes = totalStakes.add(amount);
         stakes[msg.sender] = stakes[msg.sender].add(amount);
@@ -85,14 +85,14 @@ contract LiquidityStaking {
     }
 
     function _withdraw(address account, uint256 amount) private {
-        require(IERC20(stakedToken).transfer(account, amount), "Transfer failed");
+        require(IERC20(stakedToken).transfer(account, amount), "Staked transfer failed");
         totalStakes = totalStakes.sub(amount, "Exceed staked balances");
         stakes[account] = stakes[account].sub(amount, "Exceed staked balances");
     }
 
     function _claimRewards(address account) private returns (uint256 rewards) {
         rewards = claimableRewards[account];
-        require(IERC20(rewardToken).transfer(account, rewards), "Transfer failed");
+        require(IERC20(rewardToken).transfer(account, rewards), "Reward transfer failed");
         delete claimableRewards[account];
     }
 

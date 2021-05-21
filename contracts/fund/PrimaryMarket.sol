@@ -100,10 +100,10 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     }
 
     function create(uint256 underlying) external nonReentrant onlyActive {
-        require(underlying >= minCreationUnderlying, "min amount");
+        require(underlying >= minCreationUnderlying, "Min amount");
         require(
             IERC20(fund.tokenUnderlying()).transferFrom(msg.sender, address(this), underlying),
-            "tokenUnderlying failed transferFrom"
+            "Underlying transferFrom failed"
         );
 
         CreationRedemption memory cr = _currentCreationRedemption(msg.sender);
@@ -160,7 +160,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         if (redeemedUnderlying > 0) {
             require(
                 IERC20(fund.tokenUnderlying()).transfer(account, redeemedUnderlying),
-                "tokenUnderlying failed transfer"
+                "Underlying transfer failed"
             );
             cr.redeemedUnderlying = 0;
         }
@@ -309,7 +309,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
                     address(fund),
                     creationUnderlying - redemptionUnderlying
                 ),
-                "tokenUnderlying failed approve"
+                "Underlying approve failed"
             );
         }
 
@@ -421,13 +421,12 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     }
 
     modifier onlyActive() {
-        // Check roles in Fund.
-        require(fund.isPrimaryMarketActive(address(this), block.timestamp), "only when active");
+        require(fund.isPrimaryMarketActive(address(this), block.timestamp), "Only when active");
         _;
     }
 
     modifier onlyFund() {
-        require(msg.sender == address(fund), "only fund");
+        require(msg.sender == address(fund), "Only fund");
         _;
     }
 }

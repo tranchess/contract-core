@@ -103,7 +103,7 @@ describe("VotingEscrow", function () {
 
     describe("createLock()", function () {
         it("Should revert with zero amount", async function () {
-            await expect(votingEscrow.createLock(0, startWeek)).to.revertedWith("zero value");
+            await expect(votingEscrow.createLock(0, startWeek)).to.revertedWith("Zero value");
         });
 
         it("Should revert with existing lock found", async function () {
@@ -153,7 +153,7 @@ describe("VotingEscrow", function () {
 
     describe("depositFor()", function () {
         it("Should revert with zero amount", async function () {
-            await expect(votingEscrow.depositFor(addr1, 0)).to.revertedWith("zero value");
+            await expect(votingEscrow.depositFor(addr1, 0)).to.revertedWith("Zero value");
         });
 
         it("Should revert with no existing lock found", async function () {
@@ -196,7 +196,7 @@ describe("VotingEscrow", function () {
 
     describe("increaseAmount()", function () {
         it("Should revert with zero amount", async function () {
-            await expect(votingEscrow.increaseAmount(0)).to.revertedWith("zero value");
+            await expect(votingEscrow.increaseAmount(0)).to.revertedWith("Zero value");
         });
 
         it("Should revert with no existing lock found", async function () {

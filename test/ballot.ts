@@ -130,7 +130,7 @@ describe("Ballot", function () {
         });
 
         it("Should revert cast votes with invalid option", async function () {
-            await expect(ballot.cast(3)).to.be.revertedWith("invalid option");
+            await expect(ballot.cast(3)).to.be.revertedWith("Invalid option");
         });
     });
 

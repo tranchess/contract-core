@@ -133,14 +133,14 @@ describe("PrimaryMarket", function () {
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
             await expect(primaryMarket.create(parseBtc("1"))).to.be.revertedWith(
-                "only when active"
+                "Only when active"
             );
         });
 
         it("Should check minimum creation amount", async function () {
             // TODO this value should be configurable on initialization
             await expect(primaryMarket.create(MIN_CREATION_AMOUNT - 1)).to.be.revertedWith(
-                "min amount"
+                "Min amount"
             );
             await primaryMarket.create(MIN_CREATION_AMOUNT);
         });
@@ -181,7 +181,7 @@ describe("PrimaryMarket", function () {
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
             await expect(primaryMarket.redeem(parseEther("1"))).to.be.revertedWith(
-                "only when active"
+                "Only when active"
             );
         });
 
@@ -234,7 +234,7 @@ describe("PrimaryMarket", function () {
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
             await expect(primaryMarket.split(parseEther("1"))).to.be.revertedWith(
-                "only when active"
+                "Only when active"
             );
         });
 
@@ -294,7 +294,7 @@ describe("PrimaryMarket", function () {
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
             await expect(primaryMarket.merge(parseEther("1"))).to.be.revertedWith(
-                "only when active"
+                "Only when active"
             );
         });
 
@@ -353,7 +353,7 @@ describe("PrimaryMarket", function () {
     describe("settle()", function () {
         it("Should revert if not called from Fund", async function () {
             await expect(primaryMarket.settle(START_DAY, 0, 0, 1, 1)).to.be.revertedWith(
-                "only fund"
+                "Only fund"
             );
         });
 

@@ -91,7 +91,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     function depositFor(address account, uint256 amount) public nonReentrant {
         LockedBalance memory lockedBalance = locked[account];
 
-        require(amount > 0, "zero value");
+        require(amount > 0, "Zero value");
         require(lockedBalance.unlockTime > block.timestamp, "Cannot add to expired lock. Withdraw");
 
         _lock(account, amount, 0, lockedBalance, LockType.DEPOSIT_FOR_TYPE);
@@ -103,7 +103,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         unlockTime = (unlockTime / 1 weeks) * 1 weeks; // Locktime is rounded down to weeks
         LockedBalance memory lockedBalance = locked[msg.sender];
 
-        require(amount > 0, "zero value");
+        require(amount > 0, "Zero value");
         require(lockedBalance.amount == 0, "Withdraw old tokens first");
         require(unlockTime > block.timestamp, "Can only lock until time in the future");
         require(unlockTime <= block.timestamp + maxTime, "Voting lock cannot exceed max lock time");
@@ -115,7 +115,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         _assertNotContract(msg.sender);
         LockedBalance memory lockedBalance = locked[msg.sender];
 
-        require(amount > 0, "zero value");
+        require(amount > 0, "Zero value");
         require(lockedBalance.unlockTime > block.timestamp, "Cannot add to expired lock. Withdraw");
 
         _lock(msg.sender, amount, 0, lockedBalance, LockType.INCREASE_LOCK_AMOUNT);
@@ -170,7 +170,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         view
         returns (uint256)
     {
-        require(timestamp >= block.timestamp, "must be current or future time");
+        require(timestamp >= block.timestamp, "Must be current or future time");
         LockedBalance memory lockedBalance = locked[account];
         if (timestamp > lockedBalance.unlockTime) {
             return 0;

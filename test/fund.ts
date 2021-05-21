@@ -438,7 +438,7 @@ describe("Fund", function () {
         describe("mint()", function () {
             it("Should revert if not called from PrimaryMarket", async function () {
                 await expect(fund.connect(user1).mint(TRANCHE_M, addr1, 1)).to.be.revertedWith(
-                    "Only primary market"
+                    "FundRoles: only primary market"
                 );
             });
 
@@ -475,7 +475,7 @@ describe("Fund", function () {
         describe("burn()", function () {
             it("Should revert if not called from PrimaryMarket", async function () {
                 await expect(fund.connect(user1).burn(TRANCHE_M, addr1, 1)).to.be.revertedWith(
-                    "Only primary market"
+                    "FundRoles: only primary market"
                 );
             });
 
