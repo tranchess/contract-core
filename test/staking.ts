@@ -64,7 +64,6 @@ describe("Staking", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly checkpointTimestamp: number;
-        readonly nextRateUpdateTime: number;
         readonly fund: MockContract;
         readonly shareM: MockContract;
         readonly shareA: MockContract;
@@ -79,7 +78,6 @@ describe("Staking", function () {
     let fixtureData: FixtureData;
 
     let checkpointTimestamp: number;
-    let nextRateUpdateTime: number;
     let user1: Wallet;
     let user2: Wallet;
     let owner: Wallet;
@@ -99,11 +97,6 @@ describe("Staking", function () {
 
         const startEpoch = (await ethers.provider.getBlock("latest")).timestamp;
         advanceBlockAtTime(Math.floor(startEpoch / WEEK) * WEEK + WEEK);
-        const endWeek =
-            Math.floor((startEpoch + WEEK - SETTLEMENT_TIME) / WEEK) * WEEK +
-            SETTLEMENT_TIME +
-            WEEK * 2;
-        const nextRateUpdateTime = endWeek + WEEK * 10;
 
         const fund = await deployMockForName(owner, "IFund");
         const shareM = await deployMockForName(owner, "IERC20");
@@ -150,7 +143,6 @@ describe("Staking", function () {
         return {
             wallets: { user1, user2, owner },
             checkpointTimestamp,
-            nextRateUpdateTime,
             fund,
             shareM,
             shareA,
@@ -169,7 +161,6 @@ describe("Staking", function () {
     beforeEach(async function () {
         fixtureData = await loadFixture(currentFixture);
         checkpointTimestamp = fixtureData.checkpointTimestamp;
-        nextRateUpdateTime = fixtureData.nextRateUpdateTime;
         user1 = fixtureData.wallets.user1;
         user2 = fixtureData.wallets.user2;
         owner = fixtureData.wallets.owner;
@@ -733,6 +724,7 @@ describe("Staking", function () {
     });
 
     describe("Rewards", function () {
+        let rewardStartTimestamp: number; // Reward rate becomes non-zero at this timestamp.
         let rate1: BigNumber;
         let rate2: BigNumber;
 
@@ -779,36 +771,36 @@ describe("Staking", function () {
         }
 
         beforeEach(async function () {
-            // Trigger a checkpoint and record its block timestamp. Reward rate is zero before
-            // this checkpoint. So no one has rewards till now.
+            rewardStartTimestamp =
+                Math.floor(checkpointTimestamp / WEEK) * WEEK + WEEK * 10 + SETTLEMENT_TIME;
             await fund.mock.getRebalanceTimestamp
                 .withArgs(0)
-                .returns(nextRateUpdateTime + 100 * WEEK);
-            await chess.mock.getRate.withArgs(nextRateUpdateTime).returns(parseEther("1"));
-            await advanceBlockAtTime(nextRateUpdateTime);
+                .returns(rewardStartTimestamp + 100 * WEEK);
+            await chess.mock.getRate.withArgs(rewardStartTimestamp).returns(parseEther("1"));
+            await advanceBlockAtTime(rewardStartTimestamp);
 
             rate1 = parseEther("1").mul(USER1_WEIGHT).div(TOTAL_WEIGHT);
             rate2 = parseEther("1").mul(USER2_WEIGHT).div(TOTAL_WEIGHT);
         });
 
         it("Should mint rewards on claimRewards()", async function () {
-            await advanceBlockAtTime(nextRateUpdateTime + 100);
+            await advanceBlockAtTime(rewardStartTimestamp + 100);
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rate1.mul(100));
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(rate2.mul(100));
 
             await expect(async () => {
-                await setNextBlockTime(nextRateUpdateTime + 300);
+                await setNextBlockTime(rewardStartTimestamp + 300);
                 await staking.claimRewards(addr1);
             }).to.callMocks({
                 func: chess.mock.mint.withArgs(addr1, rate1.mul(300)),
             });
 
-            await advanceBlockAtTime(nextRateUpdateTime + 800);
+            await advanceBlockAtTime(rewardStartTimestamp + 800);
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rate1.mul(500));
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(rate2.mul(800));
 
             await expect(async () => {
-                await setNextBlockTime(nextRateUpdateTime + 1000);
+                await setNextBlockTime(rewardStartTimestamp + 1000);
                 await staking.claimRewards(addr1);
             }).to.callMocks({
                 func: chess.mock.mint.withArgs(addr1, rate1.mul(700)),
@@ -818,13 +810,13 @@ describe("Staking", function () {
         it("Should make a checkpoint on deposit()", async function () {
             // Deposit some Token A to double the total reward weight
             await shareA.mock.transferFrom.returns(true);
-            await setNextBlockTime(nextRateUpdateTime + 100);
+            await setNextBlockTime(rewardStartTimestamp + 100);
             await staking.deposit(
                 TRANCHE_A,
                 TOTAL_WEIGHT.mul(REWARD_WEIGHT_M).div(REWARD_WEIGHT_A)
             );
 
-            await advanceBlockAtTime(nextRateUpdateTime + 500);
+            await advanceBlockAtTime(rewardStartTimestamp + 500);
             const { rewards1, rewards2 } = rewardsAfterDoublingTotal(100, 500);
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rewards1);
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(rewards2);
@@ -834,10 +826,10 @@ describe("Staking", function () {
             // Withdraw some Token M to reduce 20% of the total reward weight,
             // assuming balance is enough
             await shareM.mock.transfer.returns(true);
-            await setNextBlockTime(nextRateUpdateTime + 200);
+            await setNextBlockTime(rewardStartTimestamp + 200);
             await staking.withdraw(TRANCHE_M, TOTAL_WEIGHT.div(5));
 
-            await advanceBlockAtTime(nextRateUpdateTime + 700);
+            await advanceBlockAtTime(rewardStartTimestamp + 700);
             const { rewards1, rewards2 } = rewardsAfterReducingTotal(200, 700);
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rewards1);
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(rewards2);
@@ -846,10 +838,10 @@ describe("Staking", function () {
         it("Should make a checkpoint on tradeAvailable()", async function () {
             // Trade some Token M to reduce 20% of the total reward weight, assuming balance is enough
             await shareM.mock.transfer.returns(true);
-            await setNextBlockTime(nextRateUpdateTime + 300);
+            await setNextBlockTime(rewardStartTimestamp + 300);
             await staking.tradeAvailable(TRANCHE_M, addr1, TOTAL_WEIGHT.div(5));
 
-            await advanceBlockAtTime(nextRateUpdateTime + 900);
+            await advanceBlockAtTime(rewardStartTimestamp + 900);
             const { rewards1, rewards2 } = rewardsAfterReducingTotal(300, 900);
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rewards1);
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(rewards2);
@@ -858,7 +850,7 @@ describe("Staking", function () {
         it("Should make a checkpoint on rebalanceAndClearTrade()", async function () {
             // Get some Token B by settling trade to double the total reward weight
             await shareA.mock.transferFrom.returns(true);
-            await setNextBlockTime(nextRateUpdateTime + 400);
+            await setNextBlockTime(rewardStartTimestamp + 400);
             await staking.rebalanceAndClearTrade(
                 addr1,
                 0,
@@ -867,32 +859,32 @@ describe("Staking", function () {
                 0
             );
 
-            await advanceBlockAtTime(nextRateUpdateTime + 1500);
+            await advanceBlockAtTime(rewardStartTimestamp + 1500);
             const { rewards1, rewards2 } = rewardsAfterDoublingTotal(400, 1500);
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rewards1);
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(rewards2);
         });
 
         it("Should have no difference in rewarding available and locked balance", async function () {
-            await setNextBlockTime(nextRateUpdateTime + 300);
+            await setNextBlockTime(rewardStartTimestamp + 300);
             await staking.lock(TRANCHE_M, addr1, USER1_M.div(2));
-            await setNextBlockTime(nextRateUpdateTime + 350);
+            await setNextBlockTime(rewardStartTimestamp + 350);
             await staking.lock(TRANCHE_A, addr1, USER1_A.div(3));
-            await setNextBlockTime(nextRateUpdateTime + 400);
+            await setNextBlockTime(rewardStartTimestamp + 400);
             await staking.lock(TRANCHE_B, addr2, USER2_B.div(4));
 
-            await advanceBlockAtTime(nextRateUpdateTime + 500);
+            await advanceBlockAtTime(rewardStartTimestamp + 500);
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rate1.mul(500));
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(rate2.mul(500));
 
-            await setNextBlockTime(nextRateUpdateTime + 700);
+            await setNextBlockTime(rewardStartTimestamp + 700);
             await staking.rebalanceAndUnlock(addr1, USER1_M.div(3), 0, 0, 0);
-            await setNextBlockTime(nextRateUpdateTime + 750);
+            await setNextBlockTime(rewardStartTimestamp + 750);
             await staking.rebalanceAndUnlock(addr1, 0, USER1_A.div(5), 0, 0);
-            await setNextBlockTime(nextRateUpdateTime + 800);
+            await setNextBlockTime(rewardStartTimestamp + 800);
             await staking.rebalanceAndUnlock(addr2, 0, 0, USER2_B.div(7), 0);
 
-            await advanceBlockAtTime(nextRateUpdateTime + 2000);
+            await advanceBlockAtTime(rewardStartTimestamp + 2000);
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rate1.mul(2000));
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(rate2.mul(2000));
         });
@@ -900,36 +892,36 @@ describe("Staking", function () {
         it("Should make a checkpoint on tradeLocked()", async function () {
             // Trade some locked Token M to reduce 20% of the total reward weight
             await shareM.mock.transfer.returns(true);
-            await setNextBlockTime(nextRateUpdateTime + 789);
+            await setNextBlockTime(rewardStartTimestamp + 789);
             await staking.lock(TRANCHE_M, addr1, USER1_M);
-            await setNextBlockTime(nextRateUpdateTime + 1234);
+            await setNextBlockTime(rewardStartTimestamp + 1234);
             await staking.tradeLocked(TRANCHE_M, addr1, TOTAL_WEIGHT.div(5));
 
-            await advanceBlockAtTime(nextRateUpdateTime + 5678);
+            await advanceBlockAtTime(rewardStartTimestamp + 5678);
             const { rewards1, rewards2 } = rewardsAfterReducingTotal(1234, 5678);
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rewards1);
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(rewards2);
         });
 
         it("Should calculate rewards for two users in multiple weeks", async function () {
-            await chess.mock.getRate.withArgs(nextRateUpdateTime + WEEK).returns(parseEther("2"));
+            await chess.mock.getRate.withArgs(rewardStartTimestamp + WEEK).returns(parseEther("2"));
             await chess.mock.getRate
-                .withArgs(nextRateUpdateTime + WEEK * 2)
+                .withArgs(rewardStartTimestamp + WEEK * 2)
                 .returns(parseEther("3"));
             await chess.mock.getRate
-                .withArgs(nextRateUpdateTime + WEEK * 3)
+                .withArgs(rewardStartTimestamp + WEEK * 3)
                 .returns(parseEther("4"));
 
             let balance1 = rate1.mul(WEEK);
             let balance2 = rate2.mul(WEEK);
-            await advanceBlockAtTime(nextRateUpdateTime + WEEK);
+            await advanceBlockAtTime(rewardStartTimestamp + WEEK);
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(balance1);
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(balance2);
 
             balance1 = balance1.add(rate1.mul(WEEK).mul(2));
             balance2 = balance2.add(rate2.mul(WEEK).mul(2));
             await expect(async () => {
-                await setNextBlockTime(nextRateUpdateTime + WEEK * 2);
+                await setNextBlockTime(rewardStartTimestamp + WEEK * 2);
                 await staking.claimRewards(addr1);
             }).to.callMocks({
                 func: chess.mock.mint.withArgs(addr1, balance1),
@@ -940,14 +932,14 @@ describe("Staking", function () {
                 .sub(rate1.mul(WEEK).mul(2))
                 .sub(rate1.mul(WEEK));
             balance2 = balance2.add(rate2.mul(WEEK).mul(3));
-            await advanceBlockAtTime(nextRateUpdateTime + WEEK * 3);
+            await advanceBlockAtTime(rewardStartTimestamp + WEEK * 3);
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(balance1);
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(balance2);
 
             balance1 = balance1.add(rate1.mul(WEEK).mul(4));
             balance2 = balance2.add(rate2.mul(WEEK).mul(4));
             await expect(async () => {
-                await setNextBlockTime(nextRateUpdateTime + WEEK * 4);
+                await setNextBlockTime(rewardStartTimestamp + WEEK * 4);
                 await staking.claimRewards(addr1);
             }).to.callMocks({
                 func: chess.mock.mint.withArgs(addr1, balance1),
@@ -956,15 +948,15 @@ describe("Staking", function () {
 
         it("Should calculate rewards with rebalance in two weeks", async function () {
             await chess.mock.getRate
-                .withArgs(nextRateUpdateTime + WEEK * 1)
+                .withArgs(rewardStartTimestamp + WEEK * 1)
                 .returns(parseEther("3"));
             await chess.mock.getRate
-                .withArgs(nextRateUpdateTime + WEEK * 2)
+                .withArgs(rewardStartTimestamp + WEEK * 2)
                 .returns(parseEther("5"));
             await fund.mock.getRebalanceSize.returns(1);
             await fund.mock.getRebalanceTimestamp
                 .withArgs(0)
-                .returns(nextRateUpdateTime + WEEK + 100);
+                .returns(rewardStartTimestamp + WEEK + 100);
             await fund.mock.doRebalance
                 .withArgs(TOTAL_M, TOTAL_A, TOTAL_B, 0)
                 .returns(TOTAL_M.mul(4), TOTAL_A.mul(4), TOTAL_B.mul(4));
@@ -977,7 +969,7 @@ describe("Staking", function () {
             await fund.mock.doRebalance
                 .withArgs(USER1_M.mul(2), USER1_A.mul(2), USER1_B.mul(2), 1)
                 .returns(USER1_M.mul(3), USER1_A.mul(3), USER1_B.mul(3));
-            await advanceBlockAtTime(nextRateUpdateTime + WEEK * 2 + 100);
+            await advanceBlockAtTime(rewardStartTimestamp + WEEK * 2 + 100);
 
             const rewardWeek0Version0 = rate1.mul(WEEK);
             const rewardWeek1Version0 = rate1.mul(3).mul(100);
@@ -1004,10 +996,10 @@ describe("Staking", function () {
             await staking.deposit(TRANCHE_A, deposit1);
             await staking.deposit(TRANCHE_A, deposit2);
             await staking.deposit(TRANCHE_A, deposit3);
-            await advanceBlockAtTime(nextRateUpdateTime + 100);
+            await advanceBlockAtTime(rewardStartTimestamp + 100);
             await setAutomine(true);
 
-            await advanceBlockAtTime(nextRateUpdateTime + 500);
+            await advanceBlockAtTime(rewardStartTimestamp + 500);
             const { rewards1, rewards2 } = rewardsAfterDoublingTotal(100, 500);
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rewards1);
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(rewards2);
@@ -1015,8 +1007,8 @@ describe("Staking", function () {
 
         it("Should calculate rewards after each rebalance", async function () {
             await fund.mock.getRebalanceSize.returns(2);
-            await fund.mock.getRebalanceTimestamp.withArgs(0).returns(nextRateUpdateTime + 100);
-            await fund.mock.getRebalanceTimestamp.withArgs(1).returns(nextRateUpdateTime + 400);
+            await fund.mock.getRebalanceTimestamp.withArgs(0).returns(rewardStartTimestamp + 100);
+            await fund.mock.getRebalanceTimestamp.withArgs(1).returns(rewardStartTimestamp + 400);
             await fund.mock.doRebalance
                 .withArgs(TOTAL_M, TOTAL_A, TOTAL_B, 0)
                 .returns(TOTAL_M.mul(4), TOTAL_A.mul(4), TOTAL_B.mul(4));
@@ -1029,7 +1021,7 @@ describe("Staking", function () {
             await fund.mock.doRebalance
                 .withArgs(USER1_M.mul(2), USER1_A.mul(2), USER1_B.mul(2), 1)
                 .returns(USER1_M.mul(3), USER1_A.mul(3), USER1_B.mul(3));
-            await advanceBlockAtTime(nextRateUpdateTime + 1000);
+            await advanceBlockAtTime(rewardStartTimestamp + 1000);
 
             const rewardVersion0 = rate1.mul(100);
             const rewardVersion1 = rate1.div(2).mul(300); // Half (2/4) rate1 after the first rebalance
@@ -1048,7 +1040,7 @@ describe("Staking", function () {
             await staking.withdraw(TRANCHE_A, USER1_A);
             await staking.connect(user2).withdraw(TRANCHE_M, USER2_M);
             await staking.connect(user2).withdraw(TRANCHE_A, USER2_A);
-            await advanceBlockAtTime(nextRateUpdateTime + 100);
+            await advanceBlockAtTime(rewardStartTimestamp + 100);
             await setAutomine(true);
             // Rewards before the withdrawals
             let user1Rewards = rate1.mul(100);
@@ -1056,8 +1048,8 @@ describe("Staking", function () {
 
             // Rebalance any Token B to zero in the first rebalance.
             await fund.mock.getRebalanceSize.returns(2);
-            await fund.mock.getRebalanceTimestamp.withArgs(0).returns(nextRateUpdateTime + 400);
-            await fund.mock.getRebalanceTimestamp.withArgs(1).returns(nextRateUpdateTime + 1000);
+            await fund.mock.getRebalanceTimestamp.withArgs(0).returns(rewardStartTimestamp + 400);
+            await fund.mock.getRebalanceTimestamp.withArgs(1).returns(rewardStartTimestamp + 1000);
             await fund.mock.doRebalance.withArgs(0, 0, TOTAL_B, 0).returns(0, 0, 0);
             await fund.mock.doRebalance.withArgs(0, 0, USER1_B, 0).returns(0, 0, 0);
             await fund.mock.doRebalance.withArgs(0, 0, USER2_B, 0).returns(0, 0, 0);
@@ -1067,16 +1059,16 @@ describe("Staking", function () {
             user2Rewards = user2Rewards.add(parseEther("1").mul(300).mul(USER2_B).div(TOTAL_B));
 
             // User1 deposit some Token M
-            await setNextBlockTime(nextRateUpdateTime + 2000);
+            await setNextBlockTime(rewardStartTimestamp + 2000);
             await staking.deposit(TRANCHE_M, parseEther("1"));
 
             // User2 deposit some Token M
-            await setNextBlockTime(nextRateUpdateTime + 3500);
+            await setNextBlockTime(rewardStartTimestamp + 3500);
             await staking.connect(user2).deposit(TRANCHE_M, parseEther("1"));
             // Add rewards before user2's deposit
             user1Rewards = user1Rewards.add(parseEther("1").mul(1500));
 
-            await advanceBlockAtTime(nextRateUpdateTime + 5600);
+            await advanceBlockAtTime(rewardStartTimestamp + 5600);
             // The two users evenly split rewards after user2's deposit
             user1Rewards = user1Rewards.add(parseEther("0.5").mul(2100));
             user2Rewards = user2Rewards.add(parseEther("0.5").mul(2100));
