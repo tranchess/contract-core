@@ -40,7 +40,6 @@ describe("Staking", function () {
     let user2: Wallet;
     let user3: Wallet;
     let user4: Wallet;
-    let owner: Wallet;
     let addr1: string;
     let addr2: string;
     let addr3: string;
@@ -83,7 +82,7 @@ describe("Staking", function () {
         await stakedToken.connect(user4).approve(staking.address, parseEther("100"));
 
         return {
-            wallets: { user1, user2, user3, user4, owner },
+            wallets: { user1, user2, user3, user4 },
             startTimestamp: startTimestamp,
             endTimestamp: endTimestamp,
             rewardToken: rewardToken,
@@ -104,7 +103,6 @@ describe("Staking", function () {
         user2 = fixtureData.wallets.user2;
         user3 = fixtureData.wallets.user3;
         user4 = fixtureData.wallets.user4;
-        owner = fixtureData.wallets.owner;
         addr1 = user1.address;
         addr2 = user2.address;
         addr3 = user3.address;

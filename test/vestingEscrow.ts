@@ -75,7 +75,7 @@ describe("VestingEscrow", function () {
             initialVestedSupply,
             vestedAtStart,
             chess,
-            vestingEscrow: vestingEscrow.connect(owner),
+            vestingEscrow: vestingEscrow.connect(user1),
         };
     }
 
@@ -99,28 +99,28 @@ describe("VestingEscrow", function () {
 
     describe("initialize()", function () {
         it("Should revert with zero amount", async function () {
-            await expect(vestingEscrow.initialize(0, 0)).to.revertedWith(
+            await expect(vestingEscrow.connect(owner).initialize(0, 0)).to.revertedWith(
                 "Invalid amount or vestedAtStart"
             );
-            await expect(vestingEscrow.initialize(100, 101)).to.revertedWith(
+            await expect(vestingEscrow.connect(owner).initialize(100, 101)).to.revertedWith(
                 "Invalid amount or vestedAtStart"
             );
         });
 
         it("Should revert with already initialized", async function () {
             await expect(
-                vestingEscrow.initialize(initialVestedSupply, vestedAtStart)
+                vestingEscrow.connect(owner).initialize(initialVestedSupply, vestedAtStart)
             ).to.revertedWith("Already initialized");
         });
     });
 
     describe("toggleDisable()", function () {
         it("Should disable the recipient", async function () {
-            await expect(vestingEscrow.toggleDisable())
+            await expect(vestingEscrow.connect(owner).toggleDisable())
                 .to.emit(vestingEscrow, "ToggleDisable")
                 .withArgs(true);
 
-            await expect(vestingEscrow.toggleDisable())
+            await expect(vestingEscrow.connect(owner).toggleDisable())
                 .to.emit(vestingEscrow, "ToggleDisable")
                 .withArgs(false);
         });
@@ -128,9 +128,11 @@ describe("VestingEscrow", function () {
 
     describe("disableCanDisable()", function () {
         it("Should disable canDisable", async function () {
-            await vestingEscrow.disableCanDisable();
+            await vestingEscrow.connect(owner).disableCanDisable();
 
-            await expect(vestingEscrow.toggleDisable()).to.be.revertedWith("Cannot disable");
+            await expect(vestingEscrow.connect(owner).toggleDisable()).to.be.revertedWith(
+                "Cannot disable"
+            );
         });
     });
 
