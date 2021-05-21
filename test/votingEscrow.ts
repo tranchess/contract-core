@@ -4,14 +4,9 @@ import type { Fixture, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther } = ethers.utils;
+import { DAY, WEEK, FixtureWalletMap, advanceBlockAtTime } from "./utils";
 
-const DAY = 86400;
-const WEEK = DAY * 7;
 const MAX_TIME = BigNumber.from(WEEK * 100);
-
-async function advanceBlockAtTime(time: number) {
-    await ethers.provider.send("evm_mine", [time]);
-}
 
 function calculateBalanceOf(
     lockAmount: BigNumber,
@@ -31,10 +26,6 @@ function calculateDropBelowTime(
 }
 
 describe("VotingEscrow", function () {
-    interface FixtureWalletMap {
-        readonly [name: string]: Wallet;
-    }
-
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly startWeek: number;

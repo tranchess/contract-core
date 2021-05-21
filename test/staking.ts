@@ -5,15 +5,21 @@ import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther } = ethers.utils;
 import { deployMockForName } from "./mock";
+import {
+    TRANCHE_M,
+    TRANCHE_A,
+    TRANCHE_B,
+    WEEK,
+    SETTLEMENT_TIME,
+    FixtureWalletMap,
+    advanceBlockAtTime,
+    setNextBlockTime,
+    setAutomine,
+} from "./utils";
 
-const WEEK = 7 * 86400;
-const TRANCHE_M = 0;
-const TRANCHE_A = 1;
-const TRANCHE_B = 2;
 const REWARD_WEIGHT_M = 3;
 const REWARD_WEIGHT_A = 4;
 const REWARD_WEIGHT_B = 2;
-const SETTLEMENT_TIME = 3600 * 14; // UTC time 14:00 every day
 
 // Initial balance:
 // User 1: 400 M + 120 A + 180 B
@@ -41,26 +47,7 @@ const USER2_WEIGHT = USER2_M.mul(REWARD_WEIGHT_M)
     .div(REWARD_WEIGHT_M);
 const TOTAL_WEIGHT = USER1_WEIGHT.add(USER2_WEIGHT);
 
-async function advanceBlockAtTime(time: number) {
-    await ethers.provider.send("evm_mine", [time]);
-}
-
-async function setNextBlockTime(time: number) {
-    await ethers.provider.send("evm_setNextBlockTimestamp", [time]);
-}
-
-/**
- * Note that failed transactions are silently ignored when automining is disabled.
- */
-async function setAutomine(flag: boolean) {
-    await ethers.provider.send("evm_setAutomine", [flag]);
-}
-
 describe("Staking", function () {
-    interface FixtureWalletMap {
-        readonly [name: string]: Wallet;
-    }
-
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly checkpointTimestamp: number;

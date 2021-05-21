@@ -6,6 +6,7 @@ import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseUnits, parseEther } = ethers.utils;
 const parsePrice = (value: string) => parseUnits(value, 6);
+import { advanceBlockAtTime } from "./utils";
 
 // These constants should match those in the contract.
 const BATCH_SIZE = 30;
@@ -22,10 +23,6 @@ for (let i = 0; i < BATCH_SIZE; i++) {
     PRICES.push(parsePrice((20000 + i).toString()));
 }
 const PRICES_AVG = parseEther((40000 + BATCH_SIZE - 1).toString()).div(2);
-
-async function advanceBlockAtTime(time: number) {
-    await ethers.provider.send("evm_mine", [time]);
-}
 
 async function signMessage(wallet: Wallet, timestamp: BigNumber, symbol: string, price: BigNumber) {
     const message = ethers.utils.defaultAbiCoder.encode(

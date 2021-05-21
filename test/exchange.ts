@@ -6,15 +6,19 @@ const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 const parseUsdc = (value: string) => parseUnits(value, 6);
 import { deployMockForName } from "./mock";
+import {
+    TRANCHE_M,
+    TRANCHE_A,
+    TRANCHE_B,
+    DAY,
+    WEEK,
+    FixtureWalletMap,
+    advanceBlockAtTime,
+} from "./utils";
 
 const EPOCH = 1800; // 30 min
-const DAY = 86400;
-const WEEK = DAY * 7;
 const USDC_TO_ETHER = parseUnits("1", 12);
 const MAKER_RESERVE_BPS = 11000; // 110%
-const TRANCHE_M = 0;
-const TRANCHE_A = 1;
-const TRANCHE_B = 2;
 
 const USER1_USDC = parseEther("100000");
 const USER1_M = parseEther("10000");
@@ -35,15 +39,7 @@ const MIN_BID_AMOUNT = parseEther("0.8");
 const MIN_ASK_AMOUNT = parseEther("0.9");
 const MAKER_REQUIREMENT = parseEther("10000");
 
-async function advanceBlockAtTime(time: number) {
-    await ethers.provider.send("evm_mine", [time]);
-}
-
 describe("Exchange", function () {
-    interface FixtureWalletMap {
-        readonly [name: string]: Wallet;
-    }
-
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly startEpoch: number;

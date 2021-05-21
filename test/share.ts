@@ -6,27 +6,23 @@ const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
+import {
+    TRANCHE_M,
+    TRANCHE_A,
+    TRANCHE_B,
+    DAY,
+    HOUR,
+    SETTLEMENT_TIME,
+    FixtureWalletMap,
+    advanceBlockAtTime,
+} from "./utils";
 
-const TRANCHE_M = 0;
-const TRANCHE_A = 1;
-const TRANCHE_B = 2;
-const DAY = 86400;
-const HOUR = 3600;
-const SETTLEMENT_TIME = 3600 * 14; // UTC time 14:00 every day
 const UPPER_REBALANCE_THRESHOLD = parseEther("2");
 const LOWER_REBALANCE_THRESHOLD = parseEther("0.5");
 const MAX_UINT256 = BigNumber.from(2).pow(256).sub(1);
 const SUB_MAX_UINT256 = MAX_UINT256.div(parseEther("1"));
 
-async function advanceBlockAtTime(time: number) {
-    await ethers.provider.send("evm_mine", [time]);
-}
-
 describe("Share", function () {
-    interface FixtureWalletMap {
-        readonly [name: string]: Wallet;
-    }
-
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly twapOracle: MockContract;

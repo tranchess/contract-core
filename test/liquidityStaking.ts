@@ -5,25 +5,9 @@ import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 const parsePrecise = (value: string) => parseUnits(value, 27);
-
-const WEEK = 7 * 86400;
-
-async function advanceBlockAtTime(time: number) {
-    await ethers.provider.send("evm_mine", [time]);
-}
-
-/**
- * Note that failed transactions are silently ignored when automining is disabled.
- */
-async function setAutomine(flag: boolean) {
-    await ethers.provider.send("evm_setAutomine", [flag]);
-}
+import { WEEK, FixtureWalletMap, advanceBlockAtTime, setAutomine } from "./utils";
 
 describe("Staking", function () {
-    interface FixtureWalletMap {
-        readonly [name: string]: Wallet;
-    }
-
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly startTimestamp: number;

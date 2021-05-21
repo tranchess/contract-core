@@ -6,21 +6,21 @@ const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
+import {
+    TRANCHE_M,
+    TRANCHE_A,
+    TRANCHE_B,
+    DAY,
+    FixtureWalletMap,
+    advanceBlockAtTime,
+} from "./utils";
 
-const TRANCHE_M = 0;
-const TRANCHE_A = 1;
-const TRANCHE_B = 2;
 const REDEMPTION_FEE_BPS = 3500;
 const SPLIT_FEE_BPS = 4000;
 const MERGE_FEE_BPS = 4500;
 const MIN_CREATION_AMOUNT = 5;
 
-const DAY = 86400; // 1 day
 const START_DAY = 1609556400; // 2021-01-02 03:00:00
-
-async function advanceBlockAtTime(time: number) {
-    await ethers.provider.send("evm_mine", [time]);
-}
 
 async function parseEvent(tx: Transaction, contract: Contract, eventName: string) {
     const receipt = await contract.provider.waitForTransaction(tx.hash as string);
@@ -37,10 +37,6 @@ async function parseEvent(tx: Transaction, contract: Contract, eventName: string
 }
 
 describe("PrimaryMarket", function () {
-    interface FixtureWalletMap {
-        readonly [name: string]: Wallet;
-    }
-
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly btc: Contract;
