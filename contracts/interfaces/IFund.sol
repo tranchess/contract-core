@@ -9,14 +9,14 @@ interface IFund {
     ///
     ///         ```
     ///             [ ratioM          0        0 ]
-    ///         C = [ ratioA2M  ratioAB        0 ]
+    ///         R = [ ratioA2M  ratioAB        0 ]
     ///             [ ratioB2M        0  ratioAB ]
     ///         ```
     ///
     ///         Amounts of the three tranches `m`, `a` and `b` can be rebalanced by multiplying the matrix:
     ///
     ///         ```
-    ///         [ m', a', b' ] = [ m, a, b ] * C
+    ///         [ m', a', b' ] = [ m, a, b ] * R
     ///         ```
     struct Rebalance {
         uint256 ratioM;
