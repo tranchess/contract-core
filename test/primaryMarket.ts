@@ -18,6 +18,10 @@ const MIN_CREATION_AMOUNT = 5;
 const DAY = 86400; // 1 day
 const START_DAY = 1609556400; // 2021-01-02 03:00:00
 
+async function advanceBlockAtTime(time: number) {
+    await ethers.provider.send("evm_mine", [time]);
+}
+
 async function parseEvent(tx: Transaction, contract: Contract, eventName: string) {
     const receipt = await contract.provider.waitForTransaction(tx.hash as string);
     const topic = contract.interface.getEventTopic(eventName);
@@ -50,6 +54,7 @@ describe("PrimaryMarket", function () {
 
     let user1: Wallet;
     let user2: Wallet;
+    let owner: Wallet;
     let btc: Contract;
     let fund: Contract;
     let shareM: Contract;
@@ -91,6 +96,7 @@ describe("PrimaryMarket", function () {
         const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
         const primaryMarket = await PrimaryMarket.connect(owner).deploy(
             fund.address,
+            0,
             parseUnits(REDEMPTION_FEE_BPS.toString(), 18 - 4),
             parseUnits(SPLIT_FEE_BPS.toString(), 18 - 4),
             parseUnits(MERGE_FEE_BPS.toString(), 18 - 4),
@@ -104,7 +110,7 @@ describe("PrimaryMarket", function () {
         await btc.connect(user2).approve(primaryMarket.address, parseBtc("10000"));
 
         return {
-            wallets: { user1, user2 },
+            wallets: { user1, user2, owner },
             btc,
             fund,
             shareM,
@@ -120,6 +126,7 @@ describe("PrimaryMarket", function () {
         fixtureData = await loadFixture(currentFixture);
         user1 = fixtureData.wallets.user1;
         user2 = fixtureData.wallets.user2;
+        owner = fixtureData.wallets.owner;
         btc = fixtureData.btc;
         fund = fixtureData.fund;
         shareM = fixtureData.shareM;
@@ -670,6 +677,90 @@ describe("PrimaryMarket", function () {
                     rets: [true],
                 }
             );
+        });
+    });
+
+    describe("Guarded launch", function () {
+        let currentTimestamp: number;
+
+        beforeEach(async function () {
+            currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+
+            const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
+            primaryMarket = await PrimaryMarket.connect(owner).deploy(
+                fund.address,
+                currentTimestamp, // guardedLaunchStart
+                parseUnits(REDEMPTION_FEE_BPS.toString(), 18 - 4),
+                parseUnits(SPLIT_FEE_BPS.toString(), 18 - 4),
+                parseUnits(MERGE_FEE_BPS.toString(), 18 - 4),
+                MIN_CREATION_AMOUNT
+            );
+            primaryMarket = primaryMarket.connect(user1);
+            await fund.mock.isPrimaryMarketActive.returns(true);
+
+            await btc.connect(user1).approve(primaryMarket.address, parseBtc("10000"));
+            await btc.connect(user2).approve(primaryMarket.address, parseBtc("10000"));
+        });
+
+        it("Should revert when cap is zero", async function () {
+            await expect(primaryMarket.connect(user1).create(parseBtc("1"))).to.be.revertedWith(
+                "Guarded launch: exceed total cap"
+            );
+        });
+
+        it("Should revert when creation amount exceeds total cap", async function () {
+            await primaryMarket
+                .connect(owner)
+                .updateGuardedLaunchCap(parseBtc("1"), parseBtc("100"));
+
+            await expect(primaryMarket.create(parseBtc("2"))).to.be.revertedWith(
+                "Guarded launch: exceed total cap"
+            );
+            await primaryMarket.create(parseBtc("0.6"));
+            await expect(primaryMarket.connect(user2).create(parseBtc("0.6"))).to.be.revertedWith(
+                "Guarded launch: exceed total cap"
+            );
+
+            await btc.mint(fund.address, parseBtc("0.3"));
+            await expect(primaryMarket.create(parseBtc("0.2"))).to.be.revertedWith(
+                "Guarded launch: exceed total cap"
+            );
+
+            await primaryMarket.create(parseBtc("0.1"));
+        });
+
+        it("Should revert when creation amount exceeds individual cap", async function () {
+            await primaryMarket
+                .connect(owner)
+                .updateGuardedLaunchCap(parseBtc("100"), parseBtc("1"));
+
+            await expect(primaryMarket.create(parseBtc("2"))).to.be.revertedWith(
+                "Guarded launch: exceed individual cap"
+            );
+
+            await primaryMarket.create(parseBtc("0.6"));
+            expect(await primaryMarket.guardedLaunchCreations(user1.address)).to.equal(
+                parseBtc("0.6")
+            );
+            await expect(primaryMarket.create(parseBtc("0.6"))).to.be.revertedWith(
+                "Guarded launch: exceed individual cap"
+            );
+
+            await primaryMarket.connect(user2).create(parseBtc("1"));
+            await primaryMarket.create(parseBtc("0.4"));
+        });
+
+        it("Should allow splitting after 2 weeks", async function () {
+            await fund.mock.burn.returns();
+            await fund.mock.mint.returns();
+
+            advanceBlockAtTime(currentTimestamp + DAY * 14 - 100);
+            await expect(primaryMarket.split(parseEther("1"))).to.be.revertedWith(
+                "Guarded launch: split not ready yet"
+            );
+
+            advanceBlockAtTime(currentTimestamp + DAY * 14);
+            await primaryMarket.split(parseEther("1"));
         });
     });
 });

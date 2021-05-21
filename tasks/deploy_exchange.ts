@@ -1,6 +1,6 @@
 import { task } from "hardhat/config";
 import { createAddressFile, selectAddressFile } from "./address_file";
-import { EXCHANGE_CONFIG } from "../config";
+import { GOVERNANCE_CONFIG, FUND_CONFIG, EXCHANGE_CONFIG } from "../config";
 
 task("deploy_exchange", "Deploy exchange contracts")
     .addOptionalParam("governance", "Path to the governance address file", "")
@@ -28,7 +28,9 @@ task("deploy_exchange", "Deploy exchange contracts")
             governanceAddresses.votingEscrow,
             parseEther(EXCHANGE_CONFIG.MIN_ORDER_AMOUNT),
             parseEther(EXCHANGE_CONFIG.MIN_ORDER_AMOUNT),
-            parseEther(EXCHANGE_CONFIG.MAKER_REQUIREMENT)
+            parseEther(EXCHANGE_CONFIG.MAKER_REQUIREMENT),
+            FUND_CONFIG.GUARDED_LAUNCH ? GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP : 0,
+            parseEther(EXCHANGE_CONFIG.GUARDED_LAUNCH_MIN_ORDER_AMOUNT)
         );
         console.log(`Exchange implementation: ${exchangeImpl.address}`);
         addressFile.set("exchangeImpl", exchangeImpl.address);

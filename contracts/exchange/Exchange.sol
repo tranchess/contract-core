@@ -189,6 +189,9 @@ contract Exchange is ExchangeRoles, Staking {
     /// @notice Minumum base amount of maker ask orders
     uint256 public immutable minAskAmount;
 
+    /// @notice Minumum base or quote amount of maker orders during guarded launch
+    uint256 public immutable guardedLaunchMinOrderAmount;
+
     /// @dev A multipler that normalizes a quote asset balance to 18 decimal places.
     uint256 private immutable _quoteDecimalMultiplier;
 
@@ -220,14 +223,17 @@ contract Exchange is ExchangeRoles, Staking {
         address votingEscrow_,
         uint256 minBidAmount_,
         uint256 minAskAmount_,
-        uint256 makerRequirement_
+        uint256 makerRequirement_,
+        uint256 guardedLaunchStart_,
+        uint256 guardedLaunchMinOrderAmount_
     )
         public
         ExchangeRoles(votingEscrow_, makerRequirement_)
-        Staking(fund_, chess_, chessController_, quoteAssetAddress_)
+        Staking(fund_, chess_, chessController_, quoteAssetAddress_, guardedLaunchStart_)
     {
         minBidAmount = minBidAmount_;
         minAskAmount = minAskAmount_;
+        guardedLaunchMinOrderAmount = guardedLaunchMinOrderAmount_;
         require(quoteDecimals_ <= 18, "Quote asset decimals larger than 18");
         _quoteDecimalMultiplier = 10**(18 - quoteDecimals_);
     }
@@ -309,7 +315,12 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 quoteAmount,
         uint256 version
     ) external onlyMaker {
-        require(quoteAmount >= minBidAmount, "Quote amount too low");
+        require(block.timestamp >= guardedLaunchStart + 8 days, "Guarded launch: market closed");
+        if (block.timestamp < guardedLaunchStart + 4 weeks) {
+            require(quoteAmount >= guardedLaunchMinOrderAmount, "Guarded launch: amount too low");
+        } else {
+            require(quoteAmount >= minBidAmount, "Quote amount too low");
+        }
         uint256 bestAsk = bestAsks[version][tranche];
         require(
             pdLevel > 0 && pdLevel < (bestAsk == 0 ? PD_LEVEL_COUNT + 1 : bestAsk),
@@ -338,7 +349,12 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 baseAmount,
         uint256 version
     ) external onlyMaker {
-        require(baseAmount >= minAskAmount, "Base amount too low");
+        require(block.timestamp >= guardedLaunchStart + 8 days, "Guarded launch: market closed");
+        if (block.timestamp < guardedLaunchStart + 4 weeks) {
+            require(baseAmount >= guardedLaunchMinOrderAmount, "Guarded launch: amount too low");
+        } else {
+            require(baseAmount >= minAskAmount, "Base amount too low");
+        }
         require(
             pdLevel > bestBids[version][tranche] && pdLevel <= PD_LEVEL_COUNT,
             "Invalid premium-discount level"

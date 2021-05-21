@@ -1,6 +1,6 @@
 import { task } from "hardhat/config";
 import { createAddressFile, selectAddressFile } from "./address_file";
-import { FUND_CONFIG } from "../config";
+import { GOVERNANCE_CONFIG, FUND_CONFIG } from "../config";
 
 task("deploy_fund", "Deploy fund contracts")
     .addOptionalParam("governance", "Path to the governance address file", "")
@@ -69,6 +69,7 @@ task("deploy_fund", "Deploy fund contracts")
         const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
         const primaryMarket = await PrimaryMarket.deploy(
             fund.address,
+            FUND_CONFIG.GUARDED_LAUNCH ? GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP : 0,
             parseEther("0.001"),
             parseEther("0.0005"),
             parseEther("0.0005"),
