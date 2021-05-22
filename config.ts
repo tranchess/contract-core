@@ -27,6 +27,8 @@ export const APR_ORACLE_CONFIG = {
 };
 
 export const GOVERNANCE_CONFIG = {
+    CHESS_TOTAL_SUPPLY: "300000000",
+    CHESS_SCHEDULE_MAX_SUPPLY: "120000000",
     TIMELOCK_DELAY: parseInt(process.env.GOVERNANCE_TIMELOCK_DELAY ?? "3600"),
     LAUNCH_TIMESTAMP: endOfWeek(
         new Date(process.env.GOVERNANCE_LAUNCH_DATE ?? "1970-01-01").getTime() / 1000

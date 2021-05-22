@@ -10,7 +10,6 @@ task("deploy_exchange", "Deploy exchange contracts")
         const { parseEther } = ethers.utils;
 
         await hre.run("compile");
-        const [deployer] = await ethers.getSigners();
         const addressFile = createAddressFile(hre, "exchange");
         const governanceAddresses = await selectAddressFile(hre, "governance", args.governance);
         const fundAddresses = await selectAddressFile(hre, "fund", args.fund);
@@ -21,7 +20,7 @@ task("deploy_exchange", "Deploy exchange contracts")
         const Exchange = await ethers.getContractFactory("Exchange");
         const exchangeImpl = await Exchange.deploy(
             fundAddresses.fund,
-            governanceAddresses.chess,
+            governanceAddresses.chessSchedule,
             governanceAddresses.chessController,
             quoteToken.address,
             quoteDecimals,
@@ -40,7 +39,7 @@ task("deploy_exchange", "Deploy exchange contracts")
         );
         const exchangeProxy = await TransparentUpgradeableProxy.deploy(
             exchangeImpl.address,
-            deployer.address,
+            governanceAddresses.proxyAdmin,
             "0x",
             { gasLimit: 1e6 } // Gas estimation may fail
         );
@@ -48,7 +47,10 @@ task("deploy_exchange", "Deploy exchange contracts")
         console.log(`Exchange: ${exchange.address}`);
         addressFile.set("exchange", exchange.address);
 
-        const chess = await ethers.getContractAt("Chess", governanceAddresses.chess);
-        await chess.addMinter(exchange.address);
+        const chessSchedule = await ethers.getContractAt(
+            "ChessSchedule",
+            governanceAddresses.chessSchedule
+        );
+        await chessSchedule.addMinter(exchange.address);
         console.log("Exchange is a CHESS minter now");
     });
