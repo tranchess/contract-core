@@ -27,10 +27,11 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
 
     uint256 public immutable override maxTime;
 
+    address public immutable override token;
+
     string public name;
     string public symbol;
 
-    address public override token;
     address public addressWhitelist;
 
     mapping(address => LockedBalance) public locked;
