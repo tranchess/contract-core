@@ -485,6 +485,11 @@ describe("Exchange", function () {
             await expect(exchange.buyM(0, 41, 1)).to.be.revertedWith("Price is not available");
         });
 
+        it("Should revert if estimated NAV is zero", async function () {
+            await fund.mock.extrapolateNav.returns(0, 0, 0);
+            await expect(exchange.buyM(0, 41, 1)).to.be.revertedWith("Zero estimated NAV");
+        });
+
         it("Should check pd level", async function () {
             await fund.mock.extrapolateNav.returns(
                 parseEther("1"),
@@ -842,6 +847,11 @@ describe("Exchange", function () {
         it("Should revert if price is not available", async function () {
             await twapOracle.mock.getTwap.returns(0);
             await expect(exchange.sellM(0, 41, 1)).to.be.revertedWith("Price is not available");
+        });
+
+        it("Should revert if estimated NAV is zero", async function () {
+            await fund.mock.extrapolateNav.returns(0, 0, 0);
+            await expect(exchange.sellM(0, 41, 1)).to.be.revertedWith("Zero estimated NAV");
         });
 
         it("Should check pd level", async function () {

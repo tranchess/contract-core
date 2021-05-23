@@ -617,6 +617,7 @@ contract Exchange is Staking, ExchangeRoles {
     ) internal onlyActive {
         require(maxPDLevel > 0 && maxPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
         require(version == fund.getRebalanceSize(), "Invalid version");
+        require(estimatedNav > 0, "Zero estimated NAV");
 
         UnsettledBuyTrade memory totalTrade;
         uint256 epoch = endOfEpoch(block.timestamp);
@@ -744,6 +745,7 @@ contract Exchange is Staking, ExchangeRoles {
     ) internal onlyActive {
         require(minPDLevel > 0 && minPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
         require(version == fund.getRebalanceSize(), "Invalid version");
+        require(estimatedNav > 0, "Zero estimated NAV");
 
         UnsettledSellTrade memory totalTrade;
         uint256 epoch = endOfEpoch(block.timestamp);
