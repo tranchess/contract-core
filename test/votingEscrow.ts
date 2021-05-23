@@ -434,26 +434,26 @@ describe("VotingEscrow", function () {
         });
     });
 
-    describe("updateChecker()", function () {
-        let newChecker: MockContract;
+    describe("updateAddressWhitelist()", function () {
+        let newWhitelist: MockContract;
         let someContract: MockContract;
 
         beforeEach(async function () {
-            newChecker = await deployMockForName(owner, "ISmartWalletChecker");
+            newWhitelist = await deployMockForName(owner, "IAddressWhitelist");
             someContract = await deployMockForName(owner, "IERC20");
             await chess.mint(someContract.address, parseEther("1000"));
             await someContract.call(chess, "approve", votingEscrow.address, parseEther("1000"));
         });
 
         it("Should only be called by owner", async function () {
-            await expect(votingEscrow.updateChecker(newChecker.address)).to.be.revertedWith(
-                "Ownable: caller is not the owner"
-            );
+            await expect(
+                votingEscrow.updateAddressWhitelist(newWhitelist.address)
+            ).to.be.revertedWith("Ownable: caller is not the owner");
         });
 
         it("Should reject non-whitelisted contract to create lock", async function () {
-            await newChecker.mock.check.withArgs(someContract.address).returns(false);
-            await votingEscrow.connect(owner).updateChecker(newChecker.address);
+            await newWhitelist.mock.check.withArgs(someContract.address).returns(false);
+            await votingEscrow.connect(owner).updateAddressWhitelist(newWhitelist.address);
             await expect(
                 someContract.call(
                     votingEscrow,
@@ -465,7 +465,7 @@ describe("VotingEscrow", function () {
         });
 
         it("Should allow whitelisted contract to create lock", async function () {
-            await votingEscrow.connect(owner).updateChecker(newChecker.address);
+            await votingEscrow.connect(owner).updateAddressWhitelist(newWhitelist.address);
             await expect(() =>
                 someContract.call(
                     votingEscrow,
@@ -474,7 +474,7 @@ describe("VotingEscrow", function () {
                     startWeek + WEEK * 10
                 )
             ).to.callMocks({
-                func: newChecker.mock.check.withArgs(someContract.address),
+                func: newWhitelist.mock.check.withArgs(someContract.address),
                 rets: [true],
             });
         });

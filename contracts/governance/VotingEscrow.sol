@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../interfaces/IVotingEscrow.sol";
 
-interface ISmartWalletChecker {
+interface IAddressWhitelist {
     function check(address account) external view returns (bool);
 }
 
@@ -31,7 +31,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     string public symbol;
 
     address public override token;
-    address public checker;
+    address public addressWhitelist;
 
     mapping(address => LockedBalance) public locked;
 
@@ -40,7 +40,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
 
     constructor(
         address token_,
-        address checker_,
+        address addressWhitelist_,
         string memory name_,
         string memory symbol_,
         uint256 maxTime_
@@ -48,7 +48,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         name = name_;
         symbol = symbol_;
         token = token_;
-        checker = checker_;
+        addressWhitelist = addressWhitelist_;
         maxTime = maxTime_;
     }
 
@@ -163,17 +163,19 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         emit Withdrawn(msg.sender, amount);
     }
 
-    function updateChecker(address newChecker) external onlyOwner {
+    function updateAddressWhitelist(address newWhitelist) external onlyOwner {
         require(
-            newChecker == address(0) || Address.isContract(newChecker),
-            "Smart contract checker has to be null or a contract"
+            newWhitelist == address(0) || Address.isContract(newWhitelist),
+            "Smart contract whitelist has to be null or a contract"
         );
-        checker = newChecker;
+        addressWhitelist = newWhitelist;
     }
 
     function _assertNotContract(address account) private view {
         if (Address.isContract(account)) {
-            if (checker != address(0) && ISmartWalletChecker(checker).check(account)) {
+            if (
+                addressWhitelist != address(0) && IAddressWhitelist(addressWhitelist).check(account)
+            ) {
                 return;
             }
             revert("Smart contract depositors not allowed");
