@@ -452,7 +452,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 quoteAmount
     ) external onlyActive {
         (uint256 estimatedNav, , ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _buy(version, msg.sender, TRANCHE_M, maxPDLevel, estimatedNav, quoteAmount);
+        _buy(version, TRANCHE_M, maxPDLevel, estimatedNav, quoteAmount);
     }
 
     /// @notice Buy Token A
@@ -465,7 +465,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 quoteAmount
     ) external onlyActive {
         (, uint256 estimatedNav, ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _buy(version, msg.sender, TRANCHE_A, maxPDLevel, estimatedNav, quoteAmount);
+        _buy(version, TRANCHE_A, maxPDLevel, estimatedNav, quoteAmount);
     }
 
     /// @notice Buy Token B
@@ -478,7 +478,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 quoteAmount
     ) external onlyActive {
         (, , uint256 estimatedNav) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _buy(version, msg.sender, TRANCHE_B, maxPDLevel, estimatedNav, quoteAmount);
+        _buy(version, TRANCHE_B, maxPDLevel, estimatedNav, quoteAmount);
     }
 
     /// @notice Sell Token M
@@ -491,7 +491,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 baseAmount
     ) external onlyActive {
         (uint256 estimatedNav, , ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _sell(version, msg.sender, TRANCHE_M, minPDLevel, estimatedNav, baseAmount);
+        _sell(version, TRANCHE_M, minPDLevel, estimatedNav, baseAmount);
     }
 
     /// @notice Sell Token A
@@ -504,7 +504,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 baseAmount
     ) external onlyActive {
         (, uint256 estimatedNav, ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _sell(version, msg.sender, TRANCHE_A, minPDLevel, estimatedNav, baseAmount);
+        _sell(version, TRANCHE_A, minPDLevel, estimatedNav, baseAmount);
     }
 
     /// @notice Sell Token B
@@ -517,7 +517,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 baseAmount
     ) external onlyActive {
         (, , uint256 estimatedNav) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _sell(version, msg.sender, TRANCHE_B, minPDLevel, estimatedNav, baseAmount);
+        _sell(version, TRANCHE_B, minPDLevel, estimatedNav, baseAmount);
     }
 
     /// @notice Settle trades of a specified epoch for makers
@@ -604,14 +604,12 @@ contract Exchange is Staking, ExchangeRoles {
 
     /// @dev Buy share
     /// @param version Current rebalance version. Revert if it is not the latest version.
-    /// @param taker Taker address
     /// @param tranche Tranche of the base asset
     /// @param maxPDLevel Maximal premium-discount level accepted
     /// @param estimatedNav Estimated net asset value of the base asset
     /// @param quoteAmount Amount of quote assets willing to trade with 18 decimal places
     function _buy(
         uint256 version,
-        address taker,
         uint256 tranche,
         uint256 maxPDLevel,
         uint256 estimatedNav,
@@ -703,7 +701,7 @@ contract Exchange is Staking, ExchangeRoles {
             }
         }
         emit BuyTrade(
-            taker,
+            msg.sender,
             tranche,
             totalTrade.frozenQuote,
             version,
@@ -727,20 +725,18 @@ contract Exchange is Staking, ExchangeRoles {
             totalTrade.frozenQuote > 0,
             "Nothing can be bought at the given premium-discount level"
         );
-        _transferQuoteFrom(taker, totalTrade.frozenQuote);
-        unsettledTrades[taker][tranche][epoch].takerBuy.add(totalTrade);
+        _transferQuoteFrom(msg.sender, totalTrade.frozenQuote);
+        unsettledTrades[msg.sender][tranche][epoch].takerBuy.add(totalTrade);
     }
 
     /// @dev Sell share
     /// @param version Current rebalance version. Revert if it is not the latest version.
-    /// @param taker Taker address
     /// @param tranche Tranche of the base asset
     /// @param minPDLevel Minimal premium-discount level accepted
     /// @param estimatedNav Estimated net asset value of the base asset
     /// @param baseAmount Amount of base assets willing to trade
     function _sell(
         uint256 version,
-        address taker,
         uint256 tranche,
         uint256 minPDLevel,
         uint256 estimatedNav,
@@ -823,7 +819,7 @@ contract Exchange is Staking, ExchangeRoles {
             }
         }
         emit SellTrade(
-            taker,
+            msg.sender,
             tranche,
             totalTrade.frozenBase,
             version,
@@ -847,8 +843,8 @@ contract Exchange is Staking, ExchangeRoles {
             totalTrade.frozenBase > 0,
             "Nothing can be sold at the given premium-discount level"
         );
-        _tradeAvailable(tranche, taker, totalTrade.frozenBase);
-        unsettledTrades[taker][tranche][epoch].takerSell.add(totalTrade);
+        _tradeAvailable(tranche, msg.sender, totalTrade.frozenBase);
+        unsettledTrades[msg.sender][tranche][epoch].takerSell.add(totalTrade);
     }
 
     /// @dev Settle both buy and sell trades of a specified epoch for takers
