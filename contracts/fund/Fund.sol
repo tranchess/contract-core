@@ -322,48 +322,6 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         return (navM, navA, navB);
     }
 
-    /// @notice Estimate NAV of Token M at a given timestamp, considering underlying price
-    ///         change and accrued protocol fee since the previous settlement.
-    ///
-    ///         The extrapolation uses simple interest instead of daily compound interest in
-    ///         calculating protocol fee and Token A's interest. There may be significant error
-    ///         in the returned value when `timestamp` is far beyond the last settlement.
-    /// @param timestamp Timestamp to estimate
-    /// @param price Price of the underlying asset (18 decimal places)
-    /// @return Estimated NAV of Token M
-    function extrapolateNavM(uint256 timestamp, uint256 price)
-        external
-        view
-        override
-        returns (uint256)
-    {
-        // Find the last settled trading day before the given timestamp.
-        uint256 previousDay = currentDay - 1 days;
-        if (previousDay > timestamp) {
-            previousDay = endOfDay(timestamp) - 1 days;
-        }
-        uint256 previousShares = historicalTotalShares[previousDay];
-        return _extrapolateNavM(previousDay, previousShares, timestamp, price);
-    }
-
-    /// @notice Estimate NAV of Token A at a given timestamp, considering accrued interest
-    ///         since the previous settlement.
-    ///
-    ///         The extrapolation uses simple interest instead of daily compound interest in
-    ///         calculating protocol fee and Token A's interest. There may be significant error
-    ///         in the returned value when `timestamp` is far beyond the last settlement.
-    /// @param timestamp Timestamp to estimate
-    /// @return Estimated NAV of Token A
-    function extrapolateNavA(uint256 timestamp) external view override returns (uint256) {
-        // Find the last settled trading day before the given timestamp.
-        uint256 previousDay = currentDay - 1 days;
-        if (previousDay > timestamp) {
-            previousDay = endOfDay(timestamp) - 1 days;
-        }
-        uint256 previousShares = historicalTotalShares[previousDay];
-        return _extrapolateNavA(previousDay, previousShares, timestamp);
-    }
-
     function _extrapolateNavM(
         uint256 previousDay,
         uint256 previousShares,

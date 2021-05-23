@@ -946,10 +946,6 @@ describe("Fund", function () {
 
     describe("extrapolateNav()", function () {
         it("Should return ones before any shares are created", async function () {
-            expect(await fund.extrapolateNavM(startDay - DAY * 10, parseEther("8000"))).to.equal(
-                parseEther("1")
-            );
-            expect(await fund.extrapolateNavA(startDay - DAY * 10)).to.equal(parseEther("1"));
             const navs = await fund.extrapolateNav(startDay - DAY * 10, parseEther("8000"));
             expect(navs[TRANCHE_M]).to.equal(parseEther("1"));
             expect(navs[TRANCHE_A]).to.equal(parseEther("1"));
@@ -983,16 +979,10 @@ describe("Fund", function () {
                 .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
             const expectedB = expectedM.mul(2).sub(expectedA);
-            expect(await fund.extrapolateNavM(emptyDay, parseEther("8000"))).to.eq(expectedM);
-            expect(await fund.extrapolateNavA(emptyDay)).to.eq(expectedA);
             const startNavs = await fund.extrapolateNav(emptyDay, parseEther("8000"));
             expect(startNavs[TRANCHE_M]).to.equal(expectedM);
             expect(startNavs[TRANCHE_A]).to.equal(expectedA);
             expect(startNavs[TRANCHE_B]).to.equal(expectedB);
-            expect(await fund.extrapolateNavM(emptyDay + DAY - 1, parseEther("8000"))).to.eq(
-                expectedM
-            );
-            expect(await fund.extrapolateNavA(emptyDay + DAY - 1)).to.eq(expectedA);
             const endNavs = await fund.extrapolateNav(emptyDay + DAY - 1, parseEther("8000"));
             expect(endNavs[TRANCHE_M]).to.equal(expectedM);
             expect(endNavs[TRANCHE_A]).to.equal(expectedA);
@@ -1017,8 +1007,6 @@ describe("Fund", function () {
                 .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
             const expectedB1000 = expectedP1000.mul(2).sub(expectedA);
-            expect(await fund.extrapolateNavM(day, parseEther("1000"))).to.equal(expectedP1000);
-            expect(await fund.extrapolateNavA(day)).to.equal(expectedA);
             const navsAt1000 = await fund.extrapolateNav(day, parseEther("1000"));
             expect(navsAt1000[TRANCHE_M]).to.equal(expectedP1000);
             expect(navsAt1000[TRANCHE_A]).to.equal(expectedA);
@@ -1028,8 +1016,6 @@ describe("Fund", function () {
                 .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
             const expectedB2000 = expectedP2000.mul(2).sub(expectedA);
-            expect(await fund.extrapolateNavM(day, parseEther("2000"))).to.equal(expectedP2000);
-            expect(await fund.extrapolateNavA(day)).to.equal(expectedA);
             const navsAt2000 = await fund.extrapolateNav(day, parseEther("2000"));
             expect(navsAt2000[TRANCHE_M]).to.equal(expectedP2000);
             expect(navsAt2000[TRANCHE_A]).to.equal(expectedA);
@@ -1060,10 +1046,6 @@ describe("Fund", function () {
                 .mul(20000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(20000);
             const expectedB = expectedM.mul(2).sub(expectedA);
-            expect(await fund.extrapolateNavM(day + DAY / 2, parseEther("1000"))).to.equal(
-                expectedM
-            );
-            expect(await fund.extrapolateNavA(day + DAY / 2)).to.equal(expectedA);
             const navsAt1000 = await fund.extrapolateNav(day + DAY / 2, parseEther("1000"));
             expect(navsAt1000[TRANCHE_M]).to.equal(expectedM);
             expect(navsAt1000[TRANCHE_A]).to.equal(expectedA);
@@ -1094,10 +1076,6 @@ describe("Fund", function () {
                 .mul(10000 - DAILY_PROTOCOL_FEE_BPS * 10)
                 .div(10000);
             const expectedB = expectedM.mul(2).sub(expectedA);
-            expect(await fund.extrapolateNavM(day + DAY * 10, parseEther("1000"))).to.equal(
-                expectedM
-            );
-            expect(await fund.extrapolateNavA(day + DAY * 10)).to.equal(expectedA);
             const navsAt1000 = await fund.extrapolateNav(day + DAY * 10, parseEther("1000"));
             expect(navsAt1000[TRANCHE_M]).to.equal(expectedM);
             expect(navsAt1000[TRANCHE_A]).to.equal(expectedA);
@@ -1118,8 +1096,6 @@ describe("Fund", function () {
             await btc.mint(fund.address, parseBtc("1"));
             await advanceOneDayAndSettle();
 
-            expect(await fund.extrapolateNavA(day + DAY / 2)).to.equal(parseEther("1"));
-            expect(await fund.extrapolateNavA(day + DAY * 10)).to.equal(parseEther("1"));
             expect(
                 (await fund.extrapolateNav(day + DAY / 2, parseEther("1000")))[TRANCHE_A]
             ).to.equal(parseEther("1"));
