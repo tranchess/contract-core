@@ -26,7 +26,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     using SafeDecimalMath for uint256;
 
     uint256 private constant UNIT = 1e18;
-    uint256 private constant MAX_INTEREST_RATE = 0.5e18; // 50% APR
+    uint256 private constant MAX_INTEREST_RATE = 0.2e18; // 20% daily
     uint256 private constant MAX_DAILY_PROTOCOL_FEE_RATE = 0.05e18; // 5% daily rate
 
     uint256 private constant WEIGHT_A = 1;
