@@ -96,7 +96,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         return _totalSupplyAtTimestamp(timestamp);
     }
 
-    function createLock(uint256 amount, uint256 unlockTime) public nonReentrant {
+    function createLock(uint256 amount, uint256 unlockTime) external nonReentrant {
         _assertNotContract(msg.sender);
 
         unlockTime = (unlockTime / 1 weeks) * 1 weeks; // Locktime is rounded down to weeks
@@ -116,7 +116,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         emit LockCreated(msg.sender, amount, unlockTime);
     }
 
-    function increaseAmount(address account, uint256 amount) public nonReentrant {
+    function increaseAmount(address account, uint256 amount) external nonReentrant {
         LockedBalance memory lockedBalance = locked[account];
 
         require(amount > 0, "Zero value");
@@ -132,7 +132,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         emit AmountIncreased(account, amount);
     }
 
-    function increaseUnlockTime(uint256 unlockTime) public nonReentrant {
+    function increaseUnlockTime(uint256 unlockTime) external nonReentrant {
         LockedBalance memory lockedBalance = locked[msg.sender];
         unlockTime = (unlockTime / 1 weeks) * 1 weeks; // Locktime is rounded down to weeks
 
@@ -149,7 +149,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         emit UnlockTimeIncreased(msg.sender, unlockTime);
     }
 
-    function withdraw() public nonReentrant {
+    function withdraw() external nonReentrant {
         LockedBalance memory lockedBalance = locked[msg.sender];
         require(block.timestamp >= lockedBalance.unlockTime, "The lock is not expired");
         uint256 amount = uint256(lockedBalance.amount);
