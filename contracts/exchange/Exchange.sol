@@ -622,7 +622,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 epoch = endOfEpoch(block.timestamp);
 
         // Record rebalance version in the first transaction in the epoch
-        if (_epochVersions[epoch] != version) {
+        if (_epochVersions[epoch] == 0) {
             _epochVersions[epoch] = version;
         }
 
@@ -749,7 +749,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 epoch = endOfEpoch(block.timestamp);
 
         // Record rebalance version in the first transaction in the epoch
-        if (_epochVersions[epoch] != version) {
+        if (_epochVersions[epoch] == 0) {
             _epochVersions[epoch] = version;
         }
 
