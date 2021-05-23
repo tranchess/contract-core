@@ -9,9 +9,6 @@ import "../interfaces/IVotingEscrow.sol";
 /// @notice Exchange role management
 /// @author Tranchess
 abstract contract ExchangeRoles {
-    /// @dev Reserved storage slots for future sibling contract upgrades
-    uint256[16] private _reservedSlots;
-
     event MakerApplied(address indexed account, uint256 expiration);
 
     /// @notice Voting Escrow.

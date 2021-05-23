@@ -19,7 +19,7 @@ import "./Staking.sol";
 /// @title Tranchess's Exchange Contract
 /// @notice A decentralized exchange to match premium-discount orders and clear trades
 /// @author Tranchess
-contract Exchange is Staking, ExchangeRoles {
+contract Exchange is ExchangeRoles, Staking {
     /// @dev Reserved storage slots for future base contract upgrades
     uint256[32] private _reservedSlots;
 
