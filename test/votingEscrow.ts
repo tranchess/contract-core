@@ -183,6 +183,17 @@ describe("VotingEscrow", function () {
             );
         });
 
+        it("Should transfer tokens", async function () {
+            await votingEscrow.createLock(parseEther("1"), startWeek + WEEK * 10);
+            await expect(() =>
+                votingEscrow.connect(user2).increaseAmount(addr1, parseEther("2"))
+            ).to.changeTokenBalances(
+                chess,
+                [user2, votingEscrow],
+                [parseEther("-2"), parseEther("2")]
+            );
+        });
+
         it("Should increase amount for self", async function () {
             const lockAmount = parseEther("10");
             const lockAmount2 = parseEther("5");

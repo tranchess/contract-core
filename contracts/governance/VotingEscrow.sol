@@ -126,7 +126,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         );
         locked[account].amount = lockedBalance.amount.add(amount);
 
-        IERC20(token).transferFrom(account, address(this), amount);
+        IERC20(token).transferFrom(msg.sender, address(this), amount);
 
         emit AmountIncreased(account, amount);
     }
