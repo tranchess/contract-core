@@ -189,7 +189,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         fund.mint(TRANCHE_M, address(this), feeM);
 
         currentFeeInShares = currentFeeInShares.add(feeM);
-        emit Split(msg.sender, inM, outA, outA);
+        emit Split(msg.sender, inM, outA, outB);
     }
 
     function merge(uint256 inA) external onlyActive {
