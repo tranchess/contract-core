@@ -119,7 +119,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         LockedBalance memory lockedBalance = locked[account];
 
         require(amount > 0, "Zero value");
-        require(lockedBalance.unlockTime > block.timestamp, "Cannot add to expired lock. Withdraw");
+        require(lockedBalance.unlockTime > block.timestamp, "Cannot add to expired lock");
 
         scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime].add(
             amount
@@ -151,7 +151,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
 
     function withdraw() public nonReentrant {
         LockedBalance memory lockedBalance = locked[msg.sender];
-        require(block.timestamp >= lockedBalance.unlockTime, "The lock didn't expire");
+        require(block.timestamp >= lockedBalance.unlockTime, "The lock is not expired");
         uint256 amount = uint256(lockedBalance.amount);
 
         lockedBalance.unlockTime = 0;

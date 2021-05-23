@@ -171,7 +171,7 @@ describe("VotingEscrow", function () {
 
         it("Should revert with no existing lock found", async function () {
             await expect(votingEscrow.increaseAmount(addr1, parseEther("10"))).to.revertedWith(
-                "Cannot add to expired lock. Withdraw"
+                "Cannot add to expired lock"
             );
         });
 
@@ -179,7 +179,7 @@ describe("VotingEscrow", function () {
             await votingEscrow.createLock(parseEther("10"), startWeek + WEEK);
             advanceBlockAtTime(startWeek + WEEK * 2);
             await expect(votingEscrow.increaseAmount(addr1, parseEther("10"))).to.revertedWith(
-                "Cannot add to expired lock. Withdraw"
+                "Cannot add to expired lock"
             );
         });
 
@@ -293,7 +293,7 @@ describe("VotingEscrow", function () {
             const lockAmount = parseEther("10");
             const unlockTime = startWeek + WEEK * 10;
             await votingEscrow.createLock(lockAmount, unlockTime);
-            await expect(votingEscrow.withdraw()).to.revertedWith("The lock didn't expire");
+            await expect(votingEscrow.withdraw()).to.revertedWith("The lock is not expired");
         });
 
         it("Should increase unlock time for user1", async function () {
