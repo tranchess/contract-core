@@ -472,6 +472,11 @@ describe("Exchange", function () {
 
         it("Should revert if exchange is inactive", async function () {
             await fund.mock.isExchangeActive.returns(false);
+            await fund.mock.extrapolateNav.returns(
+                parseEther("1"),
+                parseEther("1"),
+                parseEther("1")
+            );
             await expect(exchange.buyM(0, 41, 1)).to.be.revertedWith("Exchange is inactive");
         });
 
@@ -826,6 +831,11 @@ describe("Exchange", function () {
 
         it("Should revert if exchange is inactive", async function () {
             await fund.mock.isExchangeActive.returns(false);
+            await fund.mock.extrapolateNav.returns(
+                parseEther("1"),
+                parseEther("1"),
+                parseEther("1")
+            );
             await expect(exchange.sellM(0, 41, 1)).to.be.revertedWith("Exchange is inactive");
         });
 

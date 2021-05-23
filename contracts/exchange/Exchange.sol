@@ -450,7 +450,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 version,
         uint256 maxPDLevel,
         uint256 quoteAmount
-    ) external onlyActive {
+    ) external {
         (uint256 estimatedNav, , ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
         _buy(version, TRANCHE_M, maxPDLevel, estimatedNav, quoteAmount);
     }
@@ -463,7 +463,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 version,
         uint256 maxPDLevel,
         uint256 quoteAmount
-    ) external onlyActive {
+    ) external {
         (, uint256 estimatedNav, ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
         _buy(version, TRANCHE_A, maxPDLevel, estimatedNav, quoteAmount);
     }
@@ -476,7 +476,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 version,
         uint256 maxPDLevel,
         uint256 quoteAmount
-    ) external onlyActive {
+    ) external {
         (, , uint256 estimatedNav) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
         _buy(version, TRANCHE_B, maxPDLevel, estimatedNav, quoteAmount);
     }
@@ -489,7 +489,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 version,
         uint256 minPDLevel,
         uint256 baseAmount
-    ) external onlyActive {
+    ) external {
         (uint256 estimatedNav, , ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
         _sell(version, TRANCHE_M, minPDLevel, estimatedNav, baseAmount);
     }
@@ -502,7 +502,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 version,
         uint256 minPDLevel,
         uint256 baseAmount
-    ) external onlyActive {
+    ) external {
         (, uint256 estimatedNav, ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
         _sell(version, TRANCHE_A, minPDLevel, estimatedNav, baseAmount);
     }
@@ -515,7 +515,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 version,
         uint256 minPDLevel,
         uint256 baseAmount
-    ) external onlyActive {
+    ) external {
         (, , uint256 estimatedNav) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
         _sell(version, TRANCHE_B, minPDLevel, estimatedNav, baseAmount);
     }
@@ -614,7 +614,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 maxPDLevel,
         uint256 estimatedNav,
         uint256 quoteAmount
-    ) internal {
+    ) internal onlyActive {
         require(maxPDLevel > 0 && maxPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
         require(version == fund.getRebalanceSize(), "Invalid version");
 
@@ -741,7 +741,7 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 minPDLevel,
         uint256 estimatedNav,
         uint256 baseAmount
-    ) internal {
+    ) internal onlyActive {
         require(minPDLevel > 0 && minPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
         require(version == fund.getRebalanceSize(), "Invalid version");
 
