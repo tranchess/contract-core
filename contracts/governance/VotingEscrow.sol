@@ -133,7 +133,6 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     }
 
     function increaseUnlockTime(uint256 unlockTime) public nonReentrant {
-        _assertNotContract(msg.sender);
         LockedBalance memory lockedBalance = locked[msg.sender];
         unlockTime = (unlockTime / 1 weeks) * 1 weeks; // Locktime is rounded down to weeks
 
