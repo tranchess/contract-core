@@ -1427,6 +1427,54 @@ describe("Exchange", function () {
         });
     });
 
+    describe("Settlement with zero NAV", function () {
+        it("Buy trade", async function () {
+            await exchange.connect(user2).placeAsk(TRANCHE_B, 41, parseEther("10"), 0);
+
+            await fund.mock.extrapolateNav
+                .withArgs(startEpoch - EPOCH * 2, parseEther("1000"))
+                .returns(parseEther("1"), parseEther("1"), parseEther("1"));
+            await exchange.buyB(0, 41, parseEther("1"));
+            await fund.mock.extrapolateNav
+                .withArgs(startEpoch + EPOCH, parseEther("1000"))
+                .returns(parseEther("0.5"), parseEther("1"), 0);
+
+            // Taker pays nothing and gets all shares
+            const takerResult = await exchange.callStatic.settleTaker(addr1, startEpoch);
+            expect(takerResult.amountB).to.equal(parseEther("1").mul(MAKER_RESERVE_BPS).div(10000));
+            expect(takerResult.quoteAmount).to.equal(parseEther("1"));
+
+            // Maker sells all shares but gets nothing
+            const makerResult = await exchange.callStatic.settleMaker(addr2, startEpoch);
+            expect(makerResult.amountB).to.equal(0);
+            expect(makerResult.quoteAmount).to.equal(0);
+        });
+
+        it("Sell trade", async function () {
+            await exchange.connect(user2).placeBid(TRANCHE_B, 41, parseEther("10"), 0);
+
+            await fund.mock.extrapolateNav
+                .withArgs(startEpoch - EPOCH * 2, parseEther("1000"))
+                .returns(parseEther("1"), parseEther("1"), parseEther("1"));
+            await exchange.sellB(0, 41, parseEther("1"));
+            await fund.mock.extrapolateNav
+                .withArgs(startEpoch + EPOCH, parseEther("1000"))
+                .returns(parseEther("0.5"), parseEther("1"), 0);
+
+            // Taker sells all shares but gets nothing
+            const takerResult = await exchange.callStatic.settleTaker(addr1, startEpoch);
+            expect(takerResult.amountB).to.equal(0);
+            expect(takerResult.quoteAmount).to.equal(0);
+
+            // Maker pays nothing and gets all shares
+            const makerResult = await exchange.callStatic.settleMaker(addr2, startEpoch);
+            expect(makerResult.amountB).to.equal(parseEther("1"));
+            expect(makerResult.quoteAmount).to.equal(
+                parseEther("1").mul(MAKER_RESERVE_BPS).div(10000)
+            );
+        });
+    });
+
     describe("applyForMaker()", function () {
         it("Should update maker status", async function () {
             await votingEscrow.mock.getTimestampDropBelow
