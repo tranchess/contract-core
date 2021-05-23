@@ -125,7 +125,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Mapping of trading week => interest rate of Token A.
     ///
     ///         Key is the end timestamp of a trading week. Value is the interest rate captured
-    ///         after settlement of the first day of the trading week.
+    ///         after settlement of the last day of the previous trading week.
     mapping(uint256 => uint256) public historicalInterestRate;
 
     address[] private obsoletePrimaryMarkets;
@@ -214,7 +214,6 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         return _endOfWeek(timestamp);
     }
 
-    // ---------------------------------
     /// @notice Return the status of the fund contract.
     /// @param timestamp Timestamp to assess
     /// @return True if the fund contract is active
@@ -948,11 +947,8 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     }
 
     /// @dev Check whether a new rebalance should be triggered. Rebalance is triggered if
-    ///      one of the following conditions is met:
-    ///
-    ///      1. NAV of Token M grows above a threshold.
-    ///      2. NAV of Token B drops below a threshold.
-    ///      3. NAV of Token A grows above a threshold.
+    ///      NAV of Token B over NAV of Token A is greater than the upper threshold or
+    ///      less than the lower threshold.
     /// @param navA NAV of Token A before the rebalance
     /// @param navBOrZero NAV of Token B before the rebalance or zero if the NAV is negative
     /// @return Whether a new rebalance should be triggered
@@ -1104,7 +1100,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         _allowanceVersions[owner][spender] = targetVersion;
 
         if (allowanceM == 0 && allowanceA == 0 && allowanceB == 0) {
-            // Fast path for an empty account
+            // Fast path for an empty allowance
             return;
         }
 

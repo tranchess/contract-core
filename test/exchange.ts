@@ -721,8 +721,6 @@ describe("Exchange", function () {
                 expect(await exchange.bestAsks(0, TRANCHE_M)).to.equal(49);
             });
         });
-
-        // TODO skip expired maker, last order is skipped
     });
 
     describe("cancelAsk()", function () {
@@ -1074,8 +1072,6 @@ describe("Exchange", function () {
                 expect(await exchange.bestBids(0, TRANCHE_M)).to.equal(33);
             });
         });
-
-        // TODO skip expired maker, last order is skipped
     });
 
     describe("cancelBid()", function () {

@@ -48,9 +48,9 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         uint256 version;
     }
 
-    uint256 private constant MAX_REDEMPTION_FEE_RATE = 0.01e18; // 1% redemption rate
-    uint256 private constant MAX_SPLIT_FEE_RATE = 0.01e18; // 1% split rate
-    uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18; // 1% split rate
+    uint256 private constant MAX_REDEMPTION_FEE_RATE = 0.01e18;
+    uint256 private constant MAX_SPLIT_FEE_RATE = 0.01e18;
+    uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18;
 
     uint256 public immutable guardedLaunchStart;
     uint256 public guardedLaunchTotalCap;
@@ -217,7 +217,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     ///
     ///         Creations and redemptions are settled according to the current shares and
     ///         underlying assets in the fund. Split and merge fee charged as Token M are also
-    ///         redeemed at the same rate (without no redemption fee).
+    ///         redeemed at the same rate (without redemption fee).
     ///
     ///         This function does not mint or burn shares, nor transfer underlying assets.
     ///         It returns the following changes that should be done by the fund:

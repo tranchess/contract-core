@@ -100,7 +100,6 @@ contract InterestRateBallot is IBallot {
         });
     }
 
-    // -------------------------------------------------------------------------
     function _balanceOfAtTimestamp(address account, uint256 timestamp)
         private
         view

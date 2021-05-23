@@ -70,7 +70,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @dev Rebalance version mapping for `_availableBalances`.
     mapping(address => uint256) private _balanceVersions;
 
-    /// @dev 1e27 * ∫(rate(t) / totalWeight(t) dt) from 0 till checkpoint.
+    /// @dev 1e27 * ∫(rate(t) / totalWeight(t) dt) from the latest rebalance till checkpoint.
     uint256 private _invTotalWeightIntegral;
 
     /// @dev Final `_invTotalWeightIntegral` before each rebalance.
@@ -290,7 +290,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     ///
     ///         This function should be call as a "view" function off-chain to get
     ///         the return value, e.g. using `contract.claimableRewards.call(account)` in web3
-    ///         or `contract.callStatic["claimableRewards"](account)` in ethers.js.
+    ///         or `contract.callStatic.claimableRewards(account)` in ethers.js.
     /// @param account Address of an account
     /// @return Amount of claimable rewards
     function claimableRewards(address account) external returns (uint256) {
@@ -532,7 +532,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     ///      with index `targetVersion`).
     ///
     ///      This function should always be called after `_checkpoint()` is called, so that
-    ///      the global reward checkpoint is gaurenteed up to date.
+    ///      the global reward checkpoint is guarenteed up to date.
     /// @param account Account to update
     /// @param targetVersion The target rebalance version
     function _userCheckpoint(address account, uint256 targetVersion) private {

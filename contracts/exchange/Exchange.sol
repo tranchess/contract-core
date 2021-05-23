@@ -210,7 +210,7 @@ contract Exchange is Staking, ExchangeRoles {
     ///         Zero or `PD_LEVEL_COUNT + 1` indicates that there is no ask order.
     mapping(uint256 => uint256[TRANCHE_COUNT]) public bestAsks;
 
-    /// @notice Mapping of account => tranche => epoch ID => unsettled trade
+    /// @notice Mapping of account => tranche => epoch => unsettled trade
     mapping(address => mapping(uint256 => mapping(uint256 => UnsettledTrade)))
         public unsettledTrades;
 
@@ -377,11 +377,11 @@ contract Exchange is Staking, ExchangeRoles {
         emit AskOrderPlaced(msg.sender, tranche, pdLevel, baseAmount, version, index);
     }
 
-    /// @notice Cancel a bid order by order identifier
+    /// @notice Cancel a bid order
     /// @param version Order's rebalance version
     /// @param tranche Tranche of the order's base asset
     /// @param pdLevel Order's premium-discount level
-    /// @param index Order's index
+    /// @param index Order's index in the order queue
     function cancelBid(
         uint256 version,
         uint256 tranche,
@@ -408,11 +408,11 @@ contract Exchange is Staking, ExchangeRoles {
         _transferQuote(msg.sender, fillable);
     }
 
-    /// @notice Cancel an ask order by order identifier
+    /// @notice Cancel an ask order
     /// @param version Order's rebalance version
     /// @param tranche Tranche of the order's base asset
     /// @param pdLevel Order's premium-discount level
-    /// @param index Order's index
+    /// @param index Order's index in the order queue
     function cancelAsk(
         uint256 version,
         uint256 tranche,
@@ -648,7 +648,7 @@ contract Exchange is Staking, ExchangeRoles {
                 Order storage order = orderQueue.list[orderIndex];
 
                 // If the order initiator is no longer qualified for maker,
-                // we would only skip the order since the linked-list-based order queue
+                // we skip the order and the linked-list-based order queue
                 // would never traverse the order again
                 if (!isMaker(order.maker)) {
                     orderIndex = order.next;
@@ -771,7 +771,7 @@ contract Exchange is Staking, ExchangeRoles {
                 Order storage order = orderQueue.list[orderIndex];
 
                 // If the order initiator is no longer qualified for maker,
-                // we would only skip the order since the linked-list-based order queue
+                // we skip the order and the linked-list-based order queue
                 // would never traverse the order again
                 if (!isMaker(order.maker)) {
                     orderIndex = order.next;
@@ -837,7 +837,7 @@ contract Exchange is Staking, ExchangeRoles {
         if (orderIndex == 0) {
             // Matching ends by completely filling all orders at and above the specified
             // premium-discount level `minPDLevel`.
-            // Find the new best ask beyond that level.
+            // Find the new best bid beyond that level.
             for (; pdLevel > 0; pdLevel--) {
                 if (!bids[version][tranche][pdLevel].isEmpty()) {
                     break;
@@ -922,7 +922,7 @@ contract Exchange is Staking, ExchangeRoles {
         }
     }
 
-    /// @dev Calculate the result of a unsettled buy trade with a given NAV
+    /// @dev Calculate the result of an unsettled buy trade with a given NAV
     /// @param buyTrade Buy trade result of this particular epoch
     /// @param nav Net asset value for the base asset
     /// @return executionQuote Real amount of quote asset waiting for settlment
@@ -946,7 +946,7 @@ contract Exchange is Staking, ExchangeRoles {
         }
     }
 
-    /// @dev Calculate the result of a unsettled sell trade with a given NAV
+    /// @dev Calculate the result of an unsettled sell trade with a given NAV
     /// @param sellTrade Sell trade result of this particular epoch
     /// @param nav Net asset value for the base asset
     /// @return executionQuote Real amount of quote asset waiting for settlment
