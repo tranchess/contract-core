@@ -288,6 +288,12 @@ describe("VotingEscrow", function () {
     });
 
     describe("balanceOfAtTimestamp()/totalSupplyAtTimestamp()", function () {
+        it("Should reject timestamp in the past", async function () {
+            await expect(
+                votingEscrow.balanceOfAtTimestamp(addr1, startWeek - WEEK * 10)
+            ).to.be.revertedWith("Must be current or future time");
+        });
+
         it("Balance and totalSupply should change with accounts", async function () {
             const lockAmount1 = parseEther("123");
             const lockAmount2 = parseEther("456");
@@ -449,6 +455,12 @@ describe("VotingEscrow", function () {
             await expect(
                 votingEscrow.updateAddressWhitelist(newWhitelist.address)
             ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+
+        it("Should reject non-contract whitelist address", async function () {
+            await expect(
+                votingEscrow.connect(owner).updateAddressWhitelist(addr1)
+            ).to.be.revertedWith("Smart contract whitelist has to be null or a contract");
         });
 
         it("Should reject non-whitelisted contract to create lock", async function () {
