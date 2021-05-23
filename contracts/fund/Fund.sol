@@ -39,9 +39,6 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Lower bound of `NAV_B / NAV_A` to trigger a rebalance.
     uint256 public immutable lowerRebalanceThreshold;
 
-    /// @notice Address of the interest rate ballot.
-    IBallot public immutable ballot;
-
     /// @notice Address of the underlying token.
     address public immutable override tokenUnderlying;
 
@@ -54,11 +51,14 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice TwapOracle address for the underlying asset.
     ITwapOracle public override twapOracle;
 
-    /// @notice Fee Collector address.
-    address public override feeCollector;
-
     /// @notice AprOracle address.
     IAprOracle public aprOracle;
+
+    /// @notice Address of the interest rate ballot.
+    IBallot public ballot;
+
+    /// @notice Fee Collector address.
+    address public override feeCollector;
 
     /// @notice Address of Token M.
     address public override tokenM;
@@ -153,8 +153,8 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         upperRebalanceThreshold = upperRebalanceThreshold_;
         lowerRebalanceThreshold = lowerRebalanceThreshold_;
         twapOracle = ITwapOracle(twapOracle_);
-        ballot = IBallot(ballot_);
         aprOracle = IAprOracle(aprOracle_);
+        ballot = IBallot(ballot_);
         feeCollector = feeCollector_;
 
         currentDay = endOfDay(block.timestamp);
@@ -875,6 +875,10 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
 
     function updateAprOracle(address newAprOracle) external onlyOwner {
         aprOracle = IAprOracle(newAprOracle);
+    }
+
+    function updateBallot(address newBallot) external onlyOwner {
+        ballot = IBallot(newBallot);
     }
 
     function updateFeeCollector(address newFeeCollector) external onlyOwner {
