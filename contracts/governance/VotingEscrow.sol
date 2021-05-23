@@ -10,29 +10,38 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../interfaces/IVotingEscrow.sol";
 
-interface ISmartWalletChecker {
+interface IAddressWhitelist {
     function check(address account) external view returns (bool);
 }
 
 contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     using SafeMath for uint256;
 
+    event LockCreated(address indexed account, uint256 amount, uint256 unlockTime);
+
+    event AmountIncreased(address indexed account, uint256 increasedAmount);
+
+    event UnlockTimeIncreased(address indexed account, uint256 newUnlockTime);
+
+    event Withdrawn(address indexed account, uint256 amount);
+
     uint256 public immutable override maxTime;
+
+    address public immutable override token;
 
     string public name;
     string public symbol;
 
-    address public override token;
-    address public checker;
+    address public addressWhitelist;
 
     mapping(address => LockedBalance) public locked;
 
-    // unlockTime => amount that will be unlocked at unlockTime
+    /// @notice Mapping of unlockTime => total amount that will be unlocked at unlockTime
     mapping(uint256 => uint256) public scheduledUnlock;
 
     constructor(
         address token_,
-        address checker_,
+        address addressWhitelist_,
         string memory name_,
         string memory symbol_,
         uint256 maxTime_
@@ -40,7 +49,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         name = name_;
         symbol = symbol_;
         token = token_;
-        checker = checker_;
+        addressWhitelist = addressWhitelist_;
         maxTime = maxTime_;
     }
 
@@ -87,17 +96,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         return _totalSupplyAtTimestamp(timestamp);
     }
 
-    // -------------------------------------------------------------------------
-    function depositFor(address account, uint256 amount) public nonReentrant {
-        LockedBalance memory lockedBalance = locked[account];
-
-        require(amount > 0, "Zero value");
-        require(lockedBalance.unlockTime > block.timestamp, "Cannot add to expired lock. Withdraw");
-
-        _lock(account, amount, 0, lockedBalance, LockType.DEPOSIT_FOR_TYPE);
-    }
-
-    function createLock(uint256 amount, uint256 unlockTime) public nonReentrant {
+    function createLock(uint256 amount, uint256 unlockTime) external nonReentrant {
         _assertNotContract(msg.sender);
 
         unlockTime = (unlockTime / 1 weeks) * 1 weeks; // Locktime is rounded down to weeks
@@ -108,21 +107,32 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         require(unlockTime > block.timestamp, "Can only lock until time in the future");
         require(unlockTime <= block.timestamp + maxTime, "Voting lock cannot exceed max lock time");
 
-        _lock(msg.sender, amount, unlockTime, lockedBalance, LockType.CREATE_LOCK_TYPE);
+        scheduledUnlock[unlockTime] = scheduledUnlock[unlockTime].add(amount);
+        locked[msg.sender].unlockTime = unlockTime;
+        locked[msg.sender].amount = amount;
+
+        IERC20(token).transferFrom(msg.sender, address(this), amount);
+
+        emit LockCreated(msg.sender, amount, unlockTime);
     }
 
-    function increaseAmount(uint256 amount) public nonReentrant {
-        _assertNotContract(msg.sender);
-        LockedBalance memory lockedBalance = locked[msg.sender];
+    function increaseAmount(address account, uint256 amount) external nonReentrant {
+        LockedBalance memory lockedBalance = locked[account];
 
         require(amount > 0, "Zero value");
-        require(lockedBalance.unlockTime > block.timestamp, "Cannot add to expired lock. Withdraw");
+        require(lockedBalance.unlockTime > block.timestamp, "Cannot add to expired lock");
 
-        _lock(msg.sender, amount, 0, lockedBalance, LockType.INCREASE_LOCK_AMOUNT);
+        scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime].add(
+            amount
+        );
+        locked[account].amount = lockedBalance.amount.add(amount);
+
+        IERC20(token).transferFrom(msg.sender, address(this), amount);
+
+        emit AmountIncreased(account, amount);
     }
 
-    function increaseUnlockTime(uint256 unlockTime) public nonReentrant {
-        _assertNotContract(msg.sender);
+    function increaseUnlockTime(uint256 unlockTime) external nonReentrant {
         LockedBalance memory lockedBalance = locked[msg.sender];
         unlockTime = (unlockTime / 1 weeks) * 1 weeks; // Locktime is rounded down to weeks
 
@@ -130,12 +140,18 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         require(unlockTime > lockedBalance.unlockTime, "Can only increase lock duration");
         require(unlockTime <= block.timestamp + maxTime, "Voting lock cannot exceed max lock time");
 
-        _lock(msg.sender, 0, unlockTime, lockedBalance, LockType.INCREASE_UNLOCK_TIME);
+        scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime].sub(
+            lockedBalance.amount
+        );
+        scheduledUnlock[unlockTime] = scheduledUnlock[unlockTime].add(lockedBalance.amount);
+        locked[msg.sender].unlockTime = unlockTime;
+
+        emit UnlockTimeIncreased(msg.sender, unlockTime);
     }
 
-    function withdraw() public nonReentrant {
+    function withdraw() external nonReentrant {
         LockedBalance memory lockedBalance = locked[msg.sender];
-        require(block.timestamp >= lockedBalance.unlockTime, "The lock didn't expire");
+        require(block.timestamp >= lockedBalance.unlockTime, "The lock is not expired");
         uint256 amount = uint256(lockedBalance.amount);
 
         lockedBalance.unlockTime = 0;
@@ -147,18 +163,19 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         emit Withdrawn(msg.sender, amount);
     }
 
-    function updateChecker(address newChecker) external onlyOwner {
+    function updateAddressWhitelist(address newWhitelist) external onlyOwner {
         require(
-            newChecker == address(0) || Address.isContract(newChecker),
-            "Smart contract checker has to be null or a contract"
+            newWhitelist == address(0) || Address.isContract(newWhitelist),
+            "Smart contract whitelist has to be null or a contract"
         );
-        checker = newChecker;
+        addressWhitelist = newWhitelist;
     }
 
-    // -------------------------------------------------------------------------
     function _assertNotContract(address account) private view {
-        if (Address.isContract(account) && checker != address(0)) {
-            if (ISmartWalletChecker(checker).check(account)) {
+        if (Address.isContract(account)) {
+            if (
+                addressWhitelist != address(0) && IAddressWhitelist(addressWhitelist).check(account)
+            ) {
                 return;
             }
             revert("Smart contract depositors not allowed");
@@ -184,38 +201,6 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         for (; weekCursor <= timestamp + maxTime; weekCursor += 1 weeks) {
             total = total.add((scheduledUnlock[weekCursor].mul(weekCursor - timestamp)) / maxTime);
         }
-
         return total;
-    }
-
-    function _lock(
-        address account,
-        uint256 amount,
-        uint256 unlockTime,
-        LockedBalance memory lockedBalance,
-        LockType lockType
-    ) private {
-        if (unlockTime != 0) {
-            // update scheduled unlock
-            scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime]
-                .sub(lockedBalance.amount);
-            scheduledUnlock[unlockTime] = scheduledUnlock[unlockTime].add(lockedBalance.amount).add(
-                amount
-            );
-
-            // update unlock time per account
-            locked[account].unlockTime = unlockTime;
-        } else {
-            scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime]
-                .add(amount);
-        }
-
-        if (amount != 0) {
-            IERC20(token).transferFrom(account, address(this), amount);
-            // update locked amount per account
-            locked[account].amount = lockedBalance.amount.add(amount);
-        }
-
-        emit Locked(account, amount, unlockTime, lockType);
     }
 }
