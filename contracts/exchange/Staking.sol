@@ -452,7 +452,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         }
 
         uint256 integral = _invTotalWeightIntegral;
-        uint256 endWeek = endOfWeek(timestamp);
+        uint256 endWeek = _endOfWeek(timestamp);
         uint256 weeklyPercentage =
             chessController.getFundRelativeWeight(address(this), endWeek - 1 weeks);
         uint256 version = _totalSupplyVersion;

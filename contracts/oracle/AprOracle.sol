@@ -125,7 +125,7 @@ contract AprOracle is IAprOracle, Exponential, CoreUtility {
     }
 
     function capture() external override returns (uint256 dailyRate) {
-        uint256 currentWeek = endOfWeek(timestamp);
+        uint256 currentWeek = _endOfWeek(timestamp);
         if (currentWeek > block.timestamp) {
             return currentDailyRate;
         }
