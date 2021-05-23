@@ -172,8 +172,8 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     }
 
     function _assertNotContract(address account) private view {
-        if (Address.isContract(account) && checker != address(0)) {
-            if (ISmartWalletChecker(checker).check(account)) {
+        if (Address.isContract(account)) {
+            if (checker != address(0) && ISmartWalletChecker(checker).check(account)) {
                 return;
             }
             revert("Smart contract depositors not allowed");
