@@ -1,9 +1,10 @@
 import { expect } from "chai";
 import { BigNumber, Contract, Wallet, constants, BigNumberish } from "ethers";
-import type { Fixture, MockProvider } from "ethereum-waffle";
+import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther } = ethers.utils;
+import { deployMockForName } from "./mock";
 import { DAY, WEEK, FixtureWalletMap, advanceBlockAtTime } from "./utils";
 
 const MAX_TIME = BigNumber.from(WEEK * 100);
@@ -123,6 +124,18 @@ describe("VotingEscrow", function () {
             await expect(
                 votingEscrow.createLock(parseEther("10"), startWeek + 365 * 5 * DAY)
             ).to.revertedWith("Voting lock cannot exceed max lock time");
+        });
+
+        it("Should revert when called by a smart contract", async function () {
+            const someContract = await deployMockForName(owner, "IERC20");
+            await expect(
+                someContract.call(
+                    votingEscrow,
+                    "createLock",
+                    parseEther("10"),
+                    startWeek + WEEK * 10
+                )
+            ).to.revertedWith("Smart contract depositors not allowed");
         });
 
         it("Should create lock for user1", async function () {
@@ -418,6 +431,52 @@ describe("VotingEscrow", function () {
             );
 
             expect(dropTimeBefore.toNumber()).to.be.lessThan(dropTimeAfterDepositFor.toNumber());
+        });
+    });
+
+    describe("updateChecker()", function () {
+        let newChecker: MockContract;
+        let someContract: MockContract;
+
+        beforeEach(async function () {
+            newChecker = await deployMockForName(owner, "ISmartWalletChecker");
+            someContract = await deployMockForName(owner, "IERC20");
+            await chess.mint(someContract.address, parseEther("1000"));
+            await someContract.call(chess, "approve", votingEscrow.address, parseEther("1000"));
+        });
+
+        it("Should only be called by owner", async function () {
+            await expect(votingEscrow.updateChecker(newChecker.address)).to.be.revertedWith(
+                "Ownable: caller is not the owner"
+            );
+        });
+
+        it("Should reject non-whitelisted contract to create lock", async function () {
+            await newChecker.mock.check.withArgs(someContract.address).returns(false);
+            await votingEscrow.connect(owner).updateChecker(newChecker.address);
+            await expect(
+                someContract.call(
+                    votingEscrow,
+                    "createLock",
+                    parseEther("10"),
+                    startWeek + WEEK * 10
+                )
+            ).to.revertedWith("Smart contract depositors not allowed");
+        });
+
+        it("Should allow whitelisted contract to create lock", async function () {
+            await votingEscrow.connect(owner).updateChecker(newChecker.address);
+            await expect(() =>
+                someContract.call(
+                    votingEscrow,
+                    "createLock",
+                    parseEther("10"),
+                    startWeek + WEEK * 10
+                )
+            ).to.callMocks({
+                func: newChecker.mock.check.withArgs(someContract.address),
+                rets: [true],
+            });
         });
     });
 });
