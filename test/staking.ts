@@ -1066,6 +1066,34 @@ describe("Staking", function () {
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(user1Rewards);
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(user2Rewards);
         });
+
+        it("Should calculate rewards on refreshBalance()", async function () {
+            await fund.mock.getRebalanceSize.returns(2);
+            await fund.mock.getRebalanceTimestamp.withArgs(0).returns(rewardStartTimestamp + 100);
+            await fund.mock.getRebalanceTimestamp.withArgs(1).returns(rewardStartTimestamp + 300);
+            await fund.mock.doRebalance
+                .withArgs(TOTAL_M, TOTAL_A, TOTAL_B, 0)
+                .returns(TOTAL_M, TOTAL_A, TOTAL_B);
+            await fund.mock.doRebalance
+                .withArgs(TOTAL_M, TOTAL_A, TOTAL_B, 1)
+                .returns(TOTAL_M, TOTAL_A, TOTAL_B);
+            await fund.mock.doRebalance
+                .withArgs(USER1_M, USER1_A, USER1_B, 0)
+                .returns(USER1_M, USER1_A, USER1_B);
+            await fund.mock.doRebalance
+                .withArgs(USER1_M, USER1_A, USER1_B, 1)
+                .returns(USER1_M, USER1_A, USER1_B);
+            await advanceBlockAtTime(rewardStartTimestamp + 1000);
+            expect(await staking.callStatic.claimableRewards(addr1)).to.equal(rate1.mul(1000));
+
+            await setNextBlockTime(rewardStartTimestamp + 1200);
+            await staking.refreshBalance(addr1, 1);
+            expect(await staking.callStatic.claimableRewards(addr1)).to.equal(rate1.mul(1200));
+
+            await setNextBlockTime(rewardStartTimestamp + 1500);
+            await staking.refreshBalance(addr1, 1);
+            expect(await staking.callStatic.claimableRewards(addr1)).to.equal(rate1.mul(1500));
+        });
     });
 
     describe("Guarded launch", function () {
