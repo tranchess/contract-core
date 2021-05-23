@@ -865,7 +865,7 @@ contract Exchange is Staking, ExchangeRoles {
         if (takerBuy.frozenQuote > 0) {
             (uint256 executionQuote, uint256 executionBase) =
                 _buyTradeResult(takerBuy, estimatedNav);
-            baseAmount = baseAmount.add(executionBase);
+            baseAmount = executionBase;
             quoteAmount = takerBuy.frozenQuote.sub(executionQuote);
             delete unsettledTrade.takerBuy;
         }
