@@ -116,7 +116,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     }
 
     function increaseAmount(address account, uint256 amount) public nonReentrant {
-        LockedBalance memory lockedBalance = locked[msg.sender];
+        LockedBalance memory lockedBalance = locked[account];
 
         require(amount > 0, "Zero value");
         require(lockedBalance.unlockTime > block.timestamp, "Cannot add to expired lock. Withdraw");
