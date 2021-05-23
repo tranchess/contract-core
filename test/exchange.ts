@@ -48,7 +48,7 @@ describe("Exchange", function () {
         readonly shareA: MockContract;
         readonly shareB: MockContract;
         readonly twapOracle: MockContract;
-        readonly chess: MockContract;
+        readonly chessSchedule: MockContract;
         readonly chessController: MockContract;
         readonly usdc: Contract;
         readonly votingEscrow: MockContract;
@@ -71,7 +71,7 @@ describe("Exchange", function () {
     let shareA: MockContract;
     let shareB: MockContract;
     let twapOracle: MockContract;
-    let chess: MockContract;
+    let chessSchedule: MockContract;
     let chessController: MockContract;
     let usdc: Contract;
     let votingEscrow: MockContract;
@@ -99,8 +99,8 @@ describe("Exchange", function () {
         await fund.mock.isExchangeActive.returns(true);
         await twapOracle.mock.getTwap.returns(parseEther("1000"));
 
-        const chess = await deployMockForName(owner, "IChess");
-        await chess.mock.getRate.returns(0);
+        const chessSchedule = await deployMockForName(owner, "IChessSchedule");
+        await chessSchedule.mock.getRate.returns(0);
 
         const chessController = await deployMockForName(owner, "IChessController");
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
@@ -113,7 +113,7 @@ describe("Exchange", function () {
         const Exchange = await ethers.getContractFactory("Exchange");
         const exchangeImpl = await Exchange.connect(owner).deploy(
             fund.address,
-            chess.address,
+            chessSchedule.address,
             chessController.address,
             usdc.address,
             6,
@@ -174,7 +174,7 @@ describe("Exchange", function () {
             shareA,
             shareB,
             twapOracle,
-            chess,
+            chessSchedule,
             chessController,
             usdc,
             votingEscrow,
@@ -201,7 +201,7 @@ describe("Exchange", function () {
         shareA = fixtureData.shareA;
         shareB = fixtureData.shareB;
         twapOracle = fixtureData.twapOracle;
-        chess = fixtureData.chess;
+        chessSchedule = fixtureData.chessSchedule;
         chessController = fixtureData.chessController;
         usdc = fixtureData.usdc;
         votingEscrow = fixtureData.votingEscrow;
@@ -1469,7 +1469,7 @@ describe("Exchange", function () {
             const Exchange = await ethers.getContractFactory("Exchange");
             exchange = await Exchange.connect(owner).deploy(
                 fund.address,
-                chess.address,
+                chessSchedule.address,
                 chessController.address,
                 usdc.address,
                 6,
@@ -1851,7 +1851,7 @@ describe("Exchange", function () {
             const Exchange = await ethers.getContractFactory("Exchange");
             exchange = await Exchange.connect(owner).deploy(
                 fund.address,
-                chess.address,
+                chessSchedule.address,
                 chessController.address,
                 mockUsdc.address,
                 6,
@@ -1901,7 +1901,7 @@ describe("Exchange", function () {
             await expect(
                 Exchange.connect(owner).deploy(
                     fund.address,
-                    chess.address,
+                    chessSchedule.address,
                     chessController.address,
                     usdc.address,
                     19,
@@ -1939,7 +1939,7 @@ describe("Exchange", function () {
             const Exchange = await ethers.getContractFactory("Exchange");
             exchange = await Exchange.connect(owner).deploy(
                 fund.address,
-                chess.address,
+                chessSchedule.address,
                 chessController.address,
                 usdc.address,
                 6,

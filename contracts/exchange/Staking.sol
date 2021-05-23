@@ -9,7 +9,7 @@ import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
 
 import "../interfaces/IFund.sol";
-import "../interfaces/IChess.sol";
+import "../interfaces/IChessSchedule.sol";
 import "../interfaces/ITrancheIndex.sol";
 import "../interfaces/IPrimaryMarket.sol";
 
@@ -39,8 +39,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     IERC20 private immutable tokenA;
     IERC20 private immutable tokenB;
 
-    /// @notice The CHESS token contract.
-    IChess public immutable chess;
+    /// @notice The Chess release schedule contract.
+    IChessSchedule public immutable chessSchedule;
 
     uint256 public immutable guardedLaunchStart;
 
@@ -87,7 +87,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
 
     constructor(
         address fund_,
-        address chess_,
+        address chessSchedule_,
         address chessController_,
         address quoteAssetAddress_,
         uint256 guardedLaunchStart_
@@ -96,13 +96,13 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         tokenM = IERC20(IFund(fund_).tokenM());
         tokenA = IERC20(IFund(fund_).tokenA());
         tokenB = IERC20(IFund(fund_).tokenB());
-        chess = IChess(chess_);
+        chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
         quoteAssetAddress = quoteAssetAddress_;
         _checkpointTimestamp = block.timestamp;
         guardedLaunchStart = guardedLaunchStart_;
 
-        _rate = IChess(chess_).getRate(block.timestamp);
+        _rate = IChessSchedule(chessSchedule_).getRate(block.timestamp);
     }
 
     /// @notice Return weight of given balance with respect to rewards.
@@ -438,7 +438,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     ///      in order for the user to get all rewards till now.
     /// @param account Address of the account
     function _claim(address account) internal {
-        chess.mint(account, _claimableRewards[account]);
+        chessSchedule.mint(account, _claimableRewards[account]);
         _claimableRewards[account] = 0;
     }
 
@@ -502,7 +502,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                 }
             }
             if (endTimestamp == endWeek) {
-                rate = chess.getRate(endWeek);
+                rate = chessSchedule.getRate(endWeek);
                 weeklyPercentage = chessController.getFundRelativeWeight(address(this), endWeek);
                 endWeek += 1 weeks;
             }

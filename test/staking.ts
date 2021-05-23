@@ -55,7 +55,7 @@ describe("Staking", function () {
         readonly shareM: MockContract;
         readonly shareA: MockContract;
         readonly shareB: MockContract;
-        readonly chess: MockContract;
+        readonly chessSchedule: MockContract;
         readonly chessController: MockContract;
         readonly usdc: Contract;
         readonly staking: Contract;
@@ -74,7 +74,7 @@ describe("Staking", function () {
     let shareM: MockContract;
     let shareA: MockContract;
     let shareB: MockContract;
-    let chess: MockContract;
+    let chessSchedule: MockContract;
     let chessController: MockContract;
     let usdc: Contract;
     let staking: Contract;
@@ -94,8 +94,8 @@ describe("Staking", function () {
         await fund.mock.tokenB.returns(shareB.address);
         await fund.mock.getRebalanceSize.returns(0);
 
-        const chess = await deployMockForName(owner, "IChess");
-        await chess.mock.getRate.returns(0);
+        const chessSchedule = await deployMockForName(owner, "IChessSchedule");
+        await chessSchedule.mock.getRate.returns(0);
 
         const chessController = await deployMockForName(owner, "IChessController");
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
@@ -106,7 +106,7 @@ describe("Staking", function () {
         const Staking = await ethers.getContractFactory("StakingTestWrapper");
         const staking = await Staking.connect(owner).deploy(
             fund.address,
-            chess.address,
+            chessSchedule.address,
             chessController.address,
             usdc.address,
             0
@@ -134,7 +134,7 @@ describe("Staking", function () {
             shareM,
             shareA,
             shareB,
-            chess,
+            chessSchedule,
             chessController,
             usdc,
             staking: staking.connect(user1),
@@ -157,7 +157,7 @@ describe("Staking", function () {
         shareM = fixtureData.shareM;
         shareA = fixtureData.shareA;
         shareB = fixtureData.shareB;
-        chess = fixtureData.chess;
+        chessSchedule = fixtureData.chessSchedule;
         chessController = fixtureData.chessController;
         usdc = fixtureData.usdc;
         staking = fixtureData.staking;
@@ -763,7 +763,9 @@ describe("Staking", function () {
             await fund.mock.getRebalanceTimestamp
                 .withArgs(0)
                 .returns(rewardStartTimestamp + 100 * WEEK);
-            await chess.mock.getRate.withArgs(rewardStartTimestamp).returns(parseEther("1"));
+            await chessSchedule.mock.getRate
+                .withArgs(rewardStartTimestamp)
+                .returns(parseEther("1"));
             await advanceBlockAtTime(rewardStartTimestamp);
 
             rate1 = parseEther("1").mul(USER1_WEIGHT).div(TOTAL_WEIGHT);
@@ -779,7 +781,7 @@ describe("Staking", function () {
                 await setNextBlockTime(rewardStartTimestamp + 300);
                 await staking.claimRewards(addr1);
             }).to.callMocks({
-                func: chess.mock.mint.withArgs(addr1, rate1.mul(300)),
+                func: chessSchedule.mock.mint.withArgs(addr1, rate1.mul(300)),
             });
 
             await advanceBlockAtTime(rewardStartTimestamp + 800);
@@ -790,7 +792,7 @@ describe("Staking", function () {
                 await setNextBlockTime(rewardStartTimestamp + 1000);
                 await staking.claimRewards(addr1);
             }).to.callMocks({
-                func: chess.mock.mint.withArgs(addr1, rate1.mul(700)),
+                func: chessSchedule.mock.mint.withArgs(addr1, rate1.mul(700)),
             });
         });
 
@@ -891,11 +893,13 @@ describe("Staking", function () {
         });
 
         it("Should calculate rewards for two users in multiple weeks", async function () {
-            await chess.mock.getRate.withArgs(rewardStartTimestamp + WEEK).returns(parseEther("2"));
-            await chess.mock.getRate
+            await chessSchedule.mock.getRate
+                .withArgs(rewardStartTimestamp + WEEK)
+                .returns(parseEther("2"));
+            await chessSchedule.mock.getRate
                 .withArgs(rewardStartTimestamp + WEEK * 2)
                 .returns(parseEther("3"));
-            await chess.mock.getRate
+            await chessSchedule.mock.getRate
                 .withArgs(rewardStartTimestamp + WEEK * 3)
                 .returns(parseEther("4"));
 
@@ -911,7 +915,7 @@ describe("Staking", function () {
                 await setNextBlockTime(rewardStartTimestamp + WEEK * 2);
                 await staking.claimRewards(addr1);
             }).to.callMocks({
-                func: chess.mock.mint.withArgs(addr1, balance1),
+                func: chessSchedule.mock.mint.withArgs(addr1, balance1),
             });
 
             balance1 = balance1
@@ -929,15 +933,15 @@ describe("Staking", function () {
                 await setNextBlockTime(rewardStartTimestamp + WEEK * 4);
                 await staking.claimRewards(addr1);
             }).to.callMocks({
-                func: chess.mock.mint.withArgs(addr1, balance1),
+                func: chessSchedule.mock.mint.withArgs(addr1, balance1),
             });
         });
 
         it("Should calculate rewards with rebalance in two weeks", async function () {
-            await chess.mock.getRate
+            await chessSchedule.mock.getRate
                 .withArgs(rewardStartTimestamp + WEEK * 1)
                 .returns(parseEther("3"));
-            await chess.mock.getRate
+            await chessSchedule.mock.getRate
                 .withArgs(rewardStartTimestamp + WEEK * 2)
                 .returns(parseEther("5"));
             await fund.mock.getRebalanceSize.returns(1);
@@ -1068,12 +1072,12 @@ describe("Staking", function () {
         let guardedLaunchStart: number;
 
         beforeEach(async function () {
-            await chess.mock.getRate.returns(parseEther("1"));
+            await chessSchedule.mock.getRate.returns(parseEther("1"));
             guardedLaunchStart = (await ethers.provider.getBlock("latest")).timestamp + 10000;
             const Staking = await ethers.getContractFactory("StakingTestWrapper");
             staking = await Staking.connect(owner).deploy(
                 fund.address,
-                chess.address,
+                chessSchedule.address,
                 chessController.address,
                 usdc.address,
                 guardedLaunchStart
@@ -1091,7 +1095,7 @@ describe("Staking", function () {
             );
 
             await advanceBlockAtTime(guardedLaunchStart + WEEK * 4);
-            await chess.mock.mint.returns();
+            await chessSchedule.mock.mint.returns();
             await staking.claimRewards(addr1);
         });
     });

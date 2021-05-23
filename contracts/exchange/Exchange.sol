@@ -219,7 +219,7 @@ contract Exchange is Staking, ExchangeRoles {
 
     constructor(
         address fund_,
-        address chess_,
+        address chessSchedule_,
         address chessController_,
         address quoteAssetAddress_,
         uint256 quoteDecimals_,
@@ -232,7 +232,7 @@ contract Exchange is Staking, ExchangeRoles {
     )
         public
         ExchangeRoles(votingEscrow_, makerRequirement_)
-        Staking(fund_, chess_, chessController_, quoteAssetAddress_, guardedLaunchStart_)
+        Staking(fund_, chessSchedule_, chessController_, quoteAssetAddress_, guardedLaunchStart_)
     {
         minBidAmount = minBidAmount_;
         minAskAmount = minAskAmount_;
