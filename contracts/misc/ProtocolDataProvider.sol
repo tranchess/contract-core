@@ -178,7 +178,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.fund.totalUnderlying = underlyingToken.balanceOf(address(fund));
         data.fund.rebalanceSize = fund.getRebalanceSize();
         data.fund.currentInterestRate = fund.historicalInterestRate(
-            endOfWeek(data.fund.currentDay - 1 days)
+            _endOfWeek(data.fund.currentDay - 1 days)
         );
 
         PrimaryMarket primaryMarket = PrimaryMarket(primaryMarketAddress);
@@ -202,7 +202,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.governance.votingEscrow.chessBalance = chessToken.balanceOf(address(votingEscrow));
         data.governance.votingEscrow.totalSupply = votingEscrow.totalSupply();
         data.governance.votingEscrow.account = votingEscrow.getLockedBalance(account);
-        data.governance.interestRateBallot.nextCloseTimestamp = endOfWeek(
+        data.governance.interestRateBallot.nextCloseTimestamp = _endOfWeek(
             data.fund.currentDay - 1 days
         );
         data.governance.interestRateBallot.account = InterestRateBallot(address(fund.ballot()))

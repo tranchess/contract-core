@@ -164,7 +164,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         _historicalNavs[lastDay][TRANCHE_M] = UNIT;
         _historicalNavs[lastDay][TRANCHE_A] = UNIT;
         _historicalNavs[lastDay][TRANCHE_B] = UNIT;
-        historicalInterestRate[endOfWeek(lastDay)] = MAX_INTEREST_RATE.min(aprOracle.capture());
+        historicalInterestRate[_endOfWeek(lastDay)] = MAX_INTEREST_RATE.min(aprOracle.capture());
         fundActivityStartTime = lastDay;
         exchangeActivityStartTime = lastDay + 30 minutes;
     }
@@ -189,6 +189,11 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         return (WEIGHT_A, WEIGHT_B);
     }
 
+    /// @notice UTC time of a day when the fund settles.
+    function settlementTime() external pure returns (uint256) {
+        return SETTLEMENT_TIME;
+    }
+
     /// @notice Return end timestamp of the trading day containing a given timestamp.
     ///
     ///         A trading day starts at UTC time `SETTLEMENT_TIME` of a day (inclusive)
@@ -197,6 +202,16 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @return End timestamp of the trading day.
     function endOfDay(uint256 timestamp) public pure override returns (uint256) {
         return ((timestamp.add(1 days) - SETTLEMENT_TIME) / 1 days) * 1 days + SETTLEMENT_TIME;
+    }
+
+    /// @notice Return end timestamp of the trading week containing a given timestamp.
+    ///
+    ///         A trading week starts at UTC time `SETTLEMENT_TIME` on a Thursday (inclusive)
+    ///         and ends at the same time of the next Thursday (exclusive).
+    /// @param timestamp The given timestamp
+    /// @return End timestamp of the trading week.
+    function endOfWeek(uint256 timestamp) external pure returns (uint256) {
+        return _endOfWeek(timestamp);
     }
 
     // ---------------------------------
@@ -393,7 +408,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             }
         }
 
-        uint256 week = endOfWeek(previousDay);
+        uint256 week = _endOfWeek(previousDay);
         uint256 newNavA =
             navA
                 .multiplyDecimal(
@@ -762,7 +777,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     ///         4. Capture new interest rate for Token A.
     function settle() external nonReentrant {
         uint256 day = currentDay;
-        uint256 currentWeek = endOfWeek(day - 1 days);
+        uint256 currentWeek = _endOfWeek(day - 1 days);
         require(block.timestamp >= day, "The current trading day does not end yet");
         uint256 price = twapOracle.getTwap(day);
         require(price != 0, "Underlying price for settlement is not ready yet");
