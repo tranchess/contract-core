@@ -898,7 +898,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             if (fee > 0) {
                 require(
                     IERC20(tokenUnderlying).transfer(address(feeCollector), fee),
-                    "Underlying transferFrom failed"
+                    "Underlying transfer failed"
                 );
             }
         }
