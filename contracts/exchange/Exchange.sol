@@ -367,10 +367,7 @@ contract Exchange is Staking, ExchangeRoles {
         _lock(tranche, msg.sender, baseAmount);
         uint256 index = asks[version][tranche][pdLevel].append(msg.sender, baseAmount, version);
         uint256 oldBestAsk = bestAsks[version][tranche];
-        if (oldBestAsk > pdLevel) {
-            bestAsks[version][tranche] = pdLevel;
-        } else if (oldBestAsk == 0 && asks[version][tranche][0].tail == 0) {
-            // The best ask level is not initialized yet, because order queue at PD level 0 is empty
+        if (oldBestAsk > pdLevel || oldBestAsk == 0) {
             bestAsks[version][tranche] = pdLevel;
         }
 
