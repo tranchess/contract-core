@@ -178,10 +178,10 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         // Charge splitting fee and round it to a multiple of (weightA + weightB)
         uint256 unit = inM.sub(inM.multiplyDecimal(splitFeeRate)) / (weightA + weightB);
         require(unit > 0, "Too little to split");
-        uint256 inPAfterFee = unit * (weightA + weightB);
+        uint256 inMAfterFee = unit * (weightA + weightB);
         uint256 outA = unit * weightA;
-        uint256 outB = inPAfterFee - outA;
-        uint256 feeM = inM - inPAfterFee;
+        uint256 outB = inMAfterFee - outA;
+        uint256 feeM = inM - inMAfterFee;
 
         fund.burn(TRANCHE_M, msg.sender, inM);
         fund.mint(TRANCHE_A, msg.sender, outA);
@@ -200,9 +200,9 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         // Keep unmergable Token A unchanged.
         inA = unit * weightA;
         uint256 inB = unit.mul(weightB);
-        uint256 outPBeforeFee = inA.add(inB);
-        uint256 feeM = outPBeforeFee.multiplyDecimal(mergeFeeRate);
-        uint256 outM = outPBeforeFee.sub(feeM);
+        uint256 outMBeforeFee = inA.add(inB);
+        uint256 feeM = outMBeforeFee.multiplyDecimal(mergeFeeRate);
+        uint256 outM = outMBeforeFee.sub(feeM);
 
         fund.burn(TRANCHE_A, msg.sender, inA);
         fund.burn(TRANCHE_B, msg.sender, inB);
