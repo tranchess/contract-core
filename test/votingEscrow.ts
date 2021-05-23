@@ -183,7 +183,7 @@ describe("VotingEscrow", function () {
             );
         });
 
-        it("Should increase amount for user1", async function () {
+        it("Should increase amount for self", async function () {
             const lockAmount = parseEther("10");
             const lockAmount2 = parseEther("5");
             const totalLockAmount = lockAmount.add(lockAmount2);
@@ -192,6 +192,33 @@ describe("VotingEscrow", function () {
             advanceBlockAtTime(unlockTime - WEEK);
 
             await expect(votingEscrow.increaseAmount(addr1, lockAmount2))
+                .to.emit(votingEscrow, "AmountIncreased")
+                .withArgs(addr1, lockAmount2);
+
+            const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+            const dropTime = calculateDropBelowTime(unlockTime, lockAmount, totalLockAmount);
+            expect(await votingEscrow.getTimestampDropBelow(addr1, lockAmount)).to.be.equal(
+                dropTime
+            );
+            expect((await votingEscrow.getLockedBalance(addr1)).amount).to.be.equal(
+                totalLockAmount
+            );
+            expect((await votingEscrow.getLockedBalance(addr1)).unlockTime).to.be.equal(unlockTime);
+
+            const balance = totalLockAmount.mul(unlockTime - currentTimestamp).div(MAX_TIME);
+            expect(await votingEscrow.balanceOf(addr1)).to.be.equal(balance);
+            expect(await votingEscrow.totalSupply()).to.be.equal(balance);
+        });
+
+        it("Should increase amount for other", async function () {
+            const lockAmount = parseEther("10");
+            const lockAmount2 = parseEther("5");
+            const totalLockAmount = lockAmount.add(lockAmount2);
+            const unlockTime = startWeek + WEEK * 10;
+            await votingEscrow.createLock(lockAmount, unlockTime);
+            advanceBlockAtTime(unlockTime - WEEK);
+
+            await expect(votingEscrow.connect(user2).increaseAmount(addr1, lockAmount2))
                 .to.emit(votingEscrow, "AmountIncreased")
                 .withArgs(addr1, lockAmount2);
 
