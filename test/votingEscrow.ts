@@ -389,23 +389,6 @@ describe("VotingEscrow", function () {
             expect(dropTimeBefore.toNumber()).to.be.greaterThan(higherThresholdDropTime.toNumber());
         });
 
-        it("Drop below time should increase after depositFor", async function () {
-            const lockAmount2 = parseEther("5");
-            const totalLockAmount = lockAmount.add(lockAmount2);
-            const dropTimeAfterDepositFor = calculateDropBelowTime(
-                unlockTime,
-                threshold,
-                totalLockAmount
-            );
-
-            await votingEscrow.increaseAmount(addr1, lockAmount2);
-            expect(await votingEscrow.getTimestampDropBelow(addr1, threshold)).to.be.equal(
-                dropTimeAfterDepositFor
-            );
-
-            expect(dropTimeBefore.toNumber()).to.be.lessThan(dropTimeAfterDepositFor.toNumber());
-        });
-
         it("Drop below time should increase after increaseAmount", async function () {
             const lockAmount2 = parseEther("5");
             const totalLockAmount = lockAmount.add(lockAmount2);
