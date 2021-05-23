@@ -485,7 +485,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     }
 
     function shareBalanceOf(uint256 tranche, address account)
-        public
+        external
         view
         override
         returns (uint256)
@@ -548,7 +548,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 tranche,
         address owner,
         address spender
-    ) public view override returns (uint256) {
+    ) external view override returns (uint256) {
         uint256 allowanceM = _allowances[owner][spender][TRANCHE_M];
         uint256 allowanceA = _allowances[owner][spender][TRANCHE_A];
         uint256 allowanceB = _allowances[owner][spender][TRANCHE_B];
@@ -589,7 +589,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         return _allowanceVersions[owner][spender];
     }
 
-    function shareTotalSupply(uint256 tranche) public view override returns (uint256) {
+    function shareTotalSupply(uint256 tranche) external view override returns (uint256) {
         return _totalSupplies[tranche];
     }
 
@@ -597,7 +597,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 tranche,
         address account,
         uint256 amount
-    ) public override onlyPrimaryMarket {
+    ) external override onlyPrimaryMarket {
         _refreshBalance(account, _rebalanceSize);
         _mint(tranche, account, amount);
     }
@@ -606,7 +606,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 tranche,
         address account,
         uint256 amount
-    ) public override onlyPrimaryMarket {
+    ) external override onlyPrimaryMarket {
         _refreshBalance(account, _rebalanceSize);
         _burn(tranche, account, amount);
     }
@@ -629,7 +629,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address sender,
         address recipient,
         uint256 amount
-    ) public override onlyShare returns (uint256 newAllowance) {
+    ) external override onlyShare returns (uint256 newAllowance) {
         transfer(tranche, sender, recipient, amount);
 
         _refreshAllowance(sender, spender, _rebalanceSize);
@@ -645,7 +645,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address owner,
         address spender,
         uint256 amount
-    ) public override onlyShare {
+    ) external override onlyShare {
         _refreshAllowance(owner, spender, _rebalanceSize);
         _approve(tranche, owner, spender, amount);
     }
@@ -655,7 +655,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address sender,
         address spender,
         uint256 addedValue
-    ) public override onlyShare returns (uint256 newAllowance) {
+    ) external override onlyShare returns (uint256 newAllowance) {
         _refreshAllowance(sender, spender, _rebalanceSize);
         newAllowance = _allowances[sender][spender][tranche].add(addedValue);
         _approve(tranche, sender, spender, newAllowance);
@@ -666,7 +666,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address sender,
         address spender,
         uint256 subtractedValue
-    ) public override onlyShare returns (uint256 newAllowance) {
+    ) external override onlyShare returns (uint256 newAllowance) {
         _refreshAllowance(sender, spender, _rebalanceSize);
         newAllowance = _allowances[sender][spender][tranche].sub(subtractedValue);
         _approve(tranche, sender, spender, newAllowance);
