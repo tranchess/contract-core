@@ -65,8 +65,7 @@ contract InterestRateBallot is IBallot {
         return _averageAtTimestamp(timestamp);
     }
 
-    // -------------------------------------------------------------------------
-    function cast(uint256 option) public {
+    function cast(uint256 option) external {
         require(option < maxOption, "Invalid option");
 
         IVotingEscrow.LockedBalance memory lockedBalance =
@@ -100,7 +99,6 @@ contract InterestRateBallot is IBallot {
         });
     }
 
-    // -------------------------------------------------------------------------
     function _balanceOfAtTimestamp(address account, uint256 timestamp)
         private
         view

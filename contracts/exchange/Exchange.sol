@@ -19,7 +19,7 @@ import "./Staking.sol";
 /// @title Tranchess's Exchange Contract
 /// @notice A decentralized exchange to match premium-discount orders and clear trades
 /// @author Tranchess
-contract Exchange is Staking, ExchangeRoles {
+contract Exchange is ExchangeRoles, Staking {
     /// @dev Reserved storage slots for future base contract upgrades
     uint256[32] private _reservedSlots;
 
@@ -210,7 +210,7 @@ contract Exchange is Staking, ExchangeRoles {
     ///         Zero or `PD_LEVEL_COUNT + 1` indicates that there is no ask order.
     mapping(uint256 => uint256[TRANCHE_COUNT]) public bestAsks;
 
-    /// @notice Mapping of account => tranche => epoch ID => unsettled trade
+    /// @notice Mapping of account => tranche => epoch => unsettled trade
     mapping(address => mapping(uint256 => mapping(uint256 => UnsettledTrade)))
         public unsettledTrades;
 
@@ -367,21 +367,18 @@ contract Exchange is Staking, ExchangeRoles {
         _lock(tranche, msg.sender, baseAmount);
         uint256 index = asks[version][tranche][pdLevel].append(msg.sender, baseAmount, version);
         uint256 oldBestAsk = bestAsks[version][tranche];
-        if (oldBestAsk > pdLevel) {
-            bestAsks[version][tranche] = pdLevel;
-        } else if (oldBestAsk == 0 && asks[version][tranche][0].tail == 0) {
-            // The best ask level is not initialized yet, because order queue at PD level 0 is empty
+        if (oldBestAsk > pdLevel || oldBestAsk == 0) {
             bestAsks[version][tranche] = pdLevel;
         }
 
         emit AskOrderPlaced(msg.sender, tranche, pdLevel, baseAmount, version, index);
     }
 
-    /// @notice Cancel a bid order by order identifier
+    /// @notice Cancel a bid order
     /// @param version Order's rebalance version
     /// @param tranche Tranche of the order's base asset
     /// @param pdLevel Order's premium-discount level
-    /// @param index Order's index
+    /// @param index Order's index in the order queue
     function cancelBid(
         uint256 version,
         uint256 tranche,
@@ -408,11 +405,11 @@ contract Exchange is Staking, ExchangeRoles {
         _transferQuote(msg.sender, fillable);
     }
 
-    /// @notice Cancel an ask order by order identifier
+    /// @notice Cancel an ask order
     /// @param version Order's rebalance version
     /// @param tranche Tranche of the order's base asset
     /// @param pdLevel Order's premium-discount level
-    /// @param index Order's index
+    /// @param index Order's index in the order queue
     function cancelAsk(
         uint256 version,
         uint256 tranche,
@@ -453,9 +450,9 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 version,
         uint256 maxPDLevel,
         uint256 quoteAmount
-    ) external onlyActive {
+    ) external {
         (uint256 estimatedNav, , ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _buy(version, msg.sender, TRANCHE_M, maxPDLevel, estimatedNav, quoteAmount);
+        _buy(version, TRANCHE_M, maxPDLevel, estimatedNav, quoteAmount);
     }
 
     /// @notice Buy Token A
@@ -466,9 +463,9 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 version,
         uint256 maxPDLevel,
         uint256 quoteAmount
-    ) external onlyActive {
+    ) external {
         (, uint256 estimatedNav, ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _buy(version, msg.sender, TRANCHE_A, maxPDLevel, estimatedNav, quoteAmount);
+        _buy(version, TRANCHE_A, maxPDLevel, estimatedNav, quoteAmount);
     }
 
     /// @notice Buy Token B
@@ -479,9 +476,9 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 version,
         uint256 maxPDLevel,
         uint256 quoteAmount
-    ) external onlyActive {
+    ) external {
         (, , uint256 estimatedNav) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _buy(version, msg.sender, TRANCHE_B, maxPDLevel, estimatedNav, quoteAmount);
+        _buy(version, TRANCHE_B, maxPDLevel, estimatedNav, quoteAmount);
     }
 
     /// @notice Sell Token M
@@ -492,9 +489,9 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 version,
         uint256 minPDLevel,
         uint256 baseAmount
-    ) external onlyActive {
+    ) external {
         (uint256 estimatedNav, , ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _sell(version, msg.sender, TRANCHE_M, minPDLevel, estimatedNav, baseAmount);
+        _sell(version, TRANCHE_M, minPDLevel, estimatedNav, baseAmount);
     }
 
     /// @notice Sell Token A
@@ -505,9 +502,9 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 version,
         uint256 minPDLevel,
         uint256 baseAmount
-    ) external onlyActive {
+    ) external {
         (, uint256 estimatedNav, ) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _sell(version, msg.sender, TRANCHE_A, minPDLevel, estimatedNav, baseAmount);
+        _sell(version, TRANCHE_A, minPDLevel, estimatedNav, baseAmount);
     }
 
     /// @notice Sell Token B
@@ -518,9 +515,9 @@ contract Exchange is Staking, ExchangeRoles {
         uint256 version,
         uint256 minPDLevel,
         uint256 baseAmount
-    ) external onlyActive {
+    ) external {
         (, , uint256 estimatedNav) = estimateNavs(endOfEpoch(block.timestamp) - 2 * EPOCH);
-        _sell(version, msg.sender, TRANCHE_B, minPDLevel, estimatedNav, baseAmount);
+        _sell(version, TRANCHE_B, minPDLevel, estimatedNav, baseAmount);
     }
 
     /// @notice Settle trades of a specified epoch for makers
@@ -607,27 +604,26 @@ contract Exchange is Staking, ExchangeRoles {
 
     /// @dev Buy share
     /// @param version Current rebalance version. Revert if it is not the latest version.
-    /// @param taker Taker address
     /// @param tranche Tranche of the base asset
     /// @param maxPDLevel Maximal premium-discount level accepted
     /// @param estimatedNav Estimated net asset value of the base asset
     /// @param quoteAmount Amount of quote assets willing to trade with 18 decimal places
     function _buy(
         uint256 version,
-        address taker,
         uint256 tranche,
         uint256 maxPDLevel,
         uint256 estimatedNav,
         uint256 quoteAmount
-    ) internal {
+    ) internal onlyActive {
         require(maxPDLevel > 0 && maxPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
         require(version == fund.getRebalanceSize(), "Invalid version");
+        require(estimatedNav > 0, "Zero estimated NAV");
 
         UnsettledBuyTrade memory totalTrade;
         uint256 epoch = endOfEpoch(block.timestamp);
 
         // Record rebalance version in the first transaction in the epoch
-        if (_epochVersions[epoch] != version) {
+        if (_epochVersions[epoch] == 0) {
             _epochVersions[epoch] = version;
         }
 
@@ -648,7 +644,7 @@ contract Exchange is Staking, ExchangeRoles {
                 Order storage order = orderQueue.list[orderIndex];
 
                 // If the order initiator is no longer qualified for maker,
-                // we would only skip the order since the linked-list-based order queue
+                // we skip the order and the linked-list-based order queue
                 // would never traverse the order again
                 if (!isMaker(order.maker)) {
                     orderIndex = order.next;
@@ -706,7 +702,7 @@ contract Exchange is Staking, ExchangeRoles {
             }
         }
         emit BuyTrade(
-            taker,
+            msg.sender,
             tranche,
             totalTrade.frozenQuote,
             version,
@@ -730,33 +726,32 @@ contract Exchange is Staking, ExchangeRoles {
             totalTrade.frozenQuote > 0,
             "Nothing can be bought at the given premium-discount level"
         );
-        _transferQuoteFrom(taker, totalTrade.frozenQuote);
-        unsettledTrades[taker][tranche][epoch].takerBuy.add(totalTrade);
+        _transferQuoteFrom(msg.sender, totalTrade.frozenQuote);
+        unsettledTrades[msg.sender][tranche][epoch].takerBuy.add(totalTrade);
     }
 
     /// @dev Sell share
     /// @param version Current rebalance version. Revert if it is not the latest version.
-    /// @param taker Taker address
     /// @param tranche Tranche of the base asset
     /// @param minPDLevel Minimal premium-discount level accepted
     /// @param estimatedNav Estimated net asset value of the base asset
     /// @param baseAmount Amount of base assets willing to trade
     function _sell(
         uint256 version,
-        address taker,
         uint256 tranche,
         uint256 minPDLevel,
         uint256 estimatedNav,
         uint256 baseAmount
-    ) internal {
+    ) internal onlyActive {
         require(minPDLevel > 0 && minPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
         require(version == fund.getRebalanceSize(), "Invalid version");
+        require(estimatedNav > 0, "Zero estimated NAV");
 
         UnsettledSellTrade memory totalTrade;
         uint256 epoch = endOfEpoch(block.timestamp);
 
         // Record rebalance version in the first transaction in the epoch
-        if (_epochVersions[epoch] != version) {
+        if (_epochVersions[epoch] == 0) {
             _epochVersions[epoch] = version;
         }
 
@@ -771,7 +766,7 @@ contract Exchange is Staking, ExchangeRoles {
                 Order storage order = orderQueue.list[orderIndex];
 
                 // If the order initiator is no longer qualified for maker,
-                // we would only skip the order since the linked-list-based order queue
+                // we skip the order and the linked-list-based order queue
                 // would never traverse the order again
                 if (!isMaker(order.maker)) {
                     orderIndex = order.next;
@@ -826,7 +821,7 @@ contract Exchange is Staking, ExchangeRoles {
             }
         }
         emit SellTrade(
-            taker,
+            msg.sender,
             tranche,
             totalTrade.frozenBase,
             version,
@@ -837,7 +832,7 @@ contract Exchange is Staking, ExchangeRoles {
         if (orderIndex == 0) {
             // Matching ends by completely filling all orders at and above the specified
             // premium-discount level `minPDLevel`.
-            // Find the new best ask beyond that level.
+            // Find the new best bid beyond that level.
             for (; pdLevel > 0; pdLevel--) {
                 if (!bids[version][tranche][pdLevel].isEmpty()) {
                     break;
@@ -850,8 +845,8 @@ contract Exchange is Staking, ExchangeRoles {
             totalTrade.frozenBase > 0,
             "Nothing can be sold at the given premium-discount level"
         );
-        _tradeAvailable(tranche, taker, totalTrade.frozenBase);
-        unsettledTrades[taker][tranche][epoch].takerSell.add(totalTrade);
+        _tradeAvailable(tranche, msg.sender, totalTrade.frozenBase);
+        unsettledTrades[msg.sender][tranche][epoch].takerSell.add(totalTrade);
     }
 
     /// @dev Settle both buy and sell trades of a specified epoch for takers
@@ -872,7 +867,7 @@ contract Exchange is Staking, ExchangeRoles {
         if (takerBuy.frozenQuote > 0) {
             (uint256 executionQuote, uint256 executionBase) =
                 _buyTradeResult(takerBuy, estimatedNav);
-            baseAmount = baseAmount.add(executionBase);
+            baseAmount = executionBase;
             quoteAmount = takerBuy.frozenQuote.sub(executionQuote);
             delete unsettledTrade.takerBuy;
         }
@@ -922,7 +917,7 @@ contract Exchange is Staking, ExchangeRoles {
         }
     }
 
-    /// @dev Calculate the result of a unsettled buy trade with a given NAV
+    /// @dev Calculate the result of an unsettled buy trade with a given NAV
     /// @param buyTrade Buy trade result of this particular epoch
     /// @param nav Net asset value for the base asset
     /// @return executionQuote Real amount of quote asset waiting for settlment
@@ -946,7 +941,7 @@ contract Exchange is Staking, ExchangeRoles {
         }
     }
 
-    /// @dev Calculate the result of a unsettled sell trade with a given NAV
+    /// @dev Calculate the result of an unsettled sell trade with a given NAV
     /// @param sellTrade Sell trade result of this particular epoch
     /// @param nav Net asset value for the base asset
     /// @return executionQuote Real amount of quote asset waiting for settlment

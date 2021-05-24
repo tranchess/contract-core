@@ -3,24 +3,36 @@ pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
+/// @notice Unsettled trade of a taker buy order or a maker sell order
+/// @param frozenQuote Amount of quote assets from the taker
+/// @param effectiveQuote Effective amount of quote assets at zero premium-discount
+/// @param reservedBase Reserved amount of base assets from the maker
 struct UnsettledBuyTrade {
-    uint256 frozenQuote; // Amount of quote assets frozen for settlement
-    uint256 effectiveQuote; // Amount of quote assets in effect
-    uint256 reservedBase; // Amount of base assets spent
+    uint256 frozenQuote;
+    uint256 effectiveQuote;
+    uint256 reservedBase;
 }
 
+/// @notice Unsettled trade of a taker sell order or a maker buy order
+/// @param frozenBase Amount of base assets from the taker
+/// @param effectiveBase Effective amount of base assets at zero premium-discount
+/// @param reservedQuote Reserved amount of quote assets from the maker
 struct UnsettledSellTrade {
-    uint256 frozenBase; // Amount of base assets frozen for settlement
-    uint256 effectiveBase; // Amount of base assets in effect
-    uint256 reservedQuote; // Amount of quote assets spent
+    uint256 frozenBase;
+    uint256 effectiveBase;
+    uint256 reservedQuote;
 }
 
-/// @notice Unsettled trades of an account
+/// @notice Unsettled trades of an account in a single epoch
+/// @param takerBuy Trade by taker buy orders
+/// @param takerSell Trade by taker sell orders
+/// @param makerBuy Trade by maker buy orders
+/// @param makerSell Trade by maker sell orders
 struct UnsettledTrade {
-    UnsettledBuyTrade takerBuy; // Buy trades as taker
-    UnsettledSellTrade takerSell; // Sell trades as taker
-    UnsettledSellTrade makerBuy; // Buy trades as maker
-    UnsettledBuyTrade makerSell; // Sell trades as maker
+    UnsettledBuyTrade takerBuy;
+    UnsettledSellTrade takerSell;
+    UnsettledSellTrade makerBuy;
+    UnsettledBuyTrade makerSell;
 }
 
 library LibUnsettledBuyTrade {

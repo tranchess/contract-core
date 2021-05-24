@@ -48,9 +48,9 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         uint256 version;
     }
 
-    uint256 private constant MAX_REDEMPTION_FEE_RATE = 0.01e18; // 1% redemption rate
-    uint256 private constant MAX_SPLIT_FEE_RATE = 0.01e18; // 1% split rate
-    uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18; // 1% split rate
+    uint256 private constant MAX_REDEMPTION_FEE_RATE = 0.01e18;
+    uint256 private constant MAX_SPLIT_FEE_RATE = 0.01e18;
+    uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18;
 
     uint256 public immutable guardedLaunchStart;
     uint256 public guardedLaunchTotalCap;
@@ -178,10 +178,10 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         // Charge splitting fee and round it to a multiple of (weightA + weightB)
         uint256 unit = inM.sub(inM.multiplyDecimal(splitFeeRate)) / (weightA + weightB);
         require(unit > 0, "Too little to split");
-        uint256 inPAfterFee = unit * (weightA + weightB);
+        uint256 inMAfterFee = unit * (weightA + weightB);
         uint256 outA = unit * weightA;
-        uint256 outB = inPAfterFee - outA;
-        uint256 feeM = inM - inPAfterFee;
+        uint256 outB = inMAfterFee - outA;
+        uint256 feeM = inM - inMAfterFee;
 
         fund.burn(TRANCHE_M, msg.sender, inM);
         fund.mint(TRANCHE_A, msg.sender, outA);
@@ -189,7 +189,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         fund.mint(TRANCHE_M, address(this), feeM);
 
         currentFeeInShares = currentFeeInShares.add(feeM);
-        emit Split(msg.sender, inM, outA, outA);
+        emit Split(msg.sender, inM, outA, outB);
     }
 
     function merge(uint256 inA) external onlyActive {
@@ -200,9 +200,9 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         // Keep unmergable Token A unchanged.
         inA = unit * weightA;
         uint256 inB = unit.mul(weightB);
-        uint256 outPBeforeFee = inA.add(inB);
-        uint256 feeM = outPBeforeFee.multiplyDecimal(mergeFeeRate);
-        uint256 outM = outPBeforeFee.sub(feeM);
+        uint256 outMBeforeFee = inA.add(inB);
+        uint256 feeM = outMBeforeFee.multiplyDecimal(mergeFeeRate);
+        uint256 outM = outMBeforeFee.sub(feeM);
 
         fund.burn(TRANCHE_A, msg.sender, inA);
         fund.burn(TRANCHE_B, msg.sender, inB);
@@ -217,7 +217,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     ///
     ///         Creations and redemptions are settled according to the current shares and
     ///         underlying assets in the fund. Split and merge fee charged as Token M are also
-    ///         redeemed at the same rate (without no redemption fee).
+    ///         redeemed at the same rate (without redemption fee).
     ///
     ///         This function does not mint or burn shares, nor transfer underlying assets.
     ///         It returns the following changes that should be done by the fund:

@@ -26,7 +26,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     using SafeDecimalMath for uint256;
 
     uint256 private constant UNIT = 1e18;
-    uint256 private constant MAX_INTEREST_RATE = 0.5e18; // 50% APR
+    uint256 private constant MAX_INTEREST_RATE = 0.2e18; // 20% daily
     uint256 private constant MAX_DAILY_PROTOCOL_FEE_RATE = 0.05e18; // 5% daily rate
 
     uint256 private constant WEIGHT_A = 1;
@@ -125,7 +125,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Mapping of trading week => interest rate of Token A.
     ///
     ///         Key is the end timestamp of a trading week. Value is the interest rate captured
-    ///         after settlement of the first day of the trading week.
+    ///         after settlement of the last day of the previous trading week.
     mapping(uint256 => uint256) public historicalInterestRate;
 
     address[] private obsoletePrimaryMarkets;
@@ -214,7 +214,6 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         return _endOfWeek(timestamp);
     }
 
-    // ---------------------------------
     /// @notice Return the status of the fund contract.
     /// @param timestamp Timestamp to assess
     /// @return True if the fund contract is active
@@ -321,48 +320,6 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 navA = _extrapolateNavA(previousDay, previousShares, timestamp);
         uint256 navB = calculateNavB(navM, navA);
         return (navM, navA, navB);
-    }
-
-    /// @notice Estimate NAV of Token M at a given timestamp, considering underlying price
-    ///         change and accrued protocol fee since the previous settlement.
-    ///
-    ///         The extrapolation uses simple interest instead of daily compound interest in
-    ///         calculating protocol fee and Token A's interest. There may be significant error
-    ///         in the returned value when `timestamp` is far beyond the last settlement.
-    /// @param timestamp Timestamp to estimate
-    /// @param price Price of the underlying asset (18 decimal places)
-    /// @return Estimated NAV of Token M
-    function extrapolateNavM(uint256 timestamp, uint256 price)
-        external
-        view
-        override
-        returns (uint256)
-    {
-        // Find the last settled trading day before the given timestamp.
-        uint256 previousDay = currentDay - 1 days;
-        if (previousDay > timestamp) {
-            previousDay = endOfDay(timestamp) - 1 days;
-        }
-        uint256 previousShares = historicalTotalShares[previousDay];
-        return _extrapolateNavM(previousDay, previousShares, timestamp, price);
-    }
-
-    /// @notice Estimate NAV of Token A at a given timestamp, considering accrued interest
-    ///         since the previous settlement.
-    ///
-    ///         The extrapolation uses simple interest instead of daily compound interest in
-    ///         calculating protocol fee and Token A's interest. There may be significant error
-    ///         in the returned value when `timestamp` is far beyond the last settlement.
-    /// @param timestamp Timestamp to estimate
-    /// @return Estimated NAV of Token A
-    function extrapolateNavA(uint256 timestamp) external view override returns (uint256) {
-        // Find the last settled trading day before the given timestamp.
-        uint256 previousDay = currentDay - 1 days;
-        if (previousDay > timestamp) {
-            previousDay = endOfDay(timestamp) - 1 days;
-        }
-        uint256 previousShares = historicalTotalShares[previousDay];
-        return _extrapolateNavA(previousDay, previousShares, timestamp);
     }
 
     function _extrapolateNavM(
@@ -528,7 +485,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     }
 
     function shareBalanceOf(uint256 tranche, address account)
-        public
+        external
         view
         override
         returns (uint256)
@@ -591,7 +548,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 tranche,
         address owner,
         address spender
-    ) public view override returns (uint256) {
+    ) external view override returns (uint256) {
         uint256 allowanceM = _allowances[owner][spender][TRANCHE_M];
         uint256 allowanceA = _allowances[owner][spender][TRANCHE_A];
         uint256 allowanceB = _allowances[owner][spender][TRANCHE_B];
@@ -632,7 +589,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         return _allowanceVersions[owner][spender];
     }
 
-    function shareTotalSupply(uint256 tranche) public view override returns (uint256) {
+    function shareTotalSupply(uint256 tranche) external view override returns (uint256) {
         return _totalSupplies[tranche];
     }
 
@@ -640,7 +597,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 tranche,
         address account,
         uint256 amount
-    ) public override onlyPrimaryMarket {
+    ) external override onlyPrimaryMarket {
         _refreshBalance(account, _rebalanceSize);
         _mint(tranche, account, amount);
     }
@@ -649,7 +606,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 tranche,
         address account,
         uint256 amount
-    ) public override onlyPrimaryMarket {
+    ) external override onlyPrimaryMarket {
         _refreshBalance(account, _rebalanceSize);
         _burn(tranche, account, amount);
     }
@@ -672,7 +629,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address sender,
         address recipient,
         uint256 amount
-    ) public override onlyShare returns (uint256 newAllowance) {
+    ) external override onlyShare returns (uint256 newAllowance) {
         transfer(tranche, sender, recipient, amount);
 
         _refreshAllowance(sender, spender, _rebalanceSize);
@@ -688,7 +645,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address owner,
         address spender,
         uint256 amount
-    ) public override onlyShare {
+    ) external override onlyShare {
         _refreshAllowance(owner, spender, _rebalanceSize);
         _approve(tranche, owner, spender, amount);
     }
@@ -698,7 +655,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address sender,
         address spender,
         uint256 addedValue
-    ) public override onlyShare returns (uint256 newAllowance) {
+    ) external override onlyShare returns (uint256 newAllowance) {
         _refreshAllowance(sender, spender, _rebalanceSize);
         newAllowance = _allowances[sender][spender][tranche].add(addedValue);
         _approve(tranche, sender, spender, newAllowance);
@@ -709,7 +666,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address sender,
         address spender,
         uint256 subtractedValue
-    ) public override onlyShare returns (uint256 newAllowance) {
+    ) external override onlyShare returns (uint256 newAllowance) {
         _refreshAllowance(sender, spender, _rebalanceSize);
         newAllowance = _allowances[sender][spender][tranche].sub(subtractedValue);
         _approve(tranche, sender, spender, newAllowance);
@@ -941,18 +898,15 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             if (fee > 0) {
                 require(
                     IERC20(tokenUnderlying).transfer(address(feeCollector), fee),
-                    "Underlying transferFrom failed"
+                    "Underlying transfer failed"
                 );
             }
         }
     }
 
     /// @dev Check whether a new rebalance should be triggered. Rebalance is triggered if
-    ///      one of the following conditions is met:
-    ///
-    ///      1. NAV of Token M grows above a threshold.
-    ///      2. NAV of Token B drops below a threshold.
-    ///      3. NAV of Token A grows above a threshold.
+    ///      NAV of Token B over NAV of Token A is greater than the upper threshold or
+    ///      less than the lower threshold.
     /// @param navA NAV of Token A before the rebalance
     /// @param navBOrZero NAV of Token B before the rebalance or zero if the NAV is negative
     /// @return Whether a new rebalance should be triggered
@@ -1104,7 +1058,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         _allowanceVersions[owner][spender] = targetVersion;
 
         if (allowanceM == 0 && allowanceA == 0 && allowanceB == 0) {
-            // Fast path for an empty account
+            // Fast path for an empty allowance
             return;
         }
 

@@ -99,10 +99,6 @@ interface IFund {
             uint256
         );
 
-    function extrapolateNavM(uint256 timestamp, uint256 price) external view returns (uint256);
-
-    function extrapolateNavA(uint256 timestamp) external view returns (uint256);
-
     function calculateNavB(uint256 navM, uint256 navA) external pure returns (uint256);
 
     function doRebalance(

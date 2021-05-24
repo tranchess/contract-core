@@ -34,14 +34,14 @@ contract Share is IERC20 {
     /**
      * @dev See {IERC20-totalSupply}.
      */
-    function totalSupply() public view override returns (uint256) {
+    function totalSupply() external view override returns (uint256) {
         return fund.shareTotalSupply(_tranche);
     }
 
     /**
      * @dev See {IERC20-balanceOf}.
      */
-    function balanceOf(address account) public view virtual override returns (uint256) {
+    function balanceOf(address account) external view override returns (uint256) {
         return fund.shareBalanceOf(_tranche, account);
     }
 
@@ -53,7 +53,7 @@ contract Share is IERC20 {
      * - `recipient` cannot be the zero address.
      * - the caller must have a balance of at least `amount`.
      */
-    function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
+    function transfer(address recipient, uint256 amount) external override returns (bool) {
         fund.transfer(_tranche, msg.sender, recipient, amount);
         emit Transfer(msg.sender, recipient, amount);
         return true;
@@ -62,13 +62,7 @@ contract Share is IERC20 {
     /**
      * @dev See {IERC20-allowance}.
      */
-    function allowance(address owner, address spender)
-        public
-        view
-        virtual
-        override
-        returns (uint256)
-    {
+    function allowance(address owner, address spender) external view override returns (uint256) {
         return fund.shareAllowance(_tranche, owner, spender);
     }
 
@@ -79,7 +73,7 @@ contract Share is IERC20 {
      *
      * - `spender` cannot be the zero address.
      */
-    function approve(address spender, uint256 amount) public virtual override returns (bool) {
+    function approve(address spender, uint256 amount) external override returns (bool) {
         fund.approve(_tranche, msg.sender, spender, amount);
         emit Approval(msg.sender, spender, amount);
         return true;
@@ -102,7 +96,7 @@ contract Share is IERC20 {
         address sender,
         address recipient,
         uint256 amount
-    ) public virtual override returns (bool) {
+    ) external override returns (bool) {
         uint256 newAllowance = fund.transferFrom(_tranche, msg.sender, sender, recipient, amount);
         emit Transfer(sender, recipient, amount);
         emit Approval(sender, msg.sender, newAllowance);
@@ -121,7 +115,7 @@ contract Share is IERC20 {
      *
      * - `spender` cannot be the zero address.
      */
-    function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
+    function increaseAllowance(address spender, uint256 addedValue) external returns (bool) {
         uint256 newAllowance = fund.increaseAllowance(_tranche, msg.sender, spender, addedValue);
         emit Approval(msg.sender, spender, newAllowance);
         return true;
@@ -141,11 +135,7 @@ contract Share is IERC20 {
      * - `spender` must have allowance for the caller of at least
      * `subtractedValue`.
      */
-    function decreaseAllowance(address spender, uint256 subtractedValue)
-        public
-        virtual
-        returns (bool)
-    {
+    function decreaseAllowance(address spender, uint256 subtractedValue) external returns (bool) {
         uint256 newAllowance =
             fund.decreaseAllowance(_tranche, msg.sender, spender, subtractedValue);
         emit Approval(msg.sender, spender, newAllowance);

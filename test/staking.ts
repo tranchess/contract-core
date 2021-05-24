@@ -760,9 +760,6 @@ describe("Staking", function () {
         beforeEach(async function () {
             rewardStartTimestamp =
                 Math.floor(checkpointTimestamp / WEEK) * WEEK + WEEK * 10 + SETTLEMENT_TIME;
-            await fund.mock.getRebalanceTimestamp
-                .withArgs(0)
-                .returns(rewardStartTimestamp + 100 * WEEK);
             await chessSchedule.mock.getRate
                 .withArgs(rewardStartTimestamp)
                 .returns(parseEther("1"));
