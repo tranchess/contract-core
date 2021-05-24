@@ -74,7 +74,15 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     uint256 private _invTotalWeightIntegral;
 
     /// @dev Final `_invTotalWeightIntegral` before each rebalance.
-    uint256[] private _historicalIntegrals;
+    ///      These values are accessed in a loop in `_userCheckpoint()` with bounds checking.
+    ///      So we store them in a fixed-length array, in order to make compiler-generated
+    ///      bounds checking on every access cheaper. The actual length of this array is stored in
+    ///      `_historicalIntegralSize` and should be explicitly checked when necessary.
+    uint256[65535] private _historicalIntegrals;
+
+    /// @dev Actual length of the `_historicalIntegrals` array, which always equals to the number of
+    ///      historical rebalances after `checkpoint()` is called.
+    uint256 private _historicalIntegralSize;
 
     /// @dev Timestamp when checkpoint() is called.
     uint256 private _checkpointTimestamp;
@@ -482,7 +490,9 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             }
 
             if (endTimestamp == rebalanceTimestamp) {
-                _historicalIntegrals.push(integral);
+                uint256 oldSize = _historicalIntegralSize;
+                _historicalIntegrals[oldSize] = integral;
+                _historicalIntegralSize = oldSize + 1;
 
                 integral = 0;
                 (totalSupplyM, totalSupplyA, totalSupplyB) = fund.doRebalance(
@@ -541,15 +551,20 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             return;
         }
         uint256 userIntegral = _userIntegrals[account];
-        uint256 integral = _invTotalWeightIntegral;
+        uint256 integral;
+        // This scope is to avoid the "stack too deep" error.
+        {
+            // We assume that this function is always called immediately after `_checkpoint()`,
+            // which guarantees that `_historicalIntegralSize` equals to the number of historical
+            // rebalances.
+            uint256 rebalanceSize = _historicalIntegralSize;
+            integral = targetVersion == rebalanceSize
+                ? _invTotalWeightIntegral
+                : _historicalIntegrals[targetVersion];
+        }
         if (userIntegral == integral && oldVersion == targetVersion) {
             // Return immediately when the user's rewards have already been updated to
-            // the lastest checkpoint.
-            //
-            // Note that when `targetVersion` is not the latest version, it is possible,
-            // although extremely rare, that `userIntegral` and the global `integral` are
-            // in different versions but happen to equal, in which case this function returns here
-            // without cumulating rewards to the end of that version.
+            // the target version.
             return;
         }
 
