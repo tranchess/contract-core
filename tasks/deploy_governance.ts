@@ -35,7 +35,7 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     // Predict address of ChessSchedule proxy and approve CHESS to it.
     const chessScheduleAddr = ethers.utils.getContractAddress({
         from: deployer.address,
-        nonce: (await deployer.getTransactionCount()) + 1,
+        nonce: (await deployer.getTransactionCount("pending")) + 1,
     });
     await chess.approve(chessScheduleAddr, parseEther(GOVERNANCE_CONFIG.CHESS_SCHEDULE_MAX_SUPPLY));
 
