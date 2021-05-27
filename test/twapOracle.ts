@@ -13,7 +13,7 @@ const BATCH_SIZE = 30;
 const EPOCH = BATCH_SIZE * 60;
 const SECONDARY_SOURCE_DELAY = EPOCH * 2;
 const OWNER_DELAY = EPOCH * 4;
-const MAX_MESSAGE_DISTANCE = 3;
+const MIN_MESSAGE_COUNT = 15;
 const PUBLISHING_DELAY = 15 * 60;
 
 // These are helper constants used in test cases.
@@ -138,6 +138,24 @@ describe("TwapOracle", function () {
                 "Unaligned timestamp"
             );
         });
+
+        it("Should accept min message count", async function () {
+            const prices = PRICES.slice();
+            for (let i = MIN_MESSAGE_COUNT; i < BATCH_SIZE; i++) {
+                prices[i] = BigNumber.from(0);
+            }
+            await callPrimary(startTimestamp + EPOCH, prices);
+        });
+
+        it("Should reject messages that are fewer than min count", async function () {
+            const prices = PRICES.slice();
+            for (let i = MIN_MESSAGE_COUNT - 1; i < BATCH_SIZE; i++) {
+                prices[i] = BigNumber.from(0);
+            }
+            await expect(callPrimary(startTimestamp + EPOCH, prices)).to.be.revertedWith(
+                "More messages are required to update this epoch"
+            );
+        });
     });
 
     describe("updateTwapFromSecondary()", async function () {
@@ -172,6 +190,28 @@ describe("TwapOracle", function () {
             const t = BigNumber.from("2").pow(256).sub(1).div(EPOCH).mul(EPOCH);
             await expect(callSecondary(t, PRICES)).to.be.revertedWith(
                 "Not ready for the secondary source"
+            );
+        });
+
+        it("Should accept min message count", async function () {
+            const t = startTimestamp + EPOCH;
+            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
+            const prices = PRICES.slice();
+            for (let i = MIN_MESSAGE_COUNT; i < BATCH_SIZE; i++) {
+                prices[i] = BigNumber.from(0);
+            }
+            await callSecondary(t, prices);
+        });
+
+        it("Should reject messages that are fewer than min count", async function () {
+            const t = startTimestamp + EPOCH;
+            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
+            const prices = PRICES.slice();
+            for (let i = MIN_MESSAGE_COUNT - 1; i < BATCH_SIZE; i++) {
+                prices[i] = BigNumber.from(0);
+            }
+            await expect(callSecondary(t, prices)).to.be.revertedWith(
+                "More messages are required to update this epoch"
             );
         });
     });
@@ -308,7 +348,7 @@ describe("TwapOracle", function () {
             let avgWithHoles: BigNumber;
 
             before(function () {
-                if (BATCH_SIZE < 10 || MAX_MESSAGE_DISTANCE < 3) this.skip();
+                if (BATCH_SIZE < 10) this.skip();
                 const ps = [];
                 let sum = BigNumber.from(0);
                 for (let i = 0; i < BATCH_SIZE; i++) {
@@ -351,7 +391,7 @@ describe("TwapOracle", function () {
         let incompletePrices: BigNumber[];
 
         beforeEach(function () {
-            if (BATCH_SIZE < 10 || MAX_MESSAGE_DISTANCE < 3) this.skip();
+            if (BATCH_SIZE < 10) this.skip();
             incompletePrices = PRICES.slice();
             incompletePrices[0] = BigNumber.from(0);
             incompletePrices[2] = BigNumber.from(0);
@@ -360,13 +400,13 @@ describe("TwapOracle", function () {
             incompletePrices[BATCH_SIZE - 2] = BigNumber.from(0);
         });
 
-        it("Should return one for uninitialized epochs", async function () {
+        it("Should return min count for uninitialized epochs", async function () {
             const t1 = startTimestamp - EPOCH * 10;
-            expect(await contract.minPrimaryMessageCountToUpdate(t1)).to.equal(1);
+            expect(await contract.minPrimaryMessageCountToUpdate(t1)).to.equal(MIN_MESSAGE_COUNT);
             const t2 = startTimestamp;
-            expect(await contract.minPrimaryMessageCountToUpdate(t2)).to.equal(1);
+            expect(await contract.minPrimaryMessageCountToUpdate(t2)).to.equal(MIN_MESSAGE_COUNT);
             const t3 = startTimestamp + EPOCH * 10;
-            expect(await contract.minPrimaryMessageCountToUpdate(t3)).to.equal(1);
+            expect(await contract.minPrimaryMessageCountToUpdate(t3)).to.equal(MIN_MESSAGE_COUNT);
         });
 
         it("Should return acceptable message count before publishing delay", async function () {
@@ -391,7 +431,7 @@ describe("TwapOracle", function () {
         let incompletePrices: BigNumber[];
 
         beforeEach(function () {
-            if (BATCH_SIZE < 10 || MAX_MESSAGE_DISTANCE < 3) this.skip();
+            if (BATCH_SIZE < 10) this.skip();
             incompletePrices = PRICES.slice();
             incompletePrices[0] = BigNumber.from(0);
             incompletePrices[2] = BigNumber.from(0);
@@ -409,7 +449,7 @@ describe("TwapOracle", function () {
         it("Should return one for uninitialized epochs", async function () {
             const t = startTimestamp + EPOCH;
             advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
-            expect(await contract.minSecondaryMessageCountToUpdate(t)).to.equal(1);
+            expect(await contract.minSecondaryMessageCountToUpdate(t)).to.equal(MIN_MESSAGE_COUNT);
         });
 
         it("Should return acceptable message count before publishing delay", async function () {
@@ -443,7 +483,7 @@ describe("TwapOracle", function () {
         let incompleteMorePrices: BigNumber[];
 
         beforeEach(function () {
-            if (BATCH_SIZE < 10 || MAX_MESSAGE_DISTANCE < 3) this.skip();
+            if (BATCH_SIZE < 10) this.skip();
             existingEpoch = startTimestamp + EPOCH * 10;
             incompletePrices = PRICES.slice();
             incompletePrices[0] = BigNumber.from(0);
@@ -473,11 +513,11 @@ describe("TwapOracle", function () {
             it("Should reject less or equal number of messages", async function () {
                 const prices = incompletePrices.slice();
                 await expect(callPrimary(existingEpoch, prices)).to.be.revertedWith(
-                    "More messages are required to update an existing epoch"
+                    "More messages are required to update this epoch"
                 );
                 prices[5] = BigNumber.from(0);
                 await expect(callPrimary(existingEpoch, prices)).to.be.revertedWith(
-                    "More messages are required to update an existing epoch"
+                    "More messages are required to update this epoch"
                 );
             });
 
@@ -522,11 +562,11 @@ describe("TwapOracle", function () {
             it("Should reject less or equal number of messages", async function () {
                 const prices = incompletePrices.slice();
                 await expect(callSecondary(existingEpoch, prices)).to.be.revertedWith(
-                    "More messages are required to update an existing epoch"
+                    "More messages are required to update this epoch"
                 );
                 prices[5] = BigNumber.from(0);
                 await expect(callSecondary(existingEpoch, prices)).to.be.revertedWith(
-                    "More messages are required to update an existing epoch"
+                    "More messages are required to update this epoch"
                 );
             });
 
@@ -550,52 +590,6 @@ describe("TwapOracle", function () {
                 advanceBlockAtTime(existingEpoch + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY);
                 expect(await contract.getTwap(existingEpoch)).to.equal(PRICES_AVG);
             });
-        });
-    });
-
-    describe("Too many continuous missing messages", function () {
-        let missingAtTheBeginning: BigNumber[];
-        let missingInTheMiddle: BigNumber[];
-        let missingAtTheEnd: BigNumber[];
-
-        before(function () {
-            if (MAX_MESSAGE_DISTANCE <= 0) this.skip();
-            missingAtTheBeginning = PRICES.slice();
-            missingInTheMiddle = PRICES.slice();
-            missingAtTheEnd = PRICES.slice();
-            for (let i = 0; i < MAX_MESSAGE_DISTANCE; i++) {
-                missingAtTheBeginning[i] = BigNumber.from(0);
-                missingInTheMiddle[i + 1] = BigNumber.from(0);
-                missingAtTheEnd[BATCH_SIZE - i - 1] = BigNumber.from(0);
-            }
-        });
-
-        it("Primary", async function () {
-            const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + EPOCH * 10);
-            await expect(callPrimary(t, missingAtTheBeginning)).to.be.revertedWith(
-                "Too many continuous missing messages"
-            );
-            await expect(callPrimary(t, missingInTheMiddle)).to.be.revertedWith(
-                "Too many continuous missing messages"
-            );
-            await expect(callPrimary(t, missingAtTheEnd)).to.be.revertedWith(
-                "Too many continuous missing messages"
-            );
-        });
-
-        it("Secondary", async function () {
-            const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + EPOCH * 10);
-            await expect(callSecondary(t, missingAtTheBeginning)).to.be.revertedWith(
-                "Too many continuous missing messages"
-            );
-            await expect(callSecondary(t, missingInTheMiddle)).to.be.revertedWith(
-                "Too many continuous missing messages"
-            );
-            await expect(callSecondary(t, missingAtTheEnd)).to.be.revertedWith(
-                "Too many continuous missing messages"
-            );
         });
     });
 

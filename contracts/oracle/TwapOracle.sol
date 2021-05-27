@@ -15,7 +15,8 @@ contract TwapOracle is ITwapOracle, Ownable {
     uint256 private constant MESSAGE_BATCH_SIZE = 30; // not exceeding 32 for v's to fit in a word
     uint256 private constant EPOCH = MESSAGE_INTERVAL * MESSAGE_BATCH_SIZE;
 
-    uint256 private constant MAX_MESSAGE_DISTANCE = 3;
+    /// @dev Minimal number of messages in an epoch.
+    uint256 private constant MIN_MESSAGE_COUNT = 15;
     uint256 private constant PUBLISHING_DELAY = 15 minutes;
 
     uint256 private constant SECONDARY_SOURCE_DELAY = EPOCH * 2;
@@ -89,7 +90,7 @@ contract TwapOracle is ITwapOracle, Ownable {
                 return MESSAGE_BATCH_SIZE + 1;
             }
         } else {
-            return 1;
+            return MIN_MESSAGE_COUNT;
         }
     }
 
@@ -111,7 +112,7 @@ contract TwapOracle is ITwapOracle, Ownable {
                 return MESSAGE_BATCH_SIZE + 1;
             }
         } else {
-            return 1;
+            return MIN_MESSAGE_COUNT;
         }
     }
 
@@ -134,7 +135,7 @@ contract TwapOracle is ITwapOracle, Ownable {
         // 1. the primary source is trusted;
         // 2. to save gas in most of the time.
 
-        uint256 lastMessageCount = 0;
+        uint256 lastMessageCount = MIN_MESSAGE_COUNT - 1;
         if (_prices[timestamp] != 0) {
             require(
                 timestamp > block.timestamp - PUBLISHING_DELAY,
@@ -182,7 +183,7 @@ contract TwapOracle is ITwapOracle, Ownable {
             timestamp > _startTimestamp,
             "The secondary source cannot update epoch before this contract is deployed"
         );
-        uint256 lastMessageCount = 0;
+        uint256 lastMessageCount = MIN_MESSAGE_COUNT - 1;
         if (_prices[timestamp] != 0) {
             require(
                 timestamp == _lastSecondaryTimestamp &&
@@ -243,7 +244,6 @@ contract TwapOracle is ITwapOracle, Ownable {
             uint256 p = priceList[i] & PRICE_MASK;
             if (p == 0) {
                 weight += 1;
-                require(weight <= MAX_MESSAGE_DISTANCE, "Too many continuous missing messages");
                 packedV >>= 8;
                 continue;
             }
@@ -272,10 +272,7 @@ contract TwapOracle is ITwapOracle, Ownable {
             messageCount += 1;
             packedV >>= 8;
         }
-        require(
-            messageCount > lastMessageCount,
-            "More messages are required to update an existing epoch"
-        );
+        require(messageCount > lastMessageCount, "More messages are required to update this epoch");
         if (weight > 1) {
             sum += (priceList[MESSAGE_BATCH_SIZE - weight] & PRICE_MASK) * (weight - 1);
         }
