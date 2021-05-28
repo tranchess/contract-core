@@ -7,7 +7,7 @@ pragma solidity ^0.6.0;
  * @notice Derived from OpenZeppelin's SafeMath library
  *         https://github.com/OpenZeppelin/openzeppelin-solidity/blob/master/contracts/math/SafeMath.sol
  */
-contract CarefulMath {
+abstract contract CarefulMath {
     /**
      * @dev Possible error codes that we can return
      */

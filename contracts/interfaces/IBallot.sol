@@ -1,35 +1,23 @@
 // SPDX-License-Identifier: MIT
-pragma experimental ABIEncoderV2;
-pragma solidity ^0.6.0;
+pragma solidity >=0.6.10 <0.8.0;
 
 interface IBallot {
-    struct VotingRound {
-        uint256 startTimestamp;
-        uint256 endTimestamp;
-        uint256 minRange;
-        uint256 stepSize;
-        uint256 totalVotes;
-        uint256 totalValue;
-        uint256 optionNumber;
+    struct Voter {
+        uint256 amount;
+        uint256 unlockTime;
+        uint256 weight;
     }
 
-    // Ballot receipt record for a voter
-    struct Receipt {
-        uint256 lastVotedTime;
-        uint256 support;
-        uint256 votes;
-    }
-
-    function initialize(uint256 timestamp) external;
-
-    function countAndUpdate(uint256 currentTimestamp) external returns (uint256 winner);
+    function count(uint256 timestamp) external view returns (uint256);
 
     // An event emitted when a new proposal is created
-    event RoundCreated(
-        address proposer,
-        uint256 startBlock,
-        uint256 endTimestamp,
-        string description
+    event Voted(
+        address indexed account,
+        uint256 oldAmount,
+        uint256 oldUnlockTime,
+        uint256 oldWeight,
+        uint256 amount,
+        uint256 indexed unlockTime,
+        uint256 indexed weight
     );
-    event VoteCast(address voter, uint256 support, uint256 votes);
 }

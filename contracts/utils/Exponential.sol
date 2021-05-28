@@ -12,7 +12,7 @@ import "./ExponentialNoError.sol";
  *         Thus, if we wanted to store the 5.1, mantissa would store 5.1e18. That is:
  *         `Exp({mantissa: 5100000000000000000})`.
  */
-contract Exponential is CarefulMath, ExponentialNoError {
+abstract contract Exponential is CarefulMath, ExponentialNoError {
     /**
      * @dev Creates an exponential from numerator and denominator values.
      *      Note: Returns an error if (`num` * 10e18) > MAX_INT,
