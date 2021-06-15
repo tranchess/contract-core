@@ -97,7 +97,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     }
 
     function createLock(uint256 amount, uint256 unlockTime) external nonReentrant {
-        _assertNotContract(msg.sender);
+        _assertNotContract();
 
         unlockTime = (unlockTime / 1 weeks) * 1 weeks; // Locktime is rounded down to weeks
         LockedBalance memory lockedBalance = locked[msg.sender];
@@ -171,10 +171,11 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         addressWhitelist = newWhitelist;
     }
 
-    function _assertNotContract(address account) private view {
-        if (Address.isContract(account)) {
+    function _assertNotContract() private view {
+        if (msg.sender != tx.origin) {
             if (
-                addressWhitelist != address(0) && IAddressWhitelist(addressWhitelist).check(account)
+                addressWhitelist != address(0) &&
+                IAddressWhitelist(addressWhitelist).check(msg.sender)
             ) {
                 return;
             }
