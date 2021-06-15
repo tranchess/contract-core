@@ -4,12 +4,14 @@ pragma solidity >=0.6.10 <0.8.0;
 /// @notice Vests `Chess` tokens for a single address
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract VestingEscrow is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
+    using SafeERC20 for IERC20;
 
     event Fund(uint256 amount);
     event Claim(uint256 amount);
@@ -44,7 +46,7 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
         require(amount != 0 && amount >= vestedAtStart_, "Invalid amount or vestedAtStart");
         require(initialLocked == 0, "Already initialized");
 
-        IERC20(token).transferFrom(msg.sender, address(this), amount);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         initialLocked = amount;
         vestedAtStart = vestedAtStart_;
@@ -102,7 +104,7 @@ contract VestingEscrow is Ownable, ReentrancyGuard {
         }
         uint256 claimable = _totalVestedOf(timestamp).sub(totalClaimed);
         totalClaimed = totalClaimed.add(claimable);
-        IERC20(token).transfer(recipient, claimable);
+        IERC20(token).safeTransfer(recipient, claimable);
 
         emit Claim(claimable);
     }

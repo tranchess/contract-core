@@ -4,6 +4,7 @@ pragma solidity >=0.6.10 <0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
@@ -27,6 +28,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
+    using SafeERC20 for IERC20;
 
     event Deposited(uint256 tranche, address account, uint256 amount);
     event Withdrawn(uint256 tranche, address account, uint256 amount);
@@ -238,11 +240,11 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         _checkpoint(rebalanceSize);
         _userCheckpoint(msg.sender, rebalanceSize);
         if (tranche == TRANCHE_M) {
-            tokenM.transferFrom(msg.sender, address(this), amount);
+            tokenM.safeTransferFrom(msg.sender, address(this), amount);
         } else if (tranche == TRANCHE_A) {
-            tokenA.transferFrom(msg.sender, address(this), amount);
+            tokenA.safeTransferFrom(msg.sender, address(this), amount);
         } else {
-            tokenB.transferFrom(msg.sender, address(this), amount);
+            tokenB.safeTransferFrom(msg.sender, address(this), amount);
         }
         _availableBalances[msg.sender][tranche] = _availableBalances[msg.sender][tranche].add(
             amount
@@ -272,11 +274,11 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         );
         _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
         if (tranche == TRANCHE_M) {
-            tokenM.transfer(msg.sender, amount);
+            tokenM.safeTransfer(msg.sender, amount);
         } else if (tranche == TRANCHE_A) {
-            tokenA.transfer(msg.sender, amount);
+            tokenA.safeTransfer(msg.sender, amount);
         } else {
-            tokenB.transfer(msg.sender, amount);
+            tokenB.safeTransfer(msg.sender, amount);
         }
 
         emit Withdrawn(tranche, msg.sender, amount);

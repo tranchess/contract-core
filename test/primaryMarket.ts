@@ -560,6 +560,13 @@ describe("PrimaryMarket", function () {
                 0,
                 0
             );
+            await f.fund.call(
+                f.btc,
+                "transferFrom",
+                f.primaryMarket.address,
+                f.fund.address,
+                parseBtc("1").mul(REDEMPTION_FEE_BPS).div(10000)
+            );
             const createdShares = parseEther("1000");
             const redeemedBtc = parseBtc("1")
                 .mul(10000 - REDEMPTION_FEE_BPS)

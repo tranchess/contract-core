@@ -3,6 +3,7 @@ pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -24,6 +25,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
+    using SafeERC20 for IERC20;
 
     uint256 private constant UNIT = 1e18;
     uint256 private constant MAX_INTEREST_RATE = 0.2e18; // 20% daily
@@ -849,10 +851,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         uint256 currentUnderlying = IERC20(tokenUnderlying).balanceOf(address(this));
         uint256 fee = currentUnderlying.multiplyDecimal(dailyProtocolFeeRate);
         if (fee > 0) {
-            require(
-                IERC20(tokenUnderlying).transfer(address(feeCollector), fee),
-                "Underlying transfer failed"
-            );
+            IERC20(tokenUnderlying).safeTransfer(address(feeCollector), fee);
         }
     }
 
@@ -878,28 +877,19 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
                 _burn(TRANCHE_M, address(pm), sharesToBurn - sharesToMint);
             }
             if (creationUnderlying > redemptionUnderlying) {
-                require(
-                    IERC20(tokenUnderlying).transferFrom(
-                        address(pm),
-                        address(this),
-                        creationUnderlying - redemptionUnderlying
-                    ),
-                    "Underlying transferFrom failed"
+                IERC20(tokenUnderlying).safeTransferFrom(
+                    address(pm),
+                    address(this),
+                    creationUnderlying - redemptionUnderlying
                 );
             } else if (redemptionUnderlying > creationUnderlying) {
-                require(
-                    IERC20(tokenUnderlying).transfer(
-                        address(pm),
-                        redemptionUnderlying - creationUnderlying
-                    ),
-                    "Underlying transfer failed"
+                IERC20(tokenUnderlying).safeTransfer(
+                    address(pm),
+                    redemptionUnderlying - creationUnderlying
                 );
             }
             if (fee > 0) {
-                require(
-                    IERC20(tokenUnderlying).transfer(address(feeCollector), fee),
-                    "Underlying transfer failed"
-                );
+                IERC20(tokenUnderlying).safeTransfer(address(feeCollector), fee);
             }
         }
     }

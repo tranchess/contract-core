@@ -5,6 +5,7 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -31,6 +32,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
 
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
+    using SafeERC20 for IERC20;
 
     /// @dev Creation and redemption of a single account.
     /// @param day Day of the last creation or redemption request.
@@ -104,10 +106,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
 
     function create(uint256 underlying) external nonReentrant onlyActive {
         require(underlying >= minCreationUnderlying, "Min amount");
-        require(
-            IERC20(fund.tokenUnderlying()).transferFrom(msg.sender, address(this), underlying),
-            "Underlying transferFrom failed"
-        );
+        IERC20(fund.tokenUnderlying()).safeTransferFrom(msg.sender, address(this), underlying);
 
         CreationRedemption memory cr = _currentCreationRedemption(msg.sender);
         cr.creatingUnderlying = cr.creatingUnderlying.add(underlying);
@@ -157,14 +156,11 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         redeemedUnderlying = cr.redeemedUnderlying;
 
         if (createdShares > 0) {
-            IERC20(fund.tokenM()).transfer(account, createdShares);
+            IERC20(fund.tokenM()).safeTransfer(account, createdShares);
             cr.createdShares = 0;
         }
         if (redeemedUnderlying > 0) {
-            require(
-                IERC20(fund.tokenUnderlying()).transfer(account, redeemedUnderlying),
-                "Underlying transfer failed"
-            );
+            IERC20(fund.tokenUnderlying()).safeTransfer(account, redeemedUnderlying);
             cr.redeemedUnderlying = 0;
         }
         _updateCreationRedemption(account, cr);
@@ -307,12 +303,9 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         // Instead of directly transfering underlying to the fund, this implementation
         // makes testing much easier.
         if (creationUnderlying > redemptionUnderlying) {
-            require(
-                IERC20(fund.tokenUnderlying()).approve(
-                    address(fund),
-                    creationUnderlying - redemptionUnderlying
-                ),
-                "Underlying approve failed"
+            IERC20(fund.tokenUnderlying()).safeApprove(
+                address(fund),
+                creationUnderlying - redemptionUnderlying
             );
         }
 
