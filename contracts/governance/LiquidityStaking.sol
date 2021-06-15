@@ -4,10 +4,11 @@ pragma solidity >=0.6.10 <0.8.0;
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import "../utils/SafeDecimalMath.sol";
 
-contract LiquidityStaking {
+contract LiquidityStaking is ReentrancyGuard {
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
@@ -57,7 +58,7 @@ contract LiquidityStaking {
         _rewardCheckpoint(account);
     }
 
-    function deposit(uint256 amount) external {
+    function deposit(uint256 amount) external nonReentrant {
         userCheckpoint(msg.sender);
 
         require(
@@ -68,17 +69,17 @@ contract LiquidityStaking {
         stakes[msg.sender] = stakes[msg.sender].add(amount);
     }
 
-    function withdraw(uint256 amount) external {
+    function withdraw(uint256 amount) external nonReentrant {
         userCheckpoint(msg.sender);
         _withdraw(msg.sender, amount);
     }
 
-    function claimRewards() public returns (uint256 rewards) {
+    function claimRewards() external nonReentrant returns (uint256 rewards) {
         userCheckpoint(msg.sender);
         rewards = _claimRewards(msg.sender);
     }
 
-    function exit() external returns (uint256 rewards) {
+    function exit() external nonReentrant returns (uint256 rewards) {
         userCheckpoint(msg.sender);
         _withdraw(msg.sender, stakes[msg.sender]);
         rewards = _claimRewards(msg.sender);
