@@ -15,9 +15,9 @@ import {
     advanceBlockAtTime,
 } from "./utils";
 
-const REDEMPTION_FEE_BPS = 3500;
-const SPLIT_FEE_BPS = 4000;
-const MERGE_FEE_BPS = 4500;
+const REDEMPTION_FEE_BPS = 35;
+const SPLIT_FEE_BPS = 40;
+const MERGE_FEE_BPS = 45;
 const MIN_CREATION_AMOUNT = 5;
 
 const START_DAY = 1609556400; // 2021-01-02 03:00:00
@@ -436,17 +436,17 @@ describe("PrimaryMarket", function () {
         });
 
         it("Should round down redemption shares and fee", async function () {
-            // Fund had 25 underlying units and 9 share units
-            // Redeem 7 share units
+            // Fund had 2500 underlying units and 900 share units
+            // Redeem 600 share units
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.redeem(6);
-            // Redeemed before fee: 6 * 25 / 9 = 16
-            // Fee: 16 * 0.35 = 5
-            // Redeemed after fee: 16 - 5 = 11
-            await expect(settleWithShare(START_DAY, 9, 25))
+            await primaryMarket.redeem(600);
+            // Redeemed before fee: 600 * 2500 / 900 = 1666
+            // Fee: 1666 * 0.0035 = 5
+            // Redeemed after fee: 1666 - 5 = 1661
+            await expect(settleWithShare(START_DAY, 900, 2500))
                 .to.emit(primaryMarket, "Settled")
-                .withArgs(START_DAY, 0, 6, 0, 11, 5);
+                .withArgs(START_DAY, 0, 600, 0, 1661, 5);
         });
 
         it("Should net underlying (creation > redemption)", async function () {

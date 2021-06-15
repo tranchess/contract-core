@@ -82,6 +82,9 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         uint256 mergeFeeRate_,
         uint256 minCreationUnderlying_
     ) public Ownable() {
+        require(redemptionFeeRate_ <= MAX_REDEMPTION_FEE_RATE, "Exceed max redemption fee rate");
+        require(splitFeeRate_ <= MAX_SPLIT_FEE_RATE, "Exceed max split fee rate");
+        require(mergeFeeRate_ <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
         fund = IFund(fund_);
         guardedLaunchStart = guardedLaunchStart_;
         redemptionFeeRate = redemptionFeeRate_;
@@ -353,7 +356,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     }
 
     function updateMergeFeeRate(uint256 newMergeFeeRate) external onlyOwner {
-        require(newMergeFeeRate <= MAX_MERGE_FEE_RATE, "Exceed max split fee rate");
+        require(newMergeFeeRate <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
         mergeFeeRate = newMergeFeeRate;
     }
 
