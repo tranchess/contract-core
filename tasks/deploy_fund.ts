@@ -1,10 +1,12 @@
 import { task } from "hardhat/config";
 import { createAddressFile, selectAddressFile } from "./address_file";
 import { GOVERNANCE_CONFIG, FUND_CONFIG } from "../config";
+import { updateHreSigner } from "./signers";
 
 task("deploy_fund", "Deploy fund contracts")
     .addOptionalParam("governance", "Path to the governance address file", "")
     .setAction(async function (args, hre) {
+        await updateHreSigner(hre);
         const { ethers } = hre;
         const { parseEther, parseUnits } = ethers.utils;
 

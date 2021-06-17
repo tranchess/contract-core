@@ -1,8 +1,10 @@
 import { task } from "hardhat/config";
 import { createAddressFile } from "./address_file";
 import { TWAP_ORACLE_CONFIG, APR_ORACLE_CONFIG } from "../config";
+import { updateHreSigner } from "./signers";
 
 task("deploy_oracle", "Deploy oracle contracts", async (_args, hre) => {
+    await updateHreSigner(hre);
     const { ethers } = hre;
 
     await hre.run("compile");
