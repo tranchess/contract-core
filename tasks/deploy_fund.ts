@@ -42,8 +42,8 @@ task("deploy_fund", "Deploy fund contracts")
 
         const Share = await ethers.getContractFactory("Share");
         const shareM = await Share.deploy(
-            `Tranchess ${underlyingSymbol} Class M`,
-            `t${underlyingSymbol}.M`,
+            `Tranchess ${underlyingSymbol} QUEEN`,
+            `t${underlyingSymbol}.QUEEN`,
             fund.address,
             0
         );
@@ -51,8 +51,8 @@ task("deploy_fund", "Deploy fund contracts")
         addressFile.set("shareM", shareM.address);
 
         const shareA = await Share.deploy(
-            `Tranchess ${underlyingSymbol} Class A`,
-            `t${underlyingSymbol}.A`,
+            `Tranchess ${underlyingSymbol} BISHOP`,
+            `t${underlyingSymbol}.BISHOP`,
             fund.address,
             1
         );
@@ -60,8 +60,8 @@ task("deploy_fund", "Deploy fund contracts")
         addressFile.set("shareA", shareA.address);
 
         const shareB = await Share.deploy(
-            `Tranchess ${underlyingSymbol} Class B`,
-            `t${underlyingSymbol}.B`,
+            `Tranchess ${underlyingSymbol} ROOK`,
+            `t${underlyingSymbol}.ROOK`,
             fund.address,
             2
         );
