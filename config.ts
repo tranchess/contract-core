@@ -10,9 +10,10 @@ export function endOfWeek(timestamp: number): number {
 const COINBASE_ADDRESS = "0xfCEAdAFab14d46e20144F48824d0C09B1a03F2BC";
 const OKEX_ADDRESS = "0x85615B076615317C80F14cBad6501eec031cD51C";
 
-export const DEPLOYER_PK = process.env.DEPLOYER_PK;
 export const ETH_RPC = process.env.ETH_RPC;
 export const ETH_CHAIN_ID = parseInt(process.env.ETH_CHAIN_ID ?? "");
+export const DEPLOYER_PK = process.env.DEPLOYER_PK;
+export const DEPLOYER_HD_PATH = process.env.DEPLOYER_HD_PATH;
 
 export const TWAP_ORACLE_CONFIG = {
     SYMBOL: "BTC",

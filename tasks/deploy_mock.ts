@@ -1,7 +1,9 @@
 import { task } from "hardhat/config";
 import { createAddressFile } from "./address_file";
+import { updateHreSigner } from "./signers";
 
 task("deploy_mock", "Deploy mock contracts", async (_args, hre) => {
+    await updateHreSigner(hre);
     const { ethers, waffle } = hre;
     const { parseEther } = ethers.utils;
     const { deployMockContract } = waffle;

@@ -1,8 +1,10 @@
 import { task } from "hardhat/config";
 import { createAddressFile } from "./address_file";
 import { GOVERNANCE_CONFIG } from "../config";
+import { updateHreSigner } from "./signers";
 
 task("deploy_governance", "Deploy governance contracts", async function (_args, hre) {
+    await updateHreSigner(hre);
     const { ethers } = hre;
     const { BigNumber } = ethers;
     const { parseEther } = ethers.utils;
