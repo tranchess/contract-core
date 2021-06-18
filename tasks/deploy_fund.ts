@@ -87,4 +87,8 @@ task("deploy_fund", "Deploy fund contracts")
             shareB.address,
             primaryMarket.address
         );
+
+        console.log("Transfering ownership to TimelockController");
+        await primaryMarket.transferOwnership(governanceAddresses.timelockController);
+        await fund.transferOwnership(governanceAddresses.timelockController);
     });
