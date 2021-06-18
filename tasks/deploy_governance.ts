@@ -16,7 +16,7 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     const TimelockController = await ethers.getContractFactory("TimelockController");
     const timelockController = await TimelockController.deploy(
         GOVERNANCE_CONFIG.TIMELOCK_DELAY,
-        [deployer.address], // proposers
+        [GOVERNANCE_CONFIG.TIMELOCK_PROPOSER || deployer.address], // proposers
         [ethers.constants.AddressZero] // executor
     );
     console.log(`TimelockController: ${timelockController.address}`);
