@@ -371,9 +371,9 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
                 );
                 cr.creatingUnderlying = 0;
             }
-            if (cr.createdShares > 0) {
-                uint256 rebalanceSize = fund.getRebalanceSize();
-                if (rebalanceSize > cr.version) {
+            uint256 rebalanceSize = fund.getRebalanceSize();
+            if (cr.version < rebalanceSize) {
+                if (cr.createdShares > 0) {
                     (cr.createdShares, , ) = fund.batchRebalance(
                         cr.createdShares,
                         0,
@@ -381,8 +381,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
                         cr.version,
                         rebalanceSize
                     );
-                    cr.version = rebalanceSize;
                 }
+                cr.version = rebalanceSize;
             }
             if (cr.redeemingShares > 0) {
                 cr.redeemedUnderlying = cr.redeemedUnderlying.add(
