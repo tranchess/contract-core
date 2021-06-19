@@ -4,13 +4,16 @@ pragma solidity >=0.6.10 <0.8.0;
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "../utils/SafeDecimalMath.sol";
 
-contract LiquidityStaking {
+contract LiquidityStaking is ReentrancyGuard {
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
+    using SafeERC20 for IERC20;
 
     address public immutable rewardToken;
     address public immutable stakedToken;
@@ -44,10 +47,7 @@ contract LiquidityStaking {
         require(startTimestamp >= block.timestamp, "Start cannot be in the past");
 
         uint256 amount = rate_.mul(endTimestamp.sub(startTimestamp));
-        require(
-            IERC20(rewardToken).transferFrom(msg.sender, address(this), amount),
-            "Reward transferFrom failed"
-        );
+        IERC20(rewardToken).safeTransferFrom(msg.sender, address(this), amount);
 
         rate = rate_;
     }
@@ -57,42 +57,39 @@ contract LiquidityStaking {
         _rewardCheckpoint(account);
     }
 
-    function deposit(uint256 amount) external {
+    function deposit(uint256 amount) external nonReentrant {
         userCheckpoint(msg.sender);
 
-        require(
-            IERC20(stakedToken).transferFrom(msg.sender, address(this), amount),
-            "Staked transferFrom failed"
-        );
+        IERC20(stakedToken).safeTransferFrom(msg.sender, address(this), amount);
         totalStakes = totalStakes.add(amount);
         stakes[msg.sender] = stakes[msg.sender].add(amount);
     }
 
-    function withdraw(uint256 amount) external {
+    function withdraw(uint256 amount) external nonReentrant {
         userCheckpoint(msg.sender);
         _withdraw(msg.sender, amount);
     }
 
-    function claimRewards() public returns (uint256 rewards) {
+    function claimRewards() external nonReentrant returns (uint256 rewards) {
         userCheckpoint(msg.sender);
         rewards = _claimRewards(msg.sender);
     }
 
-    function exit() external returns (uint256 rewards) {
+    function exit() external nonReentrant returns (uint256 rewards) {
         userCheckpoint(msg.sender);
         _withdraw(msg.sender, stakes[msg.sender]);
         rewards = _claimRewards(msg.sender);
     }
 
     function _withdraw(address account, uint256 amount) private {
-        require(IERC20(stakedToken).transfer(account, amount), "Staked transfer failed");
+        IERC20(stakedToken).safeTransfer(account, amount);
         totalStakes = totalStakes.sub(amount, "Exceed staked balances");
         stakes[account] = stakes[account].sub(amount, "Exceed staked balances");
     }
 
     function _claimRewards(address account) private returns (uint256 rewards) {
         rewards = claimableRewards[account];
-        require(IERC20(rewardToken).transfer(account, rewards), "Reward transfer failed");
+        IERC20(rewardToken).safeTransfer(account, rewards);
         delete claimableRewards[account];
     }
 

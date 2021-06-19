@@ -1938,7 +1938,7 @@ describe("Exchange", function () {
                 .withArgs(addr1, exchange.address, parseUsdc("10"))
                 .returns(false);
             await expect(exchange.placeBid(TRANCHE_A, 41, parseEther("10"), 0)).to.be.revertedWith(
-                "Failed to transfer quote asset from account"
+                "SafeERC20: ERC20 operation did not succeed"
             );
         });
 
@@ -1947,7 +1947,7 @@ describe("Exchange", function () {
             await exchange.placeBid(TRANCHE_A, 41, parseEther("10"), 0);
             await mockUsdc.mock.transfer.withArgs(addr1, parseUsdc("10")).returns(false);
             await expect(exchange.cancelBid(0, TRANCHE_A, 41, 1)).to.be.revertedWith(
-                "Failed to transfer quote asset"
+                "SafeERC20: ERC20 operation did not succeed"
             );
         });
     });

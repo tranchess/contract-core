@@ -2,6 +2,7 @@
 pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
@@ -15,6 +16,7 @@ contract ChessSchedule is IChessSchedule, OwnableUpgradeable, ChessRoles, CoreUt
     uint256[32] private _reservedSlots;
 
     using SafeMath for uint256;
+    using SafeERC20 for IERC20;
 
     uint256 public constant MAX_SUPPLY = 120_000_000e18;
 
@@ -46,7 +48,7 @@ contract ChessSchedule is IChessSchedule, OwnableUpgradeable, ChessRoles, CoreUt
     /// @notice Initialize ownership and deposit tokens.
     function initialize() external initializer {
         __Ownable_init();
-        chess.transferFrom(msg.sender, address(this), MAX_SUPPLY);
+        chess.safeTransferFrom(msg.sender, address(this), MAX_SUPPLY);
     }
 
     /// @notice Get length of the supply schedule
@@ -119,7 +121,7 @@ contract ChessSchedule is IChessSchedule, OwnableUpgradeable, ChessRoles, CoreUt
     /// @param amount amount of the token
     function mint(address account, uint256 amount) external override onlyMinter {
         require(minted.add(amount) <= availableSupply(), "Exceeds allowable mint amount");
-        chess.transfer(account, amount);
+        chess.safeTransfer(account, amount);
         minted = minted.add(amount);
     }
 

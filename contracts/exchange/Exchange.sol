@@ -2,6 +2,8 @@
 pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
+import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+
 import "../utils/SafeDecimalMath.sol";
 
 import {Order, OrderQueue, LibOrderQueue} from "./LibOrderQueue.sol";
@@ -25,6 +27,7 @@ contract Exchange is ExchangeRoles, Staking {
 
     using SafeDecimalMath for uint256;
     using LibOrderQueue for OrderQueue;
+    using SafeERC20 for IERC20;
     using LibUnsettledBuyTrade for UnsettledBuyTrade;
     using LibUnsettledSellTrade for UnsettledSellTrade;
 
@@ -971,10 +974,7 @@ contract Exchange is ExchangeRoles, Staking {
         if (amountToTransfer == 0) {
             return;
         }
-        require(
-            IERC20(quoteAssetAddress).transfer(account, amountToTransfer),
-            "Failed to transfer quote asset"
-        );
+        IERC20(quoteAssetAddress).safeTransfer(account, amountToTransfer);
     }
 
     /// @dev Transfer quote asset from an account. Transfered amount is rounded up.
@@ -983,10 +983,7 @@ contract Exchange is ExchangeRoles, Staking {
     function _transferQuoteFrom(address account, uint256 amount) private {
         uint256 amountToTransfer =
             amount.add(_quoteDecimalMultiplier - 1) / _quoteDecimalMultiplier;
-        require(
-            IERC20(quoteAssetAddress).transferFrom(account, address(this), amountToTransfer),
-            "Failed to transfer quote asset from account"
-        );
+        IERC20(quoteAssetAddress).safeTransferFrom(account, address(this), amountToTransfer);
     }
 
     modifier onlyActive() {

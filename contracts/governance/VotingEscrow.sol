@@ -5,6 +5,7 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -16,6 +17,7 @@ interface IAddressWhitelist {
 
 contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     using SafeMath for uint256;
+    using SafeERC20 for IERC20;
 
     event LockCreated(address indexed account, uint256 amount, uint256 unlockTime);
 
@@ -97,7 +99,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     }
 
     function createLock(uint256 amount, uint256 unlockTime) external nonReentrant {
-        _assertNotContract(msg.sender);
+        _assertNotContract();
 
         unlockTime = (unlockTime / 1 weeks) * 1 weeks; // Locktime is rounded down to weeks
         LockedBalance memory lockedBalance = locked[msg.sender];
@@ -111,7 +113,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         locked[msg.sender].unlockTime = unlockTime;
         locked[msg.sender].amount = amount;
 
-        IERC20(token).transferFrom(msg.sender, address(this), amount);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         emit LockCreated(msg.sender, amount, unlockTime);
     }
@@ -127,7 +129,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         );
         locked[account].amount = lockedBalance.amount.add(amount);
 
-        IERC20(token).transferFrom(msg.sender, address(this), amount);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         emit AmountIncreased(account, amount);
     }
@@ -158,7 +160,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         lockedBalance.amount = 0;
         locked[msg.sender] = lockedBalance;
 
-        IERC20(token).transfer(msg.sender, amount);
+        IERC20(token).safeTransfer(msg.sender, amount);
 
         emit Withdrawn(msg.sender, amount);
     }
@@ -171,10 +173,11 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         addressWhitelist = newWhitelist;
     }
 
-    function _assertNotContract(address account) private view {
-        if (Address.isContract(account)) {
+    function _assertNotContract() private view {
+        if (msg.sender != tx.origin) {
             if (
-                addressWhitelist != address(0) && IAddressWhitelist(addressWhitelist).check(account)
+                addressWhitelist != address(0) &&
+                IAddressWhitelist(addressWhitelist).check(msg.sender)
             ) {
                 return;
             }
