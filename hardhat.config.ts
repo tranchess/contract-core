@@ -9,18 +9,24 @@ import "./tasks/deploy_misc";
 import "./tasks/deploy_mock";
 import "./tasks/deploy_oracle";
 import "./tasks/test_deploy";
-import { DEPLOYER_PK, ETH_RPC, ETH_CHAIN_ID } from "./config";
+import { DEPLOYER_PK, ETH_RPC, ETH_CHAIN_ID, DEPLOYER_HD_PATH } from "./config";
 import "hardhat-gas-reporter";
 
 const networks: NetworksUserConfig = {
     hardhat: {},
     localhost: {},
 };
-if (DEPLOYER_PK && ETH_RPC && ETH_CHAIN_ID) {
+if (ETH_RPC && ETH_CHAIN_ID) {
+    if (!DEPLOYER_PK && !DEPLOYER_HD_PATH) {
+        throw new Error("Please set either DEPLOYER_PK or DEPLOYER_HD_PATH for the remote network");
+    }
+    if (DEPLOYER_PK && DEPLOYER_HD_PATH) {
+        throw new Error("Do not set both DEPLOYER_PK and DEPLOYER_HD_PATH");
+    }
     networks.remote = {
         url: ETH_RPC,
         chainId: ETH_CHAIN_ID,
-        accounts: [DEPLOYER_PK],
+        accounts: DEPLOYER_PK ? [DEPLOYER_PK] : [],
         timeout: 1000000,
     };
 }

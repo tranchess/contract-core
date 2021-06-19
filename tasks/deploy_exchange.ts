@@ -1,11 +1,13 @@
 import { task } from "hardhat/config";
 import { createAddressFile, selectAddressFile } from "./address_file";
 import { GOVERNANCE_CONFIG, FUND_CONFIG, EXCHANGE_CONFIG } from "../config";
+import { updateHreSigner } from "./signers";
 
 task("deploy_exchange", "Deploy exchange contracts")
     .addOptionalParam("governance", "Path to the governance address file", "")
     .addOptionalParam("fund", "Path to the fund address file", "")
     .setAction(async function (args, hre) {
+        await updateHreSigner(hre);
         const { ethers } = hre;
         const { parseEther } = ethers.utils;
 
@@ -51,6 +53,13 @@ task("deploy_exchange", "Deploy exchange contracts")
             "ChessSchedule",
             governanceAddresses.chessSchedule
         );
-        await chessSchedule.addMinter(exchange.address);
-        console.log("Exchange is a CHESS minter now");
+        if ((await chessSchedule.owner()) === (await chessSchedule.signer.getAddress())) {
+            await chessSchedule.addMinter(exchange.address);
+            console.log("Exchange is a CHESS minter now");
+
+            console.log("Transfering ownership of ChessSchedule to TimelockController");
+            await chessSchedule.transferOwnership(governanceAddresses.timelockController);
+        } else {
+            console.log("NOTE: Please add Exchange as a minter of ChessSchedule");
+        }
     });

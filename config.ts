@@ -10,9 +10,10 @@ export function endOfWeek(timestamp: number): number {
 const COINBASE_ADDRESS = "0xfCEAdAFab14d46e20144F48824d0C09B1a03F2BC";
 const OKEX_ADDRESS = "0x85615B076615317C80F14cBad6501eec031cD51C";
 
-export const DEPLOYER_PK = process.env.DEPLOYER_PK;
 export const ETH_RPC = process.env.ETH_RPC;
 export const ETH_CHAIN_ID = parseInt(process.env.ETH_CHAIN_ID ?? "");
+export const DEPLOYER_PK = process.env.DEPLOYER_PK;
+export const DEPLOYER_HD_PATH = process.env.DEPLOYER_HD_PATH;
 
 export const TWAP_ORACLE_CONFIG = {
     SYMBOL: "BTC",
@@ -30,6 +31,7 @@ export const GOVERNANCE_CONFIG = {
     CHESS_TOTAL_SUPPLY: "300000000",
     CHESS_SCHEDULE_MAX_SUPPLY: "120000000",
     TIMELOCK_DELAY: parseInt(process.env.GOVERNANCE_TIMELOCK_DELAY ?? "3600"),
+    TIMELOCK_PROPOSER: process.env.GOVERNANCE_TIMELOCK_PROPOSER,
     LAUNCH_TIMESTAMP: endOfWeek(
         new Date(process.env.GOVERNANCE_LAUNCH_DATE ?? "1970-01-01").getTime() / 1000
     ),
