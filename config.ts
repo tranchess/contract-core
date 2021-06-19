@@ -15,6 +15,8 @@ export const ETH_CHAIN_ID = parseInt(process.env.ETH_CHAIN_ID ?? "");
 export const DEPLOYER_PK = process.env.DEPLOYER_PK;
 export const DEPLOYER_HD_PATH = process.env.DEPLOYER_HD_PATH;
 
+export const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY;
+
 export const TWAP_ORACLE_CONFIG = {
     SYMBOL: "BTC",
     PRIMARY_SOURCE: process.env.TWAP_ORACLE_PRIMARY_SOURCE || COINBASE_ADDRESS,
