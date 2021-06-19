@@ -1,5 +1,6 @@
 import type { HardhatUserConfig, NetworksUserConfig } from "hardhat/types";
 import "@nomiclabs/hardhat-waffle";
+import "@nomiclabs/hardhat-etherscan";
 import "solidity-coverage";
 import "./tasks/accounts";
 import "./tasks/deploy_fund";
@@ -9,7 +10,7 @@ import "./tasks/deploy_misc";
 import "./tasks/deploy_mock";
 import "./tasks/deploy_oracle";
 import "./tasks/test_deploy";
-import { DEPLOYER_PK, ETH_RPC, ETH_CHAIN_ID, DEPLOYER_HD_PATH } from "./config";
+import { ETH_RPC, ETH_CHAIN_ID, DEPLOYER_PK, DEPLOYER_HD_PATH, ETHERSCAN_API_KEY } from "./config";
 import "hardhat-gas-reporter";
 
 const networks: NetworksUserConfig = {
@@ -41,6 +42,9 @@ const config: HardhatUserConfig = {
                 runs: 200,
             },
         },
+    },
+    etherscan: {
+        apiKey: ETHERSCAN_API_KEY,
     },
     // @see https://hardhat.org/plugins/hardhat-gas-reporter.html
     gasReporter: {
