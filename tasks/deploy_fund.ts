@@ -75,7 +75,8 @@ task("deploy_fund", "Deploy fund contracts")
             parseEther("0.001"),
             parseEther("0.0005"),
             parseEther("0.0005"),
-            parseUnits(FUND_CONFIG.MIN_CREATION, underlyingDecimals)
+            parseUnits(FUND_CONFIG.MIN_CREATION, underlyingDecimals),
+            { gasLimit: 5e6 } // Gas estimation may fail
         );
         console.log(`PrimaryMarket: ${primaryMarket.address}`);
         addressFile.set("primaryMarket", primaryMarket.address);
