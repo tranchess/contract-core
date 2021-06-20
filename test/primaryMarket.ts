@@ -88,6 +88,7 @@ describe("PrimaryMarket", function () {
         await fund.mock.tokenB.returns(shareB.address);
         await fund.mock.underlyingDecimalMultiplier.returns(1e10);
         await fund.mock.currentDay.returns(START_DAY);
+        await fund.mock.getRebalanceSize.returns(0);
         await fund.mock.isPrimaryMarketActive.returns(true);
         const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
         const primaryMarket = await PrimaryMarket.connect(owner).deploy(
@@ -679,6 +680,63 @@ describe("PrimaryMarket", function () {
                     func: shareM.mock.transfer.withArgs(user1.address, parseEther("7000")),
                     rets: [true],
                 }
+            );
+        });
+    });
+
+    describe("Actions after rebalance", function () {
+        beforeEach(async function () {
+            await fund.mock.getRebalanceSize.returns(3);
+            await btc.mint(fund.address, parseBtc("10"));
+        });
+
+        it("Should always return the latest version", async function () {
+            expect((await primaryMarket.creationRedemptionOf(user1.address)).version).to.equal(3);
+        });
+
+        it("Should update version on creation", async function () {
+            await primaryMarket.create(parseBtc("1"));
+            expect(
+                (await primaryMarket.creationRedemptionOf(user1.address)).creatingUnderlying
+            ).to.equal(parseBtc("1"));
+
+            await settleWithShare(START_DAY, parseEther("10000"), parseBtc("10"));
+            await fund.call(
+                btc,
+                "transferFrom",
+                primaryMarket.address,
+                fund.address,
+                parseBtc("1")
+            );
+            expect(
+                (await primaryMarket.creationRedemptionOf(user1.address)).createdShares
+            ).to.equal(parseEther("1000"));
+            await expect(() => primaryMarket.claim(user1.address)).to.callMocks({
+                func: shareM.mock.transfer.withArgs(user1.address, parseEther("1000")),
+                rets: [true],
+            });
+        });
+
+        it("Should update version on redemption", async function () {
+            await fund.mock.burn.returns();
+            await fund.mock.mint.returns();
+            await primaryMarket.redeem(parseEther("1000"));
+            expect(
+                (await primaryMarket.creationRedemptionOf(user1.address)).redeemingShares
+            ).to.equal(parseEther("1000"));
+
+            await settleWithShare(START_DAY, parseEther("10000"), parseBtc("10"));
+            const redeemedBtc = parseBtc("1")
+                .mul(10000 - REDEMPTION_FEE_BPS)
+                .div(10000);
+            await fund.call(btc, "transfer", primaryMarket.address, redeemedBtc);
+            expect(
+                (await primaryMarket.creationRedemptionOf(user1.address)).redeemedUnderlying
+            ).to.equal(redeemedBtc);
+            await expect(() => primaryMarket.claim(user1.address)).to.changeTokenBalances(
+                btc,
+                [user1, primaryMarket],
+                [redeemedBtc, redeemedBtc.mul(-1)]
             );
         });
     });
