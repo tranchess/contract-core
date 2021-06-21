@@ -317,7 +317,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @param account Account to claim its rewards
     function claimRewards(address account) external {
         require(
-            block.timestamp >= guardedLaunchStart + 4 weeks,
+            block.timestamp >= guardedLaunchStart + 15 days,
             "Cannot claim during guarded launch"
         );
         uint256 rebalanceSize = fund.getRebalanceSize();
