@@ -9,6 +9,7 @@ import {
     TRANCHE_M,
     TRANCHE_A,
     TRANCHE_B,
+    DAY,
     WEEK,
     SETTLEMENT_TIME,
     FixtureWalletMap,
@@ -1114,12 +1115,12 @@ describe("Staking", function () {
             await shareM.mock.transferFrom.returns(true);
             await staking.deposit(TRANCHE_M, USER1_M);
 
-            await advanceBlockAtTime(guardedLaunchStart + WEEK * 4 - 100);
+            await advanceBlockAtTime(guardedLaunchStart + DAY * 15 - 100);
             await expect(staking.claimRewards(addr1)).to.be.revertedWith(
                 "Cannot claim during guarded launch"
             );
 
-            await advanceBlockAtTime(guardedLaunchStart + WEEK * 4);
+            await advanceBlockAtTime(guardedLaunchStart + DAY * 15);
             await chessSchedule.mock.mint.returns();
             await staking.claimRewards(addr1);
         });
