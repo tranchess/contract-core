@@ -9,6 +9,7 @@ import {
 } from "../config";
 
 task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (_args, hre) => {
+    const { ethers } = hre;
     await hre.run("compile");
 
     console.log();
@@ -46,4 +47,24 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     console.log();
     console.log("[+] Deploying misc contracts");
     await hre.run("deploy_misc");
+
+    console.log();
+    console.log("[+] Deploying two vesting escrows");
+    await hre.run("deploy_vesting", {
+        governance: "latest",
+        amount: "1",
+        recipient: ethers.Wallet.createRandom().address,
+        startWeek: "10",
+        durationWeek: "20",
+        cliffPercent: "0",
+    });
+    await new Promise((r) => setTimeout(r, 1000)); // Sleep 1s to avoid address file name collision
+    await hre.run("deploy_vesting", {
+        governance: "latest",
+        amount: "1000000",
+        recipient: ethers.Wallet.createRandom().address,
+        startWeek: "20",
+        durationWeek: "1",
+        cliffPercent: "10",
+    });
 });
