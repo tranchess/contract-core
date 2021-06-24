@@ -22,6 +22,21 @@ interface IExchange {
     ) external view returns (UnsettledTrade memory);
 }
 
+interface IPancakePair {
+    function token0() external view returns (address);
+
+    function token1() external view returns (address);
+
+    function getReserves()
+        external
+        view
+        returns (
+            uint112 reserve0,
+            uint112 reserve1,
+            uint32 blockTimestampLast
+        );
+}
+
 contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
     struct ProtocolData {
         uint256 blockNumber;
@@ -31,6 +46,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         PrimaryMarketData primaryMarket;
         ExchangeData exchange;
         GovernanceData governance;
+        SwapPairData pair;
     }
 
     struct WalletData {
@@ -72,6 +88,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         uint256 totalUnderlying;
         uint256 rebalanceSize;
         uint256 currentInterestRate;
+        Fund.Rebalance lastRebalance;
     }
 
     struct PrimaryMarketData {
@@ -115,12 +132,20 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         IBallot.Voter account;
     }
 
+    struct SwapPairData {
+        uint112 reserve0;
+        uint112 reserve1;
+        address token0;
+        address token1;
+    }
+
     /// @dev This function should be call as a "view" function off-chain to get the return value,
     ///      e.g. using `contract.getProtocolData.call()` in web3
     ///      or `contract.callStatic["getProtocolData"]()` in ethers.js.
     function getProtocolData(
         address primaryMarketAddress,
         address exchangeAddress,
+        address pancakePairAddress,
         address account
     ) external returns (ProtocolData memory data) {
         data.blockNumber = block.number;
@@ -132,6 +157,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         IERC20 underlyingToken = IERC20(fund.tokenUnderlying());
         IERC20 quoteToken = IERC20(exchange.quoteAssetAddress());
         IERC20 chessToken = IERC20(votingEscrow.token());
+        IPancakePair pair = IPancakePair(pancakePairAddress);
 
         data.wallet.balance.underlyingToken = underlyingToken.balanceOf(account);
         data.wallet.balance.quoteToken = quoteToken.balanceOf(account);
@@ -180,6 +206,8 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.fund.currentInterestRate = fund.historicalInterestRate(
             _endOfWeek(data.fund.currentDay - 1 days)
         );
+        uint256 rebalanceSize = fund.getRebalanceSize();
+        data.fund.lastRebalance = fund.getRebalance(rebalanceSize == 0 ? 0 : rebalanceSize - 1);
 
         PrimaryMarket primaryMarket = PrimaryMarket(primaryMarketAddress);
         data.primaryMarket.currentCreatingUnderlying = primaryMarket.currentCreatingUnderlying();
@@ -207,6 +235,10 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         );
         data.governance.interestRateBallot.account = InterestRateBallot(address(fund.ballot()))
             .getReceipt(account);
+
+        data.pair.token0 = pair.token0();
+        data.pair.token1 = pair.token1();
+        (data.pair.reserve0, data.pair.reserve1, ) = pair.getReserves();
     }
 
     function getUnsettledTrades(
