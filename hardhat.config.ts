@@ -9,6 +9,7 @@ import "./tasks/deploy_governance";
 import "./tasks/deploy_misc";
 import "./tasks/deploy_mock";
 import "./tasks/deploy_oracle";
+import "./tasks/deploy_vesting";
 import "./tasks/test_deploy";
 import { ETH_RPC, ETH_CHAIN_ID, DEPLOYER_PK, DEPLOYER_HD_PATH, ETHERSCAN_API_KEY } from "./config";
 import "hardhat-gas-reporter";
