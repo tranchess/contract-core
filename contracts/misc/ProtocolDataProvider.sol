@@ -5,6 +5,7 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "../interfaces/ITrancheIndex.sol";
+import "../interfaces/IChessSchedule.sol";
 import "../utils/CoreUtility.sol";
 
 import {UnsettledTrade} from "../exchange/LibUnsettledTrade.sol";
@@ -15,6 +16,8 @@ import "../governance/InterestRateBallot.sol";
 import "../governance/VotingEscrow.sol";
 
 interface IExchange {
+    function chessSchedule() external view returns (IChessSchedule);
+
     function unsettledTrades(
         address account,
         uint256 tranche,
@@ -135,6 +138,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
 
     struct GovernanceData {
         uint256 chessTotalSupply;
+        uint256 chessRate;
         VotingEscrowData votingEscrow;
         BallotData interestRateBallot;
     }
@@ -176,6 +180,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         IERC20 quoteToken = IERC20(exchange.quoteAssetAddress());
         IERC20 chessToken = IERC20(votingEscrow.token());
         IPancakePair pair = IPancakePair(pancakePairAddress);
+        IChessSchedule chessSchedule = exchange.chessSchedule();
 
         data.wallet.balance.underlyingToken = underlyingToken.balanceOf(account);
         data.wallet.balance.quoteToken = quoteToken.balanceOf(account);
@@ -245,6 +250,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.exchange.account.chessRewards = exchange.claimableRewards(account);
 
         data.governance.chessTotalSupply = chessToken.totalSupply();
+        data.governance.chessRate = chessSchedule.getRate(block.timestamp);
         data.governance.votingEscrow.chessBalance = chessToken.balanceOf(address(votingEscrow));
         data.governance.votingEscrow.totalSupply = votingEscrow.totalSupply();
         data.governance.votingEscrow.account = votingEscrow.getLockedBalance(account);
