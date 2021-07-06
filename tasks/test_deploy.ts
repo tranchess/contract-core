@@ -46,7 +46,7 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
 
     console.log();
     console.log("[+] Deploying misc contracts");
-    await hre.run("deploy_misc");
+    await hre.run("deploy_misc", { silent: true });
 
     console.log();
     console.log("[+] Deploying two vesting escrows");
