@@ -23,24 +23,6 @@ interface IExchange {
         uint256 tranche,
         uint256 epoch
     ) external view returns (UnsettledTrade memory);
-
-    function settleMaker(address account, uint256 epoch)
-        external
-        returns (
-            uint256 amountM,
-            uint256 amountA,
-            uint256 amountB,
-            uint256 quoteAmount
-        );
-
-    function settleTaker(address account, uint256 epoch)
-        external
-        returns (
-            uint256 amountM,
-            uint256 amountA,
-            uint256 amountB,
-            uint256 quoteAmount
-        );
 }
 
 interface IPancakePair {
@@ -286,40 +268,6 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
             unsettledTradeM[i] = exchange.unsettledTrades(account, TRANCHE_M, epochs[i]);
             unsettledTradeA[i] = exchange.unsettledTrades(account, TRANCHE_A, epochs[i]);
             unsettledTradeB[i] = exchange.unsettledTrades(account, TRANCHE_B, epochs[i]);
-        }
-    }
-
-    function settleTrades(
-        address exchangeAddress,
-        uint256[] calldata makerEpochs,
-        uint256[] calldata takerEpochs,
-        address account
-    )
-        external
-        returns (
-            uint256 totalAmountM,
-            uint256 totalAmountA,
-            uint256 totalAmountB,
-            uint256 totalQuoteAmount
-        )
-    {
-        IExchange exchange = IExchange(exchangeAddress);
-        for (uint256 i = 0; i < takerEpochs.length; i++) {
-            (uint256 amountM, uint256 amountA, uint256 amountB, uint256 quoteAmount) =
-                exchange.settleTaker(account, takerEpochs[i]);
-            totalAmountM = totalAmountM.add(amountM);
-            totalAmountA = totalAmountA.add(amountA);
-            totalAmountB = totalAmountB.add(amountB);
-            totalQuoteAmount = totalQuoteAmount.add(quoteAmount);
-        }
-        uint256[] calldata makerEpochs_ = makerEpochs; // Fix the "stack too deep" error
-        for (uint256 i = 0; i < makerEpochs_.length; i++) {
-            (uint256 amountM, uint256 amountA, uint256 amountB, uint256 quoteAmount) =
-                exchange.settleMaker(account, makerEpochs_[i]);
-            totalAmountM = totalAmountM.add(amountM);
-            totalAmountA = totalAmountA.add(amountA);
-            totalAmountB = totalAmountB.add(amountB);
-            totalQuoteAmount = totalQuoteAmount.add(quoteAmount);
         }
     }
 }
