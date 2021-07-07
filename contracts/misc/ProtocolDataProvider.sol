@@ -86,6 +86,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         uint256 fundActivityStartTime;
         uint256 exchangeActivityStartTime;
         uint256 currentDay;
+        uint256 currentWeek;
         uint256 dailyProtocolFeeRate;
         uint256 totalShares;
         uint256 totalUnderlying;
@@ -128,11 +129,12 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
     struct VotingEscrowData {
         uint256 chessBalance;
         uint256 totalSupply;
+        uint256 tradingWeekTotalSupply;
         IVotingEscrow.LockedBalance account;
     }
 
     struct BallotData {
-        uint256 nextCloseTimestamp;
+        uint256 tradingWeekTotalSupply;
         IBallot.Voter account;
     }
 
@@ -204,13 +206,12 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.fund.fundActivityStartTime = fund.fundActivityStartTime();
         data.fund.exchangeActivityStartTime = fund.exchangeActivityStartTime();
         data.fund.currentDay = fund.currentDay();
+        data.fund.currentWeek = _endOfWeek(data.fund.currentDay - 1 days);
         data.fund.dailyProtocolFeeRate = fund.dailyProtocolFeeRate();
         data.fund.totalShares = fund.getTotalShares();
         data.fund.totalUnderlying = underlyingToken.balanceOf(address(fund));
         data.fund.rebalanceSize = fund.getRebalanceSize();
-        data.fund.currentInterestRate = fund.historicalInterestRate(
-            _endOfWeek(data.fund.currentDay - 1 days)
-        );
+        data.fund.currentInterestRate = fund.historicalInterestRate(data.fund.currentWeek);
         uint256 rebalanceSize = fund.getRebalanceSize();
         data.fund.lastRebalance = fund.getRebalance(rebalanceSize == 0 ? 0 : rebalanceSize - 1);
 
@@ -235,10 +236,14 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.governance.chessRate = chessSchedule.getRate(block.timestamp);
         data.governance.votingEscrow.chessBalance = chessToken.balanceOf(address(votingEscrow));
         data.governance.votingEscrow.totalSupply = votingEscrow.totalSupply();
-        data.governance.votingEscrow.account = votingEscrow.getLockedBalance(account);
-        data.governance.interestRateBallot.nextCloseTimestamp = _endOfWeek(
-            data.fund.currentDay - 1 days
+        data.governance.votingEscrow.tradingWeekTotalSupply = votingEscrow.totalSupplyAtTimestamp(
+            data.fund.currentWeek
         );
+        data.governance.votingEscrow.account = votingEscrow.getLockedBalance(account);
+        data.governance.interestRateBallot.tradingWeekTotalSupply = InterestRateBallot(
+            address(fund.ballot())
+        )
+            .totalSupplyAtTimestamp(data.fund.currentWeek);
         data.governance.interestRateBallot.account = InterestRateBallot(address(fund.ballot()))
             .getReceipt(account);
 
