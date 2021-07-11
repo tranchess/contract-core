@@ -37,7 +37,7 @@ interface IFeeDistributor {
         view
         returns (IVotingEscrow.LockedBalance memory);
 
-    function claimRewards(address account) external view returns (uint256 rewards);
+    function userCheckpoint(address account) external returns (uint256 rewards);
 }
 
 interface IPancakePair {
@@ -284,7 +284,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
             .getReceipt(account);
 
         IFeeDistributor feeDistributor = IFeeDistributor(fund.feeCollector());
-        data.governance.feeDistributor.account.claimableRewards = feeDistributor.claimRewards(
+        data.governance.feeDistributor.account.claimableRewards = feeDistributor.userCheckpoint(
             account
         );
         data.governance.feeDistributor.account.currentBalance = feeDistributor.userLastBalances(
