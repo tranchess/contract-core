@@ -25,6 +25,21 @@ interface IExchange {
     ) external view returns (UnsettledTrade memory);
 }
 
+interface IFeeDistributor {
+    function rewardsPerWeek(uint256 timestamp) external view returns (uint256);
+
+    function veSupplyPerWeek(uint256 timestamp) external view returns (uint256);
+
+    function userLastBalances(address account) external view returns (uint256);
+
+    function userLockedBalances(address account)
+        external
+        view
+        returns (IVotingEscrow.LockedBalance memory);
+
+    function claimRewards(address account) external view returns (uint256 rewards);
+}
+
 interface IPancakePair {
     function token0() external view returns (address);
 
@@ -124,6 +139,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         uint256 chessRate;
         VotingEscrowData votingEscrow;
         BallotData interestRateBallot;
+        FeeDistributorData feeDistributor;
     }
 
     struct VotingEscrowData {
@@ -136,6 +152,26 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
     struct BallotData {
         uint256 tradingWeekTotalSupply;
         IBallot.Voter account;
+    }
+
+    struct FeeDistributorData {
+        FeeDistributorAccountData account;
+        uint256 currentRewards;
+        uint256 currentSupply;
+        HistoricalRewardData[3] historicalRewards;
+    }
+
+    struct HistoricalRewardData {
+        uint256 timestamp;
+        uint256 veSupply;
+        uint256 rewards;
+    }
+
+    struct FeeDistributorAccountData {
+        uint256 claimableRewards;
+        uint256 currentBalance;
+        uint256 amount;
+        uint256 unlockTime;
     }
 
     struct SwapPairData {
@@ -246,6 +282,34 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
             .totalSupplyAtTimestamp(data.fund.currentWeek);
         data.governance.interestRateBallot.account = InterestRateBallot(address(fund.ballot()))
             .getReceipt(account);
+
+        IFeeDistributor feeDistributor = IFeeDistributor(fund.feeCollector());
+        data.governance.feeDistributor.account.claimableRewards = feeDistributor.claimRewards(
+            account
+        );
+        data.governance.feeDistributor.account.currentBalance = feeDistributor.userLastBalances(
+            account
+        );
+        data.governance.feeDistributor.account.amount = feeDistributor
+            .userLockedBalances(account)
+            .amount;
+        data.governance.feeDistributor.account.unlockTime = feeDistributor
+            .userLockedBalances(account)
+            .unlockTime;
+        data.governance.feeDistributor.currentRewards = feeDistributor.rewardsPerWeek(
+            data.fund.currentWeek - 1 weeks
+        );
+        data.governance.feeDistributor.currentSupply = feeDistributor.veSupplyPerWeek(
+            data.fund.currentWeek - 1 weeks
+        );
+        for (uint256 i = 0; i < 3; i++) {
+            uint256 weekEnd = data.fund.currentWeek - (i + 1) * 1 weeks;
+            data.governance.feeDistributor.historicalRewards[i].timestamp = weekEnd;
+            data.governance.feeDistributor.historicalRewards[i].veSupply = feeDistributor
+                .veSupplyPerWeek(weekEnd - 1 weeks);
+            data.governance.feeDistributor.historicalRewards[i].rewards = feeDistributor
+                .rewardsPerWeek(weekEnd - 1 weeks);
+        }
 
         data.pair.token0 = pair.token0();
         data.pair.token1 = pair.token1();
