@@ -11,6 +11,7 @@ import {
 task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (_args, hre) => {
     const { ethers } = hre;
     await hre.run("compile");
+    const [deployer] = await ethers.getSigners();
 
     console.log();
     console.log("[+] Deploying mock contracts");
@@ -47,6 +48,15 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     console.log();
     console.log("[+] Deploying misc contracts");
     await hre.run("deploy_misc", { silent: true });
+
+    console.log();
+    console.log("[+] Deploying fee distributor");
+    await hre.run("deploy_fee_distributor", {
+        governance: "latest",
+        fund: "latest",
+        admin: deployer.address,
+        adminFeeRate: "0.5",
+    });
 
     console.log();
     console.log("[+] Deploying two vesting escrows");
