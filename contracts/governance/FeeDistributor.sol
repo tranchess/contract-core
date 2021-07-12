@@ -168,8 +168,11 @@ contract FeeDistributor is CoreUtility {
         scheduledUnlock[newLockedBalance.unlockTime] = scheduledUnlock[newLockedBalance.unlockTime]
             .add(newLockedBalance.amount);
         nextWeekLocked = newNextWeekLocked.add(newLockedBalance.amount);
+        // Round up on division when added to the total supply, so that the total supply is never
+        // smaller than the sum of all accounts' veCHESS balance.
         nextWeekSupply = newNextWeekSupply.add(
-            newLockedBalance.amount.mul(newLockedBalance.unlockTime - nextWeek) / _maxTime
+            newLockedBalance.amount.mul(newLockedBalance.unlockTime - nextWeek).add(_maxTime - 1) /
+                _maxTime
         );
         userLockedBalances[account] = newLockedBalance;
 
@@ -315,9 +318,10 @@ contract FeeDistributor is CoreUtility {
         return rewards;
     }
 
-    /// @notice Recalculate `nextWeekSupply` from scratch. This function is only required when
-    ///         the total supply drops to zero and `checkpoint()` stucks due to rounding errors.
-    /// @dev See test cases for the details about the rounding errors.
+    /// @notice Recalculate `nextWeekSupply` from scratch. This function eliminates accumulated
+    ///         rounding errors in `nextWeekSupply`, which is incrementally updated in
+    ///         `syncWithVotingEscrow()` and `checkpoint()`. It is almost never required.
+    /// @dev See related test cases for details about the rounding errors.
     function calibrateSupply() external {
         uint256 nextWeek = _endOfWeek(checkpointTimestamp);
         nextWeekSupply = _totalSupplyAtTimestamp(nextWeek);

@@ -590,27 +590,57 @@ describe("FeeDistributor", function () {
     });
 
     describe("calibrateSupply()", function () {
-        it("Should fix rounding errors", async function () {
-            const amount1 = parseEther("5");
-            const amount2 = parseEther("13");
-            await votingEscrow.mock.getLockedBalance
-                .withArgs(addr1)
-                .returns([amount1, unixWeek(2)]);
-            await votingEscrow.mock.getLockedBalance
-                .withArgs(addr2)
-                .returns([amount2, unixWeek(2)]);
-            await feeDistributor.syncWithVotingEscrow(addr1);
-            await feeDistributor.syncWithVotingEscrow(addr2);
-            await advanceBlockAtTime(startWeek + WEEK * 3 - 100);
+        beforeEach(async function () {
+            // Lock a very small amount of CHESS, so that obtained veCHESS is rounded down to zero.
+            await votingEscrow.mock.getLockedBalance.withArgs(addr1).returns([1, unixWeek(10)]);
+        });
 
-            // This may not revert if you change the amounts, unlock times or the max time.
-            // We can do some math to make the revert more reliable in the future.
-            await expect(feeDistributor.checkpoint()).to.be.revertedWith(
-                "SafeMath: subtraction overflow"
-            );
+        it("Reproduce rounding errors", async function () {
+            await feeDistributor.syncWithVotingEscrow(addr1);
+            // Both account balance and total supply are rounded down when computed from scratch.
+            expect(await feeDistributor.balanceOfAtTimestamp(addr1, startWeek)).to.equal(0);
+            expect(await feeDistributor.totalSupplyAtTimestamp(startWeek)).to.equal(0);
+            // Incremental updated total supply is rounded up.
+            expect(await feeDistributor.nextWeekSupply()).to.equal(1);
+
+            // The rounding error is accumulated.
+            await feeDistributor.syncWithVotingEscrow(addr1);
+            await feeDistributor.syncWithVotingEscrow(addr1);
+            await feeDistributor.syncWithVotingEscrow(addr1);
+            expect(await feeDistributor.nextWeekLocked()).to.equal(1);
+            expect(await feeDistributor.nextWeekSupply()).to.equal(4);
+
+            // The rounding error persists over weeks.
+            await advanceBlockAtTime(startWeek + WEEK * 5);
+            await feeDistributor.userCheckpoint(addr1);
+            expect(await feeDistributor.userLastBalances(addr1)).to.equal(0);
+            expect(await feeDistributor.nextWeekLocked()).to.equal(1);
+            expect(await feeDistributor.nextWeekSupply()).to.equal(4);
+
+            // The rounding error persists even after all Chess unlocked.
+            await advanceBlockAtTime(startWeek + WEEK * 20);
+            await feeDistributor.userCheckpoint(addr1);
+            expect(await feeDistributor.userLastBalances(addr1)).to.equal(0);
+            expect(await feeDistributor.nextWeekLocked()).to.equal(0);
+            expect(await feeDistributor.nextWeekSupply()).to.equal(4);
+        });
+
+        it("Should fix rounding errors in the same week", async function () {
+            await feeDistributor.syncWithVotingEscrow(addr1);
+            await feeDistributor.syncWithVotingEscrow(addr1);
+            await feeDistributor.syncWithVotingEscrow(addr1);
+            expect(await feeDistributor.nextWeekSupply()).to.equal(3);
             await feeDistributor.calibrateSupply();
-            await feeDistributor.checkpoint();
-            expect(await feeDistributor.veSupplyPerWeek(startWeek + WEEK * 2)).to.closeToBn(0, 30);
+            expect(await feeDistributor.nextWeekSupply()).to.equal(0);
+        });
+
+        it("Should fix rounding errors after some weeks", async function () {
+            await feeDistributor.syncWithVotingEscrow(addr1);
+            await feeDistributor.syncWithVotingEscrow(addr1);
+            await feeDistributor.syncWithVotingEscrow(addr1);
+            await advanceBlockAtTime(startWeek + WEEK * 5);
+            await feeDistributor.calibrateSupply();
+            expect(await feeDistributor.nextWeekSupply()).to.equal(0);
         });
     });
 
