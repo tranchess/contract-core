@@ -130,7 +130,7 @@ describe("FeeDistributor", function () {
             expect(await feeDistributor.balanceOfAtTimestamp(addr1, startWeek)).to.equal(balance);
             expect(await feeDistributor.totalSupplyAtTimestamp(startWeek)).to.equal(balance);
             expect(await feeDistributor.nextWeekLocked()).to.equal(amount);
-            expect(await feeDistributor.nextWeekSupply()).to.equal(balance);
+            expect(await feeDistributor.nextWeekSupply()).to.closeToBn(balance, 30);
         });
 
         it("Should update locked balance before unlocked", async function () {
@@ -335,17 +335,17 @@ describe("FeeDistributor", function () {
                 const supply = balance1.add(balance2);
                 await advanceBlockAtTime(startWeek + DAY);
                 await feeDistributor.checkpoint();
-                expect(await feeDistributor.veSupplyPerWeek(startWeek)).to.equal(supply);
+                expect(await feeDistributor.veSupplyPerWeek(startWeek)).to.closeToBn(supply, 30);
 
                 // The calculated supply in the past does not change any more
                 await votingEscrow.mock.getLockedBalance
                     .withArgs(addr1)
                     .returns([amount1, unixWeek(100)]);
                 await feeDistributor.syncWithVotingEscrow(addr1);
-                expect(await feeDistributor.veSupplyPerWeek(startWeek)).to.equal(supply);
+                expect(await feeDistributor.veSupplyPerWeek(startWeek)).to.closeToBn(supply, 30);
                 await advanceBlockAtTime(startWeek + DAY * 10);
                 await feeDistributor.checkpoint();
-                expect(await feeDistributor.veSupplyPerWeek(startWeek)).to.equal(supply);
+                expect(await feeDistributor.veSupplyPerWeek(startWeek)).to.closeToBn(supply, 30);
             });
 
             it("Should calculate supply for multiple weeks", async function () {
@@ -372,7 +372,7 @@ describe("FeeDistributor", function () {
                 const balance2w0 = amount2.mul(unixWeek(2) - w0).div(MAX_TIME);
                 const balance3w0 = amount3.mul(unixWeek(8) - w0).div(MAX_TIME);
                 const supply0 = balance1w0.add(balance2w0).add(balance3w0);
-                expect(await feeDistributor.veSupplyPerWeek(w0)).to.equal(supply0);
+                expect(await feeDistributor.veSupplyPerWeek(w0)).to.closeToBn(supply0, 30);
 
                 const w1 = startWeek + WEEK;
                 const balance2w1 = amount2.mul(unixWeek(2) - w1).div(MAX_TIME);
@@ -466,7 +466,7 @@ describe("FeeDistributor", function () {
                 await feeDistributor.checkpoint();
                 await advanceBlockAtTime(startWeek + WEEK);
                 await feeDistributor.userCheckpoint(addr1);
-                expect(await feeDistributor.claimableRewards(addr1)).to.equal(totalRewards);
+                expect(await feeDistributor.claimableRewards(addr1)).to.closeToBn(totalRewards, 30);
                 await feeDistributor.userCheckpoint(addr2);
                 expect(await feeDistributor.claimableRewards(addr2)).to.equal(0);
             });
