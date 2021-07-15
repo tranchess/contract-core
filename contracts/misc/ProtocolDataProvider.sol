@@ -200,7 +200,6 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         IERC20 underlyingToken = IERC20(fund.tokenUnderlying());
         IERC20 quoteToken = IERC20(exchange.quoteAssetAddress());
         IERC20 chessToken = IERC20(votingEscrow.token());
-        IPancakePair pair = IPancakePair(pancakePairAddress);
         IChessSchedule chessSchedule = exchange.chessSchedule();
 
         data.wallet.balance.underlyingToken = underlyingToken.balanceOf(account);
@@ -314,6 +313,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
             }
         }
 
+        IPancakePair pair = IPancakePair(pancakePairAddress);
         data.pair.token0 = pair.token0();
         data.pair.token1 = pair.token1();
         (data.pair.reserve0, data.pair.reserve1, ) = pair.getReserves();
