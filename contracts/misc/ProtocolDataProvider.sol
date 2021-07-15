@@ -3,7 +3,6 @@ pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
 
 import "../interfaces/ITrancheIndex.sol";
 import "../interfaces/IChessSchedule.sol";
@@ -189,6 +188,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         address primaryMarketAddress,
         address exchangeAddress,
         address pancakePairAddress,
+        address feeDistributorAddress,
         address account
     ) external returns (ProtocolData memory data) {
         data.blockNumber = block.number;
@@ -284,33 +284,34 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.governance.interestRateBallot.account = InterestRateBallot(address(fund.ballot()))
             .getReceipt(account);
 
-        IFeeDistributor feeDistributor = IFeeDistributor(fund.feeCollector());
-        if (Address.isContract(address(feeDistributor))) {
-            try feeDistributor.userCheckpoint(account) returns (uint256 feeClaimableRewards) {
-                data.governance.feeDistributor.account.claimableRewards = feeClaimableRewards;
-                data.governance.feeDistributor.account.currentBalance = feeDistributor
-                    .userLastBalances(account);
-                data.governance.feeDistributor.account.amount = feeDistributor
-                    .userLockedBalances(account)
-                    .amount;
-                data.governance.feeDistributor.account.unlockTime = feeDistributor
-                    .userLockedBalances(account)
-                    .unlockTime;
-                data.governance.feeDistributor.currentRewards = feeDistributor.rewardsPerWeek(
-                    data.fund.currentWeek - 1 weeks
-                );
-                data.governance.feeDistributor.currentSupply = feeDistributor.veSupplyPerWeek(
-                    data.fund.currentWeek - 1 weeks
-                );
-                for (uint256 i = 0; i < 3; i++) {
-                    uint256 weekEnd = data.fund.currentWeek - (i + 1) * 1 weeks;
-                    data.governance.feeDistributor.historicalRewards[i].timestamp = weekEnd;
-                    data.governance.feeDistributor.historicalRewards[i].veSupply = feeDistributor
-                        .veSupplyPerWeek(weekEnd - 1 weeks);
-                    data.governance.feeDistributor.historicalRewards[i].rewards = feeDistributor
-                        .rewardsPerWeek(weekEnd - 1 weeks);
-                }
-            } catch {}
+        if (feeDistributorAddress != address(0)) {
+            IFeeDistributor feeDistributor = IFeeDistributor(feeDistributorAddress);
+            data.governance.feeDistributor.account.claimableRewards = feeDistributor.userCheckpoint(
+                account
+            );
+            data.governance.feeDistributor.account.currentBalance = feeDistributor.userLastBalances(
+                account
+            );
+            data.governance.feeDistributor.account.amount = feeDistributor
+                .userLockedBalances(account)
+                .amount;
+            data.governance.feeDistributor.account.unlockTime = feeDistributor
+                .userLockedBalances(account)
+                .unlockTime;
+            data.governance.feeDistributor.currentRewards = feeDistributor.rewardsPerWeek(
+                data.fund.currentWeek - 1 weeks
+            );
+            data.governance.feeDistributor.currentSupply = feeDistributor.veSupplyPerWeek(
+                data.fund.currentWeek - 1 weeks
+            );
+            for (uint256 i = 0; i < 3; i++) {
+                uint256 weekEnd = data.fund.currentWeek - (i + 1) * 1 weeks;
+                data.governance.feeDistributor.historicalRewards[i].timestamp = weekEnd;
+                data.governance.feeDistributor.historicalRewards[i].veSupply = feeDistributor
+                    .veSupplyPerWeek(weekEnd - 1 weeks);
+                data.governance.feeDistributor.historicalRewards[i].rewards = feeDistributor
+                    .rewardsPerWeek(weekEnd - 1 weeks);
+            }
         }
 
         data.pair.token0 = pair.token0();
