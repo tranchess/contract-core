@@ -33,10 +33,10 @@ contract FeeDistributor is CoreUtility {
     ///         trading week is not maintained and not used anymore.
     mapping(uint256 => uint256) public scheduledUnlock;
 
-    /// @notice Amount of Chess locked at the end of the last checkpoint's trading week
+    /// @notice Amount of Chess locked at the end of the last checkpoint's week
     uint256 public nextWeekLocked;
 
-    /// @notice Total veCHESS at the end of the last checkpoint's trading week
+    /// @notice Total veCHESS at the end of the last checkpoint's week
     uint256 public nextWeekSupply;
 
     /// @notice Cumulative rewards received until the last checkpoint minus cumulative rewards
@@ -45,25 +45,24 @@ contract FeeDistributor is CoreUtility {
 
     /// @notice Mapping of week => total rewards accumulated
     ///
-    ///         Key is the start timestamp of a trading week on each Thursday. Value
-    ///         is the rewards collected from the corresponding fund in rewardToken's unit
+    ///         Key is the start timestamp of a week on each Thursday. Value is
+    ///         the rewards collected from the corresponding fund in rewardToken's unit
     mapping(uint256 => uint256) public rewardsPerWeek;
 
     /// @notice Mapping of week => vote-locked chess total supplies
     ///
-    ///         Key is the start timestamp of a trading week on each Thursday. Value
-    ///         is vote-locked chess total supplies captured at the start of each
-    ///         trading week
+    ///         Key is the start timestamp of a week on each Thursday. Value is
+    ///         vote-locked chess total supplies captured at the start of each week
     mapping(uint256 => uint256) public veSupplyPerWeek;
 
     /// @notice Locked balance of an account, which is synchronized with `VotingEscrow` when
     ///         `syncWithVotingEscrow()` is called
     mapping(address => IVotingEscrow.LockedBalance) public userLockedBalances;
 
-    /// @notice Start timestamp of the trading week of a user's last checkpoint
+    /// @notice Start timestamp of the week of a user's last checkpoint
     mapping(address => uint256) public userWeekCursors;
 
-    /// @notice An account's veCHESS amount at the beginning of the trading week of this user's
+    /// @notice An account's veCHESS amount at the beginning of the week of this user's
     ///         last checkpoint
     mapping(address => uint256) public userLastBalances;
 
@@ -128,7 +127,7 @@ contract FeeDistributor is CoreUtility {
     function _totalSupplyAtTimestamp(uint256 timestamp) private view returns (uint256) {
         uint256 total = 0;
         for (
-            uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
+            uint256 weekCursor = _endOfWeek(timestamp);
             weekCursor <= timestamp + _maxTime;
             weekCursor += 1 weeks
         ) {
@@ -200,7 +199,7 @@ contract FeeDistributor is CoreUtility {
     }
 
     /// @notice Make a global checkpoint. If the period since the last checkpoint spans over
-    ///         multiple trading weeks, rewards received in this period are split into these weeks
+    ///         multiple weeks, rewards received in this period are split into these weeks
     ///         proportional to the time in each week.
     /// @dev Post-conditions:
     ///
@@ -208,8 +207,8 @@ contract FeeDistributor is CoreUtility {
     ///      - `lastRewardBalance == rewardToken.balanceOf(address(this))`
     ///      - All `rewardsPerWeek[t]` are updated, where `t <= checkpointTimestamp`
     ///      - All `veSupplyPerWeek[t]` are set, where `t <= checkpointTimestamp`
-    ///      - `nextWeekSupply` is the total veCHESS at the end of this unix week
-    ///      - `nextWeekLocked` is the total locked Chess at the end of this unix week
+    ///      - `nextWeekSupply` is the total veCHESS at the end of this week
+    ///      - `nextWeekLocked` is the total locked Chess at the end of this week
     function checkpoint() public {
         uint256 tokenBalance = rewardToken.balanceOf(address(this));
         uint256 tokensToDistribute = tokenBalance.sub(lastRewardBalance);
@@ -228,17 +227,12 @@ contract FeeDistributor is CoreUtility {
         if (weekCursor < currentWeek) {
             uint256 newLocked = nextWeekLocked;
             uint256 newSupply = nextWeekSupply;
-            // When the total supply drops to zero, the substractions in this loop may underflow
-            // due to rounding errors, preventing this contract to proceed. In this case, call
-            // `calibrateSupply()` to fix the error.
             for (uint256 w = weekCursor + 1 weeks; w <= currentWeek; w += 1 weeks) {
                 veSupplyPerWeek[w] = newSupply;
-                // Calculate supply at next Thursday 00:00 UTC.
-                newSupply = newSupply.sub(newLocked.mul(1 weeks - SETTLEMENT_TIME) / _maxTime);
-                // Remove Chess unlocked at next Thursday 00:00 UTC from total locked amount.
-                newLocked = newLocked.sub(scheduledUnlock[w + 1 weeks - SETTLEMENT_TIME]);
-                // Calculate supply at the end of the next trading week.
-                newSupply = newSupply.sub(newLocked.mul(SETTLEMENT_TIME) / _maxTime);
+                // Calculate supply at the end of the next week.
+                newSupply = newSupply.sub(newLocked.mul(1 weeks) / _maxTime);
+                // Remove Chess unlocked at the end of the next week from total locked amount.
+                newLocked = newLocked.sub(scheduledUnlock[w + 1 weeks]);
             }
             nextWeekLocked = newLocked;
             nextWeekSupply = newSupply;
@@ -276,8 +270,8 @@ contract FeeDistributor is CoreUtility {
     ///
     ///      Post-conditions:
     ///
-    ///      - `userWeekCursor[account]` is the start timestamp of the current trading week
-    ///      - `userLastBalances[account]` is amount of veCHESS at the beginning of the current trading week
+    ///      - `userWeekCursor[account]` is the start timestamp of the current week
+    ///      - `userLastBalances[account]` is amount of veCHESS at the beginning of the current week
     /// @param account Address of the account
     /// @return Rewards since the last checkpoint
     function _rewardCheckpoint(address account) private returns (uint256) {

@@ -5,7 +5,7 @@ import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther } = ethers.utils;
 import { deployMockForName } from "./mock";
-import { DAY, WEEK, FixtureWalletMap, advanceBlockAtTime } from "./utils";
+import { DAY, WEEK, SETTLEMENT_TIME, FixtureWalletMap, advanceBlockAtTime } from "./utils";
 
 const MAX_TIME = BigNumber.from(WEEK * 100);
 
@@ -53,7 +53,7 @@ describe("VotingEscrow", function () {
 
         // Start in the middle of a week
         const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
-        const startWeek = Math.floor(startTimestamp / WEEK) * WEEK + WEEK * 10;
+        const startWeek = Math.ceil(startTimestamp / WEEK) * WEEK + SETTLEMENT_TIME + WEEK * 10;
         advanceBlockAtTime(startWeek - WEEK / 2);
 
         const MockToken = await ethers.getContractFactory("MockToken");
@@ -336,7 +336,7 @@ describe("VotingEscrow", function () {
             const lockAmount1 = parseEther("123");
             const lockAmount2 = parseEther("456");
             const lockAmount3 = parseEther("789");
-            const startTime = Math.ceil(startWeek / WEEK) * WEEK;
+            const startTime = Math.ceil(startWeek / WEEK) * WEEK + SETTLEMENT_TIME;
             const unlockTime1 = startTime + 9 * WEEK;
             const unlockTime2 = startTime + 6 * WEEK;
             const unlockTime3 = startTime + 3 * WEEK;

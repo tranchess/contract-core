@@ -9,13 +9,14 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+import "../utils/CoreUtility.sol";
 import "../interfaces/IVotingEscrow.sol";
 
 interface IAddressWhitelist {
     function check(address account) external view returns (bool);
 }
 
-contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
+contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable, CoreUtility {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -101,7 +102,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     function createLock(uint256 amount, uint256 unlockTime) external nonReentrant {
         _assertNotContract();
 
-        unlockTime = (unlockTime / 1 weeks) * 1 weeks; // Locktime is rounded down to weeks
+        unlockTime = _endOfWeek(unlockTime) - 1 weeks; // Locktime is rounded down to weeks
         LockedBalance memory lockedBalance = locked[msg.sender];
 
         require(amount > 0, "Zero value");
@@ -136,7 +137,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
 
     function increaseUnlockTime(uint256 unlockTime) external nonReentrant {
         LockedBalance memory lockedBalance = locked[msg.sender];
-        unlockTime = (unlockTime / 1 weeks) * 1 weeks; // Locktime is rounded down to weeks
+        unlockTime = _endOfWeek(unlockTime) - 1 weeks; // Locktime is rounded down to weeks
 
         require(lockedBalance.unlockTime > block.timestamp, "Lock expired");
         require(unlockTime > lockedBalance.unlockTime, "Can only increase lock duration");
@@ -199,7 +200,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     }
 
     function _totalSupplyAtTimestamp(uint256 timestamp) private view returns (uint256) {
-        uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
+        uint256 weekCursor = _endOfWeek(timestamp);
         uint256 total = 0;
         for (; weekCursor <= timestamp + maxTime; weekCursor += 1 weeks) {
             total = total.add((scheduledUnlock[weekCursor].mul(weekCursor - timestamp)) / maxTime);
