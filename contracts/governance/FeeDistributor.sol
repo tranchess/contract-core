@@ -5,32 +5,35 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
 
 import "../interfaces/IVotingEscrow.sol";
 
-contract FeeDistributor is CoreUtility {
+contract FeeDistributor is CoreUtility, Ownable {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
-    address public immutable admin;
-    uint256 public immutable adminFeeRate;
+    /// @notice 60% as the max admin fee rate
+    uint256 public constant MAX_ADMIN_FEE_RATE = 6e17;
+
     uint256 private immutable _maxTime;
     IERC20 public immutable rewardToken;
     IVotingEscrow public immutable votingEscrow;
 
+    /// @notice Receiver for admin fee
+    address public admin;
+
+    /// @notice Admin fee rate
+    uint256 public adminFeeRate;
+
     /// @notice Timestamp of the last checkpoint
     uint256 public checkpointTimestamp;
 
-    /// @notice Mapping of unlockTime => amount that will be unlocked at unlockTime
-    ///
-    ///         Key is boundary of unix weeks (Thursday 00:00 UTC), which is different from
-    ///         many other mappings in this contract, whose keys are boundary of trading weeks
-    ///         (Thursday 14:00 UTC). Amount unlocked before the end of the last checkpoint's
-    ///         trading week is not maintained and not used anymore.
+    /// @notice Mapping of unlockTime => total amount that will be unlocked at unlockTime
     mapping(uint256 => uint256) public scheduledUnlock;
 
     /// @notice Amount of Chess locked at the end of the last checkpoint's week
@@ -83,6 +86,7 @@ contract FeeDistributor is CoreUtility {
         address admin_,
         uint256 adminFeeRate_
     ) public {
+        require(adminFeeRate_ <= MAX_ADMIN_FEE_RATE, "Cannot exceed max admin fee rate");
         rewardToken = IERC20(rewardToken_);
         votingEscrow = IVotingEscrow(votingEscrow_);
         _maxTime = IVotingEscrow(votingEscrow_).maxTime();
@@ -264,6 +268,15 @@ contract FeeDistributor is CoreUtility {
         }
 
         checkpointTimestamp = block.timestamp;
+    }
+
+    function updateAdmin(address newAdmin) external onlyOwner {
+        admin = newAdmin;
+    }
+
+    function updateAdminFeeRate(uint256 newAdminFeeRate) external onlyOwner {
+        require(newAdminFeeRate <= MAX_ADMIN_FEE_RATE, "Cannot exceed max admin fee rate");
+        adminFeeRate = newAdminFeeRate;
     }
 
     /// @dev Calculate rewards since a user's last checkpoint and make a new checkpoint.

@@ -8,6 +8,7 @@ import { deployMockForName } from "./mock";
 import { DAY, WEEK, SETTLEMENT_TIME, FixtureWalletMap, advanceBlockAtTime } from "./utils";
 
 const MAX_TIME = BigNumber.from(WEEK * 100);
+const MAX_TIME_ALLOWED = WEEK * 50;
 
 function calculateBalanceOf(
     lockAmount: BigNumber,
@@ -49,7 +50,7 @@ describe("VotingEscrow", function () {
     let votingEscrow: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
-        const [user1, user2, user3, owner] = provider.getWallets();
+        const [user1, user2, user3, owner, proxyOwner] = provider.getWallets();
 
         // Start in the middle of a week
         const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
@@ -60,13 +61,24 @@ describe("VotingEscrow", function () {
         const chess = await MockToken.connect(owner).deploy("Chess", "Chess", 18);
 
         const VotingEscrow = await ethers.getContractFactory("VotingEscrow");
-        const votingEscrow = await VotingEscrow.connect(owner).deploy(
+        const votingEscrowImpl = await VotingEscrow.connect(proxyOwner).deploy(
             chess.address,
             constants.AddressZero,
             "veChess",
             "veChess",
             MAX_TIME
         );
+        const TransparentUpgradeableProxy = await ethers.getContractFactory(
+            "TransparentUpgradeableProxy"
+        );
+        const chessScheduleProxy = await TransparentUpgradeableProxy.connect(proxyOwner).deploy(
+            votingEscrowImpl.address,
+            proxyOwner.address,
+            "0x"
+        );
+        const votingEscrow = VotingEscrow.attach(chessScheduleProxy.address);
+
+        await votingEscrow.connect(owner).initialize(MAX_TIME_ALLOWED);
 
         await chess.mint(user1.address, parseEther("1000"));
         await chess.mint(user2.address, parseEther("1000"));
@@ -100,6 +112,42 @@ describe("VotingEscrow", function () {
         startWeek = fixtureData.startWeek;
         chess = fixtureData.chess;
         votingEscrow = fixtureData.votingEscrow;
+    });
+
+    describe("updateMaxTimeAllowed", function () {
+        it("Should revert if max time allowed exceeds max time", async function () {
+            await expect(
+                votingEscrow.connect(owner).updateMaxTimeAllowed(MAX_TIME.add(1))
+            ).to.revertedWith("Cannot exceed max time");
+        });
+
+        it("Should revert if max time allowed decreases", async function () {
+            await expect(
+                votingEscrow.connect(owner).updateMaxTimeAllowed(MAX_TIME_ALLOWED - WEEK)
+            ).to.revertedWith("Cannot shorten max time allowed");
+        });
+
+        it("Should revert if creating a lock exceeding max time allowed", async function () {
+            await expect(
+                votingEscrow.createLock(
+                    parseEther("10"),
+                    startWeek + MAX_TIME_ALLOWED,
+                    constants.AddressZero,
+                    constants.HashZero
+                )
+            ).to.revertedWith("Voting lock cannot exceed max lock time");
+        });
+
+        it("Should revert if increasing unlock time exceeding max time allowed", async function () {
+            await votingEscrow.createLock(parseEther("10"), startWeek);
+            await expect(
+                votingEscrow.increaseUnlockTime(
+                    startWeek + MAX_TIME_ALLOWED,
+                    constants.AddressZero,
+                    constants.HashZero
+                )
+            ).to.revertedWith("Voting lock cannot exceed max lock time");
+        });
     });
 
     describe("createLock()", function () {
