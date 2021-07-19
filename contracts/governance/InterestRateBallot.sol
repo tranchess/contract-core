@@ -75,11 +75,18 @@ contract InterestRateBallot is IBallot {
         require(lockedBalance.amount > 0, "Zero value");
 
         // update scheduled unlock
-        scheduledUnlock[voter.unlockTime] -= voter.amount;
-        scheduledUnlock[lockedBalance.unlockTime] += lockedBalance.amount;
+        scheduledUnlock[voter.unlockTime] = scheduledUnlock[voter.unlockTime].sub(voter.amount);
+        scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime].add(
+            lockedBalance.amount
+        );
 
-        scheduledWeightedUnlock[voter.unlockTime] -= voter.amount * voter.weight;
-        scheduledWeightedUnlock[lockedBalance.unlockTime] += lockedBalance.amount * weight;
+        scheduledWeightedUnlock[voter.unlockTime] = scheduledWeightedUnlock[voter.unlockTime].sub(
+            voter.amount * voter.weight
+        );
+        scheduledWeightedUnlock[lockedBalance.unlockTime] = scheduledWeightedUnlock[
+            lockedBalance.unlockTime
+        ]
+            .add(lockedBalance.amount * weight);
 
         emit Voted(
             msg.sender,
@@ -97,6 +104,32 @@ contract InterestRateBallot is IBallot {
             unlockTime: lockedBalance.unlockTime,
             weight: weight
         });
+    }
+
+    function syncWithVotingEscrow(address account) external override {
+        Voter memory voter = voters[account];
+        require(voter.amount > 0, "No existing vote");
+
+        IVotingEscrow.LockedBalance memory lockedBalance = votingEscrow.getLockedBalance(account);
+        require(lockedBalance.amount > 0, "Zero value");
+
+        // update scheduled unlock
+        scheduledUnlock[voter.unlockTime] = scheduledUnlock[voter.unlockTime].sub(voter.amount);
+        scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime].add(
+            lockedBalance.amount
+        );
+
+        scheduledWeightedUnlock[voter.unlockTime] = scheduledWeightedUnlock[voter.unlockTime].sub(
+            voter.amount * voter.weight
+        );
+        scheduledWeightedUnlock[lockedBalance.unlockTime] = scheduledWeightedUnlock[
+            lockedBalance.unlockTime
+        ]
+            .add(lockedBalance.amount * voter.weight);
+
+        // update voter amount per account
+        voters[account].amount = lockedBalance.amount;
+        voters[account].unlockTime = lockedBalance.unlockTime;
     }
 
     function _balanceOfAtTimestamp(address account, uint256 timestamp)

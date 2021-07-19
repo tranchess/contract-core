@@ -109,7 +109,12 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, OwnableUpgradeable, Cor
         return _totalSupplyAtTimestamp(timestamp);
     }
 
-    function createLock(uint256 amount, uint256 unlockTime) external nonReentrant {
+    function createLock(
+        uint256 amount,
+        uint256 unlockTime,
+        address target,
+        bytes memory data
+    ) external nonReentrant {
         _assertNotContract();
 
         unlockTime = _endOfWeek(unlockTime) - 1 weeks; // Locktime is rounded down to weeks
@@ -129,10 +134,20 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, OwnableUpgradeable, Cor
 
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
+        if (target != address(0)) {
+            (bool result, ) = target.call(data);
+            require(result, "Transaction Failed");
+        }
+
         emit LockCreated(msg.sender, amount, unlockTime);
     }
 
-    function increaseAmount(address account, uint256 amount) external nonReentrant {
+    function increaseAmount(
+        address account,
+        uint256 amount,
+        address target,
+        bytes memory data
+    ) external nonReentrant {
         LockedBalance memory lockedBalance = locked[account];
 
         require(amount > 0, "Zero value");
@@ -145,10 +160,19 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, OwnableUpgradeable, Cor
 
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
+        if (target != address(0)) {
+            (bool result, ) = target.call(data);
+            require(result, "Transaction Failed");
+        }
+
         emit AmountIncreased(account, amount);
     }
 
-    function increaseUnlockTime(uint256 unlockTime) external nonReentrant {
+    function increaseUnlockTime(
+        uint256 unlockTime,
+        address target,
+        bytes memory data
+    ) external nonReentrant {
         LockedBalance memory lockedBalance = locked[msg.sender];
         unlockTime = _endOfWeek(unlockTime) - 1 weeks; // Locktime is rounded down to weeks
 
@@ -164,6 +188,11 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, OwnableUpgradeable, Cor
         );
         scheduledUnlock[unlockTime] = scheduledUnlock[unlockTime].add(lockedBalance.amount);
         locked[msg.sender].unlockTime = unlockTime;
+
+        if (target != address(0)) {
+            (bool result, ) = target.call(data);
+            require(result, "Transaction Failed");
+        }
 
         emit UnlockTimeIncreased(msg.sender, unlockTime);
     }
