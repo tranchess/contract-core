@@ -3,10 +3,13 @@ pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
+
+import "../utils/CoreUtility.sol";
+
 import "../interfaces/IBallot.sol";
 import "../interfaces/IVotingEscrow.sol";
 
-contract InterestRateBallot is IBallot {
+contract InterestRateBallot is IBallot, CoreUtility {
     using SafeMath for uint256;
 
     uint256 public immutable maxTime;
@@ -111,7 +114,10 @@ contract InterestRateBallot is IBallot {
         require(voter.amount > 0, "No existing vote");
 
         IVotingEscrow.LockedBalance memory lockedBalance = votingEscrow.getLockedBalance(account);
-        require(lockedBalance.amount > 0, "Zero value");
+        require(
+            lockedBalance.amount > 0 && lockedBalance.unlockTime > block.timestamp,
+            "No veCHESS"
+        );
 
         // update scheduled unlock
         scheduledUnlock[voter.unlockTime] = scheduledUnlock[voter.unlockTime].sub(voter.amount);
@@ -148,7 +154,7 @@ contract InterestRateBallot is IBallot {
     function _totalSupplyAtTimestamp(uint256 timestamp) private view returns (uint256) {
         uint256 total = 0;
         for (
-            uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
+            uint256 weekCursor = _endOfWeek(timestamp);
             weekCursor <= timestamp + maxTime;
             weekCursor += 1 weeks
         ) {
@@ -161,7 +167,7 @@ contract InterestRateBallot is IBallot {
     function _sumAtTimestamp(uint256 timestamp) private view returns (uint256) {
         uint256 sum = 0;
         for (
-            uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
+            uint256 weekCursor = _endOfWeek(timestamp);
             weekCursor <= timestamp + maxTime;
             weekCursor += 1 weeks
         ) {
@@ -175,7 +181,7 @@ contract InterestRateBallot is IBallot {
         uint256 sum = 0;
         uint256 total = 0;
         for (
-            uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
+            uint256 weekCursor = _endOfWeek(timestamp);
             weekCursor <= timestamp + maxTime;
             weekCursor += 1 weeks
         ) {
