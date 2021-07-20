@@ -50,7 +50,7 @@ describe("VotingEscrow", function () {
     let votingEscrow: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
-        const [user1, user2, user3, owner, proxyOwner] = provider.getWallets();
+        const [user1, user2, user3, owner] = provider.getWallets();
 
         // Start in the middle of a week
         const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
@@ -61,7 +61,7 @@ describe("VotingEscrow", function () {
         const chess = await MockToken.connect(owner).deploy("Chess", "Chess", 18);
 
         const VotingEscrow = await ethers.getContractFactory("VotingEscrow");
-        const votingEscrowImpl = await VotingEscrow.connect(proxyOwner).deploy(
+        const votingEscrowImpl = await VotingEscrow.connect(owner).deploy(
             chess.address,
             constants.AddressZero,
             "veChess",
@@ -71,14 +71,15 @@ describe("VotingEscrow", function () {
         const TransparentUpgradeableProxy = await ethers.getContractFactory(
             "TransparentUpgradeableProxy"
         );
-        const chessScheduleProxy = await TransparentUpgradeableProxy.connect(proxyOwner).deploy(
+        const ProxyAdmin = await ethers.getContractFactory("ProxyAdmin");
+        const proxyAdmin = await ProxyAdmin.connect(owner).deploy();
+        const initTx = await votingEscrowImpl.populateTransaction.initialize(MAX_TIME_ALLOWED);
+        const votingEscrowProxy = await TransparentUpgradeableProxy.connect(owner).deploy(
             votingEscrowImpl.address,
-            proxyOwner.address,
-            "0x"
+            proxyAdmin.address,
+            initTx.data
         );
-        const votingEscrow = VotingEscrow.attach(chessScheduleProxy.address);
-
-        await votingEscrow.connect(owner).initialize(MAX_TIME_ALLOWED);
+        const votingEscrow = VotingEscrow.attach(votingEscrowProxy.address);
 
         await chess.mint(user1.address, parseEther("1000"));
         await chess.mint(user2.address, parseEther("1000"));
