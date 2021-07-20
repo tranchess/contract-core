@@ -27,4 +27,12 @@ task("deploy_fee_distributor", "Deploy FeeDistributor")
         );
         console.log(`FeeDistributor implementation: ${feeDistributor.address}`);
         addressFile.set("feeDistributor", feeDistributor.address);
+
+        const VotingEscrowHelper = await ethers.getContractFactory("VotingEscrowHelper");
+        const votingEscrowHelper = await VotingEscrowHelper.deploy(
+            feeDistributor.address,
+            governanceAddresses.interestRateBallot
+        );
+        console.log(`VotingEscrowHelper: ${votingEscrowHelper.address}`);
+        addressFile.set("votingEscrowHelper", votingEscrowHelper.address);
     });
