@@ -235,7 +235,14 @@ contract Exchange is ExchangeRoles, Staking {
     )
         public
         ExchangeRoles(votingEscrow_, makerRequirement_)
-        Staking(fund_, chessSchedule_, chessController_, quoteAssetAddress_, guardedLaunchStart_)
+        Staking(
+            fund_,
+            chessSchedule_,
+            chessController_,
+            quoteAssetAddress_,
+            guardedLaunchStart_,
+            votingEscrow_
+        )
     {
         minBidAmount = minBidAmount_;
         minAskAmount = minAskAmount_;

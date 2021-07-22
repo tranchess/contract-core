@@ -48,6 +48,9 @@ const USER2_WEIGHT = USER2_M.mul(REWARD_WEIGHT_M)
     .div(REWARD_WEIGHT_M);
 const TOTAL_WEIGHT = USER1_WEIGHT.add(USER2_WEIGHT);
 
+const TOKENLESS_PRODUCTION = 40;
+const TOTAL_VE_WEIGHT = 100;
+
 describe("Staking", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
@@ -58,6 +61,7 @@ describe("Staking", function () {
         readonly shareB: MockContract;
         readonly chessSchedule: MockContract;
         readonly chessController: MockContract;
+        readonly votingEscrow: MockContract;
         readonly usdc: Contract;
         readonly staking: Contract;
     }
@@ -77,6 +81,7 @@ describe("Staking", function () {
     let shareB: MockContract;
     let chessSchedule: MockContract;
     let chessController: MockContract;
+    let votingEscrow: MockContract;
     let usdc: Contract;
     let staking: Contract;
 
@@ -104,13 +109,19 @@ describe("Staking", function () {
         const MockToken = await ethers.getContractFactory("MockToken");
         const usdc = await MockToken.connect(owner).deploy("USD Coin", "USDC", 6);
 
+        const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
+        await votingEscrow.mock.balanceOf.returns(0);
+        await votingEscrow.mock.totalSupply.returns(0);
+        await votingEscrow.mock.lastCheckpointTimestamp.returns(0);
+
         const Staking = await ethers.getContractFactory("StakingTestWrapper");
         const staking = await Staking.connect(owner).deploy(
             fund.address,
             chessSchedule.address,
             chessController.address,
             usdc.address,
-            0
+            0,
+            votingEscrow.address
         );
 
         // Deposit initial shares
@@ -137,6 +148,7 @@ describe("Staking", function () {
             shareB,
             chessSchedule,
             chessController,
+            votingEscrow,
             usdc,
             staking: staking.connect(user1),
         };
@@ -160,6 +172,7 @@ describe("Staking", function () {
         shareB = fixtureData.shareB;
         chessSchedule = fixtureData.chessSchedule;
         chessController = fixtureData.chessController;
+        votingEscrow = fixtureData.votingEscrow;
         usdc = fixtureData.usdc;
         staking = fixtureData.staking;
     });
@@ -738,6 +751,47 @@ describe("Staking", function () {
             return { rewards1, rewards2 };
         }
 
+        /**
+         * Return bossted claimable rewards of both user at time `claimingTime` if user1's balance
+         * increases at `doublingTime` by a certain amount such that the total reward weight
+         * doubles.
+         */
+        function rewardsAfterDoublingTotalWithBoost(
+            doublingTime: number,
+            claimingTime: number,
+            boostingFactor: number
+        ): { rewards1: BigNumber; rewards2: BigNumber } {
+            const formerRewards1 = rate1.mul(doublingTime);
+
+            const newUser1Weight = USER1_WEIGHT.add(TOTAL_WEIGHT);
+            const newTotalWeight = TOTAL_WEIGHT.add(TOTAL_WEIGHT);
+            const oldWorkingTotalWeight = TOTAL_WEIGHT.mul(TOKENLESS_PRODUCTION).div(100);
+            const oldWorkingWeight = USER1_WEIGHT.mul(TOKENLESS_PRODUCTION).div(100);
+            let newWorkingWeight = newUser1Weight
+                .mul(TOKENLESS_PRODUCTION)
+                .div(100)
+                .add(
+                    newTotalWeight
+                        .mul(boostingFactor)
+                        .mul(100 - TOKENLESS_PRODUCTION)
+                        .div(100)
+                        .div(TOTAL_VE_WEIGHT)
+                );
+            newWorkingWeight = newWorkingWeight.lt(newUser1Weight)
+                ? newWorkingWeight
+                : newUser1Weight;
+
+            const latterRewards1 = parseEther("1")
+                .mul(claimingTime - doublingTime)
+                .mul(parseEther("1000000000"))
+                .div(oldWorkingTotalWeight.add(newWorkingWeight).sub(oldWorkingWeight))
+                .mul(newWorkingWeight)
+                .div(parseEther("1000000000"));
+            const rewards1 = formerRewards1.add(latterRewards1);
+            const rewards2 = parseEther("1").mul(claimingTime).sub(rewards1);
+            return { rewards1, rewards2 };
+        }
+
         /*
          * Return claimable rewards of both user at time `claimingTime` if user1's balance
          * decreases at `doublingTime` by a certain amount such that the total reward weight
@@ -805,8 +859,40 @@ describe("Staking", function () {
 
             await advanceBlockAtTime(rewardStartTimestamp + 500);
             const { rewards1, rewards2 } = rewardsAfterDoublingTotal(100, 500);
+            console.log(
+                rewards1.sub(rate1.mul(100)).toString(),
+                rewards2.sub(rate2.mul(100)).toString()
+            );
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rewards1);
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(rewards2);
+        });
+
+        it("Should make a checkpoint on deposit() with boosting", async function () {
+            const votingEscrowWeightUser1 = 40;
+            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(votingEscrowWeightUser1);
+            await votingEscrow.mock.totalSupply.returns(TOTAL_VE_WEIGHT);
+            await votingEscrow.mock.lastCheckpointTimestamp.returns(1);
+
+            // Deposit some Token A to double the total reward weight
+            await shareA.mock.transferFrom.returns(true);
+            await setNextBlockTime(rewardStartTimestamp + 100);
+            await staking.deposit(
+                TRANCHE_A,
+                TOTAL_WEIGHT.mul(REWARD_WEIGHT_M).div(REWARD_WEIGHT_A)
+            );
+
+            await advanceBlockAtTime(rewardStartTimestamp + 500);
+            const { rewards1, rewards2 } = rewardsAfterDoublingTotalWithBoost(
+                100,
+                500,
+                votingEscrowWeightUser1
+            );
+            console.log(
+                rewards1.sub(rate1.mul(100)).toString(),
+                rewards2.sub(rate2.mul(100)).toString()
+            );
+            expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rewards1);
+            expect(await staking.callStatic["claimableRewards"](addr2)).closeToBn(rewards2, 1);
         });
 
         it("Should make a checkpoint on withdraw()", async function () {
@@ -1106,7 +1192,8 @@ describe("Staking", function () {
                 chessSchedule.address,
                 chessController.address,
                 usdc.address,
-                guardedLaunchStart
+                guardedLaunchStart,
+                votingEscrow.address
             );
             staking = staking.connect(user1);
         });

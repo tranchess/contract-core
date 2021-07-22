@@ -9,10 +9,18 @@ contract StakingTestWrapper is Staking {
         address chessSchedule_,
         address chessController_,
         address quoteAssetAddress_,
-        uint256 guardedLaunchStart_
+        uint256 guardedLaunchStart_,
+        address votingEscrow_
     )
         public
-        Staking(fund_, chessSchedule_, chessController_, quoteAssetAddress_, guardedLaunchStart_)
+        Staking(
+            fund_,
+            chessSchedule_,
+            chessController_,
+            quoteAssetAddress_,
+            guardedLaunchStart_,
+            votingEscrow_
+        )
     {}
 
     function tradeAvailable(

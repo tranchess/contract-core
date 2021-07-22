@@ -13,6 +13,7 @@ import "../interfaces/IFund.sol";
 import "../interfaces/IChessSchedule.sol";
 import "../interfaces/ITrancheIndex.sol";
 import "../interfaces/IPrimaryMarket.sol";
+import "../interfaces/IVotingEscrow.sol";
 
 interface IChessController {
     function getFundRelativeWeight(address account, uint256 timestamp)
@@ -32,12 +33,20 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
 
     event Deposited(uint256 tranche, address account, uint256 amount);
     event Withdrawn(uint256 tranche, address account, uint256 amount);
+    event UpdateLiquidityLimit(
+        address account,
+        uint256 originalWeight,
+        uint256 originalTotalWeight,
+        uint256 workingWeight,
+        uint256 workingTotalWeight
+    );
 
     uint256 private constant MAX_ITERATIONS = 500;
 
     uint256 private constant REWARD_WEIGHT_A = 4;
     uint256 private constant REWARD_WEIGHT_B = 2;
     uint256 private constant REWARD_WEIGHT_M = 3;
+    uint256 private constant TOKENLESS_PRODUCTION = 40;
 
     IFund public immutable fund;
     IERC20 private immutable tokenM;
@@ -98,12 +107,18 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @dev Mapping of account => claimable rewards.
     mapping(address => uint256) private _claimableRewards;
 
+    IVotingEscrow public immutable votingEscrowStaking;
+    uint256 public workingTotalWeight;
+    mapping(address => uint256) public workingWeights;
+    mapping(address => uint256) public lastCheckpointTimestamp;
+
     constructor(
         address fund_,
         address chessSchedule_,
         address chessController_,
         address quoteAssetAddress_,
-        uint256 guardedLaunchStart_
+        uint256 guardedLaunchStart_,
+        address votingEscrow_
     ) public {
         fund = IFund(fund_);
         tokenM = IERC20(IFund(fund_).tokenM());
@@ -114,6 +129,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         quoteAssetAddress = quoteAssetAddress_;
         _checkpointTimestamp = block.timestamp;
         guardedLaunchStart = guardedLaunchStart_;
+        votingEscrowStaking = IVotingEscrow(votingEscrow_);
 
         _rate = IChessSchedule(chessSchedule_).getRate(block.timestamp);
     }
@@ -251,6 +267,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         );
         _totalSupplies[tranche] = _totalSupplies[tranche].add(amount);
 
+        _updateWorkingWeights(msg.sender);
+
         emit Deposited(tranche, msg.sender, amount);
     }
 
@@ -280,6 +298,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         } else {
             tokenB.safeTransfer(msg.sender, amount);
         }
+
+        _updateWorkingWeights(msg.sender);
 
         emit Withdrawn(tranche, msg.sender, amount);
     }
@@ -326,6 +346,33 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         _claim(account);
     }
 
+    /// @notice Kick `account` for abusing their boost
+    /// @dev Only if either they had another voting event, or their voting escrow lock expired
+    /// @param account Address to kick
+    function kick(address account) external {
+        IVotingEscrow _votingEscrow = votingEscrowStaking;
+        uint256 lastTimestamp = lastCheckpointTimestamp[account];
+        uint256 latestTimestamp = _votingEscrow.lastCheckpointTimestamp(account);
+        require(_votingEscrow.balanceOf(account) == 0 || lastTimestamp < latestTimestamp); // dev: kick not allowed
+
+        uint256[TRANCHE_COUNT] storage available = _availableBalances[account];
+        uint256[TRANCHE_COUNT] storage locked = _lockedBalances[account];
+        uint256 availableM = available[TRANCHE_M];
+        uint256 availableA = available[TRANCHE_A];
+        uint256 availableB = available[TRANCHE_B];
+        uint256 lockedM = locked[TRANCHE_M];
+        uint256 lockedA = locked[TRANCHE_A];
+        uint256 lockedB = locked[TRANCHE_B];
+        uint256 weight =
+            rewardWeight(availableM.add(lockedM), availableA.add(lockedA), availableB.add(lockedB));
+        require(workingWeights[account] > (weight * TOKENLESS_PRODUCTION) / 100); // dev: kick not needed
+
+        uint256 rebalanceSize = fund.getRebalanceSize();
+        _checkpoint(rebalanceSize);
+        _userCheckpoint(account, rebalanceSize);
+        _updateWorkingWeights(account);
+    }
+
     /// @dev Transfer shares from the sender to the contract internally
     /// @param tranche Tranche of the share
     /// @param sender Sender address
@@ -340,6 +387,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         _userCheckpoint(sender, rebalanceSize);
         _availableBalances[sender][tranche] = _availableBalances[sender][tranche].sub(amount);
         _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
+        _updateWorkingWeights(sender);
     }
 
     function _rebalanceAndClearTrade(
@@ -381,6 +429,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             available[TRANCHE_B] = available[TRANCHE_B].add(amountB);
             _totalSupplies[TRANCHE_B] = _totalSupplies[TRANCHE_B].add(amountB);
         }
+        _updateWorkingWeights(account);
+
         return (amountM, amountA, amountB);
     }
 
@@ -444,6 +494,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         _userCheckpoint(account, rebalanceSize);
         _lockedBalances[account][tranche] = _lockedBalances[account][tranche].sub(amount);
         _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
+        _updateWorkingWeights(account);
     }
 
     /// @dev Transfer claimable rewards to an account. Rewards since the last user checkpoint
@@ -479,7 +530,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         uint256 totalSupplyM = _totalSupplies[TRANCHE_M];
         uint256 totalSupplyA = _totalSupplies[TRANCHE_A];
         uint256 totalSupplyB = _totalSupplies[TRANCHE_B];
-        uint256 weight = rewardWeight(totalSupplyM, totalSupplyA, totalSupplyB);
+        uint256 weight = workingTotalWeight;
         uint256 timestamp_ = timestamp; // avoid stack too deep
 
         for (uint256 i = 0; i < MAX_ITERATIONS && timestamp_ < block.timestamp; i++) {
@@ -535,6 +586,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             _totalSupplies[TRANCHE_A] = totalSupplyA;
             _totalSupplies[TRANCHE_B] = totalSupplyB;
             _totalSupplyVersion = rebalanceSize;
+            // Reset total working weight before any boosting if rebalance ever triggered
+            workingTotalWeight = weight;
         }
     }
 
@@ -573,22 +626,17 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             return;
         }
 
+        uint256 rewards = _claimableRewards[account];
         uint256[TRANCHE_COUNT] storage available = _availableBalances[account];
         uint256[TRANCHE_COUNT] storage locked = _lockedBalances[account];
+        uint256 weight = workingWeights[account];
         uint256 availableM = available[TRANCHE_M];
         uint256 availableA = available[TRANCHE_A];
         uint256 availableB = available[TRANCHE_B];
         uint256 lockedM = locked[TRANCHE_M];
         uint256 lockedA = locked[TRANCHE_A];
         uint256 lockedB = locked[TRANCHE_B];
-        uint256 rewards = _claimableRewards[account];
         for (uint256 i = oldVersion; i < targetVersion; i++) {
-            uint256 weight =
-                rewardWeight(
-                    availableM.add(lockedM),
-                    availableA.add(lockedA),
-                    availableB.add(lockedB)
-                );
             rewards = rewards.add(
                 weight.multiplyDecimalPrecise(_historicalIntegrals[i].sub(userIntegral))
             );
@@ -604,9 +652,14 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                 (lockedM, lockedA, lockedB) = fund.doRebalance(lockedM, lockedA, lockedB, i);
             }
             userIntegral = 0;
+
+            // Calculate reward weight without boost
+            weight = rewardWeight(
+                availableM.add(lockedM),
+                availableA.add(lockedA),
+                availableB.add(lockedB)
+            );
         }
-        uint256 weight =
-            rewardWeight(availableM.add(lockedM), availableA.add(lockedA), availableB.add(lockedB));
         rewards = rewards.add(weight.multiplyDecimalPrecise(integral.sub(userIntegral)));
         address account_ = account; // Fix the "stack too deep" error
         _claimableRewards[account_] = rewards;
@@ -632,6 +685,58 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                 locked[TRANCHE_B] = lockedB;
             }
             _balanceVersions[account_] = targetVersion;
+
+            // Reset working weight to zero if rebalance ever triggered
+            workingWeights[account_] = 0;
         }
+    }
+
+    /// @notice Calculate limits which depend on the amount of CHESS token per-user.
+    ///         Effectively it calculates working balances to apply amplification
+    ///         of CHESS production by CHESS
+    /// @param account User address
+    function _updateWorkingWeights(address account) private {
+        // To be called after totalSupply is updated
+        uint256[TRANCHE_COUNT] storage available = _availableBalances[account];
+        uint256[TRANCHE_COUNT] storage locked = _lockedBalances[account];
+        uint256 availableM = available[TRANCHE_M];
+        uint256 availableA = available[TRANCHE_A];
+        uint256 availableB = available[TRANCHE_B];
+        uint256 lockedM = locked[TRANCHE_M];
+        uint256 lockedA = locked[TRANCHE_A];
+        uint256 lockedB = locked[TRANCHE_B];
+        uint256 totalSupplyM = _totalSupplies[TRANCHE_M];
+        uint256 totalSupplyA = _totalSupplies[TRANCHE_A];
+        uint256 totalSupplyB = _totalSupplies[TRANCHE_B];
+        uint256 weight =
+            rewardWeight(availableM.add(lockedM), availableA.add(lockedA), availableB.add(lockedB));
+        uint256 totalWeight = rewardWeight(totalSupplyM, totalSupplyA, totalSupplyB);
+
+        address account_ = account;
+        IVotingEscrow _votingEscrow = votingEscrowStaking;
+        uint256 votingBalance = _votingEscrow.balanceOf(account_);
+        uint256 votingTotal = _votingEscrow.totalSupply();
+
+        uint256 newWorkingWeight = (weight * TOKENLESS_PRODUCTION) / 100;
+        if (votingTotal > 0) {
+            newWorkingWeight +=
+                (totalWeight * votingBalance * (100 - TOKENLESS_PRODUCTION)) /
+                (votingTotal * 100);
+        }
+
+        newWorkingWeight = weight.min(newWorkingWeight);
+        uint256 _workingTotalWeight =
+            workingTotalWeight + newWorkingWeight - workingWeights[account_];
+        workingWeights[account_] = newWorkingWeight;
+        workingTotalWeight = _workingTotalWeight;
+        lastCheckpointTimestamp[account_] = _votingEscrow.lastCheckpointTimestamp(account_);
+
+        emit UpdateLiquidityLimit(
+            account_,
+            weight,
+            totalWeight,
+            newWorkingWeight,
+            _workingTotalWeight
+        );
     }
 }
