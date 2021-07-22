@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import { BigNumber, Contract, Wallet, constants, BigNumberish } from "ethers";
+const { AddressZero } = constants;
 import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
@@ -65,7 +66,7 @@ describe("VotingEscrow", function () {
         const VotingEscrow = await ethers.getContractFactory("VotingEscrow");
         const votingEscrowImpl = await VotingEscrow.connect(owner).deploy(
             chess.address,
-            constants.AddressZero,
+            AddressZero,
             "veChess",
             "veChess",
             MAX_TIME
@@ -172,36 +173,21 @@ describe("VotingEscrow", function () {
 
     describe("createLock()", function () {
         it("Should revert with zero amount", async function () {
-            await expect(
-                votingEscrow.createLock(0, startWeek, constants.AddressZero, "0x")
-            ).to.revertedWith("Zero value");
+            await expect(votingEscrow.createLock(0, startWeek, AddressZero, "0x")).to.revertedWith(
+                "Zero value"
+            );
         });
 
         it("Should revert with existing lock found", async function () {
-            await votingEscrow.createLock(
-                parseEther("10"),
-                startWeek + WEEK,
-                constants.AddressZero,
-                "0x"
-            );
+            await votingEscrow.createLock(parseEther("10"), startWeek + WEEK, AddressZero, "0x");
             await expect(
-                votingEscrow.createLock(
-                    parseEther("10"),
-                    startWeek + WEEK * 2,
-                    constants.AddressZero,
-                    "0x"
-                )
+                votingEscrow.createLock(parseEther("10"), startWeek + WEEK * 2, AddressZero, "0x")
             ).to.revertedWith("Withdraw old tokens first");
         });
 
         it("Should revert with only lock until future time", async function () {
             await expect(
-                votingEscrow.createLock(
-                    parseEther("10"),
-                    startWeek - 1,
-                    constants.AddressZero,
-                    "0x"
-                )
+                votingEscrow.createLock(parseEther("10"), startWeek - 1, AddressZero, "0x")
             ).to.revertedWith("Can only lock until time in the future");
         });
 
@@ -210,7 +196,7 @@ describe("VotingEscrow", function () {
                 votingEscrow.createLock(
                     parseEther("10"),
                     startWeek + MAX_TIME_ALLOWED,
-                    constants.AddressZero,
+                    AddressZero,
                     "0x"
                 )
             ).to.revertedWith("Voting lock cannot exceed max lock time");
@@ -224,7 +210,7 @@ describe("VotingEscrow", function () {
                     "createLock",
                     parseEther("10"),
                     startWeek + WEEK * 10,
-                    constants.AddressZero,
+                    AddressZero,
                     "0x"
                 )
             ).to.revertedWith("Smart contract depositors not allowed");
@@ -239,9 +225,7 @@ describe("VotingEscrow", function () {
             expect(await votingEscrow.balanceOf(addr1)).to.be.equal(0);
             expect(await votingEscrow.totalSupply()).to.be.equal(0);
 
-            await expect(
-                votingEscrow.createLock(lockAmount, unlockTime, constants.AddressZero, "0x")
-            )
+            await expect(votingEscrow.createLock(lockAmount, unlockTime, AddressZero, "0x"))
                 .to.emit(votingEscrow, "LockCreated")
                 .withArgs(addr1, lockAmount, unlockTime);
 
@@ -260,27 +244,22 @@ describe("VotingEscrow", function () {
 
     describe("increaseAmount()", function () {
         it("Should revert with zero amount", async function () {
-            await expect(
-                votingEscrow.increaseAmount(addr1, 0, constants.AddressZero, "0x")
-            ).to.revertedWith("Zero value");
+            await expect(votingEscrow.increaseAmount(addr1, 0, AddressZero, "0x")).to.revertedWith(
+                "Zero value"
+            );
         });
 
         it("Should revert with no existing lock found", async function () {
             await expect(
-                votingEscrow.increaseAmount(addr1, parseEther("10"), constants.AddressZero, "0x")
+                votingEscrow.increaseAmount(addr1, parseEther("10"), AddressZero, "0x")
             ).to.revertedWith("Cannot add to expired lock");
         });
 
         it("Should revert with expired lock", async function () {
-            await votingEscrow.createLock(
-                parseEther("10"),
-                startWeek + WEEK,
-                constants.AddressZero,
-                "0x"
-            );
+            await votingEscrow.createLock(parseEther("10"), startWeek + WEEK, AddressZero, "0x");
             advanceBlockAtTime(startWeek + WEEK * 2);
             await expect(
-                votingEscrow.increaseAmount(addr1, parseEther("10"), constants.AddressZero, "0x")
+                votingEscrow.increaseAmount(addr1, parseEther("10"), AddressZero, "0x")
             ).to.revertedWith("Cannot add to expired lock");
         });
 
@@ -288,13 +267,13 @@ describe("VotingEscrow", function () {
             await votingEscrow.createLock(
                 parseEther("1"),
                 startWeek + WEEK * 10,
-                constants.AddressZero,
+                AddressZero,
                 "0x"
             );
             await expect(() =>
                 votingEscrow
                     .connect(user2)
-                    .increaseAmount(addr1, parseEther("2"), constants.AddressZero, "0x")
+                    .increaseAmount(addr1, parseEther("2"), AddressZero, "0x")
             ).to.changeTokenBalances(
                 chess,
                 [user2, votingEscrow],
@@ -307,12 +286,10 @@ describe("VotingEscrow", function () {
             const lockAmount2 = parseEther("5");
             const totalLockAmount = lockAmount.add(lockAmount2);
             const unlockTime = startWeek + WEEK * 10;
-            await votingEscrow.createLock(lockAmount, unlockTime, constants.AddressZero, "0x");
+            await votingEscrow.createLock(lockAmount, unlockTime, AddressZero, "0x");
             advanceBlockAtTime(unlockTime - WEEK);
 
-            await expect(
-                votingEscrow.increaseAmount(addr1, lockAmount2, constants.AddressZero, "0x")
-            )
+            await expect(votingEscrow.increaseAmount(addr1, lockAmount2, AddressZero, "0x"))
                 .to.emit(votingEscrow, "AmountIncreased")
                 .withArgs(addr1, lockAmount2);
 
@@ -336,13 +313,11 @@ describe("VotingEscrow", function () {
             const lockAmount2 = parseEther("5");
             const totalLockAmount = lockAmount.add(lockAmount2);
             const unlockTime = startWeek + WEEK * 10;
-            await votingEscrow.createLock(lockAmount, unlockTime, constants.AddressZero, "0x");
+            await votingEscrow.createLock(lockAmount, unlockTime, AddressZero, "0x");
             advanceBlockAtTime(unlockTime - WEEK);
 
             await expect(
-                votingEscrow
-                    .connect(user2)
-                    .increaseAmount(addr1, lockAmount2, constants.AddressZero, "0x")
+                votingEscrow.connect(user2).increaseAmount(addr1, lockAmount2, AddressZero, "0x")
             )
                 .to.emit(votingEscrow, "AmountIncreased")
                 .withArgs(addr1, lockAmount2);
@@ -365,43 +340,24 @@ describe("VotingEscrow", function () {
 
     describe("increaseUnlockTime()", function () {
         it("Should revert with expired lock", async function () {
-            await votingEscrow.createLock(
-                parseEther("10"),
-                startWeek + WEEK,
-                constants.AddressZero,
-                "0x"
-            );
+            await votingEscrow.createLock(parseEther("10"), startWeek + WEEK, AddressZero, "0x");
             advanceBlockAtTime(startWeek + WEEK * 2);
             await expect(
-                votingEscrow.increaseUnlockTime(startWeek + WEEK * 5, constants.AddressZero, "0x")
+                votingEscrow.increaseUnlockTime(startWeek + WEEK * 5, AddressZero, "0x")
             ).to.revertedWith("Lock expire");
         });
 
         it("Should revert with only increase lock duration", async function () {
-            await votingEscrow.createLock(
-                parseEther("10"),
-                startWeek + WEEK,
-                constants.AddressZero,
-                "0x"
-            );
+            await votingEscrow.createLock(parseEther("10"), startWeek + WEEK, AddressZero, "0x");
             await expect(
-                votingEscrow.increaseUnlockTime(startWeek + WEEK, constants.AddressZero, "0x")
+                votingEscrow.increaseUnlockTime(startWeek + WEEK, AddressZero, "0x")
             ).to.revertedWith("Can only increase lock duration");
         });
 
         it("Should revert with more than max time lock", async function () {
-            await votingEscrow.createLock(
-                parseEther("10"),
-                startWeek + WEEK,
-                constants.AddressZero,
-                "0x"
-            );
+            await votingEscrow.createLock(parseEther("10"), startWeek + WEEK, AddressZero, "0x");
             await expect(
-                votingEscrow.increaseUnlockTime(
-                    startWeek + MAX_TIME_ALLOWED,
-                    constants.AddressZero,
-                    "0x"
-                )
+                votingEscrow.increaseUnlockTime(startWeek + MAX_TIME_ALLOWED, AddressZero, "0x")
             ).to.revertedWith("Voting lock cannot exceed max lock time");
         });
 
@@ -409,12 +365,10 @@ describe("VotingEscrow", function () {
             const lockAmount = parseEther("10");
             const unlockTime = startWeek + WEEK * 10;
             const newUnlockTime = unlockTime + WEEK * 2;
-            await votingEscrow.createLock(lockAmount, unlockTime, constants.AddressZero, "0x");
+            await votingEscrow.createLock(lockAmount, unlockTime, AddressZero, "0x");
             advanceBlockAtTime(unlockTime - WEEK);
 
-            await expect(
-                votingEscrow.increaseUnlockTime(newUnlockTime, constants.AddressZero, "0x")
-            )
+            await expect(votingEscrow.increaseUnlockTime(newUnlockTime, AddressZero, "0x"))
                 .to.emit(votingEscrow, "UnlockTimeIncreased")
                 .withArgs(addr1, newUnlockTime);
 
@@ -438,14 +392,14 @@ describe("VotingEscrow", function () {
         it("Should revert before lock expired", async function () {
             const lockAmount = parseEther("10");
             const unlockTime = startWeek + WEEK * 10;
-            await votingEscrow.createLock(lockAmount, unlockTime, constants.AddressZero, "0x");
+            await votingEscrow.createLock(lockAmount, unlockTime, AddressZero, "0x");
             await expect(votingEscrow.withdraw()).to.revertedWith("The lock is not expired");
         });
 
         it("Should increase unlock time for user1", async function () {
             const lockAmount = parseEther("10");
             const unlockTime = startWeek + WEEK * 10;
-            await votingEscrow.createLock(lockAmount, unlockTime, constants.AddressZero, "0x");
+            await votingEscrow.createLock(lockAmount, unlockTime, AddressZero, "0x");
             advanceBlockAtTime(unlockTime);
 
             await expect(votingEscrow.withdraw())
@@ -477,13 +431,13 @@ describe("VotingEscrow", function () {
             const unlockTime3 = startTime + 3 * WEEK;
             await votingEscrow
                 .connect(user1)
-                .createLock(lockAmount1, unlockTime1, constants.AddressZero, "0x");
+                .createLock(lockAmount1, unlockTime1, AddressZero, "0x");
             await votingEscrow
                 .connect(user2)
-                .createLock(lockAmount2, unlockTime2, constants.AddressZero, "0x");
+                .createLock(lockAmount2, unlockTime2, AddressZero, "0x");
             await votingEscrow
                 .connect(user3)
-                .createLock(lockAmount3, unlockTime3, constants.AddressZero, "0x");
+                .createLock(lockAmount3, unlockTime3, AddressZero, "0x");
 
             for (let i = 0; i < 11; i++) {
                 const currentTimestamp = startTime + WEEK * i;
@@ -520,7 +474,7 @@ describe("VotingEscrow", function () {
             unlockTime = startWeek + WEEK * 10;
             dropTimeBefore = calculateDropBelowTime(unlockTime, threshold, lockAmount);
 
-            await votingEscrow.createLock(lockAmount, unlockTime, constants.AddressZero, "0x");
+            await votingEscrow.createLock(lockAmount, unlockTime, AddressZero, "0x");
         });
 
         it("Should return zero if non existing lock", async function () {
@@ -577,7 +531,7 @@ describe("VotingEscrow", function () {
                 totalLockAmount
             );
 
-            await votingEscrow.increaseAmount(addr1, lockAmount2, constants.AddressZero, "0x");
+            await votingEscrow.increaseAmount(addr1, lockAmount2, AddressZero, "0x");
             expect(await votingEscrow.getTimestampDropBelow(addr1, threshold)).to.be.equal(
                 dropTimeAfterDepositFor
             );
@@ -593,7 +547,7 @@ describe("VotingEscrow", function () {
                 lockAmount
             );
 
-            await votingEscrow.increaseUnlockTime(newUnlockTime, constants.AddressZero, "0x");
+            await votingEscrow.increaseUnlockTime(newUnlockTime, AddressZero, "0x");
             expect(await votingEscrow.getTimestampDropBelow(addr1, threshold)).to.be.equal(
                 dropTimeAfterDepositFor
             );
@@ -634,7 +588,7 @@ describe("VotingEscrow", function () {
                     "createLock",
                     parseEther("10"),
                     startWeek + WEEK * 10,
-                    constants.AddressZero,
+                    AddressZero,
                     "0x"
                 )
             ).to.revertedWith("Smart contract depositors not allowed");
@@ -648,7 +602,7 @@ describe("VotingEscrow", function () {
                     "createLock",
                     parseEther("10"),
                     startWeek + WEEK * 10,
-                    constants.AddressZero,
+                    AddressZero,
                     "0x"
                 )
             ).to.callMocks({
@@ -677,12 +631,7 @@ describe("VotingEscrow", function () {
         });
 
         it("Should call post-operation in increaseAmount()", async function () {
-            await votingEscrow.createLock(
-                parseEther("1"),
-                startWeek + WEEK,
-                constants.AddressZero,
-                "0x"
-            );
+            await votingEscrow.createLock(parseEther("1"), startWeek + WEEK, AddressZero, "0x");
             await expect(votingEscrow.increaseAmount(addr1, 1, helper.address, data)).to.be
                 .reverted;
             await helper.mock.syncWithFeeDistributor.withArgs(addr3).returns();
@@ -690,12 +639,7 @@ describe("VotingEscrow", function () {
         });
 
         it("Should call post-operation in increaseUnlockTime()", async function () {
-            await votingEscrow.createLock(
-                parseEther("1"),
-                startWeek + WEEK,
-                constants.AddressZero,
-                "0x"
-            );
+            await votingEscrow.createLock(parseEther("1"), startWeek + WEEK, AddressZero, "0x");
             await expect(
                 votingEscrow.increaseUnlockTime(startWeek + WEEK * 2, helper.address, data)
             ).to.be.reverted;
