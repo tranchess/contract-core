@@ -7,15 +7,16 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
+import "../utils/CoreUtility.sol";
 import "../interfaces/IVotingEscrow.sol";
 
 interface IAddressWhitelist {
     function check(address account) external view returns (bool);
 }
 
-contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
+contract VotingEscrow is IVotingEscrow, ReentrancyGuard, OwnableUpgradeable, CoreUtility {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -41,18 +42,28 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     /// @notice Mapping of unlockTime => total amount that will be unlocked at unlockTime
     mapping(uint256 => uint256) public scheduledUnlock;
 
+    /// @notice max lock time allowed at the moment
+    uint256 public maxTimeAllowed;
+
     constructor(
         address token_,
         address addressWhitelist_,
         string memory name_,
         string memory symbol_,
         uint256 maxTime_
-    ) public Ownable() {
+    ) public {
         name = name_;
         symbol = symbol_;
         token = token_;
         addressWhitelist = addressWhitelist_;
         maxTime = maxTime_;
+    }
+
+    /// @notice Initialize ownership
+    function initialize(uint256 maxTimeAllowed_) external initializer {
+        __Ownable_init();
+        require(maxTimeAllowed_ <= maxTime, "Cannot exceed max time");
+        maxTimeAllowed = maxTimeAllowed_;
     }
 
     function getTimestampDropBelow(address account, uint256 threshold)
@@ -98,16 +109,24 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
         return _totalSupplyAtTimestamp(timestamp);
     }
 
-    function createLock(uint256 amount, uint256 unlockTime) external nonReentrant {
+    function createLock(
+        uint256 amount,
+        uint256 unlockTime,
+        address target,
+        bytes memory data
+    ) external nonReentrant {
         _assertNotContract();
 
-        unlockTime = (unlockTime / 1 weeks) * 1 weeks; // Locktime is rounded down to weeks
+        unlockTime = _endOfWeek(unlockTime) - 1 weeks; // Locktime is rounded down to weeks
         LockedBalance memory lockedBalance = locked[msg.sender];
 
         require(amount > 0, "Zero value");
         require(lockedBalance.amount == 0, "Withdraw old tokens first");
         require(unlockTime > block.timestamp, "Can only lock until time in the future");
-        require(unlockTime <= block.timestamp + maxTime, "Voting lock cannot exceed max lock time");
+        require(
+            unlockTime <= block.timestamp + maxTimeAllowed,
+            "Voting lock cannot exceed max lock time"
+        );
 
         scheduledUnlock[unlockTime] = scheduledUnlock[unlockTime].add(amount);
         locked[msg.sender].unlockTime = unlockTime;
@@ -115,10 +134,20 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
 
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
+        if (target != address(0)) {
+            (bool result, ) = target.call(data);
+            require(result, "Transaction Failed");
+        }
+
         emit LockCreated(msg.sender, amount, unlockTime);
     }
 
-    function increaseAmount(address account, uint256 amount) external nonReentrant {
+    function increaseAmount(
+        address account,
+        uint256 amount,
+        address target,
+        bytes memory data
+    ) external nonReentrant {
         LockedBalance memory lockedBalance = locked[account];
 
         require(amount > 0, "Zero value");
@@ -131,22 +160,39 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
 
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
+        if (target != address(0)) {
+            (bool result, ) = target.call(data);
+            require(result, "Transaction Failed");
+        }
+
         emit AmountIncreased(account, amount);
     }
 
-    function increaseUnlockTime(uint256 unlockTime) external nonReentrant {
+    function increaseUnlockTime(
+        uint256 unlockTime,
+        address target,
+        bytes memory data
+    ) external nonReentrant {
         LockedBalance memory lockedBalance = locked[msg.sender];
-        unlockTime = (unlockTime / 1 weeks) * 1 weeks; // Locktime is rounded down to weeks
+        unlockTime = _endOfWeek(unlockTime) - 1 weeks; // Locktime is rounded down to weeks
 
         require(lockedBalance.unlockTime > block.timestamp, "Lock expired");
         require(unlockTime > lockedBalance.unlockTime, "Can only increase lock duration");
-        require(unlockTime <= block.timestamp + maxTime, "Voting lock cannot exceed max lock time");
+        require(
+            unlockTime <= block.timestamp + maxTimeAllowed,
+            "Voting lock cannot exceed max lock time"
+        );
 
         scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime].sub(
             lockedBalance.amount
         );
         scheduledUnlock[unlockTime] = scheduledUnlock[unlockTime].add(lockedBalance.amount);
         locked[msg.sender].unlockTime = unlockTime;
+
+        if (target != address(0)) {
+            (bool result, ) = target.call(data);
+            require(result, "Transaction Failed");
+        }
 
         emit UnlockTimeIncreased(msg.sender, unlockTime);
     }
@@ -199,11 +245,17 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, Ownable {
     }
 
     function _totalSupplyAtTimestamp(uint256 timestamp) private view returns (uint256) {
-        uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
+        uint256 weekCursor = _endOfWeek(timestamp);
         uint256 total = 0;
         for (; weekCursor <= timestamp + maxTime; weekCursor += 1 weeks) {
             total = total.add((scheduledUnlock[weekCursor].mul(weekCursor - timestamp)) / maxTime);
         }
         return total;
+    }
+
+    function updateMaxTimeAllowed(uint256 newMaxTimeAllowed) external onlyOwner {
+        require(newMaxTimeAllowed <= maxTime, "Cannot exceed max time");
+        require(newMaxTimeAllowed > maxTimeAllowed, "Cannot shorten max time allowed");
+        maxTimeAllowed = newMaxTimeAllowed;
     }
 }

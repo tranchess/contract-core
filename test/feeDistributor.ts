@@ -15,7 +15,7 @@ import {
 } from "./utils";
 
 const MAX_TIME = WEEK * 200;
-const ADMIN_FEE_RATE_BPS = 6000; // 40%
+const ADMIN_FEE_RATE_BPS = 6000; // 40% distributed to users
 
 describe("FeeDistributor", function () {
     interface FixtureData {
@@ -45,10 +45,10 @@ describe("FeeDistributor", function () {
      * Calculates the start timestamp of a UNIX week. Week 0 is the week containing `startWeek`.
      *
      * @param weekIndex Index of the week
-     * @returns Start timestamp of the UNIX week (Thursday 00:00 UTC)
+     * @returns Start timestamp of the settlement week (Thursday 14:00 UTC)
      */
-    function unixWeek(weekIndex: number): number {
-        return Math.floor(startWeek / WEEK + weekIndex) * WEEK;
+    function startOfWeek(weekIndex: number): number {
+        return startWeek + weekIndex * WEEK;
     }
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
@@ -111,7 +111,7 @@ describe("FeeDistributor", function () {
 
             await votingEscrow.mock.getLockedBalance
                 .withArgs(addr1)
-                .returns([parseEther("1"), unixWeek(0)]);
+                .returns([parseEther("1"), startOfWeek(0)]);
             await expect(feeDistributor.syncWithVotingEscrow(addr1)).to.be.revertedWith(
                 "No veCHESS"
             );
@@ -119,14 +119,16 @@ describe("FeeDistributor", function () {
 
         it("Should update locked balance", async function () {
             const amount = parseEther("1");
-            await votingEscrow.mock.getLockedBalance.withArgs(addr1).returns([amount, unixWeek(1)]);
+            await votingEscrow.mock.getLockedBalance
+                .withArgs(addr1)
+                .returns([amount, startOfWeek(1)]);
             await feeDistributor.syncWithVotingEscrow(addr1);
 
             const lockedBalance = await feeDistributor.userLockedBalances(addr1);
             expect(lockedBalance.amount).to.equal(amount);
-            expect(lockedBalance.unlockTime).to.equal(unixWeek(1));
+            expect(lockedBalance.unlockTime).to.equal(startOfWeek(1));
             // Check veCHESS at startWeek
-            const balance = amount.mul(unixWeek(1) - startWeek).div(MAX_TIME);
+            const balance = amount.mul(startOfWeek(1) - startWeek).div(MAX_TIME);
             expect(await feeDistributor.balanceOfAtTimestamp(addr1, startWeek)).to.equal(balance);
             expect(await feeDistributor.totalSupplyAtTimestamp(startWeek)).to.equal(balance);
             expect(await feeDistributor.nextWeekLocked()).to.equal(amount);
@@ -136,16 +138,18 @@ describe("FeeDistributor", function () {
         it("Should update locked balance before unlocked", async function () {
             await votingEscrow.mock.getLockedBalance
                 .withArgs(addr1)
-                .returns([parseEther("1"), unixWeek(5)]);
+                .returns([parseEther("1"), startOfWeek(5)]);
             await feeDistributor.syncWithVotingEscrow(addr1);
             await advanceBlockAtTime(startWeek + DAY * 10);
             const amount = parseEther("2");
-            await votingEscrow.mock.getLockedBalance.withArgs(addr1).returns([amount, unixWeek(8)]);
+            await votingEscrow.mock.getLockedBalance
+                .withArgs(addr1)
+                .returns([amount, startOfWeek(8)]);
             await feeDistributor.syncWithVotingEscrow(addr1);
 
             // Check veCHESS at the beginning of the next week
             const nextWeek = startWeek + WEEK * 2;
-            const balance = amount.mul(unixWeek(8) - nextWeek).div(MAX_TIME);
+            const balance = amount.mul(startOfWeek(8) - nextWeek).div(MAX_TIME);
             expect(await feeDistributor.balanceOfAtTimestamp(addr1, nextWeek)).to.equal(balance);
             expect(await feeDistributor.totalSupplyAtTimestamp(nextWeek)).to.equal(balance);
             expect(await feeDistributor.nextWeekLocked()).to.equal(amount);
@@ -155,18 +159,18 @@ describe("FeeDistributor", function () {
         it("Should update locked balance after unlocked", async function () {
             await votingEscrow.mock.getLockedBalance
                 .withArgs(addr1)
-                .returns([parseEther("1"), unixWeek(1)]);
+                .returns([parseEther("1"), startOfWeek(1)]);
             await feeDistributor.syncWithVotingEscrow(addr1);
             await advanceBlockAtTime(startWeek + WEEK * 10);
             const amount = parseEther("2");
             await votingEscrow.mock.getLockedBalance
                 .withArgs(addr1)
-                .returns([amount, unixWeek(30)]);
+                .returns([amount, startOfWeek(30)]);
             await feeDistributor.syncWithVotingEscrow(addr1);
 
             // Check veCHESS at the beginning of the next week
             const nextWeek = startWeek + WEEK * 11;
-            const balance = amount.mul(unixWeek(30) - nextWeek).div(MAX_TIME);
+            const balance = amount.mul(startOfWeek(30) - nextWeek).div(MAX_TIME);
             expect(await feeDistributor.balanceOfAtTimestamp(addr1, nextWeek)).to.equal(balance);
             expect(await feeDistributor.totalSupplyAtTimestamp(nextWeek)).to.equal(balance);
             expect(await feeDistributor.nextWeekLocked()).to.equal(amount);
@@ -176,17 +180,17 @@ describe("FeeDistributor", function () {
         it("Should emit an event", async function () {
             await votingEscrow.mock.getLockedBalance
                 .withArgs(addr1)
-                .returns([parseEther("1"), unixWeek(1)]);
+                .returns([parseEther("1"), startOfWeek(1)]);
             await expect(feeDistributor.syncWithVotingEscrow(addr1))
                 .to.emit(feeDistributor, "Synchronized")
-                .withArgs(addr1, 0, 0, parseEther("1"), unixWeek(1));
+                .withArgs(addr1, 0, 0, parseEther("1"), startOfWeek(1));
 
             await votingEscrow.mock.getLockedBalance
                 .withArgs(addr1)
-                .returns([parseEther("3"), unixWeek(5)]);
+                .returns([parseEther("3"), startOfWeek(5)]);
             await expect(feeDistributor.syncWithVotingEscrow(addr1))
                 .to.emit(feeDistributor, "Synchronized")
-                .withArgs(addr1, parseEther("1"), unixWeek(1), parseEther("3"), unixWeek(5));
+                .withArgs(addr1, parseEther("1"), startOfWeek(1), parseEther("3"), startOfWeek(5));
         });
     });
 
@@ -214,7 +218,7 @@ describe("FeeDistributor", function () {
         });
 
         it("Should be called in syncWithVotingEscrow()", async function () {
-            await votingEscrow.mock.getLockedBalance.returns([parseEther("1"), unixWeek(10)]);
+            await votingEscrow.mock.getLockedBalance.returns([parseEther("1"), startOfWeek(10)]);
             await setNextBlockTime(startWeek + DAY * 10);
             await feeDistributor.syncWithVotingEscrow(addr1);
             expect(await feeDistributor.checkpointTimestamp()).to.equal(startWeek + DAY * 10);
@@ -322,16 +326,16 @@ describe("FeeDistributor", function () {
                 const amount2 = parseEther("3");
                 await votingEscrow.mock.getLockedBalance
                     .withArgs(addr1)
-                    .returns([amount1, unixWeek(2)]);
+                    .returns([amount1, startOfWeek(2)]);
                 await votingEscrow.mock.getLockedBalance
                     .withArgs(addr2)
-                    .returns([amount2, unixWeek(5)]);
+                    .returns([amount2, startOfWeek(5)]);
                 await feeDistributor.syncWithVotingEscrow(addr1);
                 await feeDistributor.syncWithVotingEscrow(addr2);
                 expect(await feeDistributor.veSupplyPerWeek(startWeek)).to.equal(0);
 
-                const balance1 = amount1.mul(unixWeek(2) - startWeek).div(MAX_TIME);
-                const balance2 = amount2.mul(unixWeek(5) - startWeek).div(MAX_TIME);
+                const balance1 = amount1.mul(startOfWeek(2) - startWeek).div(MAX_TIME);
+                const balance2 = amount2.mul(startOfWeek(5) - startWeek).div(MAX_TIME);
                 const supply = balance1.add(balance2);
                 await advanceBlockAtTime(startWeek + DAY);
                 await feeDistributor.checkpoint();
@@ -340,7 +344,7 @@ describe("FeeDistributor", function () {
                 // The calculated supply in the past does not change any more
                 await votingEscrow.mock.getLockedBalance
                     .withArgs(addr1)
-                    .returns([amount1, unixWeek(100)]);
+                    .returns([amount1, startOfWeek(100)]);
                 await feeDistributor.syncWithVotingEscrow(addr1);
                 expect(await feeDistributor.veSupplyPerWeek(startWeek)).to.closeToBn(supply, 30);
                 await advanceBlockAtTime(startWeek + DAY * 10);
@@ -354,13 +358,13 @@ describe("FeeDistributor", function () {
                 const amount3 = parseEther("11");
                 await votingEscrow.mock.getLockedBalance
                     .withArgs(addr1)
-                    .returns([amount1, unixWeek(1)]);
+                    .returns([amount1, startOfWeek(1)]);
                 await votingEscrow.mock.getLockedBalance
                     .withArgs(addr2)
-                    .returns([amount2, unixWeek(2)]);
+                    .returns([amount2, startOfWeek(2)]);
                 await votingEscrow.mock.getLockedBalance
                     .withArgs(addr3)
-                    .returns([amount3, unixWeek(8)]);
+                    .returns([amount3, startOfWeek(8)]);
                 await feeDistributor.syncWithVotingEscrow(addr1);
                 await feeDistributor.syncWithVotingEscrow(addr2);
                 await feeDistributor.syncWithVotingEscrow(addr3);
@@ -368,20 +372,20 @@ describe("FeeDistributor", function () {
                 await feeDistributor.checkpoint();
 
                 const w0 = startWeek;
-                const balance1w0 = amount1.mul(unixWeek(1) - w0).div(MAX_TIME);
-                const balance2w0 = amount2.mul(unixWeek(2) - w0).div(MAX_TIME);
-                const balance3w0 = amount3.mul(unixWeek(8) - w0).div(MAX_TIME);
+                const balance1w0 = amount1.mul(startOfWeek(1) - w0).div(MAX_TIME);
+                const balance2w0 = amount2.mul(startOfWeek(2) - w0).div(MAX_TIME);
+                const balance3w0 = amount3.mul(startOfWeek(8) - w0).div(MAX_TIME);
                 const supply0 = balance1w0.add(balance2w0).add(balance3w0);
                 expect(await feeDistributor.veSupplyPerWeek(w0)).to.closeToBn(supply0, 30);
 
                 const w1 = startWeek + WEEK;
-                const balance2w1 = amount2.mul(unixWeek(2) - w1).div(MAX_TIME);
-                const balance3w1 = amount3.mul(unixWeek(8) - w1).div(MAX_TIME);
+                const balance2w1 = amount2.mul(startOfWeek(2) - w1).div(MAX_TIME);
+                const balance3w1 = amount3.mul(startOfWeek(8) - w1).div(MAX_TIME);
                 const supply1 = balance2w1.add(balance3w1);
                 expect(await feeDistributor.veSupplyPerWeek(w1)).to.closeToBn(supply1, 30);
 
                 const w2 = startWeek + WEEK * 2;
-                const supply2 = amount3.mul(unixWeek(8) - w2).div(MAX_TIME);
+                const supply2 = amount3.mul(startOfWeek(8) - w2).div(MAX_TIME);
                 expect(await feeDistributor.veSupplyPerWeek(w2)).to.closeToBn(supply2, 30);
             });
         });
@@ -400,7 +404,7 @@ describe("FeeDistributor", function () {
         });
 
         it("Should be called in syncWithVotingEscrow()", async function () {
-            await votingEscrow.mock.getLockedBalance.returns([parseEther("20"), unixWeek(40)]);
+            await votingEscrow.mock.getLockedBalance.returns([parseEther("20"), startOfWeek(40)]);
 
             await feeDistributor.syncWithVotingEscrow(addr1);
             expect(await feeDistributor.userWeekCursors(addr1)).to.equal(startWeek - WEEK);
@@ -418,14 +422,16 @@ describe("FeeDistributor", function () {
 
             const amount = parseEther("0.1");
             await advanceBlockAtTime(startWeek);
-            await votingEscrow.mock.getLockedBalance.withArgs(addr1).returns([amount, unixWeek(3)]);
+            await votingEscrow.mock.getLockedBalance
+                .withArgs(addr1)
+                .returns([amount, startOfWeek(3)]);
             await feeDistributor.syncWithVotingEscrow(addr1);
             expect(await feeDistributor.userLastBalances(addr1)).to.equal(0);
 
             await advanceBlockAtTime(startWeek + WEEK + 1000);
             await feeDistributor.userCheckpoint(addr1);
             expect(await feeDistributor.userLastBalances(addr1)).to.equal(
-                amount.mul(unixWeek(3) - (startWeek + WEEK)).div(MAX_TIME)
+                amount.mul(startOfWeek(3) - (startWeek + WEEK)).div(MAX_TIME)
             );
         });
 
@@ -438,8 +444,8 @@ describe("FeeDistributor", function () {
             const totalRewards = receivedBtc.mul(10000 - ADMIN_FEE_RATE_BPS).div(10000);
 
             beforeEach(async function () {
-                unlockTime1 = unixWeek(2);
-                unlockTime2 = unixWeek(5);
+                unlockTime1 = startOfWeek(2);
+                unlockTime2 = startOfWeek(5);
                 await votingEscrow.mock.getLockedBalance
                     .withArgs(addr1)
                     .returns([amount1, unlockTime1]);
@@ -548,10 +554,10 @@ describe("FeeDistributor", function () {
         beforeEach(async function () {
             await votingEscrow.mock.getLockedBalance
                 .withArgs(addr1)
-                .returns([amount1, unixWeek(100)]);
+                .returns([amount1, startOfWeek(100)]);
             await votingEscrow.mock.getLockedBalance
                 .withArgs(owner.address)
-                .returns([amountAdmin, unixWeek(100)]);
+                .returns([amountAdmin, startOfWeek(100)]);
             await feeDistributor.syncWithVotingEscrow(addr1);
             await feeDistributor.syncWithVotingEscrow(owner.address);
             await advanceBlockAtTime(startWeek);
@@ -592,7 +598,7 @@ describe("FeeDistributor", function () {
     describe("calibrateSupply()", function () {
         beforeEach(async function () {
             // Lock a very small amount of CHESS, so that obtained veCHESS is rounded down to zero.
-            await votingEscrow.mock.getLockedBalance.withArgs(addr1).returns([1, unixWeek(10)]);
+            await votingEscrow.mock.getLockedBalance.withArgs(addr1).returns([1, startOfWeek(10)]);
         });
 
         it("Reproduce rounding errors", async function () {
@@ -650,7 +656,7 @@ describe("FeeDistributor", function () {
         let unlockTime: number;
 
         beforeEach(async function () {
-            unlockTime = unixWeek(50);
+            unlockTime = startOfWeek(50);
             await votingEscrow.mock.getLockedBalance.withArgs(addr1).returns([amount1, unlockTime]);
             await votingEscrow.mock.getLockedBalance.withArgs(addr2).returns([amount2, unlockTime]);
             await feeDistributor.syncWithVotingEscrow(addr1);

@@ -196,7 +196,8 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
 
         Exchange exchange = Exchange(exchangeAddress);
         Fund fund = Fund(address(exchange.fund()));
-        VotingEscrow votingEscrow = VotingEscrow(address(exchange.votingEscrow()));
+        VotingEscrow votingEscrow =
+            VotingEscrow(address(InterestRateBallot(address(fund.ballot())).votingEscrow()));
         IERC20 underlyingToken = IERC20(fund.tokenUnderlying());
         IERC20 quoteToken = IERC20(exchange.quoteAssetAddress());
         IERC20 chessToken = IERC20(votingEscrow.token());

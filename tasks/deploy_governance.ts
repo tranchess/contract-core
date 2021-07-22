@@ -6,7 +6,6 @@ import { updateHreSigner } from "./signers";
 task("deploy_governance", "Deploy governance contracts", async function (_args, hre) {
     await updateHreSigner(hre);
     const { ethers } = hre;
-    const { BigNumber } = ethers;
     const { parseEther } = ethers.utils;
 
     await hre.run("compile");
@@ -65,13 +64,26 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     addressFile.set("chessSchedule", chessSchedule.address);
 
     const VotingEscrow = await ethers.getContractFactory("VotingEscrow");
-    const votingEscrow = await VotingEscrow.deploy(
+    const votingEscrowImpl = await VotingEscrow.deploy(
         chess.address,
         ethers.constants.AddressZero,
-        "Chess Vote",
+        "Vote-escrowed CHESS",
         "veCHESS",
-        BigNumber.from(4 * 365 * 86400)
+        208 * 7 * 86400 // 208 weeks
     );
+    console.log(`VotingEscrow implementation: ${votingEscrowImpl.address}`);
+    addressFile.set("votingEscrowImpl", votingEscrowImpl.address);
+
+    const votingEscrowInitTx = await votingEscrowImpl.populateTransaction.initialize(
+        26 * 7 * 86400
+    );
+    const votingEscrowProxy = await TransparentUpgradeableProxy.deploy(
+        votingEscrowImpl.address,
+        proxyAdmin.address,
+        votingEscrowInitTx.data,
+        { gasLimit: 1e6 } // Gas estimation may fail
+    );
+    const votingEscrow = VotingEscrow.attach(votingEscrowProxy.address);
     console.log(`VotingEscrow: ${votingEscrow.address}`);
     addressFile.set("votingEscrow", votingEscrow.address);
 

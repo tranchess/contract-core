@@ -10,6 +10,8 @@ interface IBallot {
 
     function count(uint256 timestamp) external view returns (uint256);
 
+    function syncWithVotingEscrow(address account) external;
+
     // An event emitted when a new proposal is created
     event Voted(
         address indexed account,
