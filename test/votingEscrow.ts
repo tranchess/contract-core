@@ -657,4 +657,50 @@ describe("VotingEscrow", function () {
             });
         });
     });
+
+    describe("Post-operations", function () {
+        let helper: MockContract;
+        let data: string;
+
+        beforeEach(async function () {
+            helper = await deployMockForName(owner, "VotingEscrowHelper");
+            const tx = await helper.populateTransaction.syncWithFeeDistributor(addr3);
+            data = tx.data ?? "0x";
+        });
+
+        it("Should call post-operation in createLock()", async function () {
+            await expect(
+                votingEscrow.createLock(parseEther("1"), startWeek + WEEK, helper.address, data)
+            ).to.be.reverted;
+            await helper.mock.syncWithFeeDistributor.withArgs(addr3).returns();
+            await votingEscrow.createLock(parseEther("1"), startWeek + WEEK, helper.address, data);
+        });
+
+        it("Should call post-operation in increaseAmount()", async function () {
+            await votingEscrow.createLock(
+                parseEther("1"),
+                startWeek + WEEK,
+                constants.AddressZero,
+                "0x"
+            );
+            await expect(votingEscrow.increaseAmount(addr1, 1, helper.address, data)).to.be
+                .reverted;
+            await helper.mock.syncWithFeeDistributor.withArgs(addr3).returns();
+            await votingEscrow.increaseAmount(addr1, 1, helper.address, data);
+        });
+
+        it("Should call post-operation in increaseUnlockTime()", async function () {
+            await votingEscrow.createLock(
+                parseEther("1"),
+                startWeek + WEEK,
+                constants.AddressZero,
+                "0x"
+            );
+            await expect(
+                votingEscrow.increaseUnlockTime(startWeek + WEEK * 2, helper.address, data)
+            ).to.be.reverted;
+            await helper.mock.syncWithFeeDistributor.withArgs(addr3).returns();
+            await votingEscrow.increaseUnlockTime(startWeek + WEEK * 2, helper.address, data);
+        });
+    });
 });
