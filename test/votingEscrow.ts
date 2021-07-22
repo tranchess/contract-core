@@ -32,6 +32,7 @@ describe("VotingEscrow", function () {
         readonly wallets: FixtureWalletMap;
         readonly startWeek: number;
         readonly chess: Contract;
+        readonly proxyAdmin: Contract;
         readonly votingEscrow: Contract;
     }
 
@@ -47,6 +48,7 @@ describe("VotingEscrow", function () {
     let addr2: string;
     let addr3: string;
     let chess: Contract;
+    let proxyAdmin: Contract;
     let votingEscrow: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
@@ -93,6 +95,7 @@ describe("VotingEscrow", function () {
             wallets: { user1, user2, user3, owner },
             startWeek,
             chess,
+            proxyAdmin,
             votingEscrow: votingEscrow.connect(user1),
         };
     }
@@ -112,10 +115,37 @@ describe("VotingEscrow", function () {
         addr3 = user3.address;
         startWeek = fixtureData.startWeek;
         chess = fixtureData.chess;
+        proxyAdmin = fixtureData.proxyAdmin;
         votingEscrow = fixtureData.votingEscrow;
     });
 
-    describe("updateMaxTimeAllowed", function () {
+    describe("initialize", function () {
+        it("Should revert if called again", async function () {
+            await expect(votingEscrow.initialize(MAX_TIME)).to.be.revertedWith(
+                "Initializable: contract is already initialized"
+            );
+        });
+
+        it("Should revert if exceeding max time", async function () {
+            // Deploy a new proxied VotingEscrow without initialization
+            const impl = await proxyAdmin.getProxyImplementation(votingEscrow.address);
+            const TransparentUpgradeableProxy = await ethers.getContractFactory(
+                "TransparentUpgradeableProxy"
+            );
+            const newProxy = await TransparentUpgradeableProxy.connect(owner).deploy(
+                impl,
+                proxyAdmin.address,
+                "0x"
+            );
+            const newVotingEscrow = await ethers.getContractAt("VotingEscrow", newProxy.address);
+
+            await expect(newVotingEscrow.initialize(MAX_TIME.add(1))).to.be.revertedWith(
+                "Cannot exceed max time"
+            );
+        });
+    });
+
+    describe("updateMaxTimeAllowed()", function () {
         it("Should revert if max time allowed exceeds max time", async function () {
             await expect(
                 votingEscrow.connect(owner).updateMaxTimeAllowed(MAX_TIME.add(1))
@@ -128,26 +158,15 @@ describe("VotingEscrow", function () {
             ).to.revertedWith("Cannot shorten max time allowed");
         });
 
-        it("Should revert if creating a lock exceeding max time allowed", async function () {
+        it("Should revert if not sent from owner", async function () {
             await expect(
-                votingEscrow.createLock(
-                    parseEther("10"),
-                    startWeek + MAX_TIME_ALLOWED,
-                    constants.AddressZero,
-                    "0x"
-                )
-            ).to.revertedWith("Voting lock cannot exceed max lock time");
+                votingEscrow.updateMaxTimeAllowed(MAX_TIME_ALLOWED + WEEK)
+            ).to.revertedWith("Ownable: caller is not the owner");
         });
 
-        it("Should revert if increasing unlock time exceeding max time allowed", async function () {
-            await votingEscrow.createLock(parseEther("10"), startWeek, constants.AddressZero, "0x");
-            await expect(
-                votingEscrow.increaseUnlockTime(
-                    startWeek + MAX_TIME_ALLOWED,
-                    constants.AddressZero,
-                    "0x"
-                )
-            ).to.revertedWith("Voting lock cannot exceed max lock time");
+        it("Should update max time allowed", async function () {
+            await votingEscrow.connect(owner).updateMaxTimeAllowed(MAX_TIME_ALLOWED + WEEK);
+            expect(await votingEscrow.maxTimeAllowed()).to.equal(MAX_TIME_ALLOWED + WEEK);
         });
     });
 
@@ -186,11 +205,11 @@ describe("VotingEscrow", function () {
             ).to.revertedWith("Can only lock until time in the future");
         });
 
-        it("Should revert with more than max time lock", async function () {
+        it("Should revert if locking beyond max time allowed", async function () {
             await expect(
                 votingEscrow.createLock(
                     parseEther("10"),
-                    startWeek + 365 * 5 * DAY,
+                    startWeek + MAX_TIME_ALLOWED,
                     constants.AddressZero,
                     "0x"
                 )
@@ -379,7 +398,7 @@ describe("VotingEscrow", function () {
             );
             await expect(
                 votingEscrow.increaseUnlockTime(
-                    startWeek + 365 * 5 * DAY,
+                    startWeek + MAX_TIME_ALLOWED,
                     constants.AddressZero,
                     "0x"
                 )
