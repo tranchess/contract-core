@@ -187,7 +187,7 @@ describe("VotingEscrow", function () {
 
         it("Should revert with only lock until future time", async function () {
             await expect(
-                votingEscrow.createLock(parseEther("10"), startWeek - 1, AddressZero, "0x")
+                votingEscrow.createLock(parseEther("10"), startWeek - WEEK, AddressZero, "0x")
             ).to.revertedWith("Can only lock until time in the future");
         });
 
@@ -214,6 +214,12 @@ describe("VotingEscrow", function () {
                     "0x"
                 )
             ).to.revertedWith("Smart contract depositors not allowed");
+        });
+
+        it("Should revert if unlock time is in the middle of a week", async function () {
+            await expect(
+                votingEscrow.createLock(parseEther("1"), startWeek + WEEK / 2, AddressZero, "0x")
+            ).to.revertedWith("Unlock time must be end of a week");
         });
 
         it("Should create lock for user1", async function () {
@@ -359,6 +365,13 @@ describe("VotingEscrow", function () {
             await expect(
                 votingEscrow.increaseUnlockTime(startWeek + MAX_TIME_ALLOWED, AddressZero, "0x")
             ).to.revertedWith("Voting lock cannot exceed max lock time");
+        });
+
+        it("Should revert if unlock time is in the middle of a week", async function () {
+            await votingEscrow.createLock(parseEther("10"), startWeek + WEEK, AddressZero, "0x");
+            await expect(
+                votingEscrow.increaseUnlockTime(startWeek + WEEK * 1.5, AddressZero, "0x")
+            ).to.revertedWith("Unlock time must be end of a week");
         });
 
         it("Should increase unlock time for user1", async function () {

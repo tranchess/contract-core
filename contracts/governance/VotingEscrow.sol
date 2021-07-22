@@ -119,8 +119,11 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         bytes memory data
     ) external nonReentrant {
         _assertNotContract();
+        require(
+            unlockTime + 1 weeks == _endOfWeek(unlockTime),
+            "Unlock time must be end of a week"
+        );
 
-        unlockTime = _endOfWeek(unlockTime) - 1 weeks; // Locktime is rounded down to weeks
         LockedBalance memory lockedBalance = locked[msg.sender];
 
         require(amount > 0, "Zero value");
@@ -176,8 +179,11 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         address target,
         bytes memory data
     ) external nonReentrant {
+        require(
+            unlockTime + 1 weeks == _endOfWeek(unlockTime),
+            "Unlock time must be end of a week"
+        );
         LockedBalance memory lockedBalance = locked[msg.sender];
-        unlockTime = _endOfWeek(unlockTime) - 1 weeks; // Locktime is rounded down to weeks
 
         require(lockedBalance.unlockTime > block.timestamp, "Lock expired");
         require(unlockTime > lockedBalance.unlockTime, "Can only increase lock duration");
