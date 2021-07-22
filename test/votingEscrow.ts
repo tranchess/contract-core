@@ -5,9 +5,9 @@ import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther } = ethers.utils;
 import { deployMockForName } from "./mock";
-import { DAY, WEEK, SETTLEMENT_TIME, FixtureWalletMap, advanceBlockAtTime } from "./utils";
+import { WEEK, SETTLEMENT_TIME, FixtureWalletMap, advanceBlockAtTime } from "./utils";
 
-const MAX_TIME = BigNumber.from(WEEK * 100);
+const MAX_TIME = WEEK * 100;
 const MAX_TIME_ALLOWED = WEEK * 50;
 
 function calculateBalanceOf(
@@ -24,7 +24,7 @@ function calculateDropBelowTime(
     threshold: BigNumberish,
     lockAmount: BigNumberish
 ) {
-    return BigNumber.from(unlockTime).sub(MAX_TIME.mul(threshold).div(lockAmount));
+    return unlockTime - BigNumber.from(MAX_TIME).mul(threshold).div(lockAmount).toNumber();
 }
 
 describe("VotingEscrow", function () {
@@ -139,7 +139,7 @@ describe("VotingEscrow", function () {
             );
             const newVotingEscrow = await ethers.getContractAt("VotingEscrow", newProxy.address);
 
-            await expect(newVotingEscrow.initialize(MAX_TIME.add(1))).to.be.revertedWith(
+            await expect(newVotingEscrow.initialize(MAX_TIME + 1)).to.be.revertedWith(
                 "Cannot exceed max time"
             );
         });
@@ -148,7 +148,7 @@ describe("VotingEscrow", function () {
     describe("updateMaxTimeAllowed()", function () {
         it("Should revert if max time allowed exceeds max time", async function () {
             await expect(
-                votingEscrow.connect(owner).updateMaxTimeAllowed(MAX_TIME.add(1))
+                votingEscrow.connect(owner).updateMaxTimeAllowed(MAX_TIME + 1)
             ).to.revertedWith("Cannot exceed max time");
         });
 
@@ -246,7 +246,7 @@ describe("VotingEscrow", function () {
                 .withArgs(addr1, lockAmount, unlockTime);
 
             expect(await votingEscrow.getTimestampDropBelow(addr1, lockAmount)).to.be.equal(
-                unlockTime - MAX_TIME.toNumber()
+                unlockTime - MAX_TIME
             );
             expect((await votingEscrow.getLockedBalance(addr1)).amount).to.be.equal(lockAmount);
             expect((await votingEscrow.getLockedBalance(addr1)).unlockTime).to.be.equal(unlockTime);
@@ -512,7 +512,7 @@ describe("VotingEscrow", function () {
         let lockAmount: BigNumber;
         let threshold: BigNumber;
         let unlockTime: number;
-        let dropTimeBefore: BigNumber;
+        let dropTimeBefore: number;
 
         beforeEach(async function () {
             lockAmount = parseEther("10");
@@ -540,7 +540,7 @@ describe("VotingEscrow", function () {
 
         it("Should return start week if lock amount is equal to threshold", async function () {
             expect(await votingEscrow.getTimestampDropBelow(addr1, lockAmount)).to.be.equal(
-                unlockTime - MAX_TIME.toNumber()
+                unlockTime - MAX_TIME
             );
         });
 
@@ -564,8 +564,8 @@ describe("VotingEscrow", function () {
             expect(await votingEscrow.getTimestampDropBelow(addr1, higherThreshold)).to.be.equal(
                 higherThresholdDropTime
             );
-            expect(dropTimeBefore.toNumber()).to.be.lessThan(lowerThresholdDropTime.toNumber());
-            expect(dropTimeBefore.toNumber()).to.be.greaterThan(higherThresholdDropTime.toNumber());
+            expect(dropTimeBefore).to.be.lessThan(lowerThresholdDropTime);
+            expect(dropTimeBefore).to.be.greaterThan(higherThresholdDropTime);
         });
 
         it("Drop below time should increase after increaseAmount", async function () {
@@ -582,7 +582,7 @@ describe("VotingEscrow", function () {
                 dropTimeAfterDepositFor
             );
 
-            expect(dropTimeBefore.toNumber()).to.be.lessThan(dropTimeAfterDepositFor.toNumber());
+            expect(dropTimeBefore).to.be.lessThan(dropTimeAfterDepositFor);
         });
 
         it("Drop below time should increase after increaseUnlockTime", async function () {
@@ -598,7 +598,7 @@ describe("VotingEscrow", function () {
                 dropTimeAfterDepositFor
             );
 
-            expect(dropTimeBefore.toNumber()).to.be.lessThan(dropTimeAfterDepositFor.toNumber());
+            expect(dropTimeBefore).to.be.lessThan(dropTimeAfterDepositFor);
         });
     });
 
