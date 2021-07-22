@@ -16,7 +16,10 @@ interface IAddressWhitelist {
     function check(address account) external view returns (bool);
 }
 
-contract VotingEscrow is IVotingEscrow, ReentrancyGuard, OwnableUpgradeable, CoreUtility {
+contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, CoreUtility {
+    /// @dev Reserved storage slots for future base contract upgrades
+    uint256[32] private _reservedSlots;
+
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
