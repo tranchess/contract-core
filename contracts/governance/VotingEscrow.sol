@@ -59,7 +59,7 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, OwnableUpgradeable, Cor
         maxTime = maxTime_;
     }
 
-    /// @notice Initialize ownership and deposit tokens.
+    /// @notice Initialize ownership
     function initialize(uint256 maxTimeAllowed_) external initializer {
         __Ownable_init();
         require(maxTimeAllowed_ <= maxTime, "Cannot exceed max time");
