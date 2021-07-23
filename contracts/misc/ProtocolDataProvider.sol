@@ -269,18 +269,19 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.exchange.account.isMaker = exchange.isMaker(account);
         data.exchange.account.chessRewards = exchange.claimableRewards(account);
 
+        uint256 blockCurrentWeek = _endOfWeek(block.timestamp);
         data.governance.chessTotalSupply = chessToken.totalSupply();
         data.governance.chessRate = chessSchedule.getRate(block.timestamp);
         data.governance.votingEscrow.chessBalance = chessToken.balanceOf(address(votingEscrow));
         data.governance.votingEscrow.totalSupply = votingEscrow.totalSupply();
         data.governance.votingEscrow.tradingWeekTotalSupply = votingEscrow.totalSupplyAtTimestamp(
-            data.fund.currentWeek
+            blockCurrentWeek
         );
         data.governance.votingEscrow.account = votingEscrow.getLockedBalance(account);
         data.governance.interestRateBallot.tradingWeekTotalSupply = InterestRateBallot(
             address(fund.ballot())
         )
-            .totalSupplyAtTimestamp(data.fund.currentWeek);
+            .totalSupplyAtTimestamp(blockCurrentWeek);
         data.governance.interestRateBallot.account = InterestRateBallot(address(fund.ballot()))
             .getReceipt(account);
 
@@ -299,13 +300,13 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
                 .userLockedBalances(account)
                 .unlockTime;
             data.governance.feeDistributor.currentRewards = feeDistributor.rewardsPerWeek(
-                data.fund.currentWeek - 1 weeks
+                blockCurrentWeek - 1 weeks
             );
             data.governance.feeDistributor.currentSupply = feeDistributor.veSupplyPerWeek(
-                data.fund.currentWeek - 1 weeks
+                blockCurrentWeek - 1 weeks
             );
             for (uint256 i = 0; i < 3; i++) {
-                uint256 weekEnd = data.fund.currentWeek - (i + 1) * 1 weeks;
+                uint256 weekEnd = blockCurrentWeek - (i + 1) * 1 weeks;
                 data.governance.feeDistributor.historicalRewards[i].timestamp = weekEnd;
                 data.governance.feeDistributor.historicalRewards[i].veSupply = feeDistributor
                     .veSupplyPerWeek(weekEnd - 1 weeks);
