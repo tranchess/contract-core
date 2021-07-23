@@ -121,13 +121,14 @@ contract InterestRateBallot is IBallot, CoreUtility {
 
     function syncWithVotingEscrow(address account) external override {
         Voter memory voter = voters[account];
-        require(voter.amount > 0, "No existing vote");
+        if (voter.amount == 0) {
+            return; // The account did not voted before
+        }
 
         IVotingEscrow.LockedBalance memory lockedBalance = votingEscrow.getLockedBalance(account);
-        require(
-            lockedBalance.amount > 0 && lockedBalance.unlockTime > block.timestamp,
-            "No veCHESS"
-        );
+        if (lockedBalance.amount == 0 || lockedBalance.unlockTime <= block.timestamp) {
+            return;
+        }
 
         // update scheduled unlock
         scheduledUnlock[voter.unlockTime] = scheduledUnlock[voter.unlockTime].sub(voter.amount);

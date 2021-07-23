@@ -103,18 +103,22 @@ describe("FeeDistributor", function () {
     });
 
     describe("syncWithVotingEscrow()", function () {
-        it("Should revert if no locked Chess at the end of this week", async function () {
+        it("Should do nothing if never locked Chess before", async function () {
             await votingEscrow.mock.getLockedBalance.withArgs(addr1).returns([0, 0]);
-            await expect(feeDistributor.syncWithVotingEscrow(addr1)).to.be.revertedWith(
-                "No veCHESS"
-            );
+            await feeDistributor.syncWithVotingEscrow(addr1);
+            const lockedBalance = await feeDistributor.userLockedBalances(addr1);
+            expect(lockedBalance.amount).to.equal(0);
+            expect(lockedBalance.unlockTime).to.equal(0);
+        });
 
+        it("Should do nothing if Chess unlocked at the end of this week", async function () {
             await votingEscrow.mock.getLockedBalance
                 .withArgs(addr1)
                 .returns([parseEther("1"), startOfWeek(0)]);
-            await expect(feeDistributor.syncWithVotingEscrow(addr1)).to.be.revertedWith(
-                "No veCHESS"
-            );
+            await feeDistributor.syncWithVotingEscrow(addr1);
+            const lockedBalance = await feeDistributor.userLockedBalances(addr1);
+            expect(lockedBalance.amount).to.equal(0);
+            expect(lockedBalance.unlockTime).to.equal(0);
         });
 
         it("Should update locked balance", async function () {
