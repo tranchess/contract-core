@@ -12,6 +12,16 @@ import "../interfaces/IVotingEscrow.sol";
 contract InterestRateBallot is IBallot, CoreUtility {
     using SafeMath for uint256;
 
+    event Voted(
+        address indexed account,
+        uint256 oldAmount,
+        uint256 oldUnlockTime,
+        uint256 oldWeight,
+        uint256 amount,
+        uint256 indexed unlockTime,
+        uint256 indexed weight
+    );
+
     uint256 private immutable _maxTime;
 
     uint256 public stepSize = 0.02e18;
@@ -132,6 +142,16 @@ contract InterestRateBallot is IBallot, CoreUtility {
             lockedBalance.unlockTime
         ]
             .add(lockedBalance.amount * voter.weight);
+
+        emit Voted(
+            account,
+            voter.amount,
+            voter.unlockTime,
+            voter.weight,
+            lockedBalance.amount,
+            lockedBalance.unlockTime,
+            voter.weight
+        );
 
         // update voter amount per account
         voters[account].amount = lockedBalance.amount;
