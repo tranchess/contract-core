@@ -16,7 +16,10 @@ interface IAddressWhitelist {
     function check(address account) external view returns (bool);
 }
 
-contract VotingEscrow is IVotingEscrow, ReentrancyGuard, OwnableUpgradeable, CoreUtility {
+contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, CoreUtility {
+    /// @dev Reserved storage slots for future base contract upgrades
+    uint256[32] private _reservedSlots;
+
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -116,8 +119,11 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, OwnableUpgradeable, Cor
         bytes memory data
     ) external nonReentrant {
         _assertNotContract();
+        require(
+            unlockTime + 1 weeks == _endOfWeek(unlockTime),
+            "Unlock time must be end of a week"
+        );
 
-        unlockTime = _endOfWeek(unlockTime) - 1 weeks; // Locktime is rounded down to weeks
         LockedBalance memory lockedBalance = locked[msg.sender];
 
         require(amount > 0, "Zero value");
@@ -173,8 +179,11 @@ contract VotingEscrow is IVotingEscrow, ReentrancyGuard, OwnableUpgradeable, Cor
         address target,
         bytes memory data
     ) external nonReentrant {
+        require(
+            unlockTime + 1 weeks == _endOfWeek(unlockTime),
+            "Unlock time must be end of a week"
+        );
         LockedBalance memory lockedBalance = locked[msg.sender];
-        unlockTime = _endOfWeek(unlockTime) - 1 weeks; // Locktime is rounded down to weeks
 
         require(lockedBalance.unlockTime > block.timestamp, "Lock expired");
         require(unlockTime > lockedBalance.unlockTime, "Can only increase lock duration");

@@ -12,7 +12,7 @@ import "../interfaces/IVotingEscrow.sol";
 contract InterestRateBallot is IBallot, CoreUtility {
     using SafeMath for uint256;
 
-    uint256 public immutable maxTime;
+    uint256 private immutable _maxTime;
 
     uint256 public stepSize = 0.02e18;
     uint256 public minRange = 0;
@@ -28,7 +28,7 @@ contract InterestRateBallot is IBallot, CoreUtility {
 
     constructor(address votingEscrow_) public {
         votingEscrow = IVotingEscrow(votingEscrow_);
-        maxTime = votingEscrow.maxTime();
+        _maxTime = votingEscrow.maxTime();
     }
 
     function getWeight(uint256 index) public view returns (uint256) {
@@ -148,17 +148,17 @@ contract InterestRateBallot is IBallot, CoreUtility {
         if (timestamp > voter.unlockTime) {
             return 0;
         }
-        return (voter.amount * (voter.unlockTime - timestamp)) / maxTime;
+        return (voter.amount * (voter.unlockTime - timestamp)) / _maxTime;
     }
 
     function _totalSupplyAtTimestamp(uint256 timestamp) private view returns (uint256) {
         uint256 total = 0;
         for (
             uint256 weekCursor = _endOfWeek(timestamp);
-            weekCursor <= timestamp + maxTime;
+            weekCursor <= timestamp + _maxTime;
             weekCursor += 1 weeks
         ) {
-            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / maxTime;
+            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / _maxTime;
         }
 
         return total;
@@ -168,10 +168,10 @@ contract InterestRateBallot is IBallot, CoreUtility {
         uint256 sum = 0;
         for (
             uint256 weekCursor = _endOfWeek(timestamp);
-            weekCursor <= timestamp + maxTime;
+            weekCursor <= timestamp + _maxTime;
             weekCursor += 1 weeks
         ) {
-            sum += (scheduledWeightedUnlock[weekCursor] * (weekCursor - timestamp)) / maxTime;
+            sum += (scheduledWeightedUnlock[weekCursor] * (weekCursor - timestamp)) / _maxTime;
         }
 
         return sum;
@@ -182,11 +182,11 @@ contract InterestRateBallot is IBallot, CoreUtility {
         uint256 total = 0;
         for (
             uint256 weekCursor = _endOfWeek(timestamp);
-            weekCursor <= timestamp + maxTime;
+            weekCursor <= timestamp + _maxTime;
             weekCursor += 1 weeks
         ) {
-            sum += (scheduledWeightedUnlock[weekCursor] * (weekCursor - timestamp)) / maxTime;
-            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / maxTime;
+            sum += (scheduledWeightedUnlock[weekCursor] * (weekCursor - timestamp)) / _maxTime;
+            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / _maxTime;
         }
 
         if (total == 0) {

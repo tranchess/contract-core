@@ -25,7 +25,7 @@ task("deploy_fee_distributor", "Deploy FeeDistributor")
             args.admin,
             adminFeeRate
         );
-        console.log(`FeeDistributor implementation: ${feeDistributor.address}`);
+        console.log(`FeeDistributor: ${feeDistributor.address}`);
         addressFile.set("feeDistributor", feeDistributor.address);
 
         const VotingEscrowHelper = await ethers.getContractFactory("VotingEscrowHelper");
