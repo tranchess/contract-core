@@ -148,10 +148,9 @@ contract FeeDistributor is CoreUtility, Ownable {
         uint256 nextWeek = _endOfWeek(block.timestamp);
         IVotingEscrow.LockedBalance memory newLockedBalance =
             votingEscrow.getLockedBalance(account);
-        require(
-            newLockedBalance.amount > 0 && newLockedBalance.unlockTime > nextWeek,
-            "No veCHESS"
-        );
+        if (newLockedBalance.amount == 0 || newLockedBalance.unlockTime <= nextWeek) {
+            return;
+        }
         IVotingEscrow.LockedBalance memory oldLockedBalance = userLockedBalances[account];
         uint256 newNextWeekLocked = nextWeekLocked;
         uint256 newNextWeekSupply = nextWeekSupply;
