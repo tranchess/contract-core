@@ -30,6 +30,8 @@ interface IFeeDistributor {
 
     function veSupplyPerWeek(uint256 timestamp) external view returns (uint256);
 
+    function totalSupplyAtTimestamp(uint256 timestamp) external view returns (uint256);
+
     function userLastBalances(address account) external view returns (uint256);
 
     function userLockedBalances(address account)
@@ -158,6 +160,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         FeeDistributorAccountData account;
         uint256 currentRewards;
         uint256 currentSupply;
+        uint256 tradingWeekTotalSupply;
         HistoricalRewardData[3] historicalRewards;
     }
 
@@ -305,6 +308,8 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
             data.governance.feeDistributor.currentSupply = feeDistributor.veSupplyPerWeek(
                 blockCurrentWeek - 1 weeks
             );
+            data.governance.feeDistributor.tradingWeekTotalSupply = feeDistributor
+                .totalSupplyAtTimestamp(blockCurrentWeek);
             for (uint256 i = 0; i < 3; i++) {
                 uint256 weekEnd = blockCurrentWeek - (i + 1) * 1 weeks;
                 data.governance.feeDistributor.historicalRewards[i].timestamp = weekEnd;
