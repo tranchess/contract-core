@@ -350,23 +350,25 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @dev Only if either they had another voting event, or their voting escrow lock expired
     /// @param account Address to kick
     function kick(address account) external {
+        uint256 rebalanceSize = fund.getRebalanceSize();
+        _checkpoint(rebalanceSize);
+        _userCheckpoint(account, rebalanceSize);
+
         IVotingEscrow _votingEscrow = votingEscrowStaking;
         uint256 lastTimestamp = lastCheckpointTimestamp[account];
         uint256 latestTimestamp = _votingEscrow.lastCheckpointTimestamp(account);
-        require(_votingEscrow.balanceOf(account) == 0 || lastTimestamp < latestTimestamp); // dev: kick not allowed
+        require(
+            _votingEscrow.balanceOf(account) == 0 || lastTimestamp < latestTimestamp,
+            "Kick not allowed"
+        );
 
-        uint256[TRANCHE_COUNT] storage available = _availableBalances[account];
-        uint256[TRANCHE_COUNT] storage locked = _lockedBalances[account];
-        uint256 availableM = available[TRANCHE_M];
-        uint256 availableA = available[TRANCHE_A];
-        uint256 availableB = available[TRANCHE_B];
-        uint256 lockedM = locked[TRANCHE_M];
-        uint256 lockedA = locked[TRANCHE_A];
-        uint256 lockedB = locked[TRANCHE_B];
-        uint256 weight =
-            rewardWeight(availableM.add(lockedM), availableA.add(lockedA), availableB.add(lockedB));
-        require(workingWeights[account] > (weight * TOKENLESS_PRODUCTION) / 100); // dev: kick not needed
+        uint256 weight = _currentRewardWeight(account);
+        require(workingWeights[account] > (weight * TOKENLESS_PRODUCTION) / 100, "kick not needed");
 
+        _updateWorkingWeights(account);
+    }
+
+    function userCheckpoint(address account) external {
         uint256 rebalanceSize = fund.getRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
@@ -691,12 +693,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         }
     }
 
-    /// @notice Calculate limits which depend on the amount of CHESS token per-user.
-    ///         Effectively it calculates working balances to apply amplification
-    ///         of CHESS production by CHESS
-    /// @param account User address
-    function _updateWorkingWeights(address account) private {
-        // To be called after totalSupply is updated
+    function _currentRewardWeight(address account) private view returns (uint256 weight) {
         uint256[TRANCHE_COUNT] storage available = _availableBalances[account];
         uint256[TRANCHE_COUNT] storage locked = _lockedBalances[account];
         uint256 availableM = available[TRANCHE_M];
@@ -705,12 +702,23 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         uint256 lockedM = locked[TRANCHE_M];
         uint256 lockedA = locked[TRANCHE_A];
         uint256 lockedB = locked[TRANCHE_B];
+        weight = rewardWeight(
+            availableM.add(lockedM),
+            availableA.add(lockedA),
+            availableB.add(lockedB)
+        );
+    }
+
+    /// @notice Calculate limits which depend on the amount of CHESS token per-user.
+    ///         Effectively it calculates working balances to apply amplification
+    ///         of CHESS production by CHESS
+    /// @param account User address
+    function _updateWorkingWeights(address account) private {
         uint256 totalSupplyM = _totalSupplies[TRANCHE_M];
         uint256 totalSupplyA = _totalSupplies[TRANCHE_A];
         uint256 totalSupplyB = _totalSupplies[TRANCHE_B];
-        uint256 weight =
-            rewardWeight(availableM.add(lockedM), availableA.add(lockedA), availableB.add(lockedB));
         uint256 totalWeight = rewardWeight(totalSupplyM, totalSupplyA, totalSupplyB);
+        uint256 weight = _currentRewardWeight(account);
 
         address account_ = account;
         IVotingEscrow _votingEscrow = votingEscrowStaking;
