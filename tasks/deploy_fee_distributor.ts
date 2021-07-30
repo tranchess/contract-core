@@ -35,4 +35,7 @@ task("deploy_fee_distributor", "Deploy FeeDistributor")
         );
         console.log(`VotingEscrowHelper: ${votingEscrowHelper.address}`);
         addressFile.set("votingEscrowHelper", votingEscrowHelper.address);
+
+        console.log("Transfering ownership to TimelockController");
+        await feeDistributor.transferOwnership(governanceAddresses.timelockController);
     });
