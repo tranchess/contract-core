@@ -66,15 +66,14 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     const VotingEscrow = await ethers.getContractFactory("VotingEscrow");
     const votingEscrowImpl = await VotingEscrow.deploy(
         chess.address,
-        ethers.constants.AddressZero,
-        "Vote-escrowed CHESS",
-        "veCHESS",
         208 * 7 * 86400 // 208 weeks
     );
     console.log(`VotingEscrow implementation: ${votingEscrowImpl.address}`);
     addressFile.set("votingEscrowImpl", votingEscrowImpl.address);
 
     const votingEscrowInitTx = await votingEscrowImpl.populateTransaction.initialize(
+        "Vote-escrowed CHESS",
+        "veCHESS",
         26 * 7 * 86400
     );
     const votingEscrowProxy = await TransparentUpgradeableProxy.deploy(
@@ -113,4 +112,8 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     console.log("Transfering ownership to TimelockController");
     await proxyAdmin.transferOwnership(timelockController.address);
     await votingEscrow.transferOwnership(timelockController.address);
+
+    console.log("Making VotingEscrow implementation unusable without proxy");
+    await votingEscrowImpl.initialize("", "", 0);
+    await votingEscrowImpl.renounceOwnership();
 });
