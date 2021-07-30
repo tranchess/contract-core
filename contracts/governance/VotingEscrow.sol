@@ -48,25 +48,32 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
     /// @notice max lock time allowed at the moment
     uint256 public maxTimeAllowed;
 
-    constructor(
-        address token_,
-        address addressWhitelist_,
-        string memory name_,
-        string memory symbol_,
-        uint256 maxTime_
-    ) public {
-        name = name_;
-        symbol = symbol_;
+    constructor(address token_, uint256 maxTime_) public {
         token = token_;
-        addressWhitelist = addressWhitelist_;
         maxTime = maxTime_;
     }
 
     /// @notice Initialize ownership
-    function initialize(uint256 maxTimeAllowed_) external initializer {
+    function initialize(
+        string memory name_,
+        string memory symbol_,
+        uint256 maxTimeAllowed_
+    ) external initializer {
         __Ownable_init();
         require(maxTimeAllowed_ <= maxTime, "Cannot exceed max time");
+        name = name_;
+        symbol = symbol_;
         maxTimeAllowed = maxTimeAllowed_;
+    }
+
+    /// @notice Initialize name and symbol, if they were not initialized before.
+    function initializeNameAndSymbol(string memory name_, string memory symbol_)
+        external
+        onlyOwner
+    {
+        require(bytes(name).length == 0 && bytes(symbol).length == 0);
+        name = name_;
+        symbol = symbol_;
     }
 
     function getTimestampDropBelow(address account, uint256 threshold)
