@@ -64,19 +64,17 @@ describe("VotingEscrow", function () {
         const chess = await MockToken.connect(owner).deploy("Chess", "Chess", 18);
 
         const VotingEscrow = await ethers.getContractFactory("VotingEscrow");
-        const votingEscrowImpl = await VotingEscrow.connect(owner).deploy(
-            chess.address,
-            AddressZero,
-            "veChess",
-            "veChess",
-            MAX_TIME
-        );
+        const votingEscrowImpl = await VotingEscrow.connect(owner).deploy(chess.address, MAX_TIME);
         const TransparentUpgradeableProxy = await ethers.getContractFactory(
             "TransparentUpgradeableProxy"
         );
         const ProxyAdmin = await ethers.getContractFactory("ProxyAdmin");
         const proxyAdmin = await ProxyAdmin.connect(owner).deploy();
-        const initTx = await votingEscrowImpl.populateTransaction.initialize(MAX_TIME_ALLOWED);
+        const initTx = await votingEscrowImpl.populateTransaction.initialize(
+            "Vote-escrowed CHESS",
+            "veCHESS",
+            MAX_TIME_ALLOWED
+        );
         const votingEscrowProxy = await TransparentUpgradeableProxy.connect(owner).deploy(
             votingEscrowImpl.address,
             proxyAdmin.address,
@@ -122,7 +120,7 @@ describe("VotingEscrow", function () {
 
     describe("initialize", function () {
         it("Should revert if called again", async function () {
-            await expect(votingEscrow.initialize(MAX_TIME)).to.be.revertedWith(
+            await expect(votingEscrow.initialize("", "", MAX_TIME)).to.be.revertedWith(
                 "Initializable: contract is already initialized"
             );
         });
@@ -140,9 +138,39 @@ describe("VotingEscrow", function () {
             );
             const newVotingEscrow = await ethers.getContractAt("VotingEscrow", newProxy.address);
 
-            await expect(newVotingEscrow.initialize(MAX_TIME + 1)).to.be.revertedWith(
+            await expect(newVotingEscrow.initialize("", "", MAX_TIME + 1)).to.be.revertedWith(
                 "Cannot exceed max time"
             );
+        });
+    });
+
+    describe("initializeNameAndSymbol", function () {
+        it("Should revert if already initialized", async function () {
+            await expect(votingEscrow.initializeNameAndSymbol("x", "y")).to.be.reverted;
+        });
+
+        it("Should initialize them if not initialized", async function () {
+            // Deploy a new proxied VotingEscrow without initializating name and symbol
+            const impl = await proxyAdmin.getProxyImplementation(votingEscrow.address);
+            const TransparentUpgradeableProxy = await ethers.getContractFactory(
+                "TransparentUpgradeableProxy"
+            );
+            const VotingEscrow = await ethers.getContractFactory("VotingEscrow");
+            const initTx = await VotingEscrow.attach(impl).populateTransaction.initialize(
+                "",
+                "",
+                MAX_TIME_ALLOWED
+            );
+            const newProxy = await TransparentUpgradeableProxy.connect(owner).deploy(
+                impl,
+                proxyAdmin.address,
+                initTx.data
+            );
+            const newVotingEscrow = await VotingEscrow.connect(owner).attach(newProxy.address);
+
+            await newVotingEscrow.initializeNameAndSymbol("Some Name", "SOMESYM");
+            expect(await newVotingEscrow.name()).to.equal("Some Name");
+            expect(await newVotingEscrow.symbol()).to.equal("SOMESYM");
         });
     });
 
