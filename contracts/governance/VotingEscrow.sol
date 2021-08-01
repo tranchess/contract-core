@@ -31,6 +31,8 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
 
     event Withdrawn(address indexed account, uint256 amount);
 
+    uint8 public constant decimals = 18;
+
     uint256 public immutable override maxTime;
 
     address public immutable override token;
