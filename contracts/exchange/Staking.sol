@@ -33,7 +33,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
 
     event Deposited(uint256 tranche, address account, uint256 amount);
     event Withdrawn(uint256 tranche, address account, uint256 amount);
-    event UpdateLiquidityLimit(
+    event UpdateWorkingWeights(
         address account,
         uint256 originalWeight,
         uint256 originalTotalWeight,
@@ -46,7 +46,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     uint256 private constant REWARD_WEIGHT_A = 4;
     uint256 private constant REWARD_WEIGHT_B = 2;
     uint256 private constant REWARD_WEIGHT_M = 3;
-    uint256 private constant TOKENLESS_PRODUCTION = 40;
+    uint256 private constant BASE_COEFFICIENT = 40;
+    uint256 private constant OVERALL_COEFFICIENT = 100;
 
     IFund public immutable fund;
     IERC20 private immutable tokenM;
@@ -317,6 +318,10 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         }
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, targetVersion);
+        // Only update working weights if target version is the latest
+        if (targetVersion == rebalanceSize) {
+            _updateWorkingWeights(account);
+        }
     }
 
     /// @notice Return claimable rewards of an account till now.
@@ -330,6 +335,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         uint256 rebalanceSize = fund.getRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
+        _updateWorkingWeights(account);
         return _claimableRewards[account];
     }
 
@@ -343,6 +349,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         uint256 rebalanceSize = fund.getRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
+        _updateWorkingWeights(account);
         _claim(account);
     }
 
@@ -363,7 +370,10 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         );
 
         uint256 weight = _currentRewardWeight(account);
-        require(workingWeights[account] > (weight * TOKENLESS_PRODUCTION) / 100, "kick not needed");
+        require(
+            workingWeights[account] > (weight * BASE_COEFFICIENT) / OVERALL_COEFFICIENT,
+            "kick not needed"
+        );
 
         _updateWorkingWeights(account);
     }
@@ -449,6 +459,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             "Insufficient balance to lock"
         );
         _lockedBalances[account][tranche] = _lockedBalances[account][tranche].add(amount);
+        _updateWorkingWeights(account);
     }
 
     function _rebalanceAndUnlock(
@@ -484,6 +495,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             available[TRANCHE_B] = available[TRANCHE_B].add(amountB);
             locked[TRANCHE_B] = locked[TRANCHE_B].sub(amountB);
         }
+        _updateWorkingWeights(account);
     }
 
     function _tradeLocked(
@@ -561,7 +573,10 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                 );
 
                 version++;
-                weight = rewardWeight(totalSupplyM, totalSupplyA, totalSupplyB);
+                // Reset total weight boosting after the first rebalance
+                weight =
+                    (rewardWeight(totalSupplyM, totalSupplyA, totalSupplyB) * BASE_COEFFICIENT) /
+                    OVERALL_COEFFICIENT;
 
                 if (version < rebalanceSize) {
                     rebalanceTimestamp = fund.getRebalanceTimestamp(version);
@@ -638,6 +653,15 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         uint256 lockedM = locked[TRANCHE_M];
         uint256 lockedA = locked[TRANCHE_A];
         uint256 lockedB = locked[TRANCHE_B];
+        if (weight == 0) {
+            weight =
+                (rewardWeight(
+                    availableM.add(lockedM),
+                    availableA.add(lockedA),
+                    availableB.add(lockedB)
+                ) * BASE_COEFFICIENT) /
+                OVERALL_COEFFICIENT;
+        }
         for (uint256 i = oldVersion; i < targetVersion; i++) {
             rewards = rewards.add(
                 weight.multiplyDecimalPrecise(_historicalIntegrals[i].sub(userIntegral))
@@ -655,12 +679,14 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             }
             userIntegral = 0;
 
-            // Calculate reward weight without boost
-            weight = rewardWeight(
-                availableM.add(lockedM),
-                availableA.add(lockedA),
-                availableB.add(lockedB)
-            );
+            // Reset per-user weight boosting after the first rebalance
+            weight =
+                (rewardWeight(
+                    availableM.add(lockedM),
+                    availableA.add(lockedA),
+                    availableB.add(lockedB)
+                ) * BASE_COEFFICIENT) /
+                OVERALL_COEFFICIENT;
         }
         rewards = rewards.add(weight.multiplyDecimalPrecise(integral.sub(userIntegral)));
         address account_ = account; // Fix the "stack too deep" error
@@ -687,9 +713,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                 locked[TRANCHE_B] = lockedB;
             }
             _balanceVersions[account_] = targetVersion;
-
-            // Reset working weight to zero if rebalance ever triggered
-            workingWeights[account_] = 0;
+            workingWeights[account_] = weight;
         }
     }
 
@@ -725,11 +749,11 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         uint256 votingBalance = _votingEscrow.balanceOf(account_);
         uint256 votingTotal = _votingEscrow.totalSupply();
 
-        uint256 newWorkingWeight = (weight * TOKENLESS_PRODUCTION) / 100;
+        uint256 newWorkingWeight = (weight * BASE_COEFFICIENT) / OVERALL_COEFFICIENT;
         if (votingTotal > 0) {
             newWorkingWeight +=
-                (totalWeight * votingBalance * (100 - TOKENLESS_PRODUCTION)) /
-                (votingTotal * 100);
+                (totalWeight * votingBalance * (OVERALL_COEFFICIENT - BASE_COEFFICIENT)) /
+                (votingTotal * OVERALL_COEFFICIENT);
         }
 
         newWorkingWeight = weight.min(newWorkingWeight);
@@ -739,7 +763,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         workingTotalWeight = _workingTotalWeight;
         lastCheckpointTimestamp[account_] = _votingEscrow.lastCheckpointTimestamp(account_);
 
-        emit UpdateLiquidityLimit(
+        emit UpdateWorkingWeights(
             account_,
             weight,
             totalWeight,
