@@ -48,10 +48,36 @@ const USER2_WEIGHT = USER2_M.mul(REWARD_WEIGHT_M)
     .div(REWARD_WEIGHT_M);
 const TOTAL_WEIGHT = USER1_WEIGHT.add(USER2_WEIGHT);
 
-const BASE_COEFFICIENT = 40;
-const OVERALL_COEFFICIENT = 100;
-const USER1_VE_WEIGHT = 30;
-const TOTAL_VE_WEIGHT = 100;
+// veCHESS proportion:
+// User 1: 30%
+// User 2: 70%
+// Boosted staking weight:
+// User 1: 680 + 1000 * 30% * (3 - 1) = 1280
+// User 2: 320 * 3 = 960
+// Total : 1280 + 960 = 2240
+const MAX_BOOSTING_FACTOR = parseEther("3");
+const USER1_VE = parseEther("0.03");
+const USER2_VE = parseEther("0.07");
+const TOTAL_VE = parseEther("0.1");
+const USER1_VE_PROPORTION = USER1_VE.mul(parseEther("1")).div(TOTAL_VE);
+const USER2_VE_PROPORTION = USER2_VE.mul(parseEther("1")).div(TOTAL_VE);
+
+function boostedStakingWeight(
+    userWeight: BigNumber,
+    totalWeight: BigNumber,
+    veProportion: BigNumber
+) {
+    const e18 = parseEther("1");
+    const upperBound = userWeight.mul(MAX_BOOSTING_FACTOR).div(e18);
+    const boost = userWeight.add(
+        totalWeight.mul(veProportion).div(e18).mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18)
+    );
+    return upperBound.gt(boost) ? boost : upperBound;
+}
+
+const USER1_STAKING_WEIGHT = boostedStakingWeight(USER1_WEIGHT, TOTAL_WEIGHT, USER1_VE_PROPORTION);
+const USER2_STAKING_WEIGHT = boostedStakingWeight(USER2_WEIGHT, TOTAL_WEIGHT, USER2_VE_PROPORTION);
+const TOTAL_STAKING_WEIGHT = USER1_STAKING_WEIGHT.add(USER2_STAKING_WEIGHT);
 
 describe("Staking", function () {
     interface FixtureData {
@@ -112,9 +138,6 @@ describe("Staking", function () {
         const usdc = await MockToken.connect(owner).deploy("USD Coin", "USDC", 6);
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
-        await votingEscrow.mock.balanceOf.returns(0);
-        await votingEscrow.mock.totalSupply.returns(0);
-        await votingEscrow.mock.lastCheckpointTimestamp.returns(0);
 
         const Staking = await ethers.getContractFactory("StakingTestWrapper");
         const staking = await Staking.connect(owner).deploy(
@@ -442,6 +465,263 @@ describe("Staking", function () {
         });
     });
 
+    describe("syncWithVotingEscrow()", function () {
+        const lockedAmount1 = parseEther("150");
+        const lockedAmount2 = parseEther("700");
+        let unlockTime1: number;
+        let unlockTime2: number;
+
+        beforeEach(async function () {
+            unlockTime1 = checkpointTimestamp + WEEK * 20;
+            unlockTime2 = checkpointTimestamp + WEEK * 10;
+            await votingEscrow.mock.getLockedBalance
+                .withArgs(addr1)
+                .returns([lockedAmount1, unlockTime1]);
+            await votingEscrow.mock.getLockedBalance
+                .withArgs(addr2)
+                .returns([lockedAmount2, unlockTime2]);
+            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE);
+            await votingEscrow.mock.balanceOf.withArgs(addr2).returns(USER2_VE);
+            await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
+        });
+
+        it("Should update everything the first time", async function () {
+            await staking.syncWithVotingEscrow(addr1);
+            const stakingWeight1 = await staking.stakingWeights(addr1);
+            expect(stakingWeight1.locked.amount).to.equal(lockedAmount1);
+            expect(stakingWeight1.locked.unlockTime).to.equal(unlockTime1);
+            expect(stakingWeight1.veProportion).to.equal(USER1_VE_PROPORTION);
+            expect(stakingWeight1.weight).to.equal(USER1_STAKING_WEIGHT);
+            expect(await staking.totalStakingWeight()).to.equal(
+                USER1_STAKING_WEIGHT.add(USER2_WEIGHT)
+            );
+
+            await staking.syncWithVotingEscrow(addr2);
+            const stakingWeight2 = await staking.stakingWeights(addr2);
+            expect(stakingWeight2.locked.amount).to.equal(lockedAmount2);
+            expect(stakingWeight2.locked.unlockTime).to.equal(unlockTime2);
+            expect(stakingWeight2.veProportion).to.equal(USER2_VE_PROPORTION);
+            expect(stakingWeight2.weight).to.equal(USER2_STAKING_WEIGHT);
+            expect(await staking.totalStakingWeight()).to.equal(TOTAL_STAKING_WEIGHT);
+        });
+
+        it("Should not update ve proportion when no locking action is taken", async function () {
+            await staking.syncWithVotingEscrow(addr1);
+            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE.div(2));
+            await votingEscrow.mock.totalSupply.returns(TOTAL_VE.mul(2));
+            await staking.syncWithVotingEscrow(addr1);
+            const stakingWeight = await staking.stakingWeights(addr1);
+            expect(stakingWeight.locked.amount).to.equal(lockedAmount1);
+            expect(stakingWeight.locked.unlockTime).to.equal(unlockTime1);
+            expect(stakingWeight.veProportion).to.equal(USER1_VE_PROPORTION);
+        });
+
+        it("Should still update staking weight when no locking action is taken", async function () {
+            await staking.syncWithVotingEscrow(addr1);
+            await shareM.mock.transferFrom.returns(true);
+            await staking.connect(user2).deposit(TRANCHE_M, TOTAL_WEIGHT); // Total reward weight doubles
+            await staking.syncWithVotingEscrow(addr1);
+            const stakingWeight = await staking.stakingWeights(addr1);
+            expect(stakingWeight.weight).to.equal(
+                boostedStakingWeight(USER1_WEIGHT, TOTAL_WEIGHT.mul(2), USER1_VE_PROPORTION)
+            );
+            expect(await staking.totalStakingWeight()).to.equal(
+                stakingWeight.weight.add(USER2_WEIGHT).add(TOTAL_WEIGHT)
+            );
+        });
+
+        it("Should update ve proportion if locked amount changed", async function () {
+            await staking.syncWithVotingEscrow(addr1);
+            await votingEscrow.mock.getLockedBalance
+                .withArgs(addr1)
+                .returns([lockedAmount1.mul(2), unlockTime1]);
+            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE.mul(2));
+            await votingEscrow.mock.totalSupply.returns(TOTAL_VE.mul(5));
+            await staking.syncWithVotingEscrow(addr1);
+            const stakingWeight = await staking.stakingWeights(addr1);
+            expect(stakingWeight.locked.amount).to.equal(lockedAmount1.mul(2));
+            expect(stakingWeight.veProportion).to.equal(
+                USER1_VE.mul(2).mul(parseEther("1")).div(TOTAL_VE.mul(5))
+            );
+            expect(stakingWeight.weight).to.equal(
+                boostedStakingWeight(USER1_WEIGHT, TOTAL_WEIGHT, stakingWeight.veProportion)
+            );
+            expect(await staking.totalStakingWeight()).to.equal(
+                stakingWeight.weight.add(USER2_WEIGHT)
+            );
+        });
+
+        it("Should update ve proportion if unlock time extended", async function () {
+            await staking.syncWithVotingEscrow(addr1);
+            await votingEscrow.mock.getLockedBalance
+                .withArgs(addr1)
+                .returns([lockedAmount1, unlockTime1 + WEEK * 20]);
+            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE.mul(2));
+            await votingEscrow.mock.totalSupply.returns(TOTAL_VE.mul(5));
+            await staking.syncWithVotingEscrow(addr1);
+            const stakingWeight = await staking.stakingWeights(addr1);
+            expect(stakingWeight.locked.unlockTime).to.equal(unlockTime1 + WEEK * 20);
+            expect(stakingWeight.veProportion).to.equal(
+                USER1_VE.mul(2).mul(parseEther("1")).div(TOTAL_VE.mul(5))
+            );
+            expect(stakingWeight.weight).to.equal(
+                boostedStakingWeight(USER1_WEIGHT, TOTAL_WEIGHT, stakingWeight.veProportion)
+            );
+            expect(await staking.totalStakingWeight()).to.equal(
+                stakingWeight.weight.add(USER2_WEIGHT)
+            );
+        });
+
+        it("Should update ve proportion if lock expires", async function () {
+            await staking.syncWithVotingEscrow(addr1);
+            await advanceBlockAtTime(unlockTime1);
+            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(0);
+            await staking.syncWithVotingEscrow(addr1);
+            const stakingWeight = await staking.stakingWeights(addr1);
+            expect(stakingWeight.veProportion).to.equal(0);
+            expect(stakingWeight.weight).to.equal(USER1_WEIGHT);
+            expect(await staking.totalStakingWeight()).to.equal(TOTAL_WEIGHT);
+        });
+    });
+
+    describe("Staking weight update due to balance change", function () {
+        beforeEach(async function () {
+            await votingEscrow.mock.getLockedBalance.returns([100, checkpointTimestamp + WEEK]);
+            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE);
+            await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
+            await staking.syncWithVotingEscrow(addr1);
+        });
+
+        it("Should update staking weight on deposit()", async function () {
+            await shareM.mock.transferFrom.returns(true);
+            await staking.deposit(TRANCHE_M, USER1_M);
+            const stakingWeight = await staking.stakingWeights(addr1);
+            expect(stakingWeight.weight).to.equal(
+                boostedStakingWeight(
+                    USER1_WEIGHT.add(USER1_M),
+                    TOTAL_WEIGHT.add(USER1_M),
+                    USER1_VE_PROPORTION
+                )
+            );
+            expect(await staking.totalStakingWeight()).to.equal(
+                stakingWeight.weight.add(USER2_WEIGHT)
+            );
+        });
+
+        it("Should update staking weight on withdraw()", async function () {
+            await shareM.mock.transfer.returns(true);
+            await staking.withdraw(TRANCHE_M, USER1_M);
+            const stakingWeight = await staking.stakingWeights(addr1);
+            expect(stakingWeight.weight).to.equal(
+                boostedStakingWeight(
+                    USER1_WEIGHT.sub(USER1_M),
+                    TOTAL_WEIGHT.sub(USER1_M),
+                    USER1_VE_PROPORTION
+                )
+            );
+            expect(await staking.totalStakingWeight()).to.equal(
+                stakingWeight.weight.add(USER2_WEIGHT)
+            );
+        });
+
+        it("Should not update staking weight on refreshBalance()", async function () {
+            await staking.refreshBalance(addr1, 0);
+            expect((await staking.stakingWeights(addr1)).weight).to.equal(USER1_STAKING_WEIGHT);
+            expect(await staking.totalStakingWeight()).to.equal(
+                USER1_STAKING_WEIGHT.add(USER2_WEIGHT)
+            );
+        });
+
+        it("Should not update staking weight on claimRewards()", async function () {
+            await chessSchedule.mock.mint.returns();
+            await staking.claimRewards(addr1);
+            expect((await staking.stakingWeights(addr1)).weight).to.equal(USER1_STAKING_WEIGHT);
+            expect(await staking.totalStakingWeight()).to.equal(
+                USER1_STAKING_WEIGHT.add(USER2_WEIGHT)
+            );
+        });
+
+        it("Should update staking weight on tradeAvailable()", async function () {
+            await shareM.mock.transfer.returns(true);
+            await staking.tradeAvailable(TRANCHE_M, addr1, USER1_M);
+            const stakingWeight = await staking.stakingWeights(addr1);
+            expect(stakingWeight.weight).to.equal(
+                boostedStakingWeight(
+                    USER1_WEIGHT.sub(USER1_M),
+                    TOTAL_WEIGHT.sub(USER1_M),
+                    USER1_VE_PROPORTION
+                )
+            );
+            expect(await staking.totalStakingWeight()).to.equal(
+                stakingWeight.weight.add(USER2_WEIGHT)
+            );
+        });
+
+        it("Should update staking weight on rebalanceAndClearTrade()", async function () {
+            await staking.rebalanceAndClearTrade(addr1, USER1_M, USER1_A, USER1_B, 0);
+            const stakingWeight = await staking.stakingWeights(addr1);
+            expect(stakingWeight.weight).to.equal(
+                boostedStakingWeight(
+                    USER1_WEIGHT.mul(2),
+                    TOTAL_WEIGHT.add(USER1_WEIGHT),
+                    USER1_VE_PROPORTION
+                )
+            );
+            expect(await staking.totalStakingWeight()).to.equal(
+                stakingWeight.weight.add(USER2_WEIGHT)
+            );
+        });
+
+        it("Should not update staking weight on lock()", async function () {
+            await staking.lock(TRANCHE_M, addr1, USER1_M);
+            expect((await staking.stakingWeights(addr1)).weight).to.equal(USER1_STAKING_WEIGHT);
+            expect(await staking.totalStakingWeight()).to.equal(
+                USER1_STAKING_WEIGHT.add(USER2_WEIGHT)
+            );
+        });
+
+        it("Should not update staking weight on rebalanceAndUnlock()", async function () {
+            await staking.lock(TRANCHE_M, addr1, USER1_M);
+            await staking.rebalanceAndUnlock(addr1, USER1_M, 0, 0, 0);
+            expect((await staking.stakingWeights(addr1)).weight).to.equal(USER1_STAKING_WEIGHT);
+            expect(await staking.totalStakingWeight()).to.equal(
+                USER1_STAKING_WEIGHT.add(USER2_WEIGHT)
+            );
+        });
+
+        it("Should update staking weight on tradeLocked()", async function () {
+            await staking.lock(TRANCHE_M, addr1, USER1_M);
+            await staking.tradeLocked(TRANCHE_M, addr1, USER1_M);
+            const stakingWeight = await staking.stakingWeights(addr1);
+            expect(stakingWeight.weight).to.equal(
+                boostedStakingWeight(
+                    USER1_WEIGHT.sub(USER1_M),
+                    TOTAL_WEIGHT.sub(USER1_M),
+                    USER1_VE_PROPORTION
+                )
+            );
+            expect(await staking.totalStakingWeight()).to.equal(
+                stakingWeight.weight.add(USER2_WEIGHT)
+            );
+        });
+
+        it("Should reset staking weight without boosting after rebalance", async function () {
+            await fund.mock.getRebalanceSize.returns(1);
+            await fund.mock.getRebalanceTimestamp.withArgs(0).returns(checkpointTimestamp + 100);
+            await advanceBlockAtTime(checkpointTimestamp + 100);
+            await fund.mock.doRebalance
+                .withArgs(TOTAL_M, TOTAL_A, TOTAL_B, 0)
+                .returns(TOTAL_M, TOTAL_A, TOTAL_B);
+            await fund.mock.doRebalance
+                .withArgs(USER1_M, USER1_A, USER1_B, 0)
+                .returns(USER1_M, USER1_A, USER1_B);
+
+            await staking.refreshBalance(addr1, 1);
+            expect((await staking.stakingWeights(addr1)).weight).to.equal(USER1_WEIGHT);
+            expect(await staking.totalStakingWeight()).to.equal(TOTAL_WEIGHT);
+        });
+    });
+
     describe("Rebalance", function () {
         describe("availableBalanceOf()", function () {
             it("Should return rebalanced balance", async function () {
@@ -753,53 +1033,6 @@ describe("Staking", function () {
             return { rewards1, rewards2 };
         }
 
-        /**
-         * Return bossted claimable rewards of both user at time `claimingTime` if user1's balance
-         * increases at `doublingTime` by a certain amount such that the total reward weight
-         * doubles.
-         */
-        function rewardsAfterDoublingTotalWithBoost(
-            doublingTime: number,
-            claimingTime: number,
-            boostingFactor: number
-        ): {
-            rewards1: BigNumber;
-            rewards2: BigNumber;
-            workingTotalWeight: BigNumber;
-            workingWeight: BigNumber;
-        } {
-            const formerRewards1 = rate1.mul(doublingTime);
-
-            const newUser1Weight = USER1_WEIGHT.add(TOTAL_WEIGHT);
-            const newTotalWeight = TOTAL_WEIGHT.add(TOTAL_WEIGHT);
-            const oldWorkingTotalWeight = TOTAL_WEIGHT.mul(BASE_COEFFICIENT).div(100);
-            const oldWorkingWeight = USER1_WEIGHT.mul(BASE_COEFFICIENT).div(100);
-            let workingWeight = newUser1Weight
-                .mul(BASE_COEFFICIENT)
-                .div(OVERALL_COEFFICIENT)
-                .add(
-                    newTotalWeight
-                        .mul(boostingFactor)
-                        .mul(OVERALL_COEFFICIENT - BASE_COEFFICIENT)
-                        .div(OVERALL_COEFFICIENT)
-                        .div(TOTAL_VE_WEIGHT)
-                );
-            workingWeight = workingWeight.lt(newUser1Weight) ? workingWeight : newUser1Weight;
-            const workingTotalWeight = oldWorkingTotalWeight
-                .add(workingWeight)
-                .sub(oldWorkingWeight);
-
-            const latterRewards1 = parseEther("1")
-                .mul(claimingTime - doublingTime)
-                .mul(parseEther("1000000000"))
-                .div(workingTotalWeight)
-                .mul(workingWeight)
-                .div(parseEther("1000000000"));
-            const rewards1 = formerRewards1.add(latterRewards1);
-            const rewards2 = parseEther("1").mul(claimingTime).sub(rewards1);
-            return { rewards1, rewards2, workingTotalWeight, workingWeight };
-        }
-
         /*
          * Return claimable rewards of both user at time `claimingTime` if user1's balance
          * decreases at `doublingTime` by a certain amount such that the total reward weight
@@ -867,42 +1100,8 @@ describe("Staking", function () {
 
             await advanceBlockAtTime(rewardStartTimestamp + 500);
             const { rewards1, rewards2 } = rewardsAfterDoublingTotal(100, 500);
-            console.log(
-                rewards1.sub(rate1.mul(100)).toString(),
-                rewards2.sub(rate2.mul(100)).toString()
-            );
             expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rewards1);
             expect(await staking.callStatic["claimableRewards"](addr2)).to.equal(rewards2);
-        });
-
-        it("Should make a checkpoint on deposit() with boosting", async function () {
-            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE_WEIGHT);
-            await votingEscrow.mock.totalSupply.returns(TOTAL_VE_WEIGHT);
-            await votingEscrow.mock.lastCheckpointTimestamp.returns(1);
-
-            // Deposit some Token A to double the total reward weight
-            await shareA.mock.transferFrom.returns(true);
-            await setNextBlockTime(rewardStartTimestamp + 100);
-            await staking.deposit(
-                TRANCHE_A,
-                TOTAL_WEIGHT.mul(REWARD_WEIGHT_M).div(REWARD_WEIGHT_A)
-            );
-
-            await advanceBlockAtTime(rewardStartTimestamp + 500);
-            const {
-                rewards1,
-                rewards2,
-                workingTotalWeight,
-                workingWeight,
-            } = rewardsAfterDoublingTotalWithBoost(100, 500, USER1_VE_WEIGHT);
-            expect(await staking.workingTotalWeight()).to.equal(workingTotalWeight);
-            expect(await staking.workingWeights(addr1)).to.equal(workingWeight);
-            console.log(
-                rewards1.sub(rate1.mul(100)).toString(),
-                rewards2.sub(rate2.mul(100)).toString()
-            );
-            expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rewards1);
-            expect(await staking.callStatic["claimableRewards"](addr2)).closeToBn(rewards2, 1);
         });
 
         it("Should make a checkpoint on withdraw()", async function () {
@@ -1185,14 +1384,41 @@ describe("Staking", function () {
             expect(await staking.callStatic.claimableRewards(addr1)).to.equal(rate1.mul(1200));
 
             await setNextBlockTime(rewardStartTimestamp + 1500);
-            await staking.refreshBalance(addr1, 2);
+            await staking.refreshBalance(addr1, 1);
             expect(await staking.callStatic.claimableRewards(addr1)).to.equal(rate1.mul(1500));
         });
 
-        it("Should calculate rewards on refreshBalance() with boosting", async function () {
+        it("Should calculate rewards according to boosted staking weight", async function () {
+            await votingEscrow.mock.getLockedBalance
+                .withArgs(addr1)
+                .returns([100, checkpointTimestamp + WEEK * 100]);
+            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE);
+            await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
+            await setNextBlockTime(rewardStartTimestamp + 100);
+            await staking.syncWithVotingEscrow(addr1);
+
+            await advanceBlockAtTime(rewardStartTimestamp + 300);
+            const rate1AfterSync = parseEther("1")
+                .mul(USER1_STAKING_WEIGHT)
+                .div(TOTAL_WEIGHT.sub(USER1_WEIGHT).add(USER1_STAKING_WEIGHT));
+            const reward1 = rate1.mul(100).add(rate1AfterSync.mul(200));
+            const reward2 = parseEther("1").mul(300).sub(reward1);
+            expect(await staking.callStatic.claimableRewards(addr1)).to.equal(reward1);
+            expect(await staking.callStatic.claimableRewards(addr2)).to.equal(reward2);
+        });
+
+        it("Should calculate boosted rewards until the next rebalance", async function () {
+            await votingEscrow.mock.getLockedBalance
+                .withArgs(addr1)
+                .returns([100, checkpointTimestamp + WEEK * 100]);
+            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE);
+            await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
+            await setNextBlockTime(rewardStartTimestamp + 100);
+            await staking.syncWithVotingEscrow(addr1);
+
             await fund.mock.getRebalanceSize.returns(2);
-            await fund.mock.getRebalanceTimestamp.withArgs(0).returns(rewardStartTimestamp + 100);
-            await fund.mock.getRebalanceTimestamp.withArgs(1).returns(rewardStartTimestamp + 300);
+            await fund.mock.getRebalanceTimestamp.withArgs(0).returns(rewardStartTimestamp + 300);
+            await fund.mock.getRebalanceTimestamp.withArgs(1).returns(rewardStartTimestamp + 600);
             await fund.mock.doRebalance
                 .withArgs(TOTAL_M, TOTAL_A, TOTAL_B, 0)
                 .returns(TOTAL_M, TOTAL_A, TOTAL_B);
@@ -1205,180 +1431,22 @@ describe("Staking", function () {
             await fund.mock.doRebalance
                 .withArgs(USER1_M, USER1_A, USER1_B, 1)
                 .returns(USER1_M, USER1_A, USER1_B);
+            await fund.mock.doRebalance
+                .withArgs(USER2_M, USER2_A, USER2_B, 0)
+                .returns(USER2_M, USER2_A, USER2_B);
+            await fund.mock.doRebalance
+                .withArgs(USER2_M, USER2_A, USER2_B, 1)
+                .returns(USER2_M, USER2_A, USER2_B);
+
             await advanceBlockAtTime(rewardStartTimestamp + 1000);
-            expect(await staking.callStatic.claimableRewards(addr1)).to.equal(rate1.mul(1000));
-            expect(await staking.workingTotalWeight()).to.equal(
-                TOTAL_WEIGHT.mul(BASE_COEFFICIENT).div(OVERALL_COEFFICIENT)
-            );
-            expect(await staking.workingWeights(addr1)).to.equal(
-                USER1_WEIGHT.mul(BASE_COEFFICIENT).div(OVERALL_COEFFICIENT)
-            );
-            expect(await staking.workingWeights(addr2)).to.equal(
-                USER2_WEIGHT.mul(BASE_COEFFICIENT).div(OVERALL_COEFFICIENT)
-            );
-
-            await setNextBlockTime(rewardStartTimestamp + 1200);
-            await staking.refreshBalance(addr1, 1);
-            expect(await staking.callStatic.claimableRewards(addr1)).to.equal(rate1.mul(1200));
-            expect(await staking.workingTotalWeight()).to.equal(
-                TOTAL_WEIGHT.mul(BASE_COEFFICIENT).div(OVERALL_COEFFICIENT)
-            );
-            expect(await staking.workingWeights(addr1)).to.equal(
-                USER1_WEIGHT.mul(BASE_COEFFICIENT).div(OVERALL_COEFFICIENT)
-            );
-            expect(await staking.workingWeights(addr2)).to.equal(
-                USER2_WEIGHT.mul(BASE_COEFFICIENT).div(OVERALL_COEFFICIENT)
-            );
-
-            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE_WEIGHT);
-            await votingEscrow.mock.totalSupply.returns(TOTAL_VE_WEIGHT);
-            await setNextBlockTime(rewardStartTimestamp + 1500);
-            await expect(staking.refreshBalance(addr1, 2))
-                .to.emit(staking, "UpdateWorkingWeights")
-                .withArgs(
-                    addr1,
-                    parseEther("680"),
-                    parseEther("1000"),
-                    parseEther("452"),
-                    parseEther("580")
-                );
-            expect(await staking.callStatic.claimableRewards(addr1)).to.equal(rate1.mul(1500));
-            const boostingWeight = TOTAL_WEIGHT.mul(60 * USER1_VE_WEIGHT).div(
-                TOTAL_VE_WEIGHT * OVERALL_COEFFICIENT
-            );
-            expect(await staking.workingTotalWeight()).to.equal(
-                TOTAL_WEIGHT.mul(BASE_COEFFICIENT).div(OVERALL_COEFFICIENT).add(boostingWeight)
-            );
-            expect(await staking.workingWeights(addr1)).to.equal(
-                USER1_WEIGHT.mul(BASE_COEFFICIENT).div(OVERALL_COEFFICIENT).add(boostingWeight)
-            );
-            expect(await staking.workingWeights(addr2)).to.equal(
-                USER2_WEIGHT.mul(BASE_COEFFICIENT).div(OVERALL_COEFFICIENT)
-            );
-        });
-    });
-
-    describe("kick()", function () {
-        let rewardStartTimestamp: number; // Reward rate becomes non-zero at this timestamp.
-        let rate1: BigNumber;
-
-        /**
-         * Return bossted claimable rewards of both user at time `claimingTime` if user1's balance
-         * increases at `doublingTime` by a certain amount such that the total reward weight
-         * doubles.
-         */
-        async function rewardsWithBoostAndKick(
-            doublingTime: number,
-            kickingTime: number,
-            claimingTime: number,
-            boostingFactor: number
-        ): Promise<{ rewards1: BigNumber; rewards2: BigNumber }> {
-            // Before boosting
-            const formerRewards1 = rate1.mul(doublingTime);
-
-            // Boosting
-            let currentWorkingWeight = USER1_WEIGHT.mul(BASE_COEFFICIENT).div(OVERALL_COEFFICIENT);
-            let currentWorkingTotalWeight = TOTAL_WEIGHT.mul(BASE_COEFFICIENT).div(
-                OVERALL_COEFFICIENT
-            );
-            let newWorkingWeight = USER1_WEIGHT.mul(BASE_COEFFICIENT)
-                .div(TOTAL_VE_WEIGHT)
-                .add(
-                    TOTAL_WEIGHT.mul(boostingFactor)
-                        .mul(OVERALL_COEFFICIENT - BASE_COEFFICIENT)
-                        .div(TOTAL_VE_WEIGHT)
-                        .div(OVERALL_COEFFICIENT)
-                );
-            newWorkingWeight = newWorkingWeight.lt(USER1_WEIGHT) ? newWorkingWeight : USER1_WEIGHT;
-            currentWorkingTotalWeight = currentWorkingTotalWeight
-                .add(newWorkingWeight)
-                .sub(currentWorkingWeight);
-            currentWorkingWeight = newWorkingWeight;
-            const boostRewards1 = parseEther("1")
-                .mul(kickingTime - doublingTime)
-                .mul(parseEther("1000000000"))
-                .div(currentWorkingTotalWeight)
-                .mul(currentWorkingWeight)
-                .div(parseEther("1000000000"));
-
-            // After Kick
-            newWorkingWeight = USER1_WEIGHT.mul(BASE_COEFFICIENT).div(OVERALL_COEFFICIENT);
-            currentWorkingTotalWeight = currentWorkingTotalWeight
-                .add(newWorkingWeight)
-                .sub(currentWorkingWeight);
-            currentWorkingWeight = newWorkingWeight;
-            expect(await staking.workingWeights(addr1)).to.equal(currentWorkingWeight);
-            expect(await staking.workingTotalWeight()).to.equal(currentWorkingTotalWeight);
-            const afterKickRewards1 = parseEther("1")
-                .mul(claimingTime - kickingTime)
-                .mul(parseEther("1000000000"))
-                .div(currentWorkingTotalWeight)
-                .mul(currentWorkingWeight)
-                .div(parseEther("1000000000"));
-            const rewards1 = formerRewards1.add(boostRewards1).add(afterKickRewards1);
-            const rewards2 = parseEther("1").mul(claimingTime).sub(rewards1);
-
-            return { rewards1, rewards2 };
-        }
-
-        beforeEach(async function () {
-            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE_WEIGHT);
-            await votingEscrow.mock.balanceOf
-                .withArgs(addr2)
-                .returns(TOTAL_VE_WEIGHT - USER1_VE_WEIGHT);
-            await votingEscrow.mock.totalSupply.returns(TOTAL_VE_WEIGHT);
-            await votingEscrow.mock.lastCheckpointTimestamp.returns(1);
-
-            rewardStartTimestamp =
-                Math.floor(checkpointTimestamp / WEEK) * WEEK + WEEK * 10 + SETTLEMENT_TIME;
-            await chessSchedule.mock.getRate
-                .withArgs(rewardStartTimestamp)
-                .returns(parseEther("1"));
-            await advanceBlockAtTime(rewardStartTimestamp);
-
-            rate1 = parseEther("1").mul(USER1_WEIGHT).div(TOTAL_WEIGHT);
-
-            await shareM.mock.transferFrom.returns(true);
-            await setNextBlockTime(rewardStartTimestamp + 100);
-            await staking.userCheckpoint(addr1);
-        });
-
-        it("Should revert if kicking a user with positive veChess and no new voting activity", async function () {
-            await expect(staking.kick(addr1)).to.be.revertedWith("Kick not allowed");
-        });
-
-        it("Should revert if kick is not needed", async function () {
-            await shareM.mock.transfer.returns(true);
-            await staking.connect(user2).withdraw(TRANCHE_M, USER2_M);
-            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(0);
-            await expect(staking.kick(addr2)).to.be.revertedWith("Kick not allowed");
-        });
-
-        it("Should kick a user if veChess drop to 0", async function () {
-            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(0);
-            await staking.kick(addr1);
-        });
-
-        it("Should kick a user if new voting activities", async function () {
-            await votingEscrow.mock.lastCheckpointTimestamp.returns(2);
-            await staking.kick(addr1);
-        });
-
-        it("Should first boost and then kick", async function () {
-            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(0);
-            await setNextBlockTime(rewardStartTimestamp + 500);
-            await staking.kick(addr1);
-            await advanceBlockAtTime(rewardStartTimestamp + 600);
-
-            const { rewards1, rewards2 } = await rewardsWithBoostAndKick(
-                100,
-                500,
-                600,
-                USER1_VE_WEIGHT
-            );
-
-            expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(rewards1);
-            expect(await staking.callStatic["claimableRewards"](addr2)).closeToBn(rewards2, 1);
+            const rate1AfterSync = parseEther("1")
+                .mul(USER1_STAKING_WEIGHT)
+                .div(TOTAL_WEIGHT.sub(USER1_WEIGHT).add(USER1_STAKING_WEIGHT));
+            // Boosting takes effect from time 100 to 300
+            const reward1 = rate1.mul(800).add(rate1AfterSync.mul(200));
+            const reward2 = parseEther("1").mul(1000).sub(reward1);
+            expect(await staking.callStatic.claimableRewards(addr1)).to.equal(reward1);
+            expect(await staking.callStatic.claimableRewards(addr2)).to.equal(reward2);
         });
     });
 
