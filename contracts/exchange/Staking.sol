@@ -108,7 +108,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @dev Mapping of account => claimable rewards.
     mapping(address => uint256) private _claimableRewards;
 
-    IVotingEscrow public immutable votingEscrowStaking;
+    IVotingEscrow private immutable _votingEscrow;
     uint256 public workingTotalWeight;
     mapping(address => uint256) public workingWeights;
     mapping(address => uint256) public lastCheckpointTimestamp;
@@ -130,7 +130,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         quoteAssetAddress = quoteAssetAddress_;
         _checkpointTimestamp = block.timestamp;
         guardedLaunchStart = guardedLaunchStart_;
-        votingEscrowStaking = IVotingEscrow(votingEscrow_);
+        _votingEscrow = IVotingEscrow(votingEscrow_);
 
         _rate = IChessSchedule(chessSchedule_).getRate(block.timestamp);
     }
@@ -361,7 +361,6 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
 
-        IVotingEscrow _votingEscrow = votingEscrowStaking;
         uint256 lastTimestamp = lastCheckpointTimestamp[account];
         uint256 latestTimestamp = _votingEscrow.lastCheckpointTimestamp(account);
         require(
@@ -745,7 +744,6 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         uint256 weight = _currentRewardWeight(account);
 
         address account_ = account;
-        IVotingEscrow _votingEscrow = votingEscrowStaking;
         uint256 votingBalance = _votingEscrow.balanceOf(account_);
         uint256 votingTotal = _votingEscrow.totalSupply();
 
