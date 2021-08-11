@@ -50,7 +50,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     uint256 private constant REWARD_WEIGHT_A = 4;
     uint256 private constant REWARD_WEIGHT_B = 2;
     uint256 private constant REWARD_WEIGHT_M = 3;
-    uint256 private constant MAX_BOOSTING_FACTOR = 2.5e18;
+    uint256 private constant MAX_BOOSTING_FACTOR = 3e18;
 
     IFund public immutable fund;
     IERC20 private immutable tokenM;
@@ -730,7 +730,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
 
         uint256 newWeight = userStake;
         uint256 veProportion = stakingWeights[account].veProportion;
-        if (veProportion > 0) {
+        if (veProportion > 0 && stakingWeights[account].locked.unlockTime > block.timestamp) {
             newWeight = newWeight.add(
                 totalStake.multiplyDecimal(veProportion).multiplyDecimal(MAX_BOOSTING_FACTOR - 1e18)
             );
