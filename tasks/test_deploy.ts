@@ -61,6 +61,9 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         exchange: "latest",
         feeDistributor: "latest",
         silent: true,
+        deployProtocolDataProvider: true,
+        deployBatchSettleHelper: true,
+        deployVotingEscrowHelper: true,
     });
 
     console.log();
