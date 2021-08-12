@@ -1,5 +1,5 @@
 import { task } from "hardhat/config";
-import { createAddressFile } from "./address_file";
+import { createAddressFile, selectAddressFile } from "./address_file";
 import { GOVERNANCE_CONFIG } from "../config";
 import { updateHreSigner } from "./signers";
 
@@ -37,12 +37,17 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     console.log(`Chess: ${chess.address}`);
     addressFile.set("chess", chess.address);
 
+    await hre.run("deploy_impl", {
+        governance: "latest",
+        fund: "skip",
+        silent: true,
+        deployChessSchedule: true,
+        deployVotingEscrow: true,
+    });
+    const implAddresses = await selectAddressFile(hre, "impl", "latest");
+
     const ChessSchedule = await ethers.getContractFactory("ChessSchedule");
-    const chessScheduleImpl = await ChessSchedule.deploy(
-        chess.address,
-        GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP
-    );
-    console.log(`ChessSchedule implementation: ${chessScheduleImpl.address}`);
+    const chessScheduleImpl = ChessSchedule.attach(implAddresses.chessScheduleImpl);
     addressFile.set("chessScheduleImpl", chessScheduleImpl.address);
 
     // Predict address of ChessSchedule proxy and approve CHESS to it.
@@ -64,11 +69,7 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     addressFile.set("chessSchedule", chessSchedule.address);
 
     const VotingEscrow = await ethers.getContractFactory("VotingEscrow");
-    const votingEscrowImpl = await VotingEscrow.deploy(
-        chess.address,
-        208 * 7 * 86400 // 208 weeks
-    );
-    console.log(`VotingEscrow implementation: ${votingEscrowImpl.address}`);
+    const votingEscrowImpl = VotingEscrow.attach(implAddresses.votingEscrowImpl);
     addressFile.set("votingEscrowImpl", votingEscrowImpl.address);
 
     const votingEscrowInitTx = await votingEscrowImpl.populateTransaction.initialize(
@@ -112,8 +113,4 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     console.log("Transfering ownership to TimelockController");
     await proxyAdmin.transferOwnership(timelockController.address);
     await votingEscrow.transferOwnership(timelockController.address);
-
-    console.log("Making VotingEscrow implementation unusable without proxy");
-    await votingEscrowImpl.initialize("", "", 0);
-    await votingEscrowImpl.renounceOwnership();
 });

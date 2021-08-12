@@ -68,6 +68,9 @@ export async function selectAddressFile(
     module: string,
     filename: string
 ): Promise<{ readonly [contract: string]: string }> {
+    if (filename === "skip") {
+        return {};
+    }
     if (filename === "" || filename === "latest") {
         const dir = getAddressDir(hre);
         const candidates = listAddressFile(dir, module);
