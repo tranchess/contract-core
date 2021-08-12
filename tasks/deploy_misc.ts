@@ -24,4 +24,10 @@ task("deploy_misc", "Deploy misc contracts interactively")
             console.log(`BatchSettleHelper: ${batchSettleHelper.address}`);
             addressFile.set("batchSettleHelper", batchSettleHelper.address);
         }
+        if (args.silent || keyInYNStrict("Deploy VotingEscrowHelper?", { guide: true })) {
+            const VotingEscrowHelper = await ethers.getContractFactory("VotingEscrowHelper");
+            const votingEscrowHelper = await VotingEscrowHelper.deploy();
+            console.log(`VotingEscrowHelper: ${votingEscrowHelper.address}`);
+            addressFile.set("votingEscrowHelper", votingEscrowHelper.address);
+        }
     });
