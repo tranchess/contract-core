@@ -109,9 +109,6 @@ describe("Exchange", function () {
         const usdc = await MockToken.connect(owner).deploy("USD Coin", "USDC", 6);
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
-        await votingEscrow.mock.balanceOf.returns(0);
-        await votingEscrow.mock.totalSupply.returns(0);
-        await votingEscrow.mock.lastCheckpointTimestamp.returns(0);
 
         const Exchange = await ethers.getContractFactory("Exchange");
         const exchangeImpl = await Exchange.connect(owner).deploy(
