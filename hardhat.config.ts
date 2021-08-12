@@ -7,6 +7,7 @@ import "./tasks/deploy_exchange";
 import "./tasks/deploy_fee_distributor";
 import "./tasks/deploy_fund";
 import "./tasks/deploy_governance";
+import "./tasks/deploy_impl";
 import "./tasks/deploy_misc";
 import "./tasks/deploy_mock";
 import "./tasks/deploy_oracle";

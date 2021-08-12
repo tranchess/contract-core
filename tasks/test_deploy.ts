@@ -64,6 +64,17 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     });
 
     console.log();
+    console.log("[+] Deploying implementation contracts (again)");
+    await hre.run("deploy_impl", {
+        governance: "latest",
+        fund: "latest",
+        silent: true,
+        deployChessSchedule: true,
+        deployVotingEscrow: true,
+        deployExchange: true,
+    });
+
+    console.log();
     console.log("[+] Deploying two vesting escrows");
     await hre.run("deploy_vesting", {
         governance: "latest",
