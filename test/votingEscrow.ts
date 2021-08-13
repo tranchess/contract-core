@@ -659,7 +659,7 @@ describe("VotingEscrow", function () {
 
         beforeEach(async function () {
             helper = await deployMockForName(owner, "VotingEscrowHelper");
-            const tx = await helper.populateTransaction.syncWithFeeDistributor(addr3);
+            const tx = await helper.populateTransaction.sync(addr3);
             data = tx.data ?? "0x";
         });
 
@@ -667,7 +667,7 @@ describe("VotingEscrow", function () {
             await expect(
                 votingEscrow.createLock(parseEther("1"), startWeek + WEEK, helper.address, data)
             ).to.be.reverted;
-            await helper.mock.syncWithFeeDistributor.withArgs(addr3).returns();
+            await helper.mock.sync.withArgs(addr3).returns();
             await votingEscrow.createLock(parseEther("1"), startWeek + WEEK, helper.address, data);
         });
 
@@ -675,7 +675,7 @@ describe("VotingEscrow", function () {
             await votingEscrow.createLock(parseEther("1"), startWeek + WEEK, AddressZero, "0x");
             await expect(votingEscrow.increaseAmount(addr1, 1, helper.address, data)).to.be
                 .reverted;
-            await helper.mock.syncWithFeeDistributor.withArgs(addr3).returns();
+            await helper.mock.sync.withArgs(addr3).returns();
             await votingEscrow.increaseAmount(addr1, 1, helper.address, data);
         });
 
@@ -684,7 +684,7 @@ describe("VotingEscrow", function () {
             await expect(
                 votingEscrow.increaseUnlockTime(startWeek + WEEK * 2, helper.address, data)
             ).to.be.reverted;
-            await helper.mock.syncWithFeeDistributor.withArgs(addr3).returns();
+            await helper.mock.sync.withArgs(addr3).returns();
             await votingEscrow.increaseUnlockTime(startWeek + WEEK * 2, helper.address, data);
         });
     });
