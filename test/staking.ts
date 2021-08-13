@@ -787,6 +787,29 @@ describe("Staking", function () {
             });
         });
 
+        describe("workingSupply()", function () {
+            it("Should return rebalanced working supply (without boosting)", async function () {
+                await fund.mock.getRebalanceSize.returns(2);
+                await fund.mock.batchRebalance
+                    .withArgs(TOTAL_M, TOTAL_A, TOTAL_B, 0, 2)
+                    .returns(TOTAL_M.mul(3), TOTAL_A.mul(3), TOTAL_B.mul(3));
+                expect(await staking.workingSupply()).to.equal(TOTAL_WEIGHT.mul(3));
+            });
+        });
+
+        describe("workingBalanceOf()", function () {
+            it("Should return rebalanced working balance (without boosting)", async function () {
+                await staking.lock(TRANCHE_M, addr1, USER1_M.div(2));
+                await staking.lock(TRANCHE_A, addr1, USER1_A.div(3));
+                await staking.lock(TRANCHE_B, addr1, USER1_B.div(5));
+                await fund.mock.getRebalanceSize.returns(2);
+                await fund.mock.batchRebalance
+                    .withArgs(USER1_M, USER1_A, USER1_B, 0, 2)
+                    .returns(USER1_M.mul(8), USER1_A.mul(8), USER1_B.mul(8));
+                expect(await staking.workingBalanceOf(addr1)).to.equal(USER1_WEIGHT.mul(8));
+            });
+        });
+
         describe("refreshBalance()", function () {
             it("Non-zero targetVersion", async function () {
                 await fund.mock.getRebalanceSize.returns(3);
