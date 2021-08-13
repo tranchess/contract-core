@@ -23,7 +23,7 @@ import "./Staking.sol";
 /// @author Tranchess
 contract Exchange is ExchangeRoles, Staking {
     /// @dev Reserved storage slots for future base contract upgrades
-    uint256[30] private _reservedSlots;
+    uint256[29] private _reservedSlots;
 
     using SafeDecimalMath for uint256;
     using LibOrderQueue for OrderQueue;
