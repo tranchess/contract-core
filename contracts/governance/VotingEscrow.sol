@@ -115,8 +115,8 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
     function createLock(
         uint256 amount,
         uint256 unlockTime,
-        address target,
-        bytes memory data
+        address,
+        bytes memory
     ) external nonReentrant {
         _assertNotContract();
         require(
@@ -140,19 +140,14 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
 
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
-        if (target != address(0)) {
-            (bool result, ) = target.call(data);
-            require(result, "Transaction Failed");
-        }
-
         emit LockCreated(msg.sender, amount, unlockTime);
     }
 
     function increaseAmount(
         address account,
         uint256 amount,
-        address target,
-        bytes memory data
+        address,
+        bytes memory
     ) external nonReentrant {
         LockedBalance memory lockedBalance = locked[account];
 
@@ -166,18 +161,13 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
 
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
-        if (target != address(0)) {
-            (bool result, ) = target.call(data);
-            require(result, "Transaction Failed");
-        }
-
         emit AmountIncreased(account, amount);
     }
 
     function increaseUnlockTime(
         uint256 unlockTime,
-        address target,
-        bytes memory data
+        address,
+        bytes memory
     ) external nonReentrant {
         require(
             unlockTime + 1 weeks == _endOfWeek(unlockTime),
@@ -197,11 +187,6 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         );
         scheduledUnlock[unlockTime] = scheduledUnlock[unlockTime].add(lockedBalance.amount);
         locked[msg.sender].unlockTime = unlockTime;
-
-        if (target != address(0)) {
-            (bool result, ) = target.call(data);
-            require(result, "Transaction Failed");
-        }
 
         emit UnlockTimeIncreased(msg.sender, unlockTime);
     }
