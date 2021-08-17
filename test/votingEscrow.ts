@@ -625,7 +625,7 @@ describe("VotingEscrow", function () {
         });
     });
 
-    describe("Post-operations", function () {
+    describe.skip("Post-operations", function () {
         let helper: MockContract;
         let data: string;
 
