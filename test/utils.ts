@@ -1,4 +1,5 @@
-import type { Wallet } from "ethers";
+import { Assertion } from "chai";
+import { BigNumber, BigNumberish, Wallet } from "ethers";
 import { ethers } from "hardhat";
 
 export const TRANCHE_M = 0;
@@ -26,4 +27,24 @@ export async function setNextBlockTime(time: number): Promise<void> {
  */
 export async function setAutomine(flag: boolean): Promise<void> {
     await ethers.provider.send("evm_setAutomine", [flag]);
+}
+
+Assertion.addMethod("closeToBn", function (expected: BigNumberish, delta: BigNumberish) {
+    const obj = this._obj;
+    this.assert(
+        BigNumber.from(expected).sub(obj).abs().lte(delta),
+        `expected ${obj} to be close to ${expected} +/- ${delta}`,
+        `expected ${obj} not to be close to ${expected} +/- ${delta}`,
+        expected,
+        obj
+    );
+});
+
+declare global {
+    // eslint-disable-next-line @typescript-eslint/no-namespace
+    export namespace Chai {
+        interface Assertion {
+            closeToBn(expected: BigNumberish, delta: BigNumberish): Assertion;
+        }
+    }
 }

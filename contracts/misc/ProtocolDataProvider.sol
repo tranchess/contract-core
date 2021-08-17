@@ -5,6 +5,7 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "../interfaces/ITrancheIndex.sol";
+import "../interfaces/IChessSchedule.sol";
 import "../utils/CoreUtility.sol";
 
 import {UnsettledTrade} from "../exchange/LibUnsettledTrade.sol";
@@ -15,11 +16,45 @@ import "../governance/InterestRateBallot.sol";
 import "../governance/VotingEscrow.sol";
 
 interface IExchange {
+    function chessSchedule() external view returns (IChessSchedule);
+
     function unsettledTrades(
         address account,
         uint256 tranche,
         uint256 epoch
     ) external view returns (UnsettledTrade memory);
+}
+
+interface IFeeDistributor {
+    function rewardsPerWeek(uint256 timestamp) external view returns (uint256);
+
+    function veSupplyPerWeek(uint256 timestamp) external view returns (uint256);
+
+    function totalSupplyAtTimestamp(uint256 timestamp) external view returns (uint256);
+
+    function userLastBalances(address account) external view returns (uint256);
+
+    function userLockedBalances(address account)
+        external
+        view
+        returns (IVotingEscrow.LockedBalance memory);
+
+    function userCheckpoint(address account) external returns (uint256 rewards);
+}
+
+interface IPancakePair {
+    function token0() external view returns (address);
+
+    function token1() external view returns (address);
+
+    function getReserves()
+        external
+        view
+        returns (
+            uint112 reserve0,
+            uint112 reserve1,
+            uint32 blockTimestampLast
+        );
 }
 
 contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
@@ -31,6 +66,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         PrimaryMarketData primaryMarket;
         ExchangeData exchange;
         GovernanceData governance;
+        SwapPairData pair;
     }
 
     struct WalletData {
@@ -67,11 +103,13 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         uint256 fundActivityStartTime;
         uint256 exchangeActivityStartTime;
         uint256 currentDay;
+        uint256 currentWeek;
         uint256 dailyProtocolFeeRate;
         uint256 totalShares;
         uint256 totalUnderlying;
         uint256 rebalanceSize;
         uint256 currentInterestRate;
+        Fund.Rebalance lastRebalance;
     }
 
     struct PrimaryMarketData {
@@ -100,19 +138,50 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
 
     struct GovernanceData {
         uint256 chessTotalSupply;
+        uint256 chessRate;
         VotingEscrowData votingEscrow;
         BallotData interestRateBallot;
+        FeeDistributorData feeDistributor;
     }
 
     struct VotingEscrowData {
         uint256 chessBalance;
         uint256 totalSupply;
+        uint256 tradingWeekTotalSupply;
         IVotingEscrow.LockedBalance account;
     }
 
     struct BallotData {
-        uint256 nextCloseTimestamp;
+        uint256 tradingWeekTotalSupply;
         IBallot.Voter account;
+    }
+
+    struct FeeDistributorData {
+        FeeDistributorAccountData account;
+        uint256 currentRewards;
+        uint256 currentSupply;
+        uint256 tradingWeekTotalSupply;
+        HistoricalRewardData[3] historicalRewards;
+    }
+
+    struct HistoricalRewardData {
+        uint256 timestamp;
+        uint256 veSupply;
+        uint256 rewards;
+    }
+
+    struct FeeDistributorAccountData {
+        uint256 claimableRewards;
+        uint256 currentBalance;
+        uint256 amount;
+        uint256 unlockTime;
+    }
+
+    struct SwapPairData {
+        uint112 reserve0;
+        uint112 reserve1;
+        address token0;
+        address token1;
     }
 
     /// @dev This function should be call as a "view" function off-chain to get the return value,
@@ -121,6 +190,8 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
     function getProtocolData(
         address primaryMarketAddress,
         address exchangeAddress,
+        address pancakePairAddress,
+        address feeDistributorAddress,
         address account
     ) external returns (ProtocolData memory data) {
         data.blockNumber = block.number;
@@ -128,10 +199,12 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
 
         Exchange exchange = Exchange(exchangeAddress);
         Fund fund = Fund(address(exchange.fund()));
-        VotingEscrow votingEscrow = VotingEscrow(address(exchange.votingEscrow()));
+        VotingEscrow votingEscrow =
+            VotingEscrow(address(InterestRateBallot(address(fund.ballot())).votingEscrow()));
         IERC20 underlyingToken = IERC20(fund.tokenUnderlying());
         IERC20 quoteToken = IERC20(exchange.quoteAssetAddress());
         IERC20 chessToken = IERC20(votingEscrow.token());
+        IChessSchedule chessSchedule = exchange.chessSchedule();
 
         data.wallet.balance.underlyingToken = underlyingToken.balanceOf(account);
         data.wallet.balance.quoteToken = quoteToken.balanceOf(account);
@@ -173,13 +246,14 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.fund.fundActivityStartTime = fund.fundActivityStartTime();
         data.fund.exchangeActivityStartTime = fund.exchangeActivityStartTime();
         data.fund.currentDay = fund.currentDay();
+        data.fund.currentWeek = _endOfWeek(data.fund.currentDay - 1 days);
         data.fund.dailyProtocolFeeRate = fund.dailyProtocolFeeRate();
         data.fund.totalShares = fund.getTotalShares();
         data.fund.totalUnderlying = underlyingToken.balanceOf(address(fund));
         data.fund.rebalanceSize = fund.getRebalanceSize();
-        data.fund.currentInterestRate = fund.historicalInterestRate(
-            _endOfWeek(data.fund.currentDay - 1 days)
-        );
+        data.fund.currentInterestRate = fund.historicalInterestRate(data.fund.currentWeek);
+        uint256 rebalanceSize = fund.getRebalanceSize();
+        data.fund.lastRebalance = fund.getRebalance(rebalanceSize == 0 ? 0 : rebalanceSize - 1);
 
         PrimaryMarket primaryMarket = PrimaryMarket(primaryMarketAddress);
         data.primaryMarket.currentCreatingUnderlying = primaryMarket.currentCreatingUnderlying();
@@ -198,15 +272,58 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.exchange.account.isMaker = exchange.isMaker(account);
         data.exchange.account.chessRewards = exchange.claimableRewards(account);
 
+        uint256 blockCurrentWeek = _endOfWeek(block.timestamp);
         data.governance.chessTotalSupply = chessToken.totalSupply();
+        data.governance.chessRate = chessSchedule.getRate(block.timestamp);
         data.governance.votingEscrow.chessBalance = chessToken.balanceOf(address(votingEscrow));
         data.governance.votingEscrow.totalSupply = votingEscrow.totalSupply();
-        data.governance.votingEscrow.account = votingEscrow.getLockedBalance(account);
-        data.governance.interestRateBallot.nextCloseTimestamp = _endOfWeek(
-            data.fund.currentDay - 1 days
+        data.governance.votingEscrow.tradingWeekTotalSupply = votingEscrow.totalSupplyAtTimestamp(
+            blockCurrentWeek
         );
+        data.governance.votingEscrow.account = votingEscrow.getLockedBalance(account);
+        data.governance.interestRateBallot.tradingWeekTotalSupply = InterestRateBallot(
+            address(fund.ballot())
+        )
+            .totalSupplyAtTimestamp(blockCurrentWeek);
         data.governance.interestRateBallot.account = InterestRateBallot(address(fund.ballot()))
             .getReceipt(account);
+
+        if (feeDistributorAddress != address(0)) {
+            IFeeDistributor feeDistributor = IFeeDistributor(feeDistributorAddress);
+            data.governance.feeDistributor.account.claimableRewards = feeDistributor.userCheckpoint(
+                account
+            );
+            data.governance.feeDistributor.account.currentBalance = feeDistributor.userLastBalances(
+                account
+            );
+            data.governance.feeDistributor.account.amount = feeDistributor
+                .userLockedBalances(account)
+                .amount;
+            data.governance.feeDistributor.account.unlockTime = feeDistributor
+                .userLockedBalances(account)
+                .unlockTime;
+            data.governance.feeDistributor.currentRewards = feeDistributor.rewardsPerWeek(
+                blockCurrentWeek - 1 weeks
+            );
+            data.governance.feeDistributor.currentSupply = feeDistributor.veSupplyPerWeek(
+                blockCurrentWeek - 1 weeks
+            );
+            data.governance.feeDistributor.tradingWeekTotalSupply = feeDistributor
+                .totalSupplyAtTimestamp(blockCurrentWeek);
+            for (uint256 i = 0; i < 3; i++) {
+                uint256 weekEnd = blockCurrentWeek - (i + 1) * 1 weeks;
+                data.governance.feeDistributor.historicalRewards[i].timestamp = weekEnd;
+                data.governance.feeDistributor.historicalRewards[i].veSupply = feeDistributor
+                    .veSupplyPerWeek(weekEnd - 1 weeks);
+                data.governance.feeDistributor.historicalRewards[i].rewards = feeDistributor
+                    .rewardsPerWeek(weekEnd - 1 weeks);
+            }
+        }
+
+        IPancakePair pair = IPancakePair(pancakePairAddress);
+        data.pair.token0 = pair.token0();
+        data.pair.token1 = pair.token1();
+        (data.pair.reserve0, data.pair.reserve1, ) = pair.getReserves();
     }
 
     function getUnsettledTrades(

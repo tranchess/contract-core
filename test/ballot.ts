@@ -5,7 +5,7 @@ import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther } = ethers.utils;
 import { deployMockForName } from "./mock";
-import { WEEK, FixtureWalletMap, advanceBlockAtTime } from "./utils";
+import { WEEK, SETTLEMENT_TIME, FixtureWalletMap, advanceBlockAtTime } from "./utils";
 
 describe("Ballot", function () {
     interface FixtureData {
@@ -29,9 +29,9 @@ describe("Ballot", function () {
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
         const [user1, user2, owner] = provider.getWallets();
 
-        // Start at the midnight in the next Thursday.
+        // Start at the settlement time in the next Thursday.
         const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
-        const startWeek = Math.ceil(startTimestamp / WEEK) * WEEK + WEEK;
+        const startWeek = Math.ceil(startTimestamp / WEEK) * WEEK + WEEK + SETTLEMENT_TIME;
         await advanceBlockAtTime(startWeek);
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");

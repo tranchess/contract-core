@@ -3,13 +3,26 @@ pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
+
+import "../utils/CoreUtility.sol";
+
 import "../interfaces/IBallot.sol";
 import "../interfaces/IVotingEscrow.sol";
 
-contract InterestRateBallot is IBallot {
+contract InterestRateBallot is IBallot, CoreUtility {
     using SafeMath for uint256;
 
-    uint256 public immutable maxTime;
+    event Voted(
+        address indexed account,
+        uint256 oldAmount,
+        uint256 oldUnlockTime,
+        uint256 oldWeight,
+        uint256 amount,
+        uint256 indexed unlockTime,
+        uint256 indexed weight
+    );
+
+    uint256 private immutable _maxTime;
 
     uint256 public stepSize = 0.02e18;
     uint256 public minRange = 0;
@@ -25,7 +38,7 @@ contract InterestRateBallot is IBallot {
 
     constructor(address votingEscrow_) public {
         votingEscrow = IVotingEscrow(votingEscrow_);
-        maxTime = votingEscrow.maxTime();
+        _maxTime = votingEscrow.maxTime();
     }
 
     function getWeight(uint256 index) public view returns (uint256) {
@@ -75,11 +88,18 @@ contract InterestRateBallot is IBallot {
         require(lockedBalance.amount > 0, "Zero value");
 
         // update scheduled unlock
-        scheduledUnlock[voter.unlockTime] -= voter.amount;
-        scheduledUnlock[lockedBalance.unlockTime] += lockedBalance.amount;
+        scheduledUnlock[voter.unlockTime] = scheduledUnlock[voter.unlockTime].sub(voter.amount);
+        scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime].add(
+            lockedBalance.amount
+        );
 
-        scheduledWeightedUnlock[voter.unlockTime] -= voter.amount * voter.weight;
-        scheduledWeightedUnlock[lockedBalance.unlockTime] += lockedBalance.amount * weight;
+        scheduledWeightedUnlock[voter.unlockTime] = scheduledWeightedUnlock[voter.unlockTime].sub(
+            voter.amount * voter.weight
+        );
+        scheduledWeightedUnlock[lockedBalance.unlockTime] = scheduledWeightedUnlock[
+            lockedBalance.unlockTime
+        ]
+            .add(lockedBalance.amount * weight);
 
         emit Voted(
             msg.sender,
@@ -99,6 +119,46 @@ contract InterestRateBallot is IBallot {
         });
     }
 
+    function syncWithVotingEscrow(address account) external override {
+        Voter memory voter = voters[account];
+        if (voter.amount == 0) {
+            return; // The account did not voted before
+        }
+
+        IVotingEscrow.LockedBalance memory lockedBalance = votingEscrow.getLockedBalance(account);
+        if (lockedBalance.amount == 0 || lockedBalance.unlockTime <= block.timestamp) {
+            return;
+        }
+
+        // update scheduled unlock
+        scheduledUnlock[voter.unlockTime] = scheduledUnlock[voter.unlockTime].sub(voter.amount);
+        scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime].add(
+            lockedBalance.amount
+        );
+
+        scheduledWeightedUnlock[voter.unlockTime] = scheduledWeightedUnlock[voter.unlockTime].sub(
+            voter.amount * voter.weight
+        );
+        scheduledWeightedUnlock[lockedBalance.unlockTime] = scheduledWeightedUnlock[
+            lockedBalance.unlockTime
+        ]
+            .add(lockedBalance.amount * voter.weight);
+
+        emit Voted(
+            account,
+            voter.amount,
+            voter.unlockTime,
+            voter.weight,
+            lockedBalance.amount,
+            lockedBalance.unlockTime,
+            voter.weight
+        );
+
+        // update voter amount per account
+        voters[account].amount = lockedBalance.amount;
+        voters[account].unlockTime = lockedBalance.unlockTime;
+    }
+
     function _balanceOfAtTimestamp(address account, uint256 timestamp)
         private
         view
@@ -109,17 +169,17 @@ contract InterestRateBallot is IBallot {
         if (timestamp > voter.unlockTime) {
             return 0;
         }
-        return (voter.amount * (voter.unlockTime - timestamp)) / maxTime;
+        return (voter.amount * (voter.unlockTime - timestamp)) / _maxTime;
     }
 
     function _totalSupplyAtTimestamp(uint256 timestamp) private view returns (uint256) {
         uint256 total = 0;
         for (
-            uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
-            weekCursor <= timestamp + maxTime;
+            uint256 weekCursor = _endOfWeek(timestamp);
+            weekCursor <= timestamp + _maxTime;
             weekCursor += 1 weeks
         ) {
-            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / maxTime;
+            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / _maxTime;
         }
 
         return total;
@@ -128,11 +188,11 @@ contract InterestRateBallot is IBallot {
     function _sumAtTimestamp(uint256 timestamp) private view returns (uint256) {
         uint256 sum = 0;
         for (
-            uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
-            weekCursor <= timestamp + maxTime;
+            uint256 weekCursor = _endOfWeek(timestamp);
+            weekCursor <= timestamp + _maxTime;
             weekCursor += 1 weeks
         ) {
-            sum += (scheduledWeightedUnlock[weekCursor] * (weekCursor - timestamp)) / maxTime;
+            sum += (scheduledWeightedUnlock[weekCursor] * (weekCursor - timestamp)) / _maxTime;
         }
 
         return sum;
@@ -142,12 +202,12 @@ contract InterestRateBallot is IBallot {
         uint256 sum = 0;
         uint256 total = 0;
         for (
-            uint256 weekCursor = (timestamp / 1 weeks) * 1 weeks + 1 weeks;
-            weekCursor <= timestamp + maxTime;
+            uint256 weekCursor = _endOfWeek(timestamp);
+            weekCursor <= timestamp + _maxTime;
             weekCursor += 1 weeks
         ) {
-            sum += (scheduledWeightedUnlock[weekCursor] * (weekCursor - timestamp)) / maxTime;
-            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / maxTime;
+            sum += (scheduledWeightedUnlock[weekCursor] * (weekCursor - timestamp)) / _maxTime;
+            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / _maxTime;
         }
 
         if (total == 0) {
