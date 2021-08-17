@@ -23,7 +23,7 @@ import "./Staking.sol";
 /// @author Tranchess
 contract Exchange is ExchangeRoles, Staking {
     /// @dev Reserved storage slots for future base contract upgrades
-    uint256[32] private _reservedSlots;
+    uint256[29] private _reservedSlots;
 
     using SafeDecimalMath for uint256;
     using LibOrderQueue for OrderQueue;
@@ -235,7 +235,14 @@ contract Exchange is ExchangeRoles, Staking {
     )
         public
         ExchangeRoles(votingEscrow_, makerRequirement_)
-        Staking(fund_, chessSchedule_, chessController_, quoteAssetAddress_, guardedLaunchStart_)
+        Staking(
+            fund_,
+            chessSchedule_,
+            chessController_,
+            quoteAssetAddress_,
+            guardedLaunchStart_,
+            votingEscrow_
+        )
     {
         minBidAmount = minBidAmount_;
         minAskAmount = minAskAmount_;

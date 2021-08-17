@@ -9,6 +9,7 @@ import "../interfaces/IChessSchedule.sol";
 import "../utils/CoreUtility.sol";
 
 import {UnsettledTrade} from "../exchange/LibUnsettledTrade.sol";
+import {VESnapshot} from "../exchange/Staking.sol";
 import "../exchange/Exchange.sol";
 import "../fund/Fund.sol";
 import "../fund/PrimaryMarket.sol";
@@ -120,12 +121,17 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
 
     struct ExchangeData {
         Shares totalDeposited;
+        uint256 weightedSupply;
+        uint256 workingSupply;
         ExchangeAccountData account;
     }
 
     struct ExchangeAccountData {
         Shares available;
         Shares locked;
+        uint256 weightedBalance;
+        uint256 workingBalance;
+        VESnapshot veSnapshot;
         bool isMaker;
         uint256 chessRewards;
     }
@@ -263,12 +269,25 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.exchange.totalDeposited.tokenM = exchange.totalSupply(TRANCHE_M);
         data.exchange.totalDeposited.tokenA = exchange.totalSupply(TRANCHE_A);
         data.exchange.totalDeposited.tokenB = exchange.totalSupply(TRANCHE_B);
+        data.exchange.weightedSupply = exchange.weightedBalance(
+            data.exchange.totalDeposited.tokenM,
+            data.exchange.totalDeposited.tokenA,
+            data.exchange.totalDeposited.tokenB
+        );
+        data.exchange.workingSupply = exchange.workingSupply();
         data.exchange.account.available.tokenM = exchange.availableBalanceOf(TRANCHE_M, account);
         data.exchange.account.available.tokenA = exchange.availableBalanceOf(TRANCHE_A, account);
         data.exchange.account.available.tokenB = exchange.availableBalanceOf(TRANCHE_B, account);
         data.exchange.account.locked.tokenM = exchange.lockedBalanceOf(TRANCHE_M, account);
         data.exchange.account.locked.tokenA = exchange.lockedBalanceOf(TRANCHE_A, account);
         data.exchange.account.locked.tokenB = exchange.lockedBalanceOf(TRANCHE_B, account);
+        data.exchange.account.weightedBalance = exchange.weightedBalance(
+            data.exchange.account.available.tokenM + data.exchange.account.locked.tokenM,
+            data.exchange.account.available.tokenA + data.exchange.account.locked.tokenA,
+            data.exchange.account.available.tokenB + data.exchange.account.locked.tokenB
+        );
+        data.exchange.account.workingBalance = exchange.workingBalanceOf(account);
+        data.exchange.account.veSnapshot = exchange.veSnapshotOf(account);
         data.exchange.account.isMaker = exchange.isMaker(account);
         data.exchange.account.chessRewards = exchange.claimableRewards(account);
 

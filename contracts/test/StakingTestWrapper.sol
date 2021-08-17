@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
+pragma experimental ABIEncoderV2;
 
 import "../exchange/Staking.sol";
 
@@ -9,10 +10,18 @@ contract StakingTestWrapper is Staking {
         address chessSchedule_,
         address chessController_,
         address quoteAssetAddress_,
-        uint256 guardedLaunchStart_
+        uint256 guardedLaunchStart_,
+        address votingEscrow_
     )
         public
-        Staking(fund_, chessSchedule_, chessController_, quoteAssetAddress_, guardedLaunchStart_)
+        Staking(
+            fund_,
+            chessSchedule_,
+            chessController_,
+            quoteAssetAddress_,
+            guardedLaunchStart_,
+            votingEscrow_
+        )
     {}
 
     function tradeAvailable(
