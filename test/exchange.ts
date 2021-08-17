@@ -124,13 +124,14 @@ describe("Exchange", function () {
             0,
             0
         );
+        const initTx = await exchangeImpl.populateTransaction.initialize();
         const TransparentUpgradeableProxy = await ethers.getContractFactory(
             "TransparentUpgradeableProxy"
         );
         const exchangeProxy = await TransparentUpgradeableProxy.connect(owner).deploy(
             exchangeImpl.address,
             owner.address,
-            "0x"
+            initTx.data
         );
         const exchange = Exchange.attach(exchangeProxy.address);
 
@@ -1958,6 +1959,23 @@ describe("Exchange", function () {
             expect(await exchange.minBidAmount()).to.equal(MIN_BID_AMOUNT);
             expect(await exchange.minAskAmount()).to.equal(MIN_ASK_AMOUNT);
             expect(await exchange.makerRequirement()).to.equal(MAKER_REQUIREMENT);
+        });
+
+        it("Should revert if initialized again", async function () {
+            const TransparentUpgradeableProxy = await ethers.getContractFactory(
+                "TransparentUpgradeableProxy"
+            );
+            const impl = await TransparentUpgradeableProxy.connect(owner)
+                .attach(exchange.address)
+                .callStatic.implementation();
+            const initTx = await exchange.populateTransaction.initialize();
+            const newProxy = await TransparentUpgradeableProxy.connect(owner).deploy(
+                impl,
+                owner.address,
+                initTx.data
+            );
+            const newExchange = await ethers.getContractAt("Exchange", newProxy.address);
+            await expect(newExchange.initialize()).to.be.reverted;
         });
 
         it("Should check quote decimal places", async function () {
