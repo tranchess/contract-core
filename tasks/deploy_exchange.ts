@@ -28,10 +28,11 @@ task("deploy_exchange", "Deploy exchange contracts")
         const TransparentUpgradeableProxy = await ethers.getContractFactory(
             "TransparentUpgradeableProxy"
         );
+        const initTx = await exchangeImpl.populateTransaction.initialize();
         const exchangeProxy = await TransparentUpgradeableProxy.deploy(
             exchangeImpl.address,
             governanceAddresses.proxyAdmin,
-            "0x",
+            initTx.data,
             { gasLimit: 1e6 } // Gas estimation may fail
         );
         const exchange = Exchange.attach(exchangeProxy.address);
