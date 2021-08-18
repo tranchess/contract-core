@@ -10,6 +10,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 import "../utils/CoreUtility.sol";
+import "../utils/Pausable.sol";
 import "../interfaces/IVotingEscrow.sol";
 
 interface IAddressWhitelist {
@@ -20,9 +21,9 @@ interface IVotingEscrowCallback {
     function syncWithVotingEscrow(address account) external;
 }
 
-contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, CoreUtility {
+contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, CoreUtility, Pausable {
     /// @dev Reserved storage slots for future base contract upgrades
-    uint256[32] private _reservedSlots;
+    uint256[30] private _reservedSlots;
 
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
@@ -69,6 +70,7 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         uint256 maxTimeAllowed_
     ) external initializer {
         __Ownable_init();
+        __Pausable_init();
         require(maxTimeAllowed_ <= maxTime, "Cannot exceed max time");
         name = name_;
         symbol = symbol_;
@@ -128,7 +130,7 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         return _totalSupplyAtTimestamp(timestamp);
     }
 
-    function createLock(uint256 amount, uint256 unlockTime) external nonReentrant {
+    function createLock(uint256 amount, uint256 unlockTime) external nonReentrant whenNotPaused {
         _assertNotContract();
         require(
             unlockTime + 1 weeks == _endOfWeek(unlockTime),
@@ -158,7 +160,7 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         emit LockCreated(msg.sender, amount, unlockTime);
     }
 
-    function increaseAmount(address account, uint256 amount) external nonReentrant {
+    function increaseAmount(address account, uint256 amount) external nonReentrant whenNotPaused {
         LockedBalance memory lockedBalance = locked[account];
 
         require(amount > 0, "Zero value");
@@ -178,7 +180,7 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         emit AmountIncreased(account, amount);
     }
 
-    function increaseUnlockTime(uint256 unlockTime) external nonReentrant {
+    function increaseUnlockTime(uint256 unlockTime) external nonReentrant whenNotPaused {
         require(
             unlockTime + 1 weeks == _endOfWeek(unlockTime),
             "Unlock time must be end of a week"
@@ -205,7 +207,7 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         emit UnlockTimeIncreased(msg.sender, unlockTime);
     }
 
-    function withdraw() external nonReentrant {
+    function withdraw() external nonReentrant whenNotPaused {
         LockedBalance memory lockedBalance = locked[msg.sender];
         require(block.timestamp >= lockedBalance.unlockTime, "The lock is not expired");
         uint256 amount = uint256(lockedBalance.amount);

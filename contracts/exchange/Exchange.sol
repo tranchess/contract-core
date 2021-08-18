@@ -349,7 +349,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 pdLevel,
         uint256 quoteAmount,
         uint256 version
-    ) external onlyMaker {
+    ) external onlyMaker whenNotPaused {
         require(block.timestamp >= guardedLaunchStart + 8 days, "Guarded launch: market closed");
         if (block.timestamp < guardedLaunchStart + 4 weeks) {
             require(quoteAmount >= guardedLaunchMinOrderAmount, "Guarded launch: amount too low");
@@ -383,7 +383,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 pdLevel,
         uint256 baseAmount,
         uint256 version
-    ) external onlyMaker {
+    ) external onlyMaker whenNotPaused {
         require(block.timestamp >= guardedLaunchStart + 8 days, "Guarded launch: market closed");
         if (block.timestamp < guardedLaunchStart + 4 weeks) {
             require(baseAmount >= guardedLaunchMinOrderAmount, "Guarded launch: amount too low");
@@ -646,7 +646,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 maxPDLevel,
         uint256 estimatedNav,
         uint256 quoteAmount
-    ) internal onlyActive {
+    ) internal onlyActive whenNotPaused {
         require(maxPDLevel > 0 && maxPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
         require(version == _fundRebalanceSize(), "Invalid version");
         require(estimatedNav > 0, "Zero estimated NAV");
@@ -778,7 +778,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 minPDLevel,
         uint256 estimatedNav,
         uint256 baseAmount
-    ) internal onlyActive {
+    ) internal onlyActive whenNotPaused {
         require(minPDLevel > 0 && minPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
         require(version == _fundRebalanceSize(), "Invalid version");
         require(estimatedNav > 0, "Zero estimated NAV");
