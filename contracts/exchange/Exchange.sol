@@ -259,6 +259,10 @@ contract Exchange is ExchangeRoles, Staking {
         _quoteDecimalMultiplier = 10**(18 - quoteDecimals_);
     }
 
+    function initialize() external {
+        _initializeStaking();
+    }
+
     /// @notice Return end timestamp of the epoch containing a given timestamp.
     /// @param timestamp Timestamp within a given epoch
     /// @return The closest ending timestamp

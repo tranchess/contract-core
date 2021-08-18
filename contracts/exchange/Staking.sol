@@ -129,11 +129,14 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
         quoteAssetAddress = quoteAssetAddress_;
-        _checkpointTimestamp = block.timestamp;
         guardedLaunchStart = guardedLaunchStart_;
         _votingEscrow = IVotingEscrow(votingEscrow_);
+    }
 
-        _rate = IChessSchedule(chessSchedule_).getRate(block.timestamp);
+    function _initializeStaking() internal {
+        require(_checkpointTimestamp == 0);
+        _checkpointTimestamp = block.timestamp;
+        _rate = IChessSchedule(chessSchedule).getRate(block.timestamp);
     }
 
     /// @notice Return weight of given balance with respect to rewards.
