@@ -55,7 +55,12 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
         from: deployer.address,
         nonce: (await deployer.getTransactionCount("pending")) + 1,
     });
-    await chess.approve(chessScheduleAddr, parseEther(GOVERNANCE_CONFIG.CHESS_SCHEDULE_MAX_SUPPLY));
+    await (
+        await chess.approve(
+            chessScheduleAddr,
+            parseEther(GOVERNANCE_CONFIG.CHESS_SCHEDULE_MAX_SUPPLY)
+        )
+    ).wait();
 
     const initTx = await chessScheduleImpl.populateTransaction.initialize();
     const chessScheduleProxy = await TransparentUpgradeableProxy.deploy(

@@ -46,7 +46,7 @@ task("deploy_impl", "Deploy implementation contracts interactively")
             addressFile.set("votingEscrowImpl", votingEscrowImpl.address);
 
             console.log("Making VotingEscrow implementation unusable without proxy");
-            await votingEscrowImpl.initialize("", "", 0);
+            await (await votingEscrowImpl.initialize("", "", 0)).wait();
             await votingEscrowImpl.renounceOwnership();
         }
         if (

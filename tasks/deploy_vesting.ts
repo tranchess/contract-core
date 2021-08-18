@@ -45,6 +45,6 @@ task("deploy_vesting", "Deploy and fund a VestingEscrow")
         addressFile.set("vestingEscrow", vestingEscrow.address);
 
         console.log("Initializing the VestingEscrow");
-        await chess.approve(vestingEscrow.address, amount);
+        await (await chess.approve(vestingEscrow.address, amount)).wait();
         await vestingEscrow.initialize(amount, cliffAmount);
     });
