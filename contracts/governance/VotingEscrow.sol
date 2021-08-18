@@ -16,6 +16,10 @@ interface IAddressWhitelist {
     function check(address account) external view returns (bool);
 }
 
+interface IVotingEscrowCallback {
+    function syncWithVotingEscrow(address account) external;
+}
+
 contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, CoreUtility {
     /// @dev Reserved storage slots for future base contract upgrades
     uint256[32] private _reservedSlots;
@@ -49,6 +53,9 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
 
     /// @notice max lock time allowed at the moment
     uint256 public maxTimeAllowed;
+
+    /// @notice Contract to be call when an account's locked CHESS is updated
+    address public callback;
 
     constructor(address token_, uint256 maxTime_) public {
         token = token_;
@@ -121,12 +128,7 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         return _totalSupplyAtTimestamp(timestamp);
     }
 
-    function createLock(
-        uint256 amount,
-        uint256 unlockTime,
-        address,
-        bytes memory
-    ) external nonReentrant {
+    function createLock(uint256 amount, uint256 unlockTime) external nonReentrant {
         _assertNotContract();
         require(
             unlockTime + 1 weeks == _endOfWeek(unlockTime),
@@ -149,15 +151,14 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
 
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
+        if (callback != address(0)) {
+            IVotingEscrowCallback(callback).syncWithVotingEscrow(msg.sender);
+        }
+
         emit LockCreated(msg.sender, amount, unlockTime);
     }
 
-    function increaseAmount(
-        address account,
-        uint256 amount,
-        address,
-        bytes memory
-    ) external nonReentrant {
+    function increaseAmount(address account, uint256 amount) external nonReentrant {
         LockedBalance memory lockedBalance = locked[account];
 
         require(amount > 0, "Zero value");
@@ -170,14 +171,14 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
 
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
+        if (callback != address(0)) {
+            IVotingEscrowCallback(callback).syncWithVotingEscrow(msg.sender);
+        }
+
         emit AmountIncreased(account, amount);
     }
 
-    function increaseUnlockTime(
-        uint256 unlockTime,
-        address,
-        bytes memory
-    ) external nonReentrant {
+    function increaseUnlockTime(uint256 unlockTime) external nonReentrant {
         require(
             unlockTime + 1 weeks == _endOfWeek(unlockTime),
             "Unlock time must be end of a week"
@@ -196,6 +197,10 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         );
         scheduledUnlock[unlockTime] = scheduledUnlock[unlockTime].add(lockedBalance.amount);
         locked[msg.sender].unlockTime = unlockTime;
+
+        if (callback != address(0)) {
+            IVotingEscrowCallback(callback).syncWithVotingEscrow(msg.sender);
+        }
 
         emit UnlockTimeIncreased(msg.sender, unlockTime);
     }
@@ -217,9 +222,17 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
     function updateAddressWhitelist(address newWhitelist) external onlyOwner {
         require(
             newWhitelist == address(0) || Address.isContract(newWhitelist),
-            "Smart contract whitelist has to be null or a contract"
+            "Must be null or a contract"
         );
         addressWhitelist = newWhitelist;
+    }
+
+    function updateCallback(address newCallback) external onlyOwner {
+        require(
+            newCallback == address(0) || Address.isContract(newCallback),
+            "Must be null or a contract"
+        );
+        callback = newCallback;
     }
 
     function _assertNotContract() private view {
