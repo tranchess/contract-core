@@ -179,7 +179,15 @@ contract Exchange is ExchangeRoles, Staking {
 
     /// @dev Maker reserves 110% of the asset they want to trade, which would stop
     ///      losses for makers when the net asset values turn out volatile
-    uint256 private constant MAKER_RESERVE_RATIO = 1.1e18;
+    uint256 private constant MAKER_RESERVE_RATIO_M = 1.05e18;
+
+    /// @dev Maker reserves 110% of the asset they want to trade, which would stop
+    ///      losses for makers when the net asset values turn out volatile
+    uint256 private constant MAKER_RESERVE_RATIO_A = 1.001e18;
+
+    /// @dev Maker reserves 110% of the asset they want to trade, which would stop
+    ///      losses for makers when the net asset values turn out volatile
+    uint256 private constant MAKER_RESERVE_RATIO_B = 1.1e18;
 
     /// @dev Premium-discount level ranges from -10% to 10% with 0.25% as step size
     uint256 private constant PD_TICK = 0.0025e18;
@@ -256,6 +264,16 @@ contract Exchange is ExchangeRoles, Staking {
     /// @return The closest ending timestamp
     function endOfEpoch(uint256 timestamp) public pure returns (uint256) {
         return (timestamp / EPOCH) * EPOCH + EPOCH;
+    }
+
+    function getMakerReserveRatio(uint256 tranche) public pure returns (uint256) {
+        if (tranche == TRANCHE_M) {
+            return MAKER_RESERVE_RATIO_M;
+        } else if (tranche == TRANCHE_A) {
+            return MAKER_RESERVE_RATIO_A;
+        } else {
+            return MAKER_RESERVE_RATIO_B;
+        }
     }
 
     function getBidOrder(
@@ -661,24 +679,28 @@ contract Exchange is ExchangeRoles, Staking {
                     continue;
                 }
 
-                // Calculate the current trade assuming that the taker would be completely filled.
-                currentTrade.frozenQuote = quoteAmount.sub(totalTrade.frozenQuote);
-                currentTrade.reservedBase = currentTrade.frozenQuote.mul(MAKER_RESERVE_RATIO).div(
-                    price
-                );
+                // Scope to avoid "stack too deep"
+                {
+                    // Calculate the current trade assuming that the taker would be completely filled.
+                    uint256 makerReserveRatio = getMakerReserveRatio(tranche);
+                    currentTrade.frozenQuote = quoteAmount.sub(totalTrade.frozenQuote);
+                    currentTrade.reservedBase = currentTrade.frozenQuote.mul(makerReserveRatio).div(
+                        price
+                    );
 
-                if (currentTrade.reservedBase < order.fillable) {
-                    // Taker is completely filled.
-                    currentTrade.effectiveQuote = currentTrade.frozenQuote.divideDecimal(
-                        pdLevel.mul(PD_TICK).add(PD_START)
-                    );
-                } else {
-                    // Maker is completely filled. Recalculate the current trade.
-                    currentTrade.frozenQuote = order.fillable.mul(price).div(MAKER_RESERVE_RATIO);
-                    currentTrade.effectiveQuote = order.fillable.mul(estimatedNav).div(
-                        MAKER_RESERVE_RATIO
-                    );
-                    currentTrade.reservedBase = order.fillable;
+                    if (currentTrade.reservedBase < order.fillable) {
+                        // Taker is completely filled.
+                        currentTrade.effectiveQuote = currentTrade.frozenQuote.divideDecimal(
+                            pdLevel.mul(PD_TICK).add(PD_START)
+                        );
+                    } else {
+                        // Maker is completely filled. Recalculate the current trade.
+                        currentTrade.frozenQuote = order.fillable.mul(price).div(makerReserveRatio);
+                        currentTrade.effectiveQuote = order.fillable.mul(estimatedNav).div(
+                            makerReserveRatio
+                        );
+                        currentTrade.reservedBase = order.fillable;
+                    }
                 }
                 totalTrade.frozenQuote = totalTrade.frozenQuote.add(currentTrade.frozenQuote);
                 totalTrade.effectiveQuote = totalTrade.effectiveQuote.add(
@@ -783,27 +805,32 @@ contract Exchange is ExchangeRoles, Staking {
                     continue;
                 }
 
-                currentTrade.frozenBase = baseAmount.sub(totalTrade.frozenBase);
-                currentTrade.reservedQuote = currentTrade
-                    .frozenBase
-                    .multiplyDecimal(MAKER_RESERVE_RATIO)
-                    .multiplyDecimal(price);
+                // Scope to avoid "stack too deep"
+                {
+                    // Calculate the current trade assuming that the taker would be completely filled.
+                    uint256 makerReserveRatio = getMakerReserveRatio(tranche);
+                    currentTrade.frozenBase = baseAmount.sub(totalTrade.frozenBase);
+                    currentTrade.reservedQuote = currentTrade
+                        .frozenBase
+                        .multiplyDecimal(makerReserveRatio)
+                        .multiplyDecimal(price);
 
-                if (currentTrade.reservedQuote < order.fillable) {
-                    // Taker is completely filled
-                    currentTrade.effectiveBase = currentTrade.frozenBase.multiplyDecimal(
-                        pdLevel.mul(PD_TICK).add(PD_START)
-                    );
-                } else {
-                    // Maker is completely filled. Recalculate the current trade.
-                    currentTrade.frozenBase = order.fillable.divideDecimal(price).divideDecimal(
-                        MAKER_RESERVE_RATIO
-                    );
-                    currentTrade.effectiveBase = order
-                        .fillable
-                        .divideDecimal(estimatedNav)
-                        .divideDecimal(MAKER_RESERVE_RATIO);
-                    currentTrade.reservedQuote = order.fillable;
+                    if (currentTrade.reservedQuote < order.fillable) {
+                        // Taker is completely filled
+                        currentTrade.effectiveBase = currentTrade.frozenBase.multiplyDecimal(
+                            pdLevel.mul(PD_TICK).add(PD_START)
+                        );
+                    } else {
+                        // Maker is completely filled. Recalculate the current trade.
+                        currentTrade.frozenBase = order.fillable.divideDecimal(price).divideDecimal(
+                            makerReserveRatio
+                        );
+                        currentTrade.effectiveBase = order
+                            .fillable
+                            .divideDecimal(estimatedNav)
+                            .divideDecimal(makerReserveRatio);
+                        currentTrade.reservedQuote = order.fillable;
+                    }
                 }
                 totalTrade.frozenBase = totalTrade.frozenBase.add(currentTrade.frozenBase);
                 totalTrade.effectiveBase = totalTrade.effectiveBase.add(currentTrade.effectiveBase);
