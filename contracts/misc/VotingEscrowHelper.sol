@@ -2,26 +2,24 @@
 pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
-interface IVotingEscrowSync {
-    function syncWithVotingEscrow(address account) external;
-}
+import {IVotingEscrowCallback} from "../governance/VotingEscrow.sol";
 
-contract VotingEscrowHelper {
-    IVotingEscrowSync public immutable distributor;
-    IVotingEscrowSync public immutable ballot;
-    IVotingEscrowSync public immutable exchange;
+contract VotingEscrowHelper is IVotingEscrowCallback {
+    IVotingEscrowCallback public immutable distributor;
+    IVotingEscrowCallback public immutable ballot;
+    IVotingEscrowCallback public immutable exchange;
 
     constructor(
         address distributor_,
         address ballot_,
         address exchange_
     ) public {
-        distributor = IVotingEscrowSync(distributor_);
-        ballot = IVotingEscrowSync(ballot_);
-        exchange = IVotingEscrowSync(exchange_);
+        distributor = IVotingEscrowCallback(distributor_);
+        ballot = IVotingEscrowCallback(ballot_);
+        exchange = IVotingEscrowCallback(exchange_);
     }
 
-    function sync(address account) external {
+    function syncWithVotingEscrow(address account) external override {
         distributor.syncWithVotingEscrow(account);
         ballot.syncWithVotingEscrow(account);
         exchange.syncWithVotingEscrow(account);
