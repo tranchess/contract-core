@@ -361,7 +361,7 @@ contract Exchange is ExchangeRoles, Staking {
             pdLevel > 0 && pdLevel < (bestAsk == 0 ? PD_LEVEL_COUNT + 1 : bestAsk),
             "Invalid premium-discount level"
         );
-        require(version == fund.getRebalanceSize(), "Invalid version");
+        require(version == _fundRebalanceSize(), "Invalid version");
 
         _transferQuoteFrom(msg.sender, quoteAmount);
 
@@ -394,7 +394,7 @@ contract Exchange is ExchangeRoles, Staking {
             pdLevel > bestBids[version][tranche] && pdLevel <= PD_LEVEL_COUNT,
             "Invalid premium-discount level"
         );
-        require(version == fund.getRebalanceSize(), "Invalid version");
+        require(version == _fundRebalanceSize(), "Invalid version");
 
         _lock(tranche, msg.sender, baseAmount);
         uint256 index = asks[version][tranche][pdLevel].append(msg.sender, baseAmount, version);
@@ -648,7 +648,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 quoteAmount
     ) internal onlyActive {
         require(maxPDLevel > 0 && maxPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
-        require(version == fund.getRebalanceSize(), "Invalid version");
+        require(version == _fundRebalanceSize(), "Invalid version");
         require(estimatedNav > 0, "Zero estimated NAV");
 
         UnsettledBuyTrade memory totalTrade;
@@ -780,7 +780,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 baseAmount
     ) internal onlyActive {
         require(minPDLevel > 0 && minPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
-        require(version == fund.getRebalanceSize(), "Invalid version");
+        require(version == _fundRebalanceSize(), "Invalid version");
         require(estimatedNav > 0, "Zero estimated NAV");
 
         UnsettledSellTrade memory totalTrade;
