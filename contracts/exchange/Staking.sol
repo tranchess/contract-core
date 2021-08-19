@@ -163,7 +163,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         uint256 version = _totalSupplyVersion;
         uint256 rebalanceSize = _fundRebalanceSize();
         if (version < rebalanceSize) {
-            (totalSupplyM, totalSupplyA, totalSupplyB) = fund.batchRebalance(
+            (totalSupplyM, totalSupplyA, totalSupplyB) = _fundBatchRebalance(
                 totalSupplyM,
                 totalSupplyA,
                 totalSupplyB,
@@ -197,7 +197,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         uint256 version = _balanceVersions[account];
         uint256 rebalanceSize = _fundRebalanceSize();
         if (version < rebalanceSize) {
-            (amountM, amountA, amountB) = fund.batchRebalance(
+            (amountM, amountA, amountB) = _fundBatchRebalance(
                 amountM,
                 amountA,
                 amountB,
@@ -231,7 +231,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         uint256 version = _balanceVersions[account];
         uint256 rebalanceSize = _fundRebalanceSize();
         if (version < rebalanceSize) {
-            (amountM, amountA, amountB) = fund.batchRebalance(
+            (amountM, amountA, amountB) = _fundBatchRebalance(
                 amountM,
                 amountA,
                 amountB,
@@ -258,7 +258,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         uint256 rebalanceSize = _fundRebalanceSize();
         if (version < rebalanceSize) {
             (uint256 totalSupplyM, uint256 totalSupplyA, uint256 totalSupplyB) =
-                fund.batchRebalance(
+                _fundBatchRebalance(
                     _totalSupplies[TRANCHE_M],
                     _totalSupplies[TRANCHE_A],
                     _totalSupplies[TRANCHE_B],
@@ -278,7 +278,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             uint256[TRANCHE_COUNT] storage available = _availableBalances[account];
             uint256[TRANCHE_COUNT] storage locked = _lockedBalances[account];
             (uint256 amountM, uint256 amountA, uint256 amountB) =
-                fund.batchRebalance(
+                _fundBatchRebalance(
                     available[TRANCHE_M].add(locked[TRANCHE_M]),
                     available[TRANCHE_A].add(locked[TRANCHE_A]),
                     available[TRANCHE_B].add(locked[TRANCHE_B]),
@@ -297,6 +297,24 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
 
     function _fundRebalanceSize() internal view returns (uint256) {
         return fund.getRebalanceSize();
+    }
+
+    function _fundBatchRebalance(
+        uint256 amountM,
+        uint256 amountA,
+        uint256 amountB,
+        uint256 fromIndex,
+        uint256 toIndex
+    )
+        internal
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256
+        )
+    {
+        return fund.batchRebalance(amountM, amountA, amountB, fromIndex, toIndex);
     }
 
     /// @dev Deposit to get rewards
@@ -457,7 +475,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
         if (amountVersion < rebalanceSize) {
-            (amountM, amountA, amountB) = fund.batchRebalance(
+            (amountM, amountA, amountB) = _fundBatchRebalance(
                 amountM,
                 amountA,
                 amountB,
@@ -509,7 +527,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
         if (amountVersion < rebalanceSize) {
-            (amountM, amountA, amountB) = fund.batchRebalance(
+            (amountM, amountA, amountB) = _fundBatchRebalance(
                 amountM,
                 amountA,
                 amountB,
