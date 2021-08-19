@@ -299,6 +299,23 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         return fund.getRebalanceSize();
     }
 
+    function _fundDoRebalance(
+        uint256 amountM,
+        uint256 amountA,
+        uint256 amountB,
+        uint256 index
+    )
+        internal
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256
+        )
+    {
+        return fund.doRebalance(amountM, amountA, amountB, index);
+    }
+
     function _fundBatchRebalance(
         uint256 amountM,
         uint256 amountA,
@@ -625,7 +642,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                 _historicalIntegralSize = oldSize + 1;
 
                 integral = 0;
-                (totalSupplyM, totalSupplyA, totalSupplyB) = fund.doRebalance(
+                (totalSupplyM, totalSupplyA, totalSupplyB) = _fundDoRebalance(
                     totalSupplyM,
                     totalSupplyA,
                     totalSupplyB,
@@ -728,7 +745,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                 weight.multiplyDecimalPrecise(_historicalIntegrals[i].sub(userIntegral))
             );
             if (availableM != 0 || availableA != 0 || availableB != 0) {
-                (availableM, availableA, availableB) = fund.doRebalance(
+                (availableM, availableA, availableB) = _fundDoRebalance(
                     availableM,
                     availableA,
                     availableB,
@@ -736,7 +753,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                 );
             }
             if (lockedM != 0 || lockedA != 0 || lockedB != 0) {
-                (lockedM, lockedA, lockedB) = fund.doRebalance(lockedM, lockedA, lockedB, i);
+                (lockedM, lockedA, lockedB) = _fundDoRebalance(lockedM, lockedA, lockedB, i);
             }
             userIntegral = 0;
 
