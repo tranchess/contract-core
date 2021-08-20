@@ -259,8 +259,19 @@ contract Exchange is ExchangeRoles, Staking {
         _quoteDecimalMultiplier = 10**(18 - quoteDecimals_);
     }
 
+    /// @dev Initialize the contract. The contract is designed to be used with OpenZeppelin's
+    ///      `TransparentUpgradeableProxy`. This function should be called by the proxy's
+    ///      constructor (via the `_data` argument).
     function initialize() external {
         _initializeStaking();
+        initializeV2();
+    }
+
+    /// @dev Initialize the part added in V2. If this contract is upgraded from the previous
+    ///      version, call `upgradeToAndCall` of the proxy and put a call to this function
+    ///      in the `data` argument.
+    function initializeV2() public {
+        _initializeStakingV2();
     }
 
     /// @notice Return end timestamp of the epoch containing a given timestamp.

@@ -143,36 +143,6 @@ describe("VotingEscrow", function () {
         });
     });
 
-    describe("initializeNameAndSymbol", function () {
-        it("Should revert if already initialized", async function () {
-            await expect(votingEscrow.initializeNameAndSymbol("x", "y")).to.be.reverted;
-        });
-
-        it("Should initialize them if not initialized", async function () {
-            // Deploy a new proxied VotingEscrow without initializating name and symbol
-            const impl = await proxyAdmin.getProxyImplementation(votingEscrow.address);
-            const TransparentUpgradeableProxy = await ethers.getContractFactory(
-                "TransparentUpgradeableProxy"
-            );
-            const VotingEscrow = await ethers.getContractFactory("VotingEscrow");
-            const initTx = await VotingEscrow.attach(impl).populateTransaction.initialize(
-                "",
-                "",
-                MAX_TIME_ALLOWED
-            );
-            const newProxy = await TransparentUpgradeableProxy.connect(owner).deploy(
-                impl,
-                proxyAdmin.address,
-                initTx.data
-            );
-            const newVotingEscrow = await VotingEscrow.connect(owner).attach(newProxy.address);
-
-            await newVotingEscrow.initializeNameAndSymbol("Some Name", "SOMESYM");
-            expect(await newVotingEscrow.name()).to.equal("Some Name");
-            expect(await newVotingEscrow.symbol()).to.equal("SOMESYM");
-        });
-    });
-
     describe("updateMaxTimeAllowed()", function () {
         it("Should revert if max time allowed exceeds max time", async function () {
             await expect(

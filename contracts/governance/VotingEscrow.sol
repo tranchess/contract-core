@@ -69,7 +69,9 @@ contract VotingEscrow is
         maxTime = maxTime_;
     }
 
-    /// @notice Initialize ownership
+    /// @dev Initialize the contract. The contract is designed to be used with OpenZeppelin's
+    ///      `TransparentUpgradeableProxy`. This function should be called by the proxy's
+    ///      constructor (via the `_data` argument).
     function initialize(
         string memory name_,
         string memory symbol_,
@@ -77,16 +79,17 @@ contract VotingEscrow is
     ) external initializer {
         __Ownable_init();
         require(maxTimeAllowed_ <= maxTime, "Cannot exceed max time");
-        name = name_;
-        symbol = symbol_;
         maxTimeAllowed = maxTimeAllowed_;
+        initializeV2(name_, symbol_);
     }
 
-    /// @notice Initialize name and symbol, if they were not initialized before.
-    function initializeNameAndSymbol(string memory name_, string memory symbol_)
-        external
-        onlyOwner
-    {
+    /// @dev Initialize the part added in V2. If this contract is upgraded from the previous
+    ///      version, call `upgradeToAndCall` of the proxy and put a call to this function
+    ///      in the `data` argument.
+    ///
+    ///      In the previous version, name and symbol were not correctly initialized via proxy.
+    function initializeV2(string memory name_, string memory symbol_) public {
+        _initializeManagedPausable();
         require(bytes(name).length == 0 && bytes(symbol).length == 0);
         name = name_;
         symbol = symbol_;
