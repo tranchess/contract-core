@@ -1,15 +1,12 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity >=0.6.0 <0.8.0;
 
 /**
- * @dev Contract module which allows children to implement an emergency stop
- * mechanism that can be triggered by an authorized account.
+ * @dev Contract of an emergency stop mechanism that can be triggered by an authorized account.
  *
- * This module is used through inheritance. It will make available the
- * modifiers `whenNotPaused` and `whenPaused`, which can be applied to
- * the functions of your contract. Note that they will not be pausable by
- * simply including this module, only once the modifiers are put in place.
+ * This module is modified based on Pausable in OpenZeppelin v3.3.0, adding public functions to
+ * pause, unpause and manage the pauser role. It is also designed to be used by upgradable
+ * contracts, like PausableUpgradable but with compact storage slots and no dependencies.
  */
 abstract contract Pausable {
     /**
@@ -24,15 +21,15 @@ abstract contract Pausable {
 
     event PauserRoleTransferred(address indexed previousPauser, address indexed newPauser);
 
-    bool private _pausableInitialized;
+    bool private _initialized;
 
     bool private _paused;
 
     address private _pauser;
 
-    function initPausable() external {
-        require(!_pausableInitialized, "Pausable: pausable has already been initialized");
-        _pausableInitialized = true;
+    function _initializePausable() internal {
+        require(!_initialized);
+        _initialized = true;
         _paused = false;
         _pauser = msg.sender;
     }
@@ -44,15 +41,24 @@ abstract contract Pausable {
         return _paused;
     }
 
-    function renouncePauserRole() public virtual onlyPauser {
+    function pauser() public view returns (address) {
+        return _pauser;
+    }
+
+    function renouncePauserRole() external onlyPauser {
         emit PauserRoleTransferred(_pauser, address(0));
         _pauser = address(0);
     }
 
-    function transferPauserRole(address newPauser) public virtual onlyPauser {
+    function transferPauserRole(address newPauser) external onlyPauser {
         require(newPauser != address(0));
         emit PauserRoleTransferred(_pauser, newPauser);
         _pauser = newPauser;
+    }
+
+    modifier onlyPauser() {
+        require(_pauser == msg.sender, "Pausable: only pauser");
+        _;
     }
 
     /**
@@ -63,7 +69,7 @@ abstract contract Pausable {
      * - The contract must not be paused.
      */
     modifier whenNotPaused() {
-        require(!_paused);
+        require(!_paused, "Pausable: paused");
         _;
     }
 
@@ -75,12 +81,7 @@ abstract contract Pausable {
      * - The contract must be paused.
      */
     modifier whenPaused() {
-        require(_paused);
-        _;
-    }
-
-    modifier onlyPauser() {
-        require(_pauser == msg.sender);
+        require(_paused, "Pausable: not paused");
         _;
     }
 
@@ -91,7 +92,7 @@ abstract contract Pausable {
      *
      * - The contract must not be paused.
      */
-    function pause() external virtual onlyPauser whenNotPaused {
+    function pause() external onlyPauser whenNotPaused {
         _paused = true;
         emit Paused(msg.sender);
     }
@@ -103,7 +104,7 @@ abstract contract Pausable {
      *
      * - The contract must be paused.
      */
-    function unpause() external virtual onlyPauser whenPaused {
+    function unpause() external onlyPauser whenPaused {
         _paused = false;
         emit Unpaused(msg.sender);
     }
