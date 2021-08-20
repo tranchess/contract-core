@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 import "../utils/CoreUtility.sol";
-import "../utils/Pausable.sol";
+import "../utils/ManagedPausable.sol";
 import "../interfaces/IVotingEscrow.sol";
 
 interface IAddressWhitelist {
@@ -21,7 +21,13 @@ interface IVotingEscrowCallback {
     function syncWithVotingEscrow(address account) external;
 }
 
-contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, CoreUtility, Pausable {
+contract VotingEscrow is
+    IVotingEscrow,
+    OwnableUpgradeable,
+    ReentrancyGuard,
+    CoreUtility,
+    ManagedPausable
+{
     /// @dev Reserved storage slots for future base contract upgrades
     uint256[29] private _reservedSlots;
 

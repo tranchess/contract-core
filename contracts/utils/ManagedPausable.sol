@@ -8,7 +8,7 @@ pragma solidity >=0.6.0 <0.8.0;
  * pause, unpause and manage the pauser role. It is also designed to be used by upgradable
  * contracts, like PausableUpgradable but with compact storage slots and no dependencies.
  */
-abstract contract Pausable {
+abstract contract ManagedPausable {
     /**
      * @dev Emitted when the pause is triggered by `account`.
      */
@@ -27,7 +27,7 @@ abstract contract Pausable {
 
     address private _pauser;
 
-    function _initializePausable() internal {
+    function _initializeManagedPausable() internal {
         require(!_initialized);
         _initialized = true;
         _paused = false;

@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
-import "../utils/Pausable.sol";
+import "../utils/ManagedPausable.sol";
 
 import "../interfaces/IFund.sol";
 import "../interfaces/IChessSchedule.sol";
@@ -32,7 +32,7 @@ struct VESnapshot {
     IVotingEscrow.LockedBalance veLocked;
 }
 
-abstract contract Staking is ITrancheIndex, CoreUtility, Pausable {
+abstract contract Staking is ITrancheIndex, CoreUtility, ManagedPausable {
     /// @dev Reserved storage slots for future sibling contract upgrades
     uint256[29] private _reservedSlots;
 
