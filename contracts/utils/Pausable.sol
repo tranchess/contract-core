@@ -2,8 +2,6 @@
 
 pragma solidity >=0.6.0 <0.8.0;
 
-import "@openzeppelin/contracts-upgradeable/proxy/Initializable.sol";
-
 /**
  * @dev Contract module which allows children to implement an emergency stop
  * mechanism that can be triggered by an authorized account.
@@ -13,7 +11,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/Initializable.sol";
  * the functions of your contract. Note that they will not be pausable by
  * simply including this module, only once the modifiers are put in place.
  */
-abstract contract Pausable is Initializable {
+abstract contract Pausable {
     /**
      * @dev Emitted when the pause is triggered by `account`.
      */
@@ -26,11 +24,15 @@ abstract contract Pausable is Initializable {
 
     event PauserRoleTransferred(address indexed previousPauser, address indexed newPauser);
 
+    bool private _pausableInitialized;
+
     bool private _paused;
 
     address private _pauser;
 
-    function __Pausable_init() internal initializer {
+    function initPausable() external {
+        require(!_pausableInitialized, "Pausable: pausable has already been initialized");
+        _pausableInitialized = true;
         _paused = false;
         _pauser = msg.sender;
     }
@@ -89,7 +91,7 @@ abstract contract Pausable is Initializable {
      *
      * - The contract must not be paused.
      */
-    function _pause() internal virtual whenNotPaused {
+    function pause() external virtual onlyPauser whenNotPaused {
         _paused = true;
         emit Paused(msg.sender);
     }
@@ -101,7 +103,7 @@ abstract contract Pausable is Initializable {
      *
      * - The contract must be paused.
      */
-    function _unpause() internal virtual whenPaused {
+    function unpause() external virtual onlyPauser whenPaused {
         _paused = false;
         emit Unpaused(msg.sender);
     }

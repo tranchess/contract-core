@@ -34,7 +34,7 @@ struct VESnapshot {
 
 abstract contract Staking is ITrancheIndex, CoreUtility, Pausable {
     /// @dev Reserved storage slots for future sibling contract upgrades
-    uint256[30] private _reservedSlots;
+    uint256[29] private _reservedSlots;
 
     using Math for uint256;
     using SafeMath for uint256;
@@ -136,7 +136,6 @@ abstract contract Staking is ITrancheIndex, CoreUtility, Pausable {
 
     function _initializeStaking() internal {
         require(_checkpointTimestamp == 0);
-        __Pausable_init();
         _checkpointTimestamp = block.timestamp;
         _rate = IChessSchedule(chessSchedule).getRate(block.timestamp);
     }

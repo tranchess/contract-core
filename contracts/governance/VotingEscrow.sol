@@ -23,7 +23,7 @@ interface IVotingEscrowCallback {
 
 contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, CoreUtility, Pausable {
     /// @dev Reserved storage slots for future base contract upgrades
-    uint256[30] private _reservedSlots;
+    uint256[29] private _reservedSlots;
 
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
@@ -70,7 +70,6 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         uint256 maxTimeAllowed_
     ) external initializer {
         __Ownable_init();
-        __Pausable_init();
         require(maxTimeAllowed_ <= maxTime, "Cannot exceed max time");
         name = name_;
         symbol = symbol_;
