@@ -122,6 +122,7 @@ describe("VotingEscrow", function () {
             await expect(votingEscrow.initialize("", "", MAX_TIME)).to.be.revertedWith(
                 "Initializable: contract is already initialized"
             );
+            await expect(votingEscrow.initializeV2("", "")).to.be.reverted;
         });
 
         it("Should revert if exceeding max time", async function () {
@@ -645,6 +646,46 @@ describe("VotingEscrow", function () {
                 .revertsWithReason("Mock on the method is not initialized");
             await votingEscrow.connect(owner).updateCallback(ethers.constants.AddressZero);
             await votingEscrow.increaseAmount(addr1, 1);
+        });
+    });
+
+    describe("pause() and unpause()", function () {
+        it("Should pause createLock()", async function () {
+            await votingEscrow.connect(owner).pause();
+            await expect(
+                votingEscrow.createLock(parseEther("1"), startWeek + WEEK)
+            ).to.be.revertedWith("Pausable: paused");
+            await votingEscrow.connect(owner).unpause();
+            await votingEscrow.createLock(parseEther("1"), startWeek + WEEK);
+        });
+
+        it("Should pause increaseAmount()", async function () {
+            await votingEscrow.createLock(parseEther("1"), startWeek + WEEK);
+            await votingEscrow.connect(owner).pause();
+            await expect(votingEscrow.increaseAmount(addr1, 1)).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await votingEscrow.connect(owner).unpause();
+            await votingEscrow.increaseAmount(addr1, 1);
+        });
+
+        it("Should pause increaseUnlockTime()", async function () {
+            await votingEscrow.createLock(parseEther("1"), startWeek + WEEK);
+            await votingEscrow.connect(owner).pause();
+            await expect(votingEscrow.increaseUnlockTime(startWeek + WEEK * 2)).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await votingEscrow.connect(owner).unpause();
+            await votingEscrow.increaseUnlockTime(startWeek + WEEK * 2);
+        });
+
+        it("Should pause withdraw()", async function () {
+            await votingEscrow.createLock(parseEther("1"), startWeek + WEEK);
+            await advanceBlockAtTime(startWeek + WEEK);
+            await votingEscrow.connect(owner).pause();
+            await expect(votingEscrow.withdraw()).to.be.revertedWith("Pausable: paused");
+            await votingEscrow.connect(owner).unpause();
+            await votingEscrow.withdraw();
         });
     });
 });
