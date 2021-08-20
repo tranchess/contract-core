@@ -427,7 +427,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 tranche,
         uint256 pdLevel,
         uint256 index
-    ) external {
+    ) external whenNotPaused {
         OrderQueue storage orderQueue = bids[version][tranche][pdLevel];
         Order storage order = orderQueue.list[index];
         require(order.maker == msg.sender, "Maker address mismatched");
@@ -458,7 +458,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 tranche,
         uint256 pdLevel,
         uint256 index
-    ) external {
+    ) external whenNotPaused {
         OrderQueue storage orderQueue = asks[version][tranche][pdLevel];
         Order storage order = orderQueue.list[index];
         require(order.maker == msg.sender, "Maker address mismatched");
@@ -573,6 +573,7 @@ contract Exchange is ExchangeRoles, Staking {
     ///                     for quote assets with precision other than 18 decimal places
     function settleMaker(address account, uint256 epoch)
         external
+        whenNotPaused
         returns (
             uint256 amountM,
             uint256 amountA,
@@ -614,6 +615,7 @@ contract Exchange is ExchangeRoles, Staking {
     ///                     for quote assets with precision other than 18 decimal places
     function settleTaker(address account, uint256 epoch)
         external
+        whenNotPaused
         returns (
             uint256 amountM,
             uint256 amountA,

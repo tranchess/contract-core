@@ -342,7 +342,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility, ManagedPausable {
     /// @dev Deposit to get rewards
     /// @param tranche Tranche of the share
     /// @param amount The amount to deposit
-    function deposit(uint256 tranche, uint256 amount) public {
+    function deposit(uint256 tranche, uint256 amount) public whenNotPaused {
         uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(msg.sender, rebalanceSize);
@@ -373,7 +373,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility, ManagedPausable {
     /// @dev Withdraw
     /// @param tranche Tranche of the share
     /// @param amount The amount to deposit
-    function withdraw(uint256 tranche, uint256 amount) external {
+    function withdraw(uint256 tranche, uint256 amount) external whenNotPaused {
         uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(msg.sender, rebalanceSize);
@@ -426,7 +426,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility, ManagedPausable {
 
     /// @notice Claim the rewards for an account.
     /// @param account Account to claim its rewards
-    function claimRewards(address account) external {
+    function claimRewards(address account) external whenNotPaused {
         require(
             block.timestamp >= guardedLaunchStart + 15 days,
             "Cannot claim during guarded launch"
