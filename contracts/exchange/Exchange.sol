@@ -259,8 +259,19 @@ contract Exchange is ExchangeRoles, Staking {
         _quoteDecimalMultiplier = 10**(18 - quoteDecimals_);
     }
 
+    /// @dev Initialize the contract. The contract is designed to be used with OpenZeppelin's
+    ///      `TransparentUpgradeableProxy`. This function should be called by the proxy's
+    ///      constructor (via the `_data` argument).
     function initialize() external {
         _initializeStaking();
+        initializeV2();
+    }
+
+    /// @dev Initialize the part added in V2. If this contract is upgraded from the previous
+    ///      version, call `upgradeToAndCall` of the proxy and put a call to this function
+    ///      in the `data` argument.
+    function initializeV2() public {
+        _initializeStakingV2();
     }
 
     /// @notice Return end timestamp of the epoch containing a given timestamp.
@@ -349,7 +360,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 pdLevel,
         uint256 quoteAmount,
         uint256 version
-    ) external onlyMaker {
+    ) external onlyMaker whenNotPaused {
         require(block.timestamp >= guardedLaunchStart + 8 days, "Guarded launch: market closed");
         if (block.timestamp < guardedLaunchStart + 4 weeks) {
             require(quoteAmount >= guardedLaunchMinOrderAmount, "Guarded launch: amount too low");
@@ -383,7 +394,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 pdLevel,
         uint256 baseAmount,
         uint256 version
-    ) external onlyMaker {
+    ) external onlyMaker whenNotPaused {
         require(block.timestamp >= guardedLaunchStart + 8 days, "Guarded launch: market closed");
         if (block.timestamp < guardedLaunchStart + 4 weeks) {
             require(baseAmount >= guardedLaunchMinOrderAmount, "Guarded launch: amount too low");
@@ -416,7 +427,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 tranche,
         uint256 pdLevel,
         uint256 index
-    ) external {
+    ) external whenNotPaused {
         OrderQueue storage orderQueue = bids[version][tranche][pdLevel];
         Order storage order = orderQueue.list[index];
         require(order.maker == msg.sender, "Maker address mismatched");
@@ -447,7 +458,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 tranche,
         uint256 pdLevel,
         uint256 index
-    ) external {
+    ) external whenNotPaused {
         OrderQueue storage orderQueue = asks[version][tranche][pdLevel];
         Order storage order = orderQueue.list[index];
         require(order.maker == msg.sender, "Maker address mismatched");
@@ -562,6 +573,7 @@ contract Exchange is ExchangeRoles, Staking {
     ///                     for quote assets with precision other than 18 decimal places
     function settleMaker(address account, uint256 epoch)
         external
+        whenNotPaused
         returns (
             uint256 amountM,
             uint256 amountA,
@@ -603,6 +615,7 @@ contract Exchange is ExchangeRoles, Staking {
     ///                     for quote assets with precision other than 18 decimal places
     function settleTaker(address account, uint256 epoch)
         external
+        whenNotPaused
         returns (
             uint256 amountM,
             uint256 amountA,
@@ -646,7 +659,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 maxPDLevel,
         uint256 estimatedNav,
         uint256 quoteAmount
-    ) internal onlyActive {
+    ) internal onlyActive whenNotPaused {
         require(maxPDLevel > 0 && maxPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
         require(version == _fundRebalanceSize(), "Invalid version");
         require(estimatedNav > 0, "Zero estimated NAV");
@@ -778,7 +791,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 minPDLevel,
         uint256 estimatedNav,
         uint256 baseAmount
-    ) internal onlyActive {
+    ) internal onlyActive whenNotPaused {
         require(minPDLevel > 0 && minPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
         require(version == _fundRebalanceSize(), "Invalid version");
         require(estimatedNav > 0, "Zero estimated NAV");

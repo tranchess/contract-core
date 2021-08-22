@@ -10,6 +10,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 import "../utils/CoreUtility.sol";
+import "../utils/ManagedPausable.sol";
 import "../interfaces/IVotingEscrow.sol";
 
 interface IAddressWhitelist {
@@ -20,9 +21,15 @@ interface IVotingEscrowCallback {
     function syncWithVotingEscrow(address account) external;
 }
 
-contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, CoreUtility {
+contract VotingEscrow is
+    IVotingEscrow,
+    OwnableUpgradeable,
+    ReentrancyGuard,
+    CoreUtility,
+    ManagedPausable
+{
     /// @dev Reserved storage slots for future base contract upgrades
-    uint256[32] private _reservedSlots;
+    uint256[29] private _reservedSlots;
 
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
@@ -62,7 +69,9 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         maxTime = maxTime_;
     }
 
-    /// @notice Initialize ownership
+    /// @dev Initialize the contract. The contract is designed to be used with OpenZeppelin's
+    ///      `TransparentUpgradeableProxy`. This function should be called by the proxy's
+    ///      constructor (via the `_data` argument).
     function initialize(
         string memory name_,
         string memory symbol_,
@@ -70,16 +79,17 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
     ) external initializer {
         __Ownable_init();
         require(maxTimeAllowed_ <= maxTime, "Cannot exceed max time");
-        name = name_;
-        symbol = symbol_;
         maxTimeAllowed = maxTimeAllowed_;
+        initializeV2(name_, symbol_);
     }
 
-    /// @notice Initialize name and symbol, if they were not initialized before.
-    function initializeNameAndSymbol(string memory name_, string memory symbol_)
-        external
-        onlyOwner
-    {
+    /// @dev Initialize the part added in V2. If this contract is upgraded from the previous
+    ///      version, call `upgradeToAndCall` of the proxy and put a call to this function
+    ///      in the `data` argument.
+    ///
+    ///      In the previous version, name and symbol were not correctly initialized via proxy.
+    function initializeV2(string memory name_, string memory symbol_) public {
+        _initializeManagedPausable();
         require(bytes(name).length == 0 && bytes(symbol).length == 0);
         name = name_;
         symbol = symbol_;
@@ -128,7 +138,7 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         return _totalSupplyAtTimestamp(timestamp);
     }
 
-    function createLock(uint256 amount, uint256 unlockTime) external nonReentrant {
+    function createLock(uint256 amount, uint256 unlockTime) external nonReentrant whenNotPaused {
         _assertNotContract();
         require(
             unlockTime + 1 weeks == _endOfWeek(unlockTime),
@@ -158,7 +168,7 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         emit LockCreated(msg.sender, amount, unlockTime);
     }
 
-    function increaseAmount(address account, uint256 amount) external nonReentrant {
+    function increaseAmount(address account, uint256 amount) external nonReentrant whenNotPaused {
         LockedBalance memory lockedBalance = locked[account];
 
         require(amount > 0, "Zero value");
@@ -178,7 +188,7 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         emit AmountIncreased(account, amount);
     }
 
-    function increaseUnlockTime(uint256 unlockTime) external nonReentrant {
+    function increaseUnlockTime(uint256 unlockTime) external nonReentrant whenNotPaused {
         require(
             unlockTime + 1 weeks == _endOfWeek(unlockTime),
             "Unlock time must be end of a week"
@@ -205,7 +215,7 @@ contract VotingEscrow is IVotingEscrow, OwnableUpgradeable, ReentrancyGuard, Cor
         emit UnlockTimeIncreased(msg.sender, unlockTime);
     }
 
-    function withdraw() external nonReentrant {
+    function withdraw() external nonReentrant whenNotPaused {
         LockedBalance memory lockedBalance = locked[msg.sender];
         require(block.timestamp >= lockedBalance.unlockTime, "The lock is not expired");
         uint256 amount = uint256(lockedBalance.amount);

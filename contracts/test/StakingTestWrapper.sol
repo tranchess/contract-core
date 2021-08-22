@@ -24,6 +24,11 @@ contract StakingTestWrapper is Staking {
         )
     {}
 
+    function initialize() external {
+        _initializeStaking();
+        _initializeStakingV2();
+    }
+
     function tradeAvailable(
         uint256 tranche,
         address sender,

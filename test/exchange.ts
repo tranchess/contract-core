@@ -126,13 +126,15 @@ describe("Exchange", function () {
             0,
             0
         );
-        const initTx = await exchangeImpl.populateTransaction.initialize();
         const TransparentUpgradeableProxy = await ethers.getContractFactory(
             "TransparentUpgradeableProxy"
         );
+        const ProxyAdmin = await ethers.getContractFactory("ProxyAdmin");
+        const proxyAdmin = await ProxyAdmin.connect(owner).deploy();
+        const initTx = await exchangeImpl.populateTransaction.initialize();
         const exchangeProxy = await TransparentUpgradeableProxy.connect(owner).deploy(
             exchangeImpl.address,
-            owner.address,
+            proxyAdmin.address,
             initTx.data
         );
         const exchange = Exchange.attach(exchangeProxy.address);
@@ -1966,20 +1968,8 @@ describe("Exchange", function () {
         });
 
         it("Should revert if initialized again", async function () {
-            const TransparentUpgradeableProxy = await ethers.getContractFactory(
-                "TransparentUpgradeableProxy"
-            );
-            const impl = await TransparentUpgradeableProxy.connect(owner)
-                .attach(exchange.address)
-                .callStatic.implementation();
-            const initTx = await exchange.populateTransaction.initialize();
-            const newProxy = await TransparentUpgradeableProxy.connect(owner).deploy(
-                impl,
-                owner.address,
-                initTx.data
-            );
-            const newExchange = await ethers.getContractAt("Exchange", newProxy.address);
-            await expect(newExchange.initialize()).to.be.reverted;
+            await expect(exchange.initialize()).to.be.reverted;
+            await expect(exchange.initializeV2()).to.be.reverted;
         });
 
         it("Should check quote decimal places", async function () {
@@ -2075,6 +2065,118 @@ describe("Exchange", function () {
             await expect(
                 exchange.placeAsk(TRANCHE_M, 42, guardedLaunchMinOrderAmount, 0)
             ).to.be.revertedWith("Base amount too low");
+        });
+    });
+
+    describe("pause() and unpause()", function () {
+        it("Should pause placeBid()", async function () {
+            await shareM.mock.transferFrom.returns(true);
+            await exchange.connect(owner).pause();
+            await expect(exchange.placeBid(TRANCHE_M, 41, parseEther("1"), 0)).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await exchange.connect(owner).unpause();
+            await exchange.placeBid(TRANCHE_M, 41, parseEther("1"), 0);
+        });
+
+        it("Should pause placeAsk()", async function () {
+            await exchange.connect(owner).pause();
+            await expect(exchange.placeAsk(TRANCHE_M, 41, parseEther("1"), 0)).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await exchange.connect(owner).unpause();
+            await exchange.placeAsk(TRANCHE_M, 41, parseEther("1"), 0);
+        });
+
+        it("Should pause cancelBid()", async function () {
+            await shareM.mock.transferFrom.returns(true);
+            await exchange.placeBid(TRANCHE_M, 41, parseEther("1"), 0);
+            await exchange.connect(owner).pause();
+            await expect(exchange.cancelBid(0, TRANCHE_M, 41, 1)).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await exchange.connect(owner).unpause();
+            await exchange.cancelBid(0, TRANCHE_M, 41, 1);
+        });
+
+        it("Should pause cancelAsk()", async function () {
+            await exchange.placeAsk(TRANCHE_M, 41, parseEther("1"), 0);
+            await exchange.connect(owner).pause();
+            await expect(exchange.cancelAsk(0, TRANCHE_M, 41, 1)).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await exchange.connect(owner).unpause();
+            await exchange.cancelAsk(0, TRANCHE_M, 41, 1);
+        });
+
+        it("Should pause buyM(), buyA() and buyB()", async function () {
+            await fund.mock.extrapolateNav.returns(
+                parseEther("1"),
+                parseEther("1"),
+                parseEther("1")
+            );
+            await exchange.placeAsk(TRANCHE_M, 41, parseEther("1"), 0);
+            await exchange.placeAsk(TRANCHE_A, 41, parseEther("1"), 0);
+            await exchange.placeAsk(TRANCHE_B, 41, parseEther("1"), 0);
+            await exchange.connect(owner).pause();
+            await expect(exchange.buyM(0, 41, parseEther("1"))).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await expect(exchange.buyA(0, 41, parseEther("1"))).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await expect(exchange.buyB(0, 41, parseEther("1"))).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await exchange.connect(owner).unpause();
+            await exchange.buyM(0, 41, parseEther("1"));
+            await exchange.buyA(0, 41, parseEther("1"));
+            await exchange.buyB(0, 41, parseEther("1"));
+        });
+
+        it("Should pause sellM(), sellA() and sellB()", async function () {
+            await fund.mock.extrapolateNav.returns(
+                parseEther("1"),
+                parseEther("1"),
+                parseEther("1")
+            );
+            await exchange.placeBid(TRANCHE_M, 41, parseEther("1"), 0);
+            await exchange.placeBid(TRANCHE_A, 41, parseEther("1"), 0);
+            await exchange.placeBid(TRANCHE_B, 41, parseEther("1"), 0);
+            await exchange.connect(owner).pause();
+            await expect(exchange.sellM(0, 41, parseEther("1"))).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await expect(exchange.sellA(0, 41, parseEther("1"))).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await expect(exchange.sellB(0, 41, parseEther("1"))).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await exchange.connect(owner).unpause();
+            await exchange.sellM(0, 41, parseEther("1"));
+            await exchange.sellA(0, 41, parseEther("1"));
+            await exchange.sellB(0, 41, parseEther("1"));
+        });
+
+        it("Should pause settleMaker() and settleTaker()", async function () {
+            await fund.mock.extrapolateNav.returns(
+                parseEther("1"),
+                parseEther("1"),
+                parseEther("1")
+            );
+            await exchange.placeAsk(TRANCHE_M, 41, parseEther("1"), 0);
+            await exchange.buyM(0, 41, parseEther("1"));
+            await exchange.connect(owner).pause();
+            await expect(exchange.settleMaker(addr1, startEpoch)).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await expect(exchange.settleTaker(addr1, startEpoch)).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await exchange.connect(owner).unpause();
+            await exchange.settleMaker(addr1, startEpoch);
+            await exchange.settleTaker(addr1, startEpoch);
         });
     });
 

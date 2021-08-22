@@ -156,6 +156,7 @@ describe("Staking", function () {
             0,
             votingEscrow.address
         );
+        await staking.initialize();
 
         // Deposit initial shares
         await shareM.mock.transferFrom.returns(true);
@@ -1474,6 +1475,7 @@ describe("Staking", function () {
                 guardedLaunchStart,
                 votingEscrow.address
             );
+            await staking.initialize();
             staking = staking.connect(user1);
         });
 
@@ -1488,6 +1490,36 @@ describe("Staking", function () {
 
             await advanceBlockAtTime(guardedLaunchStart + DAY * 15);
             await chessSchedule.mock.mint.returns();
+            await staking.claimRewards(addr1);
+        });
+    });
+
+    describe("pause() and unpause()", function () {
+        it("Should pause deposit()", async function () {
+            await shareM.mock.transferFrom.returns(true);
+            await staking.connect(owner).pause();
+            await expect(staking.deposit(TRANCHE_M, parseEther("1"))).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await staking.connect(owner).unpause();
+            await staking.deposit(TRANCHE_M, parseEther("1"));
+        });
+
+        it("Should pause withdraw()", async function () {
+            await shareM.mock.transfer.returns(true);
+            await staking.connect(owner).pause();
+            await expect(staking.withdraw(TRANCHE_M, parseEther("1"))).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await staking.connect(owner).unpause();
+            await staking.withdraw(TRANCHE_M, parseEther("1"));
+        });
+
+        it("Should pause claimRewards()", async function () {
+            await chessSchedule.mock.mint.returns();
+            await staking.connect(owner).pause();
+            await expect(staking.claimRewards(addr1)).to.be.revertedWith("Pausable: paused");
+            await staking.connect(owner).unpause();
             await staking.claimRewards(addr1);
         });
     });

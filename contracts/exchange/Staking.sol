@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
+import "../utils/ManagedPausable.sol";
 
 import "../interfaces/IFund.sol";
 import "../interfaces/IChessSchedule.sol";
@@ -31,9 +32,9 @@ struct VESnapshot {
     IVotingEscrow.LockedBalance veLocked;
 }
 
-abstract contract Staking is ITrancheIndex, CoreUtility {
+abstract contract Staking is ITrancheIndex, CoreUtility, ManagedPausable {
     /// @dev Reserved storage slots for future sibling contract upgrades
-    uint256[32] private _reservedSlots;
+    uint256[29] private _reservedSlots;
 
     using Math for uint256;
     using SafeMath for uint256;
@@ -137,6 +138,10 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         require(_checkpointTimestamp == 0);
         _checkpointTimestamp = block.timestamp;
         _rate = IChessSchedule(chessSchedule).getRate(block.timestamp);
+    }
+
+    function _initializeStakingV2() internal {
+        _initializeManagedPausable();
     }
 
     /// @notice Return weight of given balance with respect to rewards.
@@ -337,7 +342,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @dev Deposit to get rewards
     /// @param tranche Tranche of the share
     /// @param amount The amount to deposit
-    function deposit(uint256 tranche, uint256 amount) public {
+    function deposit(uint256 tranche, uint256 amount) public whenNotPaused {
         uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(msg.sender, rebalanceSize);
@@ -368,7 +373,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @dev Withdraw
     /// @param tranche Tranche of the share
     /// @param amount The amount to deposit
-    function withdraw(uint256 tranche, uint256 amount) external {
+    function withdraw(uint256 tranche, uint256 amount) external whenNotPaused {
         uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(msg.sender, rebalanceSize);
@@ -421,7 +426,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
 
     /// @notice Claim the rewards for an account.
     /// @param account Account to claim its rewards
-    function claimRewards(address account) external {
+    function claimRewards(address account) external whenNotPaused {
         require(
             block.timestamp >= guardedLaunchStart + 15 days,
             "Cannot claim during guarded launch"
