@@ -28,6 +28,6 @@ task("deploy_fee_distributor", "Deploy FeeDistributor")
         console.log(`FeeDistributor: ${feeDistributor.address}`);
         addressFile.set("feeDistributor", feeDistributor.address);
 
-        console.log("Transfering ownership to TimelockController");
-        await feeDistributor.transferOwnership(governanceAddresses.timelockController);
+        console.log("Transfering ownership to Timelock");
+        await feeDistributor.transferOwnership(governanceAddresses.timelock);
     });

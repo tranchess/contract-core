@@ -12,17 +12,13 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     const [deployer] = await ethers.getSigners();
     const addressFile = createAddressFile(hre, "governance");
 
-    const TimelockController = await ethers.getContractFactory("TimelockController");
-    const timelockController = await TimelockController.deploy(
-        GOVERNANCE_CONFIG.TIMELOCK_DELAY,
-        [GOVERNANCE_CONFIG.TIMELOCK_PROPOSER || deployer.address], // proposers
-        [ethers.constants.AddressZero] // executor
+    const Timelock = await ethers.getContractFactory("Timelock");
+    const timelock = await Timelock.deploy(
+        GOVERNANCE_CONFIG.TIMELOCK_PROPOSER || deployer.address, // admin
+        GOVERNANCE_CONFIG.TIMELOCK_DELAY
     );
-    console.log(`TimelockController: ${timelockController.address}`);
-    addressFile.set("timelockController", timelockController.address);
-
-    const TIMELOCK_ADMIN_ROLE = await timelockController.TIMELOCK_ADMIN_ROLE();
-    await timelockController.renounceRole(TIMELOCK_ADMIN_ROLE, deployer.address);
+    console.log(`Timelock: ${timelock.address}`);
+    addressFile.set("timelock", timelock.address);
 
     const TransparentUpgradeableProxy = await ethers.getContractFactory(
         "TransparentUpgradeableProxy"
@@ -115,7 +111,7 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     console.log(`ChessController: ${chessController.address}`);
     addressFile.set("chessController", chessController.address);
 
-    console.log("Transfering ownership to TimelockController");
-    await proxyAdmin.transferOwnership(timelockController.address);
-    await votingEscrow.transferOwnership(timelockController.address);
+    console.log("Transfering ownership to Timelock");
+    await proxyAdmin.transferOwnership(timelock.address);
+    await votingEscrow.transferOwnership(timelock.address);
 });
