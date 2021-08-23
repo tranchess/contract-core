@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
+pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/math/Math.sol";
@@ -8,16 +9,26 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
+import "../utils/ManagedPausable.sol";
 
 import "../interfaces/IFund.sol";
 import "../interfaces/IChessController.sol";
 import "../interfaces/IChessSchedule.sol";
 import "../interfaces/ITrancheIndex.sol";
 import "../interfaces/IPrimaryMarket.sol";
+import "../interfaces/IVotingEscrow.sol";
 
-abstract contract Staking is ITrancheIndex, CoreUtility {
+/// @notice Chess locking snapshot used in calculating working balance of an account.
+/// @param veProportion The account's veCHESS divided by the total veCHESS supply.
+/// @param veLocked Locked CHESS and unlock time, which is synchronized from VotingEscrow.
+struct VESnapshot {
+    uint256 veProportion;
+    IVotingEscrow.LockedBalance veLocked;
+}
+
+abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
     /// @dev Reserved storage slots for future sibling contract upgrades
-    uint256[32] private _reservedSlots;
+    uint256[29] private _reservedSlots;
 
     using Math for uint256;
     using SafeMath for uint256;
@@ -32,6 +43,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     uint256 private constant REWARD_WEIGHT_A = 4;
     uint256 private constant REWARD_WEIGHT_B = 2;
     uint256 private constant REWARD_WEIGHT_M = 3;
+    uint256 private constant MAX_BOOSTING_FACTOR = 3e18;
 
     IFund public immutable fund;
     IERC20 private immutable tokenM;
@@ -92,12 +104,18 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @dev Mapping of account => claimable rewards.
     mapping(address => uint256) private _claimableRewards;
 
+    IVotingEscrow private immutable _votingEscrow;
+    uint256 private _workingSupply;
+    mapping(address => uint256) private _workingBalances;
+    mapping(address => VESnapshot) private _veSnapshots;
+
     constructor(
         address fund_,
         address chessSchedule_,
         address chessController_,
         address quoteAssetAddress_,
-        uint256 guardedLaunchStart_
+        uint256 guardedLaunchStart_,
+        address votingEscrow_
     ) public {
         fund = IFund(fund_);
         tokenM = IERC20(IFund(fund_).tokenM());
@@ -106,10 +124,18 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
         quoteAssetAddress = quoteAssetAddress_;
-        _checkpointTimestamp = block.timestamp;
         guardedLaunchStart = guardedLaunchStart_;
+        _votingEscrow = IVotingEscrow(votingEscrow_);
+    }
 
-        _rate = IChessSchedule(chessSchedule_).getRate(block.timestamp);
+    function _initializeStaking() internal {
+        require(_checkpointTimestamp == 0);
+        _checkpointTimestamp = block.timestamp;
+        _rate = IChessSchedule(chessSchedule).getRate(block.timestamp);
+    }
+
+    function _initializeStakingV2() internal {
+        _initializeManagedPausable();
     }
 
     /// @notice Return weight of given balance with respect to rewards.
@@ -117,7 +143,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @param amountA Amount of Token A
     /// @param amountB Amount of Token B
     /// @return Rewarding weight of the balance
-    function rewardWeight(
+    function weightedBalance(
         uint256 amountM,
         uint256 amountA,
         uint256 amountB
@@ -134,9 +160,9 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         uint256 totalSupplyB = _totalSupplies[TRANCHE_B];
 
         uint256 version = _totalSupplyVersion;
-        uint256 rebalanceSize = fund.getRebalanceSize();
+        uint256 rebalanceSize = _fundRebalanceSize();
         if (version < rebalanceSize) {
-            (totalSupplyM, totalSupplyA, totalSupplyB) = fund.batchRebalance(
+            (totalSupplyM, totalSupplyA, totalSupplyB) = _fundBatchRebalance(
                 totalSupplyM,
                 totalSupplyA,
                 totalSupplyB,
@@ -168,9 +194,9 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         }
 
         uint256 version = _balanceVersions[account];
-        uint256 rebalanceSize = fund.getRebalanceSize();
+        uint256 rebalanceSize = _fundRebalanceSize();
         if (version < rebalanceSize) {
-            (amountM, amountA, amountB) = fund.batchRebalance(
+            (amountM, amountA, amountB) = _fundBatchRebalance(
                 amountM,
                 amountA,
                 amountB,
@@ -202,9 +228,9 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         }
 
         uint256 version = _balanceVersions[account];
-        uint256 rebalanceSize = fund.getRebalanceSize();
+        uint256 rebalanceSize = _fundRebalanceSize();
         if (version < rebalanceSize) {
-            (amountM, amountA, amountB) = fund.batchRebalance(
+            (amountM, amountA, amountB) = _fundBatchRebalance(
                 amountM,
                 amountA,
                 amountB,
@@ -226,11 +252,92 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         return _balanceVersions[account];
     }
 
+    function workingSupply() external view returns (uint256) {
+        uint256 version = _totalSupplyVersion;
+        uint256 rebalanceSize = _fundRebalanceSize();
+        if (version < rebalanceSize) {
+            (uint256 totalSupplyM, uint256 totalSupplyA, uint256 totalSupplyB) =
+                _fundBatchRebalance(
+                    _totalSupplies[TRANCHE_M],
+                    _totalSupplies[TRANCHE_A],
+                    _totalSupplies[TRANCHE_B],
+                    version,
+                    rebalanceSize
+                );
+            return weightedBalance(totalSupplyM, totalSupplyA, totalSupplyB);
+        } else {
+            return _workingSupply;
+        }
+    }
+
+    function workingBalanceOf(address account) external view returns (uint256) {
+        uint256 version = _balanceVersions[account];
+        uint256 rebalanceSize = _fundRebalanceSize();
+        if (version < rebalanceSize) {
+            uint256[TRANCHE_COUNT] storage available = _availableBalances[account];
+            uint256[TRANCHE_COUNT] storage locked = _lockedBalances[account];
+            (uint256 amountM, uint256 amountA, uint256 amountB) =
+                _fundBatchRebalance(
+                    available[TRANCHE_M].add(locked[TRANCHE_M]),
+                    available[TRANCHE_A].add(locked[TRANCHE_A]),
+                    available[TRANCHE_B].add(locked[TRANCHE_B]),
+                    version,
+                    rebalanceSize
+                );
+            return weightedBalance(amountM, amountA, amountB);
+        } else {
+            return _workingBalances[account];
+        }
+    }
+
+    function veSnapshotOf(address account) external view returns (VESnapshot memory) {
+        return _veSnapshots[account];
+    }
+
+    function _fundRebalanceSize() internal view returns (uint256) {
+        return fund.getRebalanceSize();
+    }
+
+    function _fundDoRebalance(
+        uint256 amountM,
+        uint256 amountA,
+        uint256 amountB,
+        uint256 index
+    )
+        internal
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256
+        )
+    {
+        return fund.doRebalance(amountM, amountA, amountB, index);
+    }
+
+    function _fundBatchRebalance(
+        uint256 amountM,
+        uint256 amountA,
+        uint256 amountB,
+        uint256 fromIndex,
+        uint256 toIndex
+    )
+        internal
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256
+        )
+    {
+        return fund.batchRebalance(amountM, amountA, amountB, fromIndex, toIndex);
+    }
+
     /// @dev Deposit to get rewards
     /// @param tranche Tranche of the share
     /// @param amount The amount to deposit
-    function deposit(uint256 tranche, uint256 amount) public {
-        uint256 rebalanceSize = fund.getRebalanceSize();
+    function deposit(uint256 tranche, uint256 amount) public whenNotPaused {
+        uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(msg.sender, rebalanceSize);
         if (tranche == TRANCHE_M) {
@@ -245,6 +352,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         );
         _totalSupplies[tranche] = _totalSupplies[tranche].add(amount);
 
+        _updateWorkingBalance(msg.sender);
+
         emit Deposited(tranche, msg.sender, amount);
     }
 
@@ -258,8 +367,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @dev Withdraw
     /// @param tranche Tranche of the share
     /// @param amount The amount to deposit
-    function withdraw(uint256 tranche, uint256 amount) external {
-        uint256 rebalanceSize = fund.getRebalanceSize();
+    function withdraw(uint256 tranche, uint256 amount) external whenNotPaused {
+        uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(msg.sender, rebalanceSize);
         _availableBalances[msg.sender][tranche] = _availableBalances[msg.sender][tranche].sub(
@@ -275,6 +384,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             tokenB.safeTransfer(msg.sender, amount);
         }
 
+        _updateWorkingBalance(msg.sender);
+
         emit Withdrawn(tranche, msg.sender, amount);
     }
 
@@ -283,7 +394,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @param account Account of the balance to rebalance
     /// @param targetVersion The target rebalance version, or zero for the latest version
     function refreshBalance(address account, uint256 targetVersion) external {
-        uint256 rebalanceSize = fund.getRebalanceSize();
+        uint256 rebalanceSize = _fundRebalanceSize();
         if (targetVersion == 0) {
             targetVersion = rebalanceSize;
         } else {
@@ -301,7 +412,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @param account Address of an account
     /// @return Amount of claimable rewards
     function claimableRewards(address account) external returns (uint256) {
-        uint256 rebalanceSize = fund.getRebalanceSize();
+        uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
         return _claimableRewards[account];
@@ -309,15 +420,40 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
 
     /// @notice Claim the rewards for an account.
     /// @param account Account to claim its rewards
-    function claimRewards(address account) external {
+    function claimRewards(address account) external whenNotPaused {
         require(
             block.timestamp >= guardedLaunchStart + 15 days,
             "Cannot claim during guarded launch"
         );
-        uint256 rebalanceSize = fund.getRebalanceSize();
+        uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
         _claim(account);
+    }
+
+    /// @notice Synchronize an account's locked Chess with `VotingEscrow`
+    ///         and update its working balance.
+    /// @param account Address of the synchronized account
+    function syncWithVotingEscrow(address account) external {
+        uint256 rebalanceSize = _fundRebalanceSize();
+        _checkpoint(rebalanceSize);
+        _userCheckpoint(account, rebalanceSize);
+
+        VESnapshot storage veSnapshot = _veSnapshots[account];
+        IVotingEscrow.LockedBalance memory newLocked = _votingEscrow.getLockedBalance(account);
+        if (
+            newLocked.amount != veSnapshot.veLocked.amount ||
+            newLocked.unlockTime != veSnapshot.veLocked.unlockTime ||
+            newLocked.unlockTime < block.timestamp
+        ) {
+            veSnapshot.veLocked.amount = newLocked.amount;
+            veSnapshot.veLocked.unlockTime = newLocked.unlockTime;
+            veSnapshot.veProportion = _votingEscrow.balanceOf(account).divideDecimal(
+                _votingEscrow.totalSupply()
+            );
+        }
+
+        _updateWorkingBalance(account);
     }
 
     /// @dev Transfer shares from the sender to the contract internally
@@ -329,11 +465,12 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         address sender,
         uint256 amount
     ) internal {
-        uint256 rebalanceSize = fund.getRebalanceSize();
+        uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(sender, rebalanceSize);
         _availableBalances[sender][tranche] = _availableBalances[sender][tranche].sub(amount);
         _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
+        _updateWorkingBalance(sender);
     }
 
     function _rebalanceAndClearTrade(
@@ -350,11 +487,11 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             uint256
         )
     {
-        uint256 rebalanceSize = fund.getRebalanceSize();
+        uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
         if (amountVersion < rebalanceSize) {
-            (amountM, amountA, amountB) = fund.batchRebalance(
+            (amountM, amountA, amountB) = _fundBatchRebalance(
                 amountM,
                 amountA,
                 amountB,
@@ -375,6 +512,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             available[TRANCHE_B] = available[TRANCHE_B].add(amountB);
             _totalSupplies[TRANCHE_B] = _totalSupplies[TRANCHE_B].add(amountB);
         }
+        _updateWorkingBalance(account);
+
         return (amountM, amountA, amountB);
     }
 
@@ -383,7 +522,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         address account,
         uint256 amount
     ) internal {
-        uint256 rebalanceSize = fund.getRebalanceSize();
+        uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
         _availableBalances[account][tranche] = _availableBalances[account][tranche].sub(
@@ -400,11 +539,11 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         uint256 amountB,
         uint256 amountVersion
     ) internal {
-        uint256 rebalanceSize = fund.getRebalanceSize();
+        uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
         if (amountVersion < rebalanceSize) {
-            (amountM, amountA, amountB) = fund.batchRebalance(
+            (amountM, amountA, amountB) = _fundBatchRebalance(
                 amountM,
                 amountA,
                 amountB,
@@ -433,11 +572,12 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         address account,
         uint256 amount
     ) internal {
-        uint256 rebalanceSize = fund.getRebalanceSize();
+        uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
         _lockedBalances[account][tranche] = _lockedBalances[account][tranche].sub(amount);
         _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
+        _updateWorkingBalance(account);
     }
 
     /// @dev Transfer claimable rewards to an account. Rewards since the last user checkpoint
@@ -473,7 +613,14 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
         uint256 totalSupplyM = _totalSupplies[TRANCHE_M];
         uint256 totalSupplyA = _totalSupplies[TRANCHE_A];
         uint256 totalSupplyB = _totalSupplies[TRANCHE_B];
-        uint256 weight = rewardWeight(totalSupplyM, totalSupplyA, totalSupplyB);
+        uint256 weight = _workingSupply;
+        if (weight == 0) {
+            weight = weightedBalance(totalSupplyM, totalSupplyA, totalSupplyB);
+            if (weight > 0) {
+                // The contract was just upgraded from an old version without boosting
+                _workingSupply = weight;
+            }
+        }
         uint256 timestamp_ = timestamp; // avoid stack too deep
 
         for (uint256 i = 0; i < MAX_ITERATIONS && timestamp_ < block.timestamp; i++) {
@@ -494,7 +641,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                 _historicalIntegralSize = oldSize + 1;
 
                 integral = 0;
-                (totalSupplyM, totalSupplyA, totalSupplyB) = fund.doRebalance(
+                (totalSupplyM, totalSupplyA, totalSupplyB) = _fundDoRebalance(
                     totalSupplyM,
                     totalSupplyA,
                     totalSupplyB,
@@ -502,7 +649,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                 );
 
                 version++;
-                weight = rewardWeight(totalSupplyM, totalSupplyA, totalSupplyB);
+                // Reset total weight boosting after the first rebalance
+                weight = weightedBalance(totalSupplyM, totalSupplyA, totalSupplyB);
 
                 if (version < rebalanceSize) {
                     rebalanceTimestamp = fund.getRebalanceTimestamp(version);
@@ -529,6 +677,8 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             _totalSupplies[TRANCHE_A] = totalSupplyA;
             _totalSupplies[TRANCHE_B] = totalSupplyB;
             _totalSupplyVersion = rebalanceSize;
+            // Reset total working weight before any boosting if rebalance ever triggered
+            _workingSupply = weight;
         }
     }
 
@@ -567,27 +717,34 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
             return;
         }
 
+        uint256 rewards = _claimableRewards[account];
         uint256[TRANCHE_COUNT] storage available = _availableBalances[account];
         uint256[TRANCHE_COUNT] storage locked = _lockedBalances[account];
+        uint256 weight = _workingBalances[account];
+        if (weight == 0) {
+            // Loading available and locked is repeated to avoid "stake too deep" error.
+            weight = weightedBalance(
+                available[TRANCHE_M].add(locked[TRANCHE_M]),
+                available[TRANCHE_A].add(locked[TRANCHE_A]),
+                available[TRANCHE_B].add(locked[TRANCHE_B])
+            );
+            if (weight > 0) {
+                // The contract was just upgraded from an old version without boosting
+                _workingBalances[account] = weight;
+            }
+        }
         uint256 availableM = available[TRANCHE_M];
         uint256 availableA = available[TRANCHE_A];
         uint256 availableB = available[TRANCHE_B];
         uint256 lockedM = locked[TRANCHE_M];
         uint256 lockedA = locked[TRANCHE_A];
         uint256 lockedB = locked[TRANCHE_B];
-        uint256 rewards = _claimableRewards[account];
         for (uint256 i = oldVersion; i < targetVersion; i++) {
-            uint256 weight =
-                rewardWeight(
-                    availableM.add(lockedM),
-                    availableA.add(lockedA),
-                    availableB.add(lockedB)
-                );
             rewards = rewards.add(
                 weight.multiplyDecimalPrecise(_historicalIntegrals[i].sub(userIntegral))
             );
             if (availableM != 0 || availableA != 0 || availableB != 0) {
-                (availableM, availableA, availableB) = fund.doRebalance(
+                (availableM, availableA, availableB) = _fundDoRebalance(
                     availableM,
                     availableA,
                     availableB,
@@ -595,12 +752,17 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                 );
             }
             if (lockedM != 0 || lockedA != 0 || lockedB != 0) {
-                (lockedM, lockedA, lockedB) = fund.doRebalance(lockedM, lockedA, lockedB, i);
+                (lockedM, lockedA, lockedB) = _fundDoRebalance(lockedM, lockedA, lockedB, i);
             }
             userIntegral = 0;
+
+            // Reset per-user weight boosting after the first rebalance
+            weight = weightedBalance(
+                availableM.add(lockedM),
+                availableA.add(lockedA),
+                availableB.add(lockedB)
+            );
         }
-        uint256 weight =
-            rewardWeight(availableM.add(lockedM), availableA.add(lockedA), availableB.add(lockedB));
         rewards = rewards.add(weight.multiplyDecimalPrecise(integral.sub(userIntegral)));
         address account_ = account; // Fix the "stack too deep" error
         _claimableRewards[account_] = rewards;
@@ -626,6 +788,45 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
                 locked[TRANCHE_B] = lockedB;
             }
             _balanceVersions[account_] = targetVersion;
+            _workingBalances[account_] = weight;
         }
+    }
+
+    /// @dev Calculate working balance, which depends on the amount of staked tokens and veCHESS.
+    ///      Before this function is called, both `_checkpoint()` and `_userCheckpoint(account)`
+    ///      should be called to update `_workingSupply` and `_workingBalances[account]` to
+    ///      the latest rebalance version.
+    /// @param account User address
+    function _updateWorkingBalance(address account) private {
+        uint256 weightedSupply =
+            weightedBalance(
+                _totalSupplies[TRANCHE_M],
+                _totalSupplies[TRANCHE_A],
+                _totalSupplies[TRANCHE_B]
+            );
+        uint256[TRANCHE_COUNT] storage available = _availableBalances[account];
+        uint256[TRANCHE_COUNT] storage locked = _lockedBalances[account];
+        uint256 weightedUserBalance =
+            weightedBalance(
+                available[TRANCHE_M].add(locked[TRANCHE_M]),
+                available[TRANCHE_A].add(locked[TRANCHE_A]),
+                available[TRANCHE_B].add(locked[TRANCHE_B])
+            );
+
+        uint256 newWorkingBalance = weightedUserBalance;
+        uint256 veProportion = _veSnapshots[account].veProportion;
+        if (veProportion > 0 && _veSnapshots[account].veLocked.unlockTime > block.timestamp) {
+            newWorkingBalance = newWorkingBalance.add(
+                weightedSupply.multiplyDecimal(veProportion).multiplyDecimal(
+                    MAX_BOOSTING_FACTOR - 1e18
+                )
+            );
+            newWorkingBalance = newWorkingBalance.min(
+                weightedUserBalance.multiplyDecimal(MAX_BOOSTING_FACTOR)
+            );
+        }
+
+        _workingSupply = _workingSupply.sub(_workingBalances[account]).add(newWorkingBalance);
+        _workingBalances[account] = newWorkingBalance;
     }
 }

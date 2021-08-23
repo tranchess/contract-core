@@ -1,19 +1,33 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
+pragma experimental ABIEncoderV2;
 
-import "../exchange/Staking.sol";
+import "../exchange/StakingV2.sol";
 
-contract StakingTestWrapper is Staking {
+contract StakingV2TestWrapper is StakingV2 {
     constructor(
         address fund_,
         address chessSchedule_,
         address chessController_,
         address quoteAssetAddress_,
-        uint256 guardedLaunchStart_
+        uint256 guardedLaunchStart_,
+        address votingEscrow_
     )
         public
-        Staking(fund_, chessSchedule_, chessController_, quoteAssetAddress_, guardedLaunchStart_)
+        StakingV2(
+            fund_,
+            chessSchedule_,
+            chessController_,
+            quoteAssetAddress_,
+            guardedLaunchStart_,
+            votingEscrow_
+        )
     {}
+
+    function initialize() external {
+        _initializeStaking();
+        _initializeStakingV2();
+    }
 
     function tradeAvailable(
         uint256 tranche,

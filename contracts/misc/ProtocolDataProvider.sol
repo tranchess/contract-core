@@ -9,8 +9,8 @@ import "../interfaces/IChessSchedule.sol";
 import "../utils/CoreUtility.sol";
 
 import {UnsettledTrade} from "../exchange/LibUnsettledTrade.sol";
-import {VESnapshot} from "../exchange/Staking.sol";
-import "../exchange/Exchange.sol";
+import {VESnapshot} from "../exchange/StakingV2.sol";
+import "../exchange/ExchangeV2.sol";
 import "../fund/Fund.sol";
 import "../fund/PrimaryMarket.sol";
 import "../governance/InterestRateBallot.sol";
@@ -203,7 +203,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.blockNumber = block.number;
         data.blockTimestamp = block.timestamp;
 
-        Exchange exchange = Exchange(exchangeAddress);
+        ExchangeV2 exchange = ExchangeV2(exchangeAddress);
         Fund fund = Fund(address(exchange.fund()));
         VotingEscrow votingEscrow =
             VotingEscrow(address(InterestRateBallot(address(fund.ballot())).votingEscrow()));

@@ -16,14 +16,14 @@ import {
 } from "./LibUnsettledTrade.sol";
 
 import "./ExchangeRoles.sol";
-import "./Staking.sol";
+import "./StakingV2.sol";
 
 /// @title Tranchess's Exchange Contract
 /// @notice A decentralized exchange to match premium-discount orders and clear trades
 /// @author Tranchess
-contract Exchange is ExchangeRoles, Staking {
+contract ExchangeV2 is ExchangeRoles, StakingV2 {
     /// @dev Reserved storage slots for future base contract upgrades
-    uint256[32] private _reservedSlots;
+    uint256[29] private _reservedSlots;
 
     using SafeDecimalMath for uint256;
     using LibOrderQueue for OrderQueue;
@@ -179,7 +179,15 @@ contract Exchange is ExchangeRoles, Staking {
 
     /// @dev Maker reserves 110% of the asset they want to trade, which would stop
     ///      losses for makers when the net asset values turn out volatile
-    uint256 private constant MAKER_RESERVE_RATIO = 1.1e18;
+    uint256 private constant MAKER_RESERVE_RATIO_M = 1.05e18;
+
+    /// @dev Maker reserves 110% of the asset they want to trade, which would stop
+    ///      losses for makers when the net asset values turn out volatile
+    uint256 private constant MAKER_RESERVE_RATIO_A = 1.001e18;
+
+    /// @dev Maker reserves 110% of the asset they want to trade, which would stop
+    ///      losses for makers when the net asset values turn out volatile
+    uint256 private constant MAKER_RESERVE_RATIO_B = 1.1e18;
 
     /// @dev Premium-discount level ranges from -10% to 10% with 0.25% as step size
     uint256 private constant PD_TICK = 0.0025e18;
@@ -235,7 +243,14 @@ contract Exchange is ExchangeRoles, Staking {
     )
         public
         ExchangeRoles(votingEscrow_, makerRequirement_)
-        Staking(fund_, chessSchedule_, chessController_, quoteAssetAddress_, guardedLaunchStart_)
+        StakingV2(
+            fund_,
+            chessSchedule_,
+            chessController_,
+            quoteAssetAddress_,
+            guardedLaunchStart_,
+            votingEscrow_
+        )
     {
         minBidAmount = minBidAmount_;
         minAskAmount = minAskAmount_;
@@ -244,11 +259,36 @@ contract Exchange is ExchangeRoles, Staking {
         _quoteDecimalMultiplier = 10**(18 - quoteDecimals_);
     }
 
+    /// @dev Initialize the contract. The contract is designed to be used with OpenZeppelin's
+    ///      `TransparentUpgradeableProxy`. This function should be called by the proxy's
+    ///      constructor (via the `_data` argument).
+    function initialize() external {
+        _initializeStaking();
+        initializeV2();
+    }
+
+    /// @dev Initialize the part added in V2. If this contract is upgraded from the previous
+    ///      version, call `upgradeToAndCall` of the proxy and put a call to this function
+    ///      in the `data` argument.
+    function initializeV2() public {
+        _initializeStakingV2();
+    }
+
     /// @notice Return end timestamp of the epoch containing a given timestamp.
     /// @param timestamp Timestamp within a given epoch
     /// @return The closest ending timestamp
     function endOfEpoch(uint256 timestamp) public pure returns (uint256) {
         return (timestamp / EPOCH) * EPOCH + EPOCH;
+    }
+
+    function getMakerReserveRatio(uint256 tranche) public pure returns (uint256) {
+        if (tranche == TRANCHE_M) {
+            return MAKER_RESERVE_RATIO_M;
+        } else if (tranche == TRANCHE_A) {
+            return MAKER_RESERVE_RATIO_A;
+        } else {
+            return MAKER_RESERVE_RATIO_B;
+        }
     }
 
     function getBidOrder(
@@ -320,7 +360,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 pdLevel,
         uint256 quoteAmount,
         uint256 version
-    ) external onlyMaker {
+    ) external onlyMaker whenNotPaused {
         require(block.timestamp >= guardedLaunchStart + 8 days, "Guarded launch: market closed");
         if (block.timestamp < guardedLaunchStart + 4 weeks) {
             require(quoteAmount >= guardedLaunchMinOrderAmount, "Guarded launch: amount too low");
@@ -332,7 +372,7 @@ contract Exchange is ExchangeRoles, Staking {
             pdLevel > 0 && pdLevel < (bestAsk == 0 ? PD_LEVEL_COUNT + 1 : bestAsk),
             "Invalid premium-discount level"
         );
-        require(version == fund.getRebalanceSize(), "Invalid version");
+        require(version == _fundRebalanceSize(), "Invalid version");
 
         _transferQuoteFrom(msg.sender, quoteAmount);
 
@@ -354,7 +394,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 pdLevel,
         uint256 baseAmount,
         uint256 version
-    ) external onlyMaker {
+    ) external onlyMaker whenNotPaused {
         require(block.timestamp >= guardedLaunchStart + 8 days, "Guarded launch: market closed");
         if (block.timestamp < guardedLaunchStart + 4 weeks) {
             require(baseAmount >= guardedLaunchMinOrderAmount, "Guarded launch: amount too low");
@@ -365,7 +405,7 @@ contract Exchange is ExchangeRoles, Staking {
             pdLevel > bestBids[version][tranche] && pdLevel <= PD_LEVEL_COUNT,
             "Invalid premium-discount level"
         );
-        require(version == fund.getRebalanceSize(), "Invalid version");
+        require(version == _fundRebalanceSize(), "Invalid version");
 
         _lock(tranche, msg.sender, baseAmount);
         uint256 index = asks[version][tranche][pdLevel].append(msg.sender, baseAmount, version);
@@ -387,7 +427,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 tranche,
         uint256 pdLevel,
         uint256 index
-    ) external {
+    ) external whenNotPaused {
         OrderQueue storage orderQueue = bids[version][tranche][pdLevel];
         Order storage order = orderQueue.list[index];
         require(order.maker == msg.sender, "Maker address mismatched");
@@ -418,7 +458,7 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 tranche,
         uint256 pdLevel,
         uint256 index
-    ) external {
+    ) external whenNotPaused {
         OrderQueue storage orderQueue = asks[version][tranche][pdLevel];
         Order storage order = orderQueue.list[index];
         require(order.maker == msg.sender, "Maker address mismatched");
@@ -533,6 +573,7 @@ contract Exchange is ExchangeRoles, Staking {
     ///                     for quote assets with precision other than 18 decimal places
     function settleMaker(address account, uint256 epoch)
         external
+        whenNotPaused
         returns (
             uint256 amountM,
             uint256 amountA,
@@ -574,6 +615,7 @@ contract Exchange is ExchangeRoles, Staking {
     ///                     for quote assets with precision other than 18 decimal places
     function settleTaker(address account, uint256 epoch)
         external
+        whenNotPaused
         returns (
             uint256 amountM,
             uint256 amountA,
@@ -617,9 +659,9 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 maxPDLevel,
         uint256 estimatedNav,
         uint256 quoteAmount
-    ) internal onlyActive {
+    ) internal onlyActive whenNotPaused {
         require(maxPDLevel > 0 && maxPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
-        require(version == fund.getRebalanceSize(), "Invalid version");
+        require(version == _fundRebalanceSize(), "Invalid version");
         require(estimatedNav > 0, "Zero estimated NAV");
 
         UnsettledBuyTrade memory totalTrade;
@@ -654,24 +696,28 @@ contract Exchange is ExchangeRoles, Staking {
                     continue;
                 }
 
-                // Calculate the current trade assuming that the taker would be completely filled.
-                currentTrade.frozenQuote = quoteAmount.sub(totalTrade.frozenQuote);
-                currentTrade.reservedBase = currentTrade.frozenQuote.mul(MAKER_RESERVE_RATIO).div(
-                    price
-                );
+                // Scope to avoid "stack too deep"
+                {
+                    // Calculate the current trade assuming that the taker would be completely filled.
+                    uint256 makerReserveRatio = getMakerReserveRatio(tranche);
+                    currentTrade.frozenQuote = quoteAmount.sub(totalTrade.frozenQuote);
+                    currentTrade.reservedBase = currentTrade.frozenQuote.mul(makerReserveRatio).div(
+                        price
+                    );
 
-                if (currentTrade.reservedBase < order.fillable) {
-                    // Taker is completely filled.
-                    currentTrade.effectiveQuote = currentTrade.frozenQuote.divideDecimal(
-                        pdLevel.mul(PD_TICK).add(PD_START)
-                    );
-                } else {
-                    // Maker is completely filled. Recalculate the current trade.
-                    currentTrade.frozenQuote = order.fillable.mul(price).div(MAKER_RESERVE_RATIO);
-                    currentTrade.effectiveQuote = order.fillable.mul(estimatedNav).div(
-                        MAKER_RESERVE_RATIO
-                    );
-                    currentTrade.reservedBase = order.fillable;
+                    if (currentTrade.reservedBase < order.fillable) {
+                        // Taker is completely filled.
+                        currentTrade.effectiveQuote = currentTrade.frozenQuote.divideDecimal(
+                            pdLevel.mul(PD_TICK).add(PD_START)
+                        );
+                    } else {
+                        // Maker is completely filled. Recalculate the current trade.
+                        currentTrade.frozenQuote = order.fillable.mul(price).div(makerReserveRatio);
+                        currentTrade.effectiveQuote = order.fillable.mul(estimatedNav).div(
+                            makerReserveRatio
+                        );
+                        currentTrade.reservedBase = order.fillable;
+                    }
                 }
                 totalTrade.frozenQuote = totalTrade.frozenQuote.add(currentTrade.frozenQuote);
                 totalTrade.effectiveQuote = totalTrade.effectiveQuote.add(
@@ -745,9 +791,9 @@ contract Exchange is ExchangeRoles, Staking {
         uint256 minPDLevel,
         uint256 estimatedNav,
         uint256 baseAmount
-    ) internal onlyActive {
+    ) internal onlyActive whenNotPaused {
         require(minPDLevel > 0 && minPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
-        require(version == fund.getRebalanceSize(), "Invalid version");
+        require(version == _fundRebalanceSize(), "Invalid version");
         require(estimatedNav > 0, "Zero estimated NAV");
 
         UnsettledSellTrade memory totalTrade;
@@ -776,27 +822,32 @@ contract Exchange is ExchangeRoles, Staking {
                     continue;
                 }
 
-                currentTrade.frozenBase = baseAmount.sub(totalTrade.frozenBase);
-                currentTrade.reservedQuote = currentTrade
-                    .frozenBase
-                    .multiplyDecimal(MAKER_RESERVE_RATIO)
-                    .multiplyDecimal(price);
+                // Scope to avoid "stack too deep"
+                {
+                    // Calculate the current trade assuming that the taker would be completely filled.
+                    uint256 makerReserveRatio = getMakerReserveRatio(tranche);
+                    currentTrade.frozenBase = baseAmount.sub(totalTrade.frozenBase);
+                    currentTrade.reservedQuote = currentTrade
+                        .frozenBase
+                        .multiplyDecimal(makerReserveRatio)
+                        .multiplyDecimal(price);
 
-                if (currentTrade.reservedQuote < order.fillable) {
-                    // Taker is completely filled
-                    currentTrade.effectiveBase = currentTrade.frozenBase.multiplyDecimal(
-                        pdLevel.mul(PD_TICK).add(PD_START)
-                    );
-                } else {
-                    // Maker is completely filled. Recalculate the current trade.
-                    currentTrade.frozenBase = order.fillable.divideDecimal(price).divideDecimal(
-                        MAKER_RESERVE_RATIO
-                    );
-                    currentTrade.effectiveBase = order
-                        .fillable
-                        .divideDecimal(estimatedNav)
-                        .divideDecimal(MAKER_RESERVE_RATIO);
-                    currentTrade.reservedQuote = order.fillable;
+                    if (currentTrade.reservedQuote < order.fillable) {
+                        // Taker is completely filled
+                        currentTrade.effectiveBase = currentTrade.frozenBase.multiplyDecimal(
+                            pdLevel.mul(PD_TICK).add(PD_START)
+                        );
+                    } else {
+                        // Maker is completely filled. Recalculate the current trade.
+                        currentTrade.frozenBase = order.fillable.divideDecimal(price).divideDecimal(
+                            makerReserveRatio
+                        );
+                        currentTrade.effectiveBase = order
+                            .fillable
+                            .divideDecimal(estimatedNav)
+                            .divideDecimal(makerReserveRatio);
+                        currentTrade.reservedQuote = order.fillable;
+                    }
                 }
                 totalTrade.frozenBase = totalTrade.frozenBase.add(currentTrade.frozenBase);
                 totalTrade.effectiveBase = totalTrade.effectiveBase.add(currentTrade.effectiveBase);
