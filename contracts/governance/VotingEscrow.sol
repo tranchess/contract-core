@@ -64,8 +64,8 @@ contract VotingEscrow is
     /// @notice Contract to be call when an account's locked CHESS is updated
     address public callback;
 
-    /// @notice Amount of Chess locked at the end of the last checkpoint's week
-    uint256 public nextWeekLocked;
+    /// @notice Amount of Chess locked now. Expired locks are not included.
+    uint256 public totalLocked;
 
     /// @notice Total veCHESS at the end of the last checkpoint's week
     uint256 public nextWeekSupply;
@@ -133,21 +133,22 @@ contract VotingEscrow is
         uint256 nextWeek = _endOfWeek(block.timestamp);
         uint256 currentWeek = nextWeek - 1 weeks;
         uint256 newNextWeekSupply = nextWeekSupply;
-        uint256 newNextWeekLocked = nextWeekLocked;
+        uint256 newTotalLocked = totalLocked;
         if (weekCursor < currentWeek) {
             weekCursor += 1 weeks;
             for (; weekCursor < currentWeek; weekCursor += 1 weeks) {
-                // Calculate supply at the end of the next week.
-                newNextWeekSupply = newNextWeekSupply.sub(newNextWeekLocked.mul(1 weeks) / maxTime);
                 // Remove Chess unlocked at the end of the next week from total locked amount.
-                newNextWeekLocked = newNextWeekLocked.sub(scheduledUnlock[weekCursor + 1 weeks]);
+                newTotalLocked = newTotalLocked.sub(scheduledUnlock[weekCursor]);
+                // Calculate supply at the end of the next week.
+                newNextWeekSupply = newNextWeekSupply.sub(newTotalLocked.mul(1 weeks) / maxTime);
             }
+            newTotalLocked = newTotalLocked.sub(scheduledUnlock[weekCursor]);
             newNextWeekSupply = newNextWeekSupply.sub(
-                newNextWeekLocked.mul(block.timestamp - currentWeek) / maxTime
+                newTotalLocked.mul(block.timestamp - currentWeek) / maxTime
             );
         } else {
             newNextWeekSupply = newNextWeekSupply.add(
-                newNextWeekLocked.mul(nextWeek - block.timestamp) / maxTime
+                newTotalLocked.mul(nextWeek - block.timestamp) / maxTime
             );
         }
 
@@ -330,28 +331,28 @@ contract VotingEscrow is
         uint256 weekCursor = checkpointTimestamp;
         uint256 nextWeek = _endOfWeek(block.timestamp);
         uint256 currentWeek = nextWeek - 1 weeks;
-        uint256 newNextWeekLocked = nextWeekLocked;
+        uint256 newTotalLocked = totalLocked;
         uint256 newNextWeekSupply = nextWeekSupply;
         if (weekCursor < currentWeek) {
             for (uint256 w = weekCursor + 1 weeks; w <= currentWeek; w += 1 weeks) {
                 veSupplyPerWeek[w] = newNextWeekSupply;
+                // Remove Chess unlocked at the end of this week from total locked amount.
+                newTotalLocked = newTotalLocked.sub(scheduledUnlock[w]);
                 // Calculate supply at the end of the next week.
-                newNextWeekSupply = newNextWeekSupply.sub(newNextWeekLocked.mul(1 weeks) / maxTime);
-                // Remove Chess unlocked at the end of the next week from total locked amount.
-                newNextWeekLocked = newNextWeekLocked.sub(scheduledUnlock[w + 1 weeks]);
+                newNextWeekSupply = newNextWeekSupply.sub(newTotalLocked.mul(1 weeks) / maxTime);
             }
             checkpointTimestamp = currentWeek;
         }
 
         // Remove the old schedule if there is one
-        if (oldLockedBalance.amount > 0 && oldLockedBalance.unlockTime > nextWeek) {
-            newNextWeekLocked = newNextWeekLocked.sub(oldLockedBalance.amount);
+        if (oldLockedBalance.amount > 0 && oldLockedBalance.unlockTime >= nextWeek) {
+            newTotalLocked = newTotalLocked.sub(oldLockedBalance.amount);
             newNextWeekSupply = newNextWeekSupply.sub(
                 oldLockedBalance.amount.mul(oldLockedBalance.unlockTime - nextWeek) / maxTime
             );
         }
 
-        nextWeekLocked = newNextWeekLocked.add(newAmount);
+        totalLocked = newTotalLocked.add(newAmount);
         // Round up on division when added to the total supply, so that the total supply is never
         // smaller than the sum of all accounts' veCHESS balance.
         nextWeekSupply = newNextWeekSupply.add(
