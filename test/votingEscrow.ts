@@ -679,6 +679,69 @@ describe("VotingEscrow", function () {
             const supply2 = amount3.mul(WEEK * 6).div(MAX_TIME);
             expect(await votingEscrow.veSupplyPerWeek(w2)).to.closeToBn(supply2, 30);
         });
+
+        it("Reproduce rounding errors", async function () {
+            await votingEscrow.createLock(1, startWeek + WEEK * 10);
+            // Both account balance and total supply are rounded down when computed from scratch.
+            expect(await votingEscrow.balanceOfAtTimestamp(addr1, startWeek)).to.equal(0);
+            expect(await votingEscrow.totalSupplyAtTimestamp(startWeek)).to.equal(0);
+            // Incremental updated total supply is rounded up.
+            expect(await votingEscrow.nextWeekSupply()).to.equal(1);
+            expect(await votingEscrow.totalSupply()).to.equal(1);
+
+            // The rounding error is accumulated.
+            await votingEscrow.connect(user2).createLock(1, startWeek + WEEK * 10);
+            expect(await votingEscrow.totalSupplyAtTimestamp(startWeek)).to.equal(0);
+            expect(await votingEscrow.totalLocked()).to.equal(2);
+            expect(await votingEscrow.nextWeekSupply()).to.equal(2);
+            expect(await votingEscrow.totalSupply()).to.equal(2);
+
+            // The rounding error persists over weeks.
+            await advanceBlockAtTime(startWeek + WEEK * 5);
+            await votingEscrow.connect(user3).createLock(1, startWeek + WEEK * 10);
+            expect(await votingEscrow.totalSupplyAtTimestamp(startWeek + WEEK * 6)).to.equal(0);
+            expect(await votingEscrow.totalLocked()).to.equal(3);
+            expect(await votingEscrow.nextWeekSupply()).to.equal(3);
+            expect(await votingEscrow.totalSupply()).to.equal(3);
+
+            // The rounding error persists even after all Chess unlocked.
+            await advanceBlockAtTime(startWeek + WEEK * 20);
+            await votingEscrow.withdraw();
+            await votingEscrow.createLock(1, startWeek + WEEK * 30);
+            expect(await votingEscrow.totalSupplyAtTimestamp(startWeek + WEEK * 21)).to.equal(0);
+            expect(await votingEscrow.totalLocked()).to.equal(1);
+            expect(await votingEscrow.nextWeekSupply()).to.equal(4);
+            expect(await votingEscrow.totalSupply()).to.equal(4);
+        });
+
+        it("Should fix rounding errors in the same week", async function () {
+            await votingEscrow.createLock(1, startWeek + WEEK * 10);
+            await votingEscrow.connect(user2).createLock(1, startWeek + WEEK * 10);
+            await votingEscrow.connect(user3).createLock(1, startWeek + WEEK * 10);
+            expect(await votingEscrow.nextWeekSupply()).to.equal(3);
+            expect(await votingEscrow.totalSupply()).to.equal(3);
+            await votingEscrow.calibrateSupply();
+            expect(await votingEscrow.nextWeekSupply()).to.equal(0);
+            expect(await votingEscrow.totalSupply()).to.equal(0);
+        });
+
+        it("Should fix rounding errors after some weeks", async function () {
+            await votingEscrow.createLock(1, startWeek + WEEK * 10);
+            await votingEscrow.connect(user2).createLock(1, startWeek + WEEK * 30);
+            await votingEscrow.connect(user3).createLock(1, startWeek + WEEK * 30);
+            await advanceBlockAtTime(startWeek + WEEK * 15);
+            expect(await votingEscrow.nextWeekSupply()).to.equal(3);
+            expect(await votingEscrow.totalSupply()).to.equal(3);
+            await votingEscrow.calibrateSupply();
+            expect(await votingEscrow.nextWeekSupply()).to.equal(0);
+            expect(await votingEscrow.totalSupply()).to.equal(0);
+
+            // The rounding error is accumulated again.
+            await votingEscrow.withdraw();
+            await votingEscrow.createLock(1, startWeek + WEEK * 30);
+            expect(await votingEscrow.nextWeekSupply()).to.equal(1);
+            expect(await votingEscrow.totalSupply()).to.equal(1);
+        });
     });
 
     describe("updateAddressWhitelist()", function () {

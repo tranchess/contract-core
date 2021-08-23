@@ -332,6 +332,14 @@ contract VotingEscrow is
         return total;
     }
 
+    /// @dev Pre-conditions:
+    ///
+    ///      - `newAmount > 0`
+    ///      - `newUnlockTime > block.timestamp`
+    ///      - `newUnlockTime + 1 weeks == _endOfWeek(newUnlockTime)`, i.e. aligned to a trading week
+    ///
+    ///      The latter two conditions gaurantee that `newUnlockTime` is no smaller than the local
+    ///      variable `nextWeek` in the function.
     function _checkpoint(
         uint256 oldAmount,
         uint256 oldUnlockTime,
@@ -381,7 +389,7 @@ contract VotingEscrow is
     ///         rounding errors in `nextWeekSupply`, which is incrementally updated in
     ///         `createLock`, `increaseAmount` and `increaseUnlockTime`. It is almost
     ///         never required.
-    /// @dev See related test cases for details about the rounding errors.
+    /// @dev Search "rounding error" in test cases for details about the rounding errors.
     function calibrateSupply() external {
         uint256 nextWeek = checkpointWeek + 1 weeks;
         nextWeekSupply = _totalSupplyAtTimestamp(nextWeek);
