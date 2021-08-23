@@ -53,7 +53,6 @@ contract Timelock {
     address public admin;
     address public pendingAdmin;
     uint256 public delay;
-    bool public admin_initialized;
 
     mapping(bytes32 => bool) public queuedTransactions;
 
@@ -66,7 +65,6 @@ contract Timelock {
 
         admin = admin_;
         delay = delay_;
-        admin_initialized = false;
     }
 
     // XXX: function() external payable { }
@@ -96,19 +94,10 @@ contract Timelock {
     }
 
     function setPendingAdmin(address pendingAdmin_) public {
-        // XXX: allows one time setting of admin for deployment purposes
-        if (admin_initialized) {
-            require(
-                msg.sender == address(this),
-                "Timelock::setPendingAdmin: Call must come from Timelock."
-            );
-        } else {
-            require(
-                msg.sender == admin,
-                "Timelock::setPendingAdmin: First call must come from admin."
-            );
-            admin_initialized = true;
-        }
+        require(
+            msg.sender == address(this),
+            "Timelock::setPendingAdmin: Call must come from Timelock."
+        );
         pendingAdmin = pendingAdmin_;
 
         emit NewPendingAdmin(pendingAdmin);
@@ -182,7 +171,7 @@ contract Timelock {
             callData = abi.encodePacked(bytes4(keccak256(bytes(signature))), data);
         }
 
-        // XXX: upgrade to the latest calling convention
+        // solium-disable-next-line security/no-call-value
         (bool success, bytes memory returnData) = target.call{value: value}(callData);
         require(success, "Timelock::executeTransaction: Transaction execution reverted.");
 
