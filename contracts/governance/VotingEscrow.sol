@@ -137,7 +137,7 @@ contract VotingEscrow is
         if (weekCursor < currentWeek) {
             weekCursor += 1 weeks;
             for (; weekCursor < currentWeek; weekCursor += 1 weeks) {
-                // Remove Chess unlocked at the end of the next week from total locked amount.
+                // Remove Chess unlocked at the beginning of the next week from total locked amount.
                 newTotalLocked = newTotalLocked.sub(scheduledUnlock[weekCursor]);
                 // Calculate supply at the end of the next week.
                 newNextWeekSupply = newNextWeekSupply.sub(newTotalLocked.mul(1 weeks) / maxTime);
@@ -355,7 +355,7 @@ contract VotingEscrow is
         if (weekCursor < currentWeek) {
             for (uint256 w = weekCursor + 1 weeks; w <= currentWeek; w += 1 weeks) {
                 veSupplyPerWeek[w] = newNextWeekSupply;
-                // Remove Chess unlocked at the end of this week from total locked amount.
+                // Remove Chess unlocked at the beginning of this week from total locked amount.
                 newTotalLocked = newTotalLocked.sub(scheduledUnlock[w]);
                 // Calculate supply at the end of the next week.
                 newNextWeekSupply = newNextWeekSupply.sub(newTotalLocked.mul(1 weeks) / maxTime);
