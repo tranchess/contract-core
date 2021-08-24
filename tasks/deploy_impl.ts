@@ -19,7 +19,7 @@ task("deploy_impl", "Deploy implementation contracts interactively")
         await hre.run("compile");
         const addressFile = createAddressFile(hre, "impl");
         const governanceAddresses = await selectAddressFile(hre, "governance", args.governance);
-        const fundAddresses = await selectAddressFile(hre, "fund", args.governance);
+        const fundAddresses = await selectAddressFile(hre, "fund", args.fund);
 
         if (
             args.deployChessSchedule ||
