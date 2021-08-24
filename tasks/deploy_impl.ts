@@ -37,7 +37,7 @@ task("deploy_impl", "Deploy implementation contracts interactively")
             args.deployVotingEscrow ||
             (!args.silent && keyInYNStrict("Deploy VotingEscrow implementation?", { guide: true }))
         ) {
-            const VotingEscrow = await ethers.getContractFactory("VotingEscrow");
+            const VotingEscrow = await ethers.getContractFactory("VotingEscrowV2");
             const votingEscrowImpl = await VotingEscrow.deploy(
                 governanceAddresses.chess,
                 208 * 7 * 86400 // 208 weeks
