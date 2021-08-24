@@ -69,7 +69,7 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     console.log(`ChessSchedule: ${chessSchedule.address}`);
     addressFile.set("chessSchedule", chessSchedule.address);
 
-    const VotingEscrow = await ethers.getContractFactory("VotingEscrow");
+    const VotingEscrow = await ethers.getContractFactory("VotingEscrowV2");
     const votingEscrowImpl = VotingEscrow.attach(implAddresses.votingEscrowImpl);
     addressFile.set("votingEscrowImpl", votingEscrowImpl.address);
 

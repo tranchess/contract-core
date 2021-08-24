@@ -2,7 +2,7 @@
 pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
-import {IVotingEscrowCallback} from "../governance/VotingEscrow.sol";
+import {IVotingEscrowCallback} from "../governance/VotingEscrowV2.sol";
 
 contract VotingEscrowHelper is IVotingEscrowCallback {
     IVotingEscrowCallback public immutable distributor;
