@@ -3,6 +3,7 @@ import "@nomiclabs/hardhat-waffle";
 import "@nomiclabs/hardhat-etherscan";
 import "solidity-coverage";
 import "./tasks/accounts";
+import "./tasks/deploy_address_whitelist";
 import "./tasks/deploy_exchange";
 import "./tasks/deploy_fee_distributor";
 import "./tasks/deploy_fund";
