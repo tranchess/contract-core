@@ -2,12 +2,15 @@
 pragma solidity >=0.6.10 <0.8.0;
 
 contract AddressWhitelist {
-    address private constant AUTOFARM_STAKER = 0x588D3774CCf20E0869AC7DCF94bc7f99798C20Cd;
+    mapping(address => bool) public whitelist;
 
-    function check(address account) external pure returns (bool) {
-        if (account == AUTOFARM_STAKER) {
-            return true;
+    constructor(address[] memory whitelistAccounts) public {
+        for (uint256 i = 0; i < whitelistAccounts.length; i++) {
+            whitelist[whitelistAccounts[i]] = true;
         }
-        return false;
+    }
+
+    function check(address account) external view returns (bool) {
+        return whitelist[account];
     }
 }
