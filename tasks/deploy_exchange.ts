@@ -47,8 +47,8 @@ task("deploy_exchange", "Deploy exchange contracts")
             await chessSchedule.addMinter(exchange.address);
             console.log("Exchange is a CHESS minter now");
 
-            console.log("Transfering ownership of ChessSchedule to TimelockController");
-            await chessSchedule.transferOwnership(governanceAddresses.timelockController);
+            console.log("Transfering ownership of ChessSchedule to Timelock");
+            await chessSchedule.transferOwnership(governanceAddresses.timelock);
         } else {
             console.log("NOTE: Please add Exchange as a minter of ChessSchedule");
         }
