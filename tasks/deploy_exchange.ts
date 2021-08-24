@@ -21,7 +21,7 @@ task("deploy_exchange", "Deploy exchange contracts")
         });
         const implAddresses = await selectAddressFile(hre, "impl", "latest");
 
-        const Exchange = await ethers.getContractFactory("Exchange");
+        const Exchange = await ethers.getContractFactory("ExchangeV2");
         const exchangeImpl = Exchange.attach(implAddresses.exchangeImpl);
         addressFile.set("exchangeImpl", exchangeImpl.address);
 

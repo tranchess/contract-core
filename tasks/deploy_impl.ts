@@ -55,7 +55,7 @@ task("deploy_impl", "Deploy implementation contracts interactively")
         ) {
             const quoteToken = await ethers.getContractAt("ERC20", EXCHANGE_CONFIG.QUOTE_ADDRESS);
             const quoteDecimals = await quoteToken.decimals();
-            const Exchange = await ethers.getContractFactory("Exchange");
+            const Exchange = await ethers.getContractFactory("ExchangeV2");
             const exchangeImpl = await Exchange.deploy(
                 fundAddresses.fund,
                 governanceAddresses.chessSchedule,
