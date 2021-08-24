@@ -5,7 +5,14 @@ import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther } = ethers.utils;
 import { deployMockForName } from "./mock";
-import { WEEK, SETTLEMENT_TIME, FixtureWalletMap, advanceBlockAtTime } from "./utils";
+import {
+    DAY,
+    WEEK,
+    SETTLEMENT_TIME,
+    FixtureWalletMap,
+    advanceBlockAtTime,
+    setNextBlockTime,
+} from "./utils";
 
 const MAX_TIME = WEEK * 100;
 const MAX_TIME_ALLOWED = WEEK * 50;
@@ -538,6 +545,202 @@ describe("VotingEscrow", function () {
             );
 
             expect(dropTimeBefore).to.be.lessThan(dropTimeAfterDepositFor);
+        });
+    });
+
+    describe("Incremental supply calculation", function () {
+        it("Should calculate current total supply", async function () {
+            const amount1 = parseEther("1");
+            const amount2 = parseEther("3");
+            await votingEscrow.createLock(amount1, startWeek + WEEK * 2);
+            await votingEscrow.connect(user2).createLock(amount2, startWeek + WEEK * 5);
+
+            const balance1 = amount1.mul(WEEK * 2 - DAY * 4).div(MAX_TIME);
+            const balance2 = amount2.mul(WEEK * 5 - DAY * 4).div(MAX_TIME);
+            const supply = balance1.add(balance2);
+            await advanceBlockAtTime(startWeek + DAY * 4);
+            expect(await votingEscrow.totalSupply()).to.closeToBn(supply, 30);
+        });
+
+        it("Should calculate current total supply when someone will unlock soon", async function () {
+            const amount1 = parseEther("1");
+            const amount2 = parseEther("3");
+            await votingEscrow.createLock(amount1, startWeek + WEEK * 2);
+            await votingEscrow.connect(user2).createLock(amount2, startWeek + WEEK * 5);
+
+            const balance1 = amount1.mul(WEEK * 2 - DAY * 10).div(MAX_TIME);
+            const balance2 = amount2.mul(WEEK * 5 - DAY * 10).div(MAX_TIME);
+            const supply = balance1.add(balance2);
+            await advanceBlockAtTime(startWeek + DAY * 10);
+            expect(await votingEscrow.totalSupply()).to.closeToBn(supply, 30);
+        });
+
+        it("Should calculate current total supply after someone unlocks", async function () {
+            const amount1 = parseEther("1");
+            const amount2 = parseEther("3");
+            await votingEscrow.createLock(amount1, startWeek + WEEK * 2);
+            await votingEscrow.connect(user2).createLock(amount2, startWeek + WEEK * 5);
+
+            const balance2 = amount2.mul(DAY * 4).div(MAX_TIME);
+            await advanceBlockAtTime(startWeek + WEEK * 4 + DAY * 3);
+            expect(await votingEscrow.totalSupply()).to.closeToBn(balance2, 30);
+        });
+
+        it("Should calculate current total supply after increaseAmount()", async function () {
+            const amount1 = parseEther("1");
+            const amount2 = parseEther("3");
+            await votingEscrow.createLock(amount1, startWeek + WEEK * 2);
+            await votingEscrow.connect(user2).createLock(amount2, startWeek + WEEK * 5);
+
+            await setNextBlockTime(startWeek + DAY * 10);
+            await votingEscrow.increaseAmount(addr1, amount1);
+            const balance1 = amount1
+                .mul(2)
+                .mul(WEEK * 2 - DAY * 10)
+                .div(MAX_TIME);
+            const balance2 = amount2.mul(WEEK * 5 - DAY * 10).div(MAX_TIME);
+            const supply = balance1.add(balance2);
+            expect(await votingEscrow.totalSupply()).to.closeToBn(supply, 30);
+
+            const newBalance2 = amount2.mul(DAY * 4).div(MAX_TIME);
+            await advanceBlockAtTime(startWeek + WEEK * 4 + DAY * 3);
+            expect(await votingEscrow.totalSupply()).to.closeToBn(newBalance2, 30);
+
+            await advanceBlockAtTime(startWeek + WEEK * 6);
+            expect(await votingEscrow.totalSupply()).to.closeToBn(0, 30);
+        });
+
+        it("Should calculate current total supply after increaseUnlockTime()", async function () {
+            const amount1 = parseEther("1");
+            const amount2 = parseEther("3");
+            await votingEscrow.createLock(amount1, startWeek + WEEK * 2);
+            await votingEscrow.connect(user2).createLock(amount2, startWeek + WEEK * 5);
+
+            await setNextBlockTime(startWeek + DAY * 10);
+            await votingEscrow.increaseUnlockTime(startWeek + WEEK * 4);
+            const balance1 = amount1.mul(WEEK * 4 - DAY * 10).div(MAX_TIME);
+            const balance2 = amount2.mul(WEEK * 5 - DAY * 10).div(MAX_TIME);
+            const supply = balance1.add(balance2);
+            expect(await votingEscrow.totalSupply()).to.closeToBn(supply, 30);
+
+            const newBalance2 = amount2.mul(DAY * 4).div(MAX_TIME);
+            await advanceBlockAtTime(startWeek + WEEK * 4 + DAY * 3);
+            expect(await votingEscrow.totalSupply()).to.closeToBn(newBalance2, 30);
+
+            await advanceBlockAtTime(startWeek + WEEK * 6);
+            expect(await votingEscrow.totalSupply()).to.closeToBn(0, 30);
+        });
+
+        it("Should calculate historical supply for one week", async function () {
+            const amount1 = parseEther("1");
+            const amount2 = parseEther("3");
+            await votingEscrow.createLock(amount1, startWeek + WEEK * 2);
+            await votingEscrow.connect(user2).createLock(amount2, startWeek + WEEK * 5);
+            expect(await votingEscrow.veSupplyPerWeek(startWeek)).to.equal(0);
+
+            const balance1 = amount1.mul(WEEK * 2).div(MAX_TIME);
+            const balance2 = amount2.mul(WEEK * 5).div(MAX_TIME);
+            const supply = balance1.add(balance2);
+            await advanceBlockAtTime(startWeek + DAY);
+            await votingEscrow.increaseAmount(addr1, 1); // Trigger checkpoint
+            expect(await votingEscrow.veSupplyPerWeek(startWeek)).to.closeToBn(supply, 30);
+
+            // The calculated supply in the past does not change any more
+            await advanceBlockAtTime(startWeek + DAY * 10);
+            expect(await votingEscrow.veSupplyPerWeek(startWeek)).to.closeToBn(supply, 30);
+            await votingEscrow.increaseUnlockTime(startWeek + WEEK * 10);
+            expect(await votingEscrow.veSupplyPerWeek(startWeek)).to.closeToBn(supply, 30);
+        });
+
+        it("Should calculate historical supply for multiple weeks", async function () {
+            const amount1 = parseEther("1");
+            const amount2 = parseEther("5");
+            const amount3 = parseEther("11");
+            await votingEscrow.createLock(amount1, startWeek + WEEK);
+            await votingEscrow.connect(user2).createLock(amount2, startWeek + WEEK * 2);
+            await votingEscrow.connect(user3).createLock(amount3, startWeek + WEEK * 8);
+            await advanceBlockAtTime(startWeek + WEEK * 3 - 100);
+            await votingEscrow.increaseAmount(addr3, 1); // Trigger checkpoint
+
+            const w0 = startWeek;
+            const balance1w0 = amount1.mul(WEEK).div(MAX_TIME);
+            const balance2w0 = amount2.mul(WEEK * 2).div(MAX_TIME);
+            const balance3w0 = amount3.mul(WEEK * 8).div(MAX_TIME);
+            const supply0 = balance1w0.add(balance2w0).add(balance3w0);
+            expect(await votingEscrow.veSupplyPerWeek(w0)).to.closeToBn(supply0, 30);
+
+            const w1 = startWeek + WEEK;
+            const balance2w1 = amount2.mul(WEEK).div(MAX_TIME);
+            const balance3w1 = amount3.mul(WEEK * 7).div(MAX_TIME);
+            const supply1 = balance2w1.add(balance3w1);
+            expect(await votingEscrow.veSupplyPerWeek(w1)).to.closeToBn(supply1, 30);
+
+            const w2 = startWeek + WEEK * 2;
+            const supply2 = amount3.mul(WEEK * 6).div(MAX_TIME);
+            expect(await votingEscrow.veSupplyPerWeek(w2)).to.closeToBn(supply2, 30);
+        });
+
+        it("Reproduce rounding errors", async function () {
+            await votingEscrow.createLock(1, startWeek + WEEK * 10);
+            // Both account balance and total supply are rounded down when computed from scratch.
+            expect(await votingEscrow.balanceOfAtTimestamp(addr1, startWeek)).to.equal(0);
+            expect(await votingEscrow.totalSupplyAtTimestamp(startWeek)).to.equal(0);
+            // Incremental updated total supply is rounded up.
+            expect(await votingEscrow.nextWeekSupply()).to.equal(1);
+            expect(await votingEscrow.totalSupply()).to.equal(1);
+
+            // The rounding error is accumulated.
+            await votingEscrow.connect(user2).createLock(1, startWeek + WEEK * 10);
+            expect(await votingEscrow.totalSupplyAtTimestamp(startWeek)).to.equal(0);
+            expect(await votingEscrow.totalLocked()).to.equal(2);
+            expect(await votingEscrow.nextWeekSupply()).to.equal(2);
+            expect(await votingEscrow.totalSupply()).to.equal(2);
+
+            // The rounding error persists over weeks.
+            await advanceBlockAtTime(startWeek + WEEK * 5);
+            await votingEscrow.connect(user3).createLock(1, startWeek + WEEK * 10);
+            expect(await votingEscrow.totalSupplyAtTimestamp(startWeek + WEEK * 6)).to.equal(0);
+            expect(await votingEscrow.totalLocked()).to.equal(3);
+            expect(await votingEscrow.nextWeekSupply()).to.equal(3);
+            expect(await votingEscrow.totalSupply()).to.equal(3);
+
+            // The rounding error persists even after all Chess unlocked.
+            await advanceBlockAtTime(startWeek + WEEK * 20);
+            await votingEscrow.withdraw();
+            await votingEscrow.createLock(1, startWeek + WEEK * 30);
+            expect(await votingEscrow.totalSupplyAtTimestamp(startWeek + WEEK * 21)).to.equal(0);
+            expect(await votingEscrow.totalLocked()).to.equal(1);
+            expect(await votingEscrow.nextWeekSupply()).to.equal(4);
+            expect(await votingEscrow.totalSupply()).to.equal(4);
+        });
+
+        it("Should fix rounding errors in the same week", async function () {
+            await votingEscrow.createLock(1, startWeek + WEEK * 10);
+            await votingEscrow.connect(user2).createLock(1, startWeek + WEEK * 10);
+            await votingEscrow.connect(user3).createLock(1, startWeek + WEEK * 10);
+            expect(await votingEscrow.nextWeekSupply()).to.equal(3);
+            expect(await votingEscrow.totalSupply()).to.equal(3);
+            await votingEscrow.calibrateSupply();
+            expect(await votingEscrow.nextWeekSupply()).to.equal(0);
+            expect(await votingEscrow.totalSupply()).to.equal(0);
+        });
+
+        it("Should fix rounding errors after some weeks", async function () {
+            await votingEscrow.createLock(1, startWeek + WEEK * 10);
+            await votingEscrow.connect(user2).createLock(1, startWeek + WEEK * 30);
+            await votingEscrow.connect(user3).createLock(1, startWeek + WEEK * 30);
+            await advanceBlockAtTime(startWeek + WEEK * 15);
+            expect(await votingEscrow.nextWeekSupply()).to.equal(3);
+            expect(await votingEscrow.totalSupply()).to.equal(3);
+            await votingEscrow.calibrateSupply();
+            expect(await votingEscrow.nextWeekSupply()).to.equal(0);
+            expect(await votingEscrow.totalSupply()).to.equal(0);
+
+            // The rounding error is accumulated again.
+            await votingEscrow.withdraw();
+            await votingEscrow.createLock(1, startWeek + WEEK * 30);
+            expect(await votingEscrow.nextWeekSupply()).to.equal(1);
+            expect(await votingEscrow.totalSupply()).to.equal(1);
         });
     });
 
