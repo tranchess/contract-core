@@ -67,6 +67,12 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     });
 
     console.log();
+    console.log("[+] Deploying address whitelist");
+    await hre.run("deploy_address_whitelist", {
+        addresses: deployer.address + "," + ethers.constants.AddressZero,
+    });
+
+    console.log();
     console.log("[+] Deploying implementation contracts (again)");
     await hre.run("deploy_impl", {
         governance: "latest",
