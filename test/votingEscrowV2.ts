@@ -129,7 +129,7 @@ describe("VotingEscrowV2", function () {
             await expect(votingEscrow.initialize("", "", MAX_TIME)).to.be.revertedWith(
                 "Initializable: contract is already initialized"
             );
-            await expect(votingEscrow.initializeV2("", "")).to.be.reverted;
+            await expect(votingEscrow.initializeV2(owner.address, "", "")).to.be.reverted;
         });
 
         it("Should revert if exceeding max time", async function () {

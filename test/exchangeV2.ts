@@ -1972,7 +1972,7 @@ describe("ExchangeV2", function () {
 
         it("Should revert if initialized again", async function () {
             await expect(exchange.initialize()).to.be.reverted;
-            await expect(exchange.initializeV2()).to.be.reverted;
+            await expect(exchange.initializeV2(owner.address)).to.be.reverted;
         });
 
         it("Should check quote decimal places", async function () {
