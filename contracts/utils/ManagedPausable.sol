@@ -21,16 +21,19 @@ abstract contract ManagedPausable {
 
     event PauserRoleTransferred(address indexed previousPauser, address indexed newPauser);
 
-    bool private _initialized;
+    uint256 private constant FALSE = 0;
+    uint256 private constant TRUE = 1;
 
-    bool private _paused;
+    uint256 private _initialized;
+
+    uint256 private _paused;
 
     address private _pauser;
 
     function _initializeManagedPausable() internal {
-        require(!_initialized);
-        _initialized = true;
-        _paused = false;
+        require(_initialized == FALSE);
+        _initialized = TRUE;
+        _paused = FALSE;
         _pauser = msg.sender;
     }
 
@@ -38,7 +41,7 @@ abstract contract ManagedPausable {
      * @dev Returns true if the contract is paused, and false otherwise.
      */
     function paused() public view returns (bool) {
-        return _paused;
+        return _paused != FALSE;
     }
 
     function pauser() public view returns (address) {
@@ -69,7 +72,7 @@ abstract contract ManagedPausable {
      * - The contract must not be paused.
      */
     modifier whenNotPaused() {
-        require(!_paused, "Pausable: paused");
+        require(_paused == FALSE, "Pausable: paused");
         _;
     }
 
@@ -81,7 +84,7 @@ abstract contract ManagedPausable {
      * - The contract must be paused.
      */
     modifier whenPaused() {
-        require(_paused, "Pausable: not paused");
+        require(_paused != FALSE, "Pausable: not paused");
         _;
     }
 
@@ -93,7 +96,7 @@ abstract contract ManagedPausable {
      * - The contract must not be paused.
      */
     function pause() external onlyPauser whenNotPaused {
-        _paused = true;
+        _paused = TRUE;
         emit Paused(msg.sender);
     }
 
@@ -105,7 +108,7 @@ abstract contract ManagedPausable {
      * - The contract must be paused.
      */
     function unpause() external onlyPauser whenPaused {
-        _paused = false;
+        _paused = FALSE;
         emit Unpaused(msg.sender);
     }
 }
