@@ -95,7 +95,7 @@ contract VotingEscrowV2 is
         __Ownable_init();
         require(maxTimeAllowed_ <= maxTime, "Cannot exceed max time");
         maxTimeAllowed = maxTimeAllowed_;
-        initializeV2(name_, symbol_);
+        initializeV2(msg.sender, name_, symbol_);
     }
 
     /// @dev Initialize the part added in V2. If this contract is upgraded from the previous
@@ -103,8 +103,12 @@ contract VotingEscrowV2 is
     ///      in the `data` argument.
     ///
     ///      In the previous version, name and symbol were not correctly initialized via proxy.
-    function initializeV2(string memory name_, string memory symbol_) public {
-        _initializeManagedPausable();
+    function initializeV2(
+        address pauser_,
+        string memory name_,
+        string memory symbol_
+    ) public {
+        _initializeManagedPausable(pauser_);
         require(bytes(name).length == 0 && bytes(symbol).length == 0);
         name = name_;
         symbol = symbol_;

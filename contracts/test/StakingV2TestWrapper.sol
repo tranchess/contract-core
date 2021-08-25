@@ -26,7 +26,7 @@ contract StakingV2TestWrapper is StakingV2 {
 
     function initialize() external {
         _initializeStaking();
-        _initializeStakingV2();
+        _initializeStakingV2(msg.sender);
     }
 
     function tradeAvailable(

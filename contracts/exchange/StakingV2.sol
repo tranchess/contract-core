@@ -134,8 +134,8 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
         _rate = IChessSchedule(chessSchedule).getRate(block.timestamp);
     }
 
-    function _initializeStakingV2() internal {
-        _initializeManagedPausable();
+    function _initializeStakingV2(address pauser_) internal {
+        _initializeManagedPausable(pauser_);
     }
 
     /// @notice Return weight of given balance with respect to rewards.

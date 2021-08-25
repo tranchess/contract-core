@@ -264,14 +264,14 @@ contract ExchangeV2 is ExchangeRoles, StakingV2 {
     ///      constructor (via the `_data` argument).
     function initialize() external {
         _initializeStaking();
-        initializeV2();
+        initializeV2(msg.sender);
     }
 
     /// @dev Initialize the part added in V2. If this contract is upgraded from the previous
     ///      version, call `upgradeToAndCall` of the proxy and put a call to this function
     ///      in the `data` argument.
-    function initializeV2() public {
-        _initializeStakingV2();
+    function initializeV2(address pauser_) public {
+        _initializeStakingV2(pauser_);
     }
 
     /// @notice Return end timestamp of the epoch containing a given timestamp.

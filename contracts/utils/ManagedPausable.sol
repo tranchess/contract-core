@@ -30,11 +30,11 @@ abstract contract ManagedPausable {
 
     address private _pauser;
 
-    function _initializeManagedPausable() internal {
+    function _initializeManagedPausable(address pauser_) internal {
         require(_initialized == FALSE);
         _initialized = TRUE;
         _paused = FALSE;
-        _pauser = msg.sender;
+        _pauser = pauser_;
     }
 
     /**
