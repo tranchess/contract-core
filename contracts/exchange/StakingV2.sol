@@ -255,38 +255,48 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
     function workingSupply() external view returns (uint256) {
         uint256 version = _totalSupplyVersion;
         uint256 rebalanceSize = _fundRebalanceSize();
-        if (version < rebalanceSize) {
-            (uint256 totalSupplyM, uint256 totalSupplyA, uint256 totalSupplyB) =
-                _fundBatchRebalance(
-                    _totalSupplies[TRANCHE_M],
-                    _totalSupplies[TRANCHE_A],
-                    _totalSupplies[TRANCHE_B],
+        uint256 workingSupply_ = _workingSupply; // gas saver
+        if (version < rebalanceSize || workingSupply_ == 0) {
+            uint256 totalSupplyM = _totalSupplies[TRANCHE_M];
+            uint256 totalSupplyA = _totalSupplies[TRANCHE_A];
+            uint256 totalSupplyB = _totalSupplies[TRANCHE_B];
+            if (version < rebalanceSize) {
+                (totalSupplyM, totalSupplyA, totalSupplyB) = _fundBatchRebalance(
+                    totalSupplyM,
+                    totalSupplyA,
+                    totalSupplyB,
                     version,
                     rebalanceSize
                 );
+            }
             return weightedBalance(totalSupplyM, totalSupplyA, totalSupplyB);
         } else {
-            return _workingSupply;
+            return workingSupply_;
         }
     }
 
     function workingBalanceOf(address account) external view returns (uint256) {
         uint256 version = _balanceVersions[account];
         uint256 rebalanceSize = _fundRebalanceSize();
-        if (version < rebalanceSize) {
+        uint256 workingBalance = _workingBalances[account]; // gas saver
+        if (version < rebalanceSize || workingBalance == 0) {
             uint256[TRANCHE_COUNT] storage available = _availableBalances[account];
             uint256[TRANCHE_COUNT] storage locked = _lockedBalances[account];
-            (uint256 amountM, uint256 amountA, uint256 amountB) =
-                _fundBatchRebalance(
-                    available[TRANCHE_M].add(locked[TRANCHE_M]),
-                    available[TRANCHE_A].add(locked[TRANCHE_A]),
-                    available[TRANCHE_B].add(locked[TRANCHE_B]),
+            uint256 amountM = available[TRANCHE_M].add(locked[TRANCHE_M]);
+            uint256 amountA = available[TRANCHE_A].add(locked[TRANCHE_A]);
+            uint256 amountB = available[TRANCHE_B].add(locked[TRANCHE_B]);
+            if (version < rebalanceSize) {
+                (amountM, amountA, amountB) = _fundBatchRebalance(
+                    amountM,
+                    amountA,
+                    amountB,
                     version,
                     rebalanceSize
                 );
+            }
             return weightedBalance(amountM, amountA, amountB);
         } else {
-            return _workingBalances[account];
+            return workingBalance;
         }
     }
 
