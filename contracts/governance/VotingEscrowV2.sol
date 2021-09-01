@@ -112,6 +112,19 @@ contract VotingEscrowV2 is
         require(bytes(name).length == 0 && bytes(symbol).length == 0);
         name = name_;
         symbol = symbol_;
+
+        // Initialize total locked, nextWeekSupply and checkpointWeek
+        uint256 weekCursor = _endOfWeek(block.timestamp);
+        uint256 totalLocked_ = 0;
+        uint256 nextWeekSupply_ = 0;
+        for (; weekCursor <= block.timestamp + maxTime; weekCursor += 1 weeks) {
+            totalLocked_ = totalLocked_.add(scheduledUnlock[weekCursor]);
+            nextWeekSupply_ = nextWeekSupply_.add(
+                (scheduledUnlock[weekCursor].mul(weekCursor - block.timestamp)) / maxTime
+            );
+        }
+        totalLocked = totalLocked_;
+        nextWeekSupply = nextWeekSupply_;
         checkpointWeek = _endOfWeek(block.timestamp) - 1 weeks;
     }
 
