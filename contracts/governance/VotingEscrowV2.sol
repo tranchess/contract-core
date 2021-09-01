@@ -113,19 +113,23 @@ contract VotingEscrowV2 is
         name = name_;
         symbol = symbol_;
 
-        // Initialize total locked, nextWeekSupply and checkpointWeek
-        uint256 weekCursor = _endOfWeek(block.timestamp);
+        // Initialize totalLocked, nextWeekSupply and checkpointWeek
+        uint256 nextWeek = _endOfWeek(block.timestamp);
         uint256 totalLocked_ = 0;
         uint256 nextWeekSupply_ = 0;
-        for (; weekCursor <= block.timestamp + maxTime; weekCursor += 1 weeks) {
+        for (
+            uint256 weekCursor = nextWeek;
+            weekCursor <= nextWeek + maxTime;
+            weekCursor += 1 weeks
+        ) {
             totalLocked_ = totalLocked_.add(scheduledUnlock[weekCursor]);
             nextWeekSupply_ = nextWeekSupply_.add(
-                (scheduledUnlock[weekCursor].mul(weekCursor - block.timestamp)) / maxTime
+                (scheduledUnlock[weekCursor].mul(weekCursor - nextWeek)) / maxTime
             );
         }
         totalLocked = totalLocked_;
         nextWeekSupply = nextWeekSupply_;
-        checkpointWeek = _endOfWeek(block.timestamp) - 1 weeks;
+        checkpointWeek = nextWeek - 1 weeks;
     }
 
     function getTimestampDropBelow(address account, uint256 threshold)
