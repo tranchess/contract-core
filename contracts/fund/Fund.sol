@@ -148,7 +148,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         require(underlyingDecimals_ <= 18, "Underlying decimals larger than 18");
         underlyingDecimalMultiplier = 10**(18 - underlyingDecimals_);
         require(
-            dailyProtocolFeeRate <= MAX_DAILY_PROTOCOL_FEE_RATE,
+            dailyProtocolFeeRate_ <= MAX_DAILY_PROTOCOL_FEE_RATE,
             "Exceed max protocol fee rate"
         );
         dailyProtocolFeeRate = dailyProtocolFeeRate_;
