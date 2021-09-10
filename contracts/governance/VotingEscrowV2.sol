@@ -289,7 +289,7 @@ contract VotingEscrowV2 is
         emit UnlockTimeIncreased(msg.sender, unlockTime);
     }
 
-    function withdraw() external nonReentrant whenNotPaused {
+    function withdraw() external nonReentrant {
         LockedBalance memory lockedBalance = locked[msg.sender];
         require(block.timestamp >= lockedBalance.unlockTime, "The lock is not expired");
         uint256 amount = uint256(lockedBalance.amount);
