@@ -351,6 +351,12 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
         uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(msg.sender, rebalanceSize);
+        _availableBalances[msg.sender][tranche] = _availableBalances[msg.sender][tranche].add(
+            amount
+        );
+        _totalSupplies[tranche] = _totalSupplies[tranche].add(amount);
+        _updateWorkingBalance(msg.sender);
+
         if (tranche == TRANCHE_M) {
             tokenM.safeTransferFrom(msg.sender, address(this), amount);
         } else if (tranche == TRANCHE_A) {
@@ -358,12 +364,6 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
         } else {
             tokenB.safeTransferFrom(msg.sender, address(this), amount);
         }
-        _availableBalances[msg.sender][tranche] = _availableBalances[msg.sender][tranche].add(
-            amount
-        );
-        _totalSupplies[tranche] = _totalSupplies[tranche].add(amount);
-
-        _updateWorkingBalance(msg.sender);
 
         emit Deposited(tranche, msg.sender, amount);
     }
@@ -387,6 +387,8 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
             "Insufficient balance to withdraw"
         );
         _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
+        _updateWorkingBalance(msg.sender);
+
         if (tranche == TRANCHE_M) {
             tokenM.safeTransfer(msg.sender, amount);
         } else if (tranche == TRANCHE_A) {
@@ -394,8 +396,6 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
         } else {
             tokenB.safeTransfer(msg.sender, amount);
         }
-
-        _updateWorkingBalance(msg.sender);
 
         emit Withdrawn(tranche, msg.sender, amount);
     }
@@ -596,8 +596,9 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
     ///      in order for the user to get all rewards till now.
     /// @param account Address of the account
     function _claim(address account) internal {
-        chessSchedule.mint(account, _claimableRewards[account]);
+        uint256 claimableReward = _claimableRewards[account];
         _claimableRewards[account] = 0;
+        chessSchedule.mint(account, claimableReward);
     }
 
     /// @dev Transform total supplies to the latest rebalance version and make a global reward checkpoint.
