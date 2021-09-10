@@ -688,6 +688,8 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             "ERC20: transfer amount exceeds balance"
         );
         _balances[recipient][tranche] = _balances[recipient][tranche].add(amount);
+
+        emit Transfer(tranche, sender, recipient, amount);
     }
 
     function _mint(
@@ -699,6 +701,8 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
 
         _totalSupplies[tranche] = _totalSupplies[tranche].add(amount);
         _balances[account][tranche] = _balances[account][tranche].add(amount);
+
+        emit Transfer(tranche, address(0), account, amount);
     }
 
     function _burn(
@@ -713,6 +717,8 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             "ERC20: burn amount exceeds balance"
         );
         _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
+
+        emit Transfer(tranche, account, address(0), amount);
     }
 
     function _approve(
@@ -725,6 +731,8 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         require(spender != address(0), "ERC20: approve to the zero address");
 
         _allowances[owner][spender][tranche] = amount;
+
+        emit Approval(tranche, owner, spender, amount);
     }
 
     /// @notice Settle the current trading day. Settlement includes the following changes
@@ -1021,6 +1029,8 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         balanceTuple[TRANCHE_M] = balanceM;
         balanceTuple[TRANCHE_A] = balanceA;
         balanceTuple[TRANCHE_B] = balanceB;
+
+        emit BalancesRebalanced(account, targetVersion, balanceM, balanceA, balanceB);
     }
 
     /// @dev Transform allowance to a given rebalance version, or to the latest version
@@ -1063,6 +1073,15 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         allowanceTuple[TRANCHE_M] = allowanceM;
         allowanceTuple[TRANCHE_A] = allowanceA;
         allowanceTuple[TRANCHE_B] = allowanceB;
+
+        emit AllowancesRebalanced(
+            owner,
+            spender,
+            targetVersion,
+            allowanceM,
+            allowanceA,
+            allowanceB
+        );
     }
 
     function _rebalanceAllowance(
