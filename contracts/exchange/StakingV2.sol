@@ -136,6 +136,12 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
 
     function _initializeStakingV2(address pauser_) internal {
         _initializeManagedPausable(pauser_);
+        // The contract was just upgraded from an old version without boosting
+        _workingSupply = weightedBalance(
+            _totalSupplies[TRANCHE_M],
+            _totalSupplies[TRANCHE_A],
+            _totalSupplies[TRANCHE_B]
+        );
     }
 
     /// @notice Return weight of given balance with respect to rewards.
@@ -255,23 +261,18 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
     function workingSupply() external view returns (uint256) {
         uint256 version = _totalSupplyVersion;
         uint256 rebalanceSize = _fundRebalanceSize();
-        uint256 workingSupply_ = _workingSupply; // gas saver
-        if (version < rebalanceSize || workingSupply_ == 0) {
-            uint256 totalSupplyM = _totalSupplies[TRANCHE_M];
-            uint256 totalSupplyA = _totalSupplies[TRANCHE_A];
-            uint256 totalSupplyB = _totalSupplies[TRANCHE_B];
-            if (version < rebalanceSize) {
-                (totalSupplyM, totalSupplyA, totalSupplyB) = _fundBatchRebalance(
-                    totalSupplyM,
-                    totalSupplyA,
-                    totalSupplyB,
+        if (version < rebalanceSize) {
+            (uint256 totalSupplyM, uint256 totalSupplyA, uint256 totalSupplyB) =
+                _fundBatchRebalance(
+                    _totalSupplies[TRANCHE_M],
+                    _totalSupplies[TRANCHE_A],
+                    _totalSupplies[TRANCHE_B],
                     version,
                     rebalanceSize
                 );
-            }
             return weightedBalance(totalSupplyM, totalSupplyA, totalSupplyB);
         } else {
-            return workingSupply_;
+            return _workingSupply;
         }
     }
 
@@ -624,13 +625,6 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
         uint256 totalSupplyA = _totalSupplies[TRANCHE_A];
         uint256 totalSupplyB = _totalSupplies[TRANCHE_B];
         uint256 weight = _workingSupply;
-        if (weight == 0) {
-            weight = weightedBalance(totalSupplyM, totalSupplyA, totalSupplyB);
-            if (weight > 0) {
-                // The contract was just upgraded from an old version without boosting
-                _workingSupply = weight;
-            }
-        }
         uint256 timestamp_ = timestamp; // avoid stack too deep
 
         for (uint256 i = 0; i < MAX_ITERATIONS && timestamp_ < block.timestamp; i++) {
