@@ -885,11 +885,11 @@ describe("VotingEscrowV2", function () {
             await votingEscrow.increaseUnlockTime(startWeek + WEEK * 2);
         });
 
-        it("Should pause withdraw()", async function () {
+        it("Should not pause withdraw()", async function () {
             await votingEscrow.createLock(parseEther("1"), startWeek + WEEK);
             await advanceBlockAtTime(startWeek + WEEK);
             await votingEscrow.connect(owner).pause();
-            await expect(votingEscrow.withdraw()).to.be.revertedWith("Pausable: paused");
+            await votingEscrow.withdraw();
             await votingEscrow.connect(owner).unpause();
             await votingEscrow.withdraw();
         });
