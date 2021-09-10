@@ -24,11 +24,11 @@ contract InterestRateBallot is IBallot, CoreUtility {
 
     uint256 private immutable _maxTime;
 
-    uint256 public stepSize = 0.02e18;
-    uint256 public minRange = 0;
-    uint256 public maxOption = 3;
+    uint256 public constant stepSize = 0.02e18;
+    uint256 public constant minRange = 0;
+    uint256 public constant maxOption = 3;
 
-    IVotingEscrow public votingEscrow;
+    IVotingEscrow public immutable votingEscrow;
 
     mapping(address => Voter) public voters;
 
@@ -38,10 +38,10 @@ contract InterestRateBallot is IBallot, CoreUtility {
 
     constructor(address votingEscrow_) public {
         votingEscrow = IVotingEscrow(votingEscrow_);
-        _maxTime = votingEscrow.maxTime();
+        _maxTime = IVotingEscrow(votingEscrow_).maxTime();
     }
 
-    function getWeight(uint256 index) public view returns (uint256) {
+    function getWeight(uint256 index) public pure returns (uint256) {
         uint256 delta = stepSize.mul(index);
         return minRange.add(delta);
     }
