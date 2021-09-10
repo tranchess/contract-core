@@ -12,6 +12,7 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "../utils/CoreUtility.sol";
 import "../utils/ManagedPausable.sol";
 import "../interfaces/IVotingEscrow.sol";
+import "../utils/ProxyUtility.sol";
 
 interface IAddressWhitelist {
     function check(address account) external view returns (bool);
@@ -26,7 +27,8 @@ contract VotingEscrowV2 is
     OwnableUpgradeable,
     ReentrancyGuard,
     CoreUtility,
-    ManagedPausable
+    ManagedPausable,
+    ProxyUtility
 {
     /// @dev Reserved storage slots for future base contract upgrades
     uint256[29] private _reservedSlots;
@@ -95,7 +97,7 @@ contract VotingEscrowV2 is
         __Ownable_init();
         require(maxTimeAllowed_ <= maxTime, "Cannot exceed max time");
         maxTimeAllowed = maxTimeAllowed_;
-        initializeV2(msg.sender, name_, symbol_);
+        _initializeV2(msg.sender, name_, symbol_);
     }
 
     /// @dev Initialize the part added in V2. If this contract is upgraded from the previous
@@ -107,7 +109,15 @@ contract VotingEscrowV2 is
         address pauser_,
         string memory name_,
         string memory symbol_
-    ) public {
+    ) external onlyProxyAdmin {
+        _initializeV2(pauser_, name_, symbol_);
+    }
+
+    function _initializeV2(
+        address pauser_,
+        string memory name_,
+        string memory symbol_
+    ) private {
         _initializeManagedPausable(pauser_);
         require(bytes(name).length == 0 && bytes(symbol).length == 0);
         name = name_;

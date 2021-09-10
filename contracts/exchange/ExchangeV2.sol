@@ -5,6 +5,7 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "../utils/SafeDecimalMath.sol";
+import "../utils/ProxyUtility.sol";
 
 import {Order, OrderQueue, LibOrderQueue} from "./LibOrderQueue.sol";
 import {
@@ -21,7 +22,7 @@ import "./StakingV2.sol";
 /// @title Tranchess's Exchange Contract
 /// @notice A decentralized exchange to match premium-discount orders and clear trades
 /// @author Tranchess
-contract ExchangeV2 is ExchangeRoles, StakingV2 {
+contract ExchangeV2 is ExchangeRoles, StakingV2, ProxyUtility {
     /// @dev Reserved storage slots for future base contract upgrades
     uint256[29] private _reservedSlots;
 
@@ -264,13 +265,17 @@ contract ExchangeV2 is ExchangeRoles, StakingV2 {
     ///      constructor (via the `_data` argument).
     function initialize() external {
         _initializeStaking();
-        initializeV2(msg.sender);
+        _initializeV2(msg.sender);
     }
 
     /// @dev Initialize the part added in V2. If this contract is upgraded from the previous
     ///      version, call `upgradeToAndCall` of the proxy and put a call to this function
     ///      in the `data` argument.
-    function initializeV2(address pauser_) public {
+    function initializeV2(address pauser_) external onlyProxyAdmin {
+        _initializeV2(pauser_);
+    }
+
+    function _initializeV2(address pauser_) private {
         _initializeStakingV2(pauser_);
     }
 
