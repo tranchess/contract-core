@@ -374,12 +374,12 @@ contract ExchangeV2 is ExchangeRoles, StakingV2 {
         );
         require(version == _fundRebalanceSize(), "Invalid version");
 
-        _transferQuoteFrom(msg.sender, quoteAmount);
-
         uint256 index = bids[version][tranche][pdLevel].append(msg.sender, quoteAmount, version);
         if (bestBids[version][tranche] < pdLevel) {
             bestBids[version][tranche] = pdLevel;
         }
+
+        _transferQuoteFrom(msg.sender, quoteAmount);
 
         emit BidOrderPlaced(msg.sender, tranche, pdLevel, quoteAmount, version, index);
     }
@@ -775,8 +775,8 @@ contract ExchangeV2 is ExchangeRoles, StakingV2 {
             totalTrade.frozenQuote > 0,
             "Nothing can be bought at the given premium-discount level"
         );
-        _transferQuoteFrom(msg.sender, totalTrade.frozenQuote);
         unsettledTrades[msg.sender][tranche][epoch].takerBuy.add(totalTrade);
+        _transferQuoteFrom(msg.sender, totalTrade.frozenQuote);
     }
 
     /// @dev Sell share

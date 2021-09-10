@@ -59,10 +59,9 @@ contract LiquidityStaking is ReentrancyGuard {
 
     function deposit(uint256 amount) external nonReentrant {
         userCheckpoint(msg.sender);
-
-        IERC20(stakedToken).safeTransferFrom(msg.sender, address(this), amount);
         totalStakes = totalStakes.add(amount);
         stakes[msg.sender] = stakes[msg.sender].add(amount);
+        IERC20(stakedToken).safeTransferFrom(msg.sender, address(this), amount);
     }
 
     function withdraw(uint256 amount) external nonReentrant {
@@ -82,15 +81,15 @@ contract LiquidityStaking is ReentrancyGuard {
     }
 
     function _withdraw(address account, uint256 amount) private {
-        IERC20(stakedToken).safeTransfer(account, amount);
         totalStakes = totalStakes.sub(amount, "Exceed staked balances");
         stakes[account] = stakes[account].sub(amount, "Exceed staked balances");
+        IERC20(stakedToken).safeTransfer(account, amount);
     }
 
     function _claimRewards(address account) private returns (uint256 rewards) {
         rewards = claimableRewards[account];
-        IERC20(rewardToken).safeTransfer(account, rewards);
         delete claimableRewards[account];
+        IERC20(rewardToken).safeTransfer(account, rewards);
     }
 
     function _checkpoint() private {
