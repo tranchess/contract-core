@@ -220,7 +220,7 @@ interface IFund {
         address indexed spender,
         uint256 version,
         uint256 allowanceM,
-        uint256 allwanceA,
+        uint256 allowanceA,
         uint256 allowanceB
     );
 }
