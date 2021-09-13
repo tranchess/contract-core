@@ -44,6 +44,10 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
     uint256 private constant REWARD_WEIGHT_B = 2;
     uint256 private constant REWARD_WEIGHT_M = 3;
     uint256 private constant MAX_BOOSTING_FACTOR = 3e18;
+    uint256 private constant MAX_BOOSTING_FACTOR_MINUS_ONE = MAX_BOOSTING_FACTOR - 1e18;
+
+    /// @dev Maximum fraction of veCHESS that can be used to boost Token M.
+    uint256 private constant MAX_BOOSTING_POWER_M = 0.5e18;
 
     IFund public immutable fund;
     IERC20 private immutable tokenM;
@@ -811,24 +815,35 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
             );
         uint256[TRANCHE_COUNT] storage available = _availableBalances[account];
         uint256[TRANCHE_COUNT] storage locked = _lockedBalances[account];
-        uint256 weightedUserBalance =
+        // Assume weightedBalance(x, 0, 0) always equal to x
+        uint256 weightedM = available[TRANCHE_M].add(locked[TRANCHE_M]);
+        uint256 weightedAB =
             weightedBalance(
-                available[TRANCHE_M].add(locked[TRANCHE_M]),
+                0,
                 available[TRANCHE_A].add(locked[TRANCHE_A]),
                 available[TRANCHE_B].add(locked[TRANCHE_B])
             );
 
-        uint256 newWorkingBalance = weightedUserBalance;
+        uint256 newWorkingBalance = weightedAB.add(weightedM);
         uint256 veProportion = _veSnapshots[account].veProportion;
         if (veProportion > 0 && _veSnapshots[account].veLocked.unlockTime > block.timestamp) {
-            newWorkingBalance = newWorkingBalance.add(
-                weightedSupply.multiplyDecimal(veProportion).multiplyDecimal(
-                    MAX_BOOSTING_FACTOR - 1e18
-                )
-            );
-            newWorkingBalance = newWorkingBalance.min(
-                weightedUserBalance.multiplyDecimal(MAX_BOOSTING_FACTOR)
-            );
+            uint256 boostingPower = weightedSupply.multiplyDecimal(veProportion);
+            if (boostingPower <= weightedAB) {
+                newWorkingBalance = newWorkingBalance.add(
+                    boostingPower.multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
+                );
+            } else if (boostingPower <= newWorkingBalance) {
+                uint256 boostingPowerM =
+                    (boostingPower - weightedAB).min(
+                        boostingPower.multiplyDecimal(MAX_BOOSTING_POWER_M)
+                    );
+                newWorkingBalance = weightedAB
+                    .multiplyDecimal(MAX_BOOSTING_FACTOR)
+                    .add(weightedM)
+                    .add(boostingPowerM.multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE));
+            } else {
+                newWorkingBalance = newWorkingBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
+            }
         }
 
         _workingSupply = _workingSupply.sub(_workingBalances[account]).add(newWorkingBalance);
