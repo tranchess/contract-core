@@ -63,25 +63,50 @@ const USER1_VE_PROPORTION = USER1_VE.mul(parseEther("1")).div(TOTAL_VE);
 const USER2_VE_PROPORTION = USER2_VE.mul(parseEther("1")).div(TOTAL_VE);
 
 function boostedWorkingBalance(
-    weightedBalance: BigNumber,
+    amountM: BigNumber,
+    amountA: BigNumber,
+    amountB: BigNumber,
     weightedSupply: BigNumber,
     veProportion: BigNumber
 ) {
     const e18 = parseEther("1");
-    const upperBound = weightedBalance.mul(MAX_BOOSTING_FACTOR).div(e18);
-    const workingBalance = weightedBalance.add(
+    const weightedAB = amountA
+        .mul(REWARD_WEIGHT_A)
+        .add(amountB.mul(REWARD_WEIGHT_B))
+        .div(REWARD_WEIGHT_M);
+    const upperBoundAB = weightedAB.mul(MAX_BOOSTING_FACTOR).div(e18);
+    let workingAB = weightedAB.add(
         weightedSupply.mul(veProportion).div(e18).mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18)
     );
-    return upperBound.gt(workingBalance) ? workingBalance : upperBound;
+    let workingM = amountM;
+    if (upperBoundAB.lte(workingAB)) {
+        const excessiveBoosting = workingAB
+            .sub(upperBoundAB)
+            .mul(e18)
+            .div(MAX_BOOSTING_FACTOR.sub(e18));
+        workingAB = upperBoundAB;
+        const upperBoundBoostingPowerM = weightedSupply.mul(veProportion).div(e18).div(2);
+        const boostingPowerM = excessiveBoosting.lte(upperBoundBoostingPowerM)
+            ? excessiveBoosting
+            : upperBoundBoostingPowerM;
+        workingM = amountM.add(boostingPowerM.mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18));
+        const upperBoundM = amountM.mul(MAX_BOOSTING_FACTOR);
+        workingM = workingM.lte(upperBoundM) ? workingM : upperBoundM;
+    }
+    return workingAB.add(workingM);
 }
 
 const USER1_WORKING_BALANCE = boostedWorkingBalance(
-    USER1_WEIGHT,
+    USER1_M,
+    USER1_A,
+    USER1_B,
     TOTAL_WEIGHT,
     USER1_VE_PROPORTION
 );
 const USER2_WORKING_BALANCE = boostedWorkingBalance(
-    USER2_WEIGHT,
+    USER2_M,
+    USER2_A,
+    USER2_B,
     TOTAL_WEIGHT,
     USER2_VE_PROPORTION
 );
@@ -533,7 +558,13 @@ describe("StakingV2", function () {
             await staking.syncWithVotingEscrow(addr1);
             const workingBalance = await staking.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
-                boostedWorkingBalance(USER1_WEIGHT, TOTAL_WEIGHT.mul(2), USER1_VE_PROPORTION)
+                boostedWorkingBalance(
+                    USER1_M,
+                    USER1_A,
+                    USER1_B,
+                    TOTAL_WEIGHT.mul(2),
+                    USER1_VE_PROPORTION
+                )
             );
             expect(await staking.workingSupply()).to.equal(
                 workingBalance.add(USER2_WEIGHT).add(TOTAL_WEIGHT)
@@ -555,7 +586,13 @@ describe("StakingV2", function () {
             );
             const workingBalance = await staking.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
-                boostedWorkingBalance(USER1_WEIGHT, TOTAL_WEIGHT, veSnapshot.veProportion)
+                boostedWorkingBalance(
+                    USER1_M,
+                    USER1_A,
+                    USER1_B,
+                    TOTAL_WEIGHT,
+                    veSnapshot.veProportion
+                )
             );
             expect(await staking.workingSupply()).to.equal(workingBalance.add(USER2_WEIGHT));
         });
@@ -575,7 +612,13 @@ describe("StakingV2", function () {
             );
             const workingBalance = await staking.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
-                boostedWorkingBalance(USER1_WEIGHT, TOTAL_WEIGHT, veSnapshot.veProportion)
+                boostedWorkingBalance(
+                    USER1_M,
+                    USER1_A,
+                    USER1_B,
+                    TOTAL_WEIGHT,
+                    veSnapshot.veProportion
+                )
             );
             expect(await staking.workingSupply()).to.equal(workingBalance.add(USER2_WEIGHT));
         });
@@ -606,7 +649,9 @@ describe("StakingV2", function () {
             const workingBalance = await staking.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
                 boostedWorkingBalance(
-                    USER1_WEIGHT.add(USER1_M),
+                    USER1_M.add(USER1_M),
+                    USER1_A,
+                    USER1_B,
                     TOTAL_WEIGHT.add(USER1_M),
                     USER1_VE_PROPORTION
                 )
@@ -620,12 +665,44 @@ describe("StakingV2", function () {
             const workingBalance = await staking.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
                 boostedWorkingBalance(
-                    USER1_WEIGHT.sub(USER1_M),
+                    BigNumber.from(0),
+                    USER1_A,
+                    USER1_B,
                     TOTAL_WEIGHT.sub(USER1_M),
                     USER1_VE_PROPORTION
                 )
             );
             expect(await staking.workingSupply()).to.equal(workingBalance.add(USER2_WEIGHT));
+        });
+
+        it("Should update working balance when reaching max boosting power of M", async function () {
+            await shareA.mock.transfer.returns(true);
+            await shareA.mock.transferFrom.returns(true);
+            await staking.connect(user2).deposit(TRANCHE_A, USER1_A); // To keep weighted supply unchanged
+            await staking.withdraw(TRANCHE_A, USER1_A);
+            expect(await staking.workingBalanceOf(addr1)).to.equal(
+                boostedWorkingBalance(
+                    USER1_M,
+                    BigNumber.from(0),
+                    USER1_B,
+                    TOTAL_WEIGHT,
+                    USER1_VE_PROPORTION
+                )
+            );
+
+            await shareB.mock.transfer.returns(true);
+            await shareB.mock.transferFrom.returns(true);
+            await staking.connect(user2).deposit(TRANCHE_B, USER1_B); // To keep weighted supply unchanged
+            await staking.withdraw(TRANCHE_B, USER1_B);
+            expect(await staking.workingBalanceOf(addr1)).to.equal(
+                boostedWorkingBalance(
+                    USER1_M,
+                    BigNumber.from(0),
+                    BigNumber.from(0),
+                    TOTAL_WEIGHT,
+                    USER1_VE_PROPORTION
+                )
+            );
         });
 
         it("Should not update working balance on refreshBalance()", async function () {
@@ -647,7 +724,9 @@ describe("StakingV2", function () {
             const workingBalance = await staking.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
                 boostedWorkingBalance(
-                    USER1_WEIGHT.sub(USER1_M),
+                    BigNumber.from(0),
+                    USER1_A,
+                    USER1_B,
                     TOTAL_WEIGHT.sub(USER1_M),
                     USER1_VE_PROPORTION
                 )
@@ -660,7 +739,9 @@ describe("StakingV2", function () {
             const workingBalance = await staking.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
                 boostedWorkingBalance(
-                    USER1_WEIGHT.mul(2),
+                    USER1_M.mul(2),
+                    USER1_A.mul(2),
+                    USER1_B.mul(2),
                     TOTAL_WEIGHT.add(USER1_WEIGHT),
                     USER1_VE_PROPORTION
                 )
@@ -687,7 +768,9 @@ describe("StakingV2", function () {
             const workingBalance = await staking.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
                 boostedWorkingBalance(
-                    USER1_WEIGHT.sub(USER1_M),
+                    BigNumber.from(0),
+                    USER1_A,
+                    USER1_B,
                     TOTAL_WEIGHT.sub(USER1_M),
                     USER1_VE_PROPORTION
                 )
