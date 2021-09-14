@@ -675,6 +675,36 @@ describe("StakingV2", function () {
             expect(await staking.workingSupply()).to.equal(workingBalance.add(USER2_WEIGHT));
         });
 
+        it("Should update working balance when reaching max boosting power of M", async function () {
+            await shareA.mock.transfer.returns(true);
+            await shareA.mock.transferFrom.returns(true);
+            await staking.connect(user2).deposit(TRANCHE_A, USER1_A); // To keep weighted supply unchanged
+            await staking.withdraw(TRANCHE_A, USER1_A);
+            expect(await staking.workingBalanceOf(addr1)).to.equal(
+                boostedWorkingBalance(
+                    USER1_M,
+                    BigNumber.from(0),
+                    USER1_B,
+                    TOTAL_WEIGHT,
+                    USER1_VE_PROPORTION
+                )
+            );
+
+            await shareB.mock.transfer.returns(true);
+            await shareB.mock.transferFrom.returns(true);
+            await staking.connect(user2).deposit(TRANCHE_B, USER1_B); // To keep weighted supply unchanged
+            await staking.withdraw(TRANCHE_B, USER1_B);
+            expect(await staking.workingBalanceOf(addr1)).to.equal(
+                boostedWorkingBalance(
+                    USER1_M,
+                    BigNumber.from(0),
+                    BigNumber.from(0),
+                    TOTAL_WEIGHT,
+                    USER1_VE_PROPORTION
+                )
+            );
+        });
+
         it("Should not update working balance on refreshBalance()", async function () {
             await staking.refreshBalance(addr1, 0);
             expect(await staking.workingBalanceOf(addr1)).to.equal(USER1_WORKING_BALANCE);
