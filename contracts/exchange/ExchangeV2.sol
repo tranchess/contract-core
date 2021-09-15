@@ -178,15 +178,15 @@ contract ExchangeV2 is ExchangeRoles, StakingV2, ProxyUtility {
 
     uint256 private constant EPOCH = 30 minutes; // An exchange epoch is 30 minutes long
 
-    /// @dev Maker reserves 110% of the asset they want to trade, which would stop
+    /// @dev Maker reserves 105% of Token M they want to trade, which would stop
     ///      losses for makers when the net asset values turn out volatile
     uint256 private constant MAKER_RESERVE_RATIO_M = 1.05e18;
 
-    /// @dev Maker reserves 110% of the asset they want to trade, which would stop
+    /// @dev Maker reserves 100.1% of Token A they want to trade, which would stop
     ///      losses for makers when the net asset values turn out volatile
     uint256 private constant MAKER_RESERVE_RATIO_A = 1.001e18;
 
-    /// @dev Maker reserves 110% of the asset they want to trade, which would stop
+    /// @dev Maker reserves 110% of Token B they want to trade, which would stop
     ///      losses for makers when the net asset values turn out volatile
     uint256 private constant MAKER_RESERVE_RATIO_B = 1.1e18;
 
