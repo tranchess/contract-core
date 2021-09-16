@@ -1579,10 +1579,10 @@ describe("ExchangeV2", function () {
             await f.exchange.connect(u3).placeAsk(TRANCHE_B, 41, parseEther("1"), 0);
             await f.fund.mock.extrapolateNav.returns(0, 0, parseEther("1"));
             // Buy something before user3's orders expire
-            advanceBlockAtTime(f.startEpoch + EPOCH * 9);
+            await advanceBlockAtTime(f.startEpoch + EPOCH * 9);
             await f.exchange.buyB(0, 41, frozenUsdc);
             // Buy something in the same epoch after user3's orders expire
-            advanceBlockAtTime(f.startEpoch + EPOCH * 9.5);
+            await advanceBlockAtTime(f.startEpoch + EPOCH * 9.5);
             await f.exchange.buyB(0, 41, 100);
             return f;
         }
@@ -1677,10 +1677,10 @@ describe("ExchangeV2", function () {
             await f.exchange.connect(u3).placeBid(TRANCHE_A, 41, parseEther("1"), 0);
             await f.fund.mock.extrapolateNav.returns(0, parseEther("1"), 0);
             // Sell something before user3's orders expire
-            advanceBlockAtTime(f.startEpoch + EPOCH * 9);
+            await advanceBlockAtTime(f.startEpoch + EPOCH * 9);
             await f.exchange.sellA(0, 41, frozenA);
             // Sell something in the same epoch after user3's orders expire
-            advanceBlockAtTime(f.startEpoch + EPOCH * 9.5);
+            await advanceBlockAtTime(f.startEpoch + EPOCH * 9.5);
             await f.exchange.sellA(0, 41, 100);
             return f;
         }
@@ -1781,7 +1781,7 @@ describe("ExchangeV2", function () {
             await fund.mock.doRebalance
                 .withArgs(USER2_M, USER2_A, USER2_B, 0)
                 .returns(USER2_M, USER2_A, USER2_B);
-            advanceBlockAtTime(startEpoch + EPOCH * 9);
+            await advanceBlockAtTime(startEpoch + EPOCH * 9);
         });
 
         it("Should rebalance on cancellation", async function () {
@@ -1789,7 +1789,7 @@ describe("ExchangeV2", function () {
             await exchange.placeAsk(TRANCHE_A, 41, parseEther("2"), 1);
 
             // Cancel the first order after two rebalances
-            advanceBlockAtTime(startEpoch + EPOCH * 30);
+            await advanceBlockAtTime(startEpoch + EPOCH * 30);
             await fund.mock.getRebalanceSize.returns(3);
             await expect(() => exchange.cancelAsk(1, TRANCHE_A, 41, 1)).to.callMocks(
                 {
@@ -1838,7 +1838,7 @@ describe("ExchangeV2", function () {
             await exchange.buyA(1, 41, frozenUsdc);
 
             // Settle the taker's trade after two rebalances
-            advanceBlockAtTime(startEpoch + EPOCH * 30);
+            await advanceBlockAtTime(startEpoch + EPOCH * 30);
             await fund.mock.getRebalanceSize.returns(3);
             await fund.mock.doRebalance
                 .withArgs(TOTAL_M, TOTAL_A.sub(reservedA), TOTAL_B, 1)
@@ -1903,7 +1903,7 @@ describe("ExchangeV2", function () {
             await exchange.connect(user2).placeAsk(TRANCHE_A, 45, parseEther("1"), 1);
             await exchange.connect(user2).placeBid(TRANCHE_A, 37, parseEther("1"), 1);
 
-            advanceBlockAtTime(startEpoch + EPOCH * 30);
+            await advanceBlockAtTime(startEpoch + EPOCH * 30);
             await fund.mock.getRebalanceSize.returns(3);
             await expect(exchange.buyA(1, 81, 100)).to.be.revertedWith("Invalid version");
             await expect(exchange.sellA(1, 1, 100)).to.be.revertedWith("Invalid version");

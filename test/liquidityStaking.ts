@@ -146,7 +146,7 @@ describe("Staking", function () {
 
             await staking.connect(user1).deposit(USER1_AMOUNT);
             await staking.connect(user2).deposit(USER2_AMOUNT);
-            advanceBlockAtTime(startTimestamp + 10);
+            await advanceBlockAtTime(startTimestamp + 10);
             await staking.userCheckpoint(addr1);
             let currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
 
@@ -190,10 +190,10 @@ describe("Staking", function () {
             await setAutomine(false);
             await staking.connect(user1).deposit(USER1_AMOUNT);
             await staking.connect(user2).deposit(USER2_AMOUNT);
-            advanceBlockAtTime(startTimestamp);
+            await advanceBlockAtTime(startTimestamp);
             await setAutomine(true);
 
-            advanceBlockAtTime(startTimestamp + WEEK);
+            await advanceBlockAtTime(startTimestamp + WEEK);
             await staking.userCheckpoint(addr1);
             const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
 
@@ -222,7 +222,7 @@ describe("Staking", function () {
             await staking.connect(user1).deposit(USER1_AMOUNT);
             await staking.connect(user2).deposit(USER2_AMOUNT);
 
-            advanceBlockAtTime(startTimestamp + 11 * WEEK);
+            await advanceBlockAtTime(startTimestamp + 11 * WEEK);
             await staking.userCheckpoint(addr1);
             await staking.userCheckpoint(addr2);
 
@@ -268,7 +268,7 @@ describe("Staking", function () {
             const USER2_AMOUNT = parseEther("10");
             const TOTAL_AMOUNT = USER1_AMOUNT.add(USER2_AMOUNT);
 
-            advanceBlockAtTime(startTimestamp + 10);
+            await advanceBlockAtTime(startTimestamp + 10);
             await staking.connect(user1).withdraw(parseEther("10"));
             const currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
 
