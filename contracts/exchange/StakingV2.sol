@@ -832,17 +832,15 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
                 newWorkingBalance = newWorkingBalance.add(
                     boostingPower.multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
                 );
-            } else if (boostingPower <= newWorkingBalance) {
+            } else {
                 uint256 boostingPowerM =
-                    (boostingPower - weightedAB).min(
-                        boostingPower.multiplyDecimal(MAX_BOOSTING_POWER_M)
-                    );
+                    (boostingPower - weightedAB)
+                        .min(boostingPower.multiplyDecimal(MAX_BOOSTING_POWER_M))
+                        .min(weightedM);
                 newWorkingBalance = weightedAB
                     .multiplyDecimal(MAX_BOOSTING_FACTOR)
                     .add(weightedM)
                     .add(boostingPowerM.multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE));
-            } else {
-                newWorkingBalance = newWorkingBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
             }
         }
 

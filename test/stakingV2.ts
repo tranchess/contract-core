@@ -670,6 +670,20 @@ describe("StakingV2", function () {
                     USER1_VE_PROPORTION
                 )
             );
+
+            await shareM.mock.transfer.returns(true);
+            await shareM.mock.transferFrom.returns(true);
+            await staking.connect(user2).deposit(TRANCHE_M, USER1_M.div(2)); // To keep weighted supply unchanged
+            await staking.withdraw(TRANCHE_M, USER1_M.div(2));
+            expect(await staking.workingBalanceOf(addr1)).to.equal(
+                boostedWorkingBalance(
+                    USER1_M.div(2),
+                    BigNumber.from(0),
+                    BigNumber.from(0),
+                    TOTAL_WEIGHT,
+                    USER1_VE_PROPORTION
+                )
+            );
         });
 
         it("Should not update working balance on refreshBalance()", async function () {
