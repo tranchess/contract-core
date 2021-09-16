@@ -17,10 +17,12 @@ import {
     setNextBlockTime,
     setAutomine,
 } from "./utils";
-
-const REWARD_WEIGHT_M = 3;
-const REWARD_WEIGHT_A = 4;
-const REWARD_WEIGHT_B = 2;
+import {
+    REWARD_WEIGHT_M,
+    REWARD_WEIGHT_A,
+    REWARD_WEIGHT_B,
+    boostedWorkingBalance,
+} from "./stakingV2Formula";
 
 // Initial balance:
 // User 1: 400 M + 120 A + 180 B
@@ -55,46 +57,11 @@ const TOTAL_WEIGHT = USER1_WEIGHT.add(USER2_WEIGHT);
 // User 1: 680 + 1000 * 30% * (3 - 1) = 1280
 // User 2: 320 * 3 = 960
 // Total : 1280 + 960 = 2240
-const MAX_BOOSTING_FACTOR = parseEther("3");
 const USER1_VE = parseEther("0.03");
 const USER2_VE = parseEther("0.07");
 const TOTAL_VE = parseEther("0.1");
 const USER1_VE_PROPORTION = USER1_VE.mul(parseEther("1")).div(TOTAL_VE);
 const USER2_VE_PROPORTION = USER2_VE.mul(parseEther("1")).div(TOTAL_VE);
-
-function boostedWorkingBalance(
-    amountM: BigNumber,
-    amountA: BigNumber,
-    amountB: BigNumber,
-    weightedSupply: BigNumber,
-    veProportion: BigNumber
-) {
-    const e18 = parseEther("1");
-    const weightedAB = amountA
-        .mul(REWARD_WEIGHT_A)
-        .add(amountB.mul(REWARD_WEIGHT_B))
-        .div(REWARD_WEIGHT_M);
-    const upperBoundAB = weightedAB.mul(MAX_BOOSTING_FACTOR).div(e18);
-    let workingAB = weightedAB.add(
-        weightedSupply.mul(veProportion).div(e18).mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18)
-    );
-    let workingM = amountM;
-    if (upperBoundAB.lte(workingAB)) {
-        const excessiveBoosting = workingAB
-            .sub(upperBoundAB)
-            .mul(e18)
-            .div(MAX_BOOSTING_FACTOR.sub(e18));
-        workingAB = upperBoundAB;
-        const upperBoundBoostingPowerM = weightedSupply.mul(veProportion).div(e18).div(2);
-        const boostingPowerM = excessiveBoosting.lte(upperBoundBoostingPowerM)
-            ? excessiveBoosting
-            : upperBoundBoostingPowerM;
-        workingM = amountM.add(boostingPowerM.mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18));
-        const upperBoundM = amountM.mul(MAX_BOOSTING_FACTOR);
-        workingM = workingM.lte(upperBoundM) ? workingM : upperBoundM;
-    }
-    return workingAB.add(workingM);
-}
 
 const USER1_WORKING_BALANCE = boostedWorkingBalance(
     USER1_M,
