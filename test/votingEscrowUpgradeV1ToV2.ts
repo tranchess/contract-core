@@ -166,7 +166,7 @@ describe("VotingEscrow upgrade V1 to V2", function () {
     afterEach(async function () {
         expect(await proxyAdmin.getProxyImplementation(votingEscrow.address)).to.equal(
             votingEscrowV2Impl.address,
-            "updateToV2() is not called in this test case"
+            "upgradeToV2() is not called in this test case"
         );
     });
 
