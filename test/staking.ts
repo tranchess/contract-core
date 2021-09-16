@@ -84,7 +84,7 @@ describe("Staking", function () {
         const [user1, user2, owner] = provider.getWallets();
 
         const startEpoch = (await ethers.provider.getBlock("latest")).timestamp;
-        advanceBlockAtTime(Math.floor(startEpoch / WEEK) * WEEK + WEEK);
+        await advanceBlockAtTime(Math.floor(startEpoch / WEEK) * WEEK + WEEK);
 
         const fund = await deployMockForName(owner, "IFund");
         const shareM = await deployMockForName(owner, "IERC20");

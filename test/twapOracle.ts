@@ -168,7 +168,7 @@ describe("TwapOracle", function () {
 
         it("Should reject data before the secondary delay expires", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY - 30);
+            await advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY - 30);
             await expect(callSecondary(t, PRICES)).to.be.revertedWith(
                 "Not ready for the secondary source"
             );
@@ -176,13 +176,13 @@ describe("TwapOracle", function () {
 
         it("Should accept data after the owner delay expires", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
+            await advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
             await callSecondary(t, PRICES);
         });
 
         it("Should reject unaligned timestamp", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
+            await advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
             await expect(callSecondary(t - 1, PRICES)).to.be.revertedWith("Unaligned timestamp");
         });
 
@@ -195,7 +195,7 @@ describe("TwapOracle", function () {
 
         it("Should accept min message count", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
+            await advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
             const prices = PRICES.slice();
             for (let i = MIN_MESSAGE_COUNT; i < BATCH_SIZE; i++) {
                 prices[i] = BigNumber.from(0);
@@ -205,7 +205,7 @@ describe("TwapOracle", function () {
 
         it("Should reject messages that are fewer than min count", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
+            await advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
             const prices = PRICES.slice();
             for (let i = MIN_MESSAGE_COUNT - 1; i < BATCH_SIZE; i++) {
                 prices[i] = BigNumber.from(0);
@@ -230,7 +230,7 @@ describe("TwapOracle", function () {
 
         it("Should reject data before the owner delay expires", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + OWNER_DELAY - 30);
+            await advanceBlockAtTime(t + OWNER_DELAY - 30);
             await expect(contract.updateTwapFromOwner(t, parsePrice("20000"))).to.be.revertedWith(
                 "Not ready for owner"
             );
@@ -238,7 +238,7 @@ describe("TwapOracle", function () {
 
         it("Should reject data following an uninitialized epoch", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + OWNER_DELAY);
+            await advanceBlockAtTime(t + OWNER_DELAY);
             await expect(contract.updateTwapFromOwner(t, parsePrice("20000"))).to.be.revertedWith(
                 "Owner can only update a epoch following an updated epoch"
             );
@@ -246,7 +246,7 @@ describe("TwapOracle", function () {
 
         it("Should reject data deviating too much", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + OWNER_DELAY);
+            await advanceBlockAtTime(t + OWNER_DELAY);
             await callPrimary(t - EPOCH, Array(BATCH_SIZE).fill(parsePrice("20000")));
             await expect(contract.updateTwapFromOwner(t, parsePrice("2000"))).to.be.revertedWith(
                 "Owner price deviates too much from the last price"
@@ -258,7 +258,7 @@ describe("TwapOracle", function () {
 
         it("Should reject data if not called by owner", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + OWNER_DELAY);
+            await advanceBlockAtTime(t + OWNER_DELAY);
             await callPrimary(t - EPOCH, PRICES);
             await expect(
                 contract.connect(sender).updateTwapFromOwner(t, parseEther("20000"))
@@ -267,7 +267,7 @@ describe("TwapOracle", function () {
 
         it("Should reject unaligned timestamp", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + OWNER_DELAY);
+            await advanceBlockAtTime(t + OWNER_DELAY);
             await callPrimary(t - EPOCH, PRICES);
             await expect(
                 contract.updateTwapFromOwner(t - 1, parseEther("20000"))
@@ -283,7 +283,7 @@ describe("TwapOracle", function () {
 
         it("Should accept valid data", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + OWNER_DELAY);
+            await advanceBlockAtTime(t + OWNER_DELAY);
             await callPrimary(t - EPOCH, PRICES);
             await contract.updateTwapFromOwner(t, parseEther("20000"));
         });
@@ -302,41 +302,41 @@ describe("TwapOracle", function () {
 
             it("Should return data from primary source after delay", async function () {
                 const t = startTimestamp + EPOCH * 10;
-                advanceBlockAtTime(t);
+                await advanceBlockAtTime(t);
                 await callPrimary(t, PRICES);
-                advanceBlockAtTime(t + PUBLISHING_DELAY - 30);
+                await advanceBlockAtTime(t + PUBLISHING_DELAY - 30);
                 expect(await contract.getTwap(t)).to.equal(0);
-                advanceBlockAtTime(t + PUBLISHING_DELAY);
+                await advanceBlockAtTime(t + PUBLISHING_DELAY);
                 expect(await contract.getTwap(t)).to.equal(PRICES_AVG);
             });
 
             it("Should return data from secondary source after delay", async function () {
                 const t = startTimestamp + EPOCH * 10;
-                advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
+                await advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
                 await callSecondary(t, PRICES);
-                advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY - 30);
+                await advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY - 30);
                 expect(await contract.getTwap(t)).to.equal(0);
-                advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY);
+                await advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY);
                 expect(await contract.getTwap(t)).to.equal(PRICES_AVG);
             });
 
             it("Should immediately return primary source data submitted late", async function () {
                 const t = startTimestamp + EPOCH * 10;
-                advanceBlockAtTime(t + EPOCH * 20);
+                await advanceBlockAtTime(t + EPOCH * 20);
                 await callPrimary(t, PRICES);
                 expect(await contract.getTwap(t)).to.equal(PRICES_AVG);
             });
 
             it("Should immediately return secondary source data submitted late", async function () {
                 const t = startTimestamp + EPOCH * 10;
-                advanceBlockAtTime(t + EPOCH * 20);
+                await advanceBlockAtTime(t + EPOCH * 20);
                 await callSecondary(t, PRICES);
                 expect(await contract.getTwap(t)).to.equal(PRICES_AVG);
             });
 
             it("Should immediately return data from owner", async function () {
                 const t = startTimestamp + EPOCH * 10;
-                advanceBlockAtTime(t + OWNER_DELAY);
+                await advanceBlockAtTime(t + OWNER_DELAY);
                 await callPrimary(t - EPOCH, PRICES);
                 await contract.connect(owner).updateTwapFromOwner(t, parseEther("20000"));
                 expect(await contract.getTwap(t)).to.equal(parseEther("20000"));
@@ -373,14 +373,14 @@ describe("TwapOracle", function () {
 
             it("Should compute TWAP from primary source", async function () {
                 const t = startTimestamp + EPOCH * 10;
-                advanceBlockAtTime(t + EPOCH * 20);
+                await advanceBlockAtTime(t + EPOCH * 20);
                 await callPrimary(t, pricesWithHoles);
                 expect(await contract.getTwap(t)).to.equal(avgWithHoles);
             });
 
             it("Should compute TWAP from secondary source", async function () {
                 const t = startTimestamp + EPOCH * 10;
-                advanceBlockAtTime(t + EPOCH * 20);
+                await advanceBlockAtTime(t + EPOCH * 20);
                 await callSecondary(t, pricesWithHoles);
                 expect(await contract.getTwap(t)).to.equal(avgWithHoles);
             });
@@ -411,7 +411,7 @@ describe("TwapOracle", function () {
 
         it("Should return acceptable message count before publishing delay", async function () {
             const t = startTimestamp + EPOCH * 10;
-            advanceBlockAtTime(t + PUBLISHING_DELAY - 30);
+            await advanceBlockAtTime(t + PUBLISHING_DELAY - 30);
             await callPrimary(t, incompletePrices);
             expect(await contract.minPrimaryMessageCountToUpdate(t)).to.equal(BATCH_SIZE - 4);
             await callPrimary(t, PRICES);
@@ -420,9 +420,9 @@ describe("TwapOracle", function () {
 
         it("Should return batch size plus one after publishing delay", async function () {
             const t = startTimestamp + EPOCH * 10;
-            advanceBlockAtTime(t);
+            await advanceBlockAtTime(t);
             await callPrimary(t, incompletePrices);
-            advanceBlockAtTime(t + PUBLISHING_DELAY);
+            await advanceBlockAtTime(t + PUBLISHING_DELAY);
             expect(await contract.minPrimaryMessageCountToUpdate(t)).to.equal(BATCH_SIZE + 1);
         });
     });
@@ -442,19 +442,19 @@ describe("TwapOracle", function () {
 
         it("Should return batch size plus one before the secondary delay expires", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY - 30);
+            await advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY - 30);
             expect(await contract.minSecondaryMessageCountToUpdate(t)).to.equal(BATCH_SIZE + 1);
         });
 
         it("Should return one for uninitialized epochs", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
+            await advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
             expect(await contract.minSecondaryMessageCountToUpdate(t)).to.equal(MIN_MESSAGE_COUNT);
         });
 
         it("Should return acceptable message count before publishing delay", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY - 30);
+            await advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY - 30);
             await callSecondary(t, incompletePrices);
             expect(await contract.minSecondaryMessageCountToUpdate(t)).to.equal(BATCH_SIZE - 4);
             await callSecondary(t, PRICES);
@@ -463,16 +463,16 @@ describe("TwapOracle", function () {
 
         it("Should return batch size plus one for epoch updated from primary source", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY - 30);
+            await advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY - 30);
             await callPrimary(t, incompletePrices);
             expect(await contract.minSecondaryMessageCountToUpdate(t)).to.equal(BATCH_SIZE + 1);
         });
 
         it("Should return batch size plus one after publishing delay", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
+            await advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY);
             await callSecondary(t, incompletePrices);
-            advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY);
+            await advanceBlockAtTime(t + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY);
             expect(await contract.minSecondaryMessageCountToUpdate(t)).to.equal(BATCH_SIZE + 1);
         });
     });
@@ -499,12 +499,12 @@ describe("TwapOracle", function () {
 
         describe("Initialized by primary source", function () {
             beforeEach(async function () {
-                advanceBlockAtTime(existingEpoch);
+                await advanceBlockAtTime(existingEpoch);
                 await callPrimary(existingEpoch, incompletePrices);
             });
 
             it("Should reject primary source after the publishing delay", async function () {
-                advanceBlockAtTime(existingEpoch + PUBLISHING_DELAY + EPOCH * 10);
+                await advanceBlockAtTime(existingEpoch + PUBLISHING_DELAY + EPOCH * 10);
                 await expect(callPrimary(existingEpoch, PRICES)).to.be.revertedWith(
                     "Too late for the primary source to update an existing epoch"
                 );
@@ -522,36 +522,36 @@ describe("TwapOracle", function () {
             });
 
             it("Should reject update from secondary source", async function () {
-                advanceBlockAtTime(existingEpoch + SECONDARY_SOURCE_DELAY);
+                await advanceBlockAtTime(existingEpoch + SECONDARY_SOURCE_DELAY);
                 await expect(callSecondary(existingEpoch, PRICES)).to.be.revertedWith(
                     "Too late for the secondary source to update an existing epoch"
                 );
             });
 
             it("Should reject update from owner", async function () {
-                advanceBlockAtTime(existingEpoch + OWNER_DELAY);
+                await advanceBlockAtTime(existingEpoch + OWNER_DELAY);
                 await expect(
                     contract.connect(owner).updateTwapFromOwner(existingEpoch, parsePrice("20000"))
                 ).to.be.revertedWith("Owner cannot update an existing epoch");
             });
 
             it("Should accept more messages", async function () {
-                advanceBlockAtTime(existingEpoch + PUBLISHING_DELAY - 30);
+                await advanceBlockAtTime(existingEpoch + PUBLISHING_DELAY - 30);
                 await callPrimary(existingEpoch, incompleteMorePrices);
                 await callPrimary(existingEpoch, PRICES);
-                advanceBlockAtTime(existingEpoch + PUBLISHING_DELAY);
+                await advanceBlockAtTime(existingEpoch + PUBLISHING_DELAY);
                 expect(await contract.getTwap(existingEpoch)).to.equal(PRICES_AVG);
             });
         });
 
         describe("Initialized by secondary source", function () {
             beforeEach(async function () {
-                advanceBlockAtTime(existingEpoch + SECONDARY_SOURCE_DELAY);
+                await advanceBlockAtTime(existingEpoch + SECONDARY_SOURCE_DELAY);
                 await callSecondary(existingEpoch, incompletePrices);
             });
 
             it("Should reject secondary source after the publishing delay", async function () {
-                advanceBlockAtTime(
+                await advanceBlockAtTime(
                     existingEpoch + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY + EPOCH * 10
                 );
                 await expect(callSecondary(existingEpoch, PRICES)).to.be.revertedWith(
@@ -577,17 +577,19 @@ describe("TwapOracle", function () {
             });
 
             it("Should reject update from owner", async function () {
-                advanceBlockAtTime(existingEpoch + OWNER_DELAY);
+                await advanceBlockAtTime(existingEpoch + OWNER_DELAY);
                 await expect(
                     contract.connect(owner).updateTwapFromOwner(existingEpoch, parsePrice("20000"))
                 ).to.be.revertedWith("Owner cannot update an existing epoch");
             });
 
             it("Should accept more messages", async function () {
-                advanceBlockAtTime(existingEpoch + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY - 30);
+                await advanceBlockAtTime(
+                    existingEpoch + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY - 30
+                );
                 await callSecondary(existingEpoch, incompleteMorePrices);
                 await callSecondary(existingEpoch, PRICES);
-                advanceBlockAtTime(existingEpoch + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY);
+                await advanceBlockAtTime(existingEpoch + SECONDARY_SOURCE_DELAY + PUBLISHING_DELAY);
                 expect(await contract.getTwap(existingEpoch)).to.equal(PRICES_AVG);
             });
         });
@@ -596,7 +598,7 @@ describe("TwapOracle", function () {
     describe("Invalid signature", function () {
         it("Primary", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + EPOCH * 10);
+            await advanceBlockAtTime(t + EPOCH * 10);
             const [rList, sList, packedV] = await signMessages(secondarySource, t, SYMBOL, PRICES);
             await expect(
                 contract.updateTwapFromPrimary(t, PRICES, rList, sList, packedV)
@@ -605,7 +607,7 @@ describe("TwapOracle", function () {
 
         it("Secondary", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t + EPOCH * 10);
+            await advanceBlockAtTime(t + EPOCH * 10);
             const [rList, sList, packedV] = await signMessages(primarySource, t, SYMBOL, PRICES);
             await expect(
                 contract.updateTwapFromSecondary(t, PRICES, rList, sList, packedV)
@@ -616,7 +618,7 @@ describe("TwapOracle", function () {
     describe("Gas used", function () {
         it("Measures gas used for update from primary source", async function () {
             const t = startTimestamp + EPOCH;
-            advanceBlockAtTime(t);
+            await advanceBlockAtTime(t);
             const tx = await callPrimary(t, PRICES);
             const receipt = await ethers.provider.getTransactionReceipt(tx.hash);
             gasUsedInPrimaryUpdate = receipt.gasUsed.toNumber();

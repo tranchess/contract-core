@@ -139,10 +139,10 @@ describe("Chess", function () {
         it("Should get available supply", async function () {
             expect(await chessSchedule.availableSupply()).to.equal(CUMULATIVE_SUPPLY_SCHEDULE[0]);
 
-            advanceBlockAtTime(startWeek);
+            await advanceBlockAtTime(startWeek);
             expect(await chessSchedule.availableSupply()).to.equal(CUMULATIVE_SUPPLY_SCHEDULE[0]);
 
-            advanceBlockAtTime(startWeek + WEEK / 2);
+            await advanceBlockAtTime(startWeek + WEEK / 2);
             expect(await chessSchedule.availableSupply()).to.equal(
                 CUMULATIVE_SUPPLY_SCHEDULE[1]
                     .sub(CUMULATIVE_SUPPLY_SCHEDULE[0])
@@ -150,7 +150,7 @@ describe("Chess", function () {
                     .add(CUMULATIVE_SUPPLY_SCHEDULE[0])
             );
 
-            advanceBlockAtTime(startWeek + WEEK + WEEK / 3);
+            await advanceBlockAtTime(startWeek + WEEK + WEEK / 3);
             expect(await chessSchedule.availableSupply()).to.equal(
                 CUMULATIVE_SUPPLY_SCHEDULE[2]
                     .sub(CUMULATIVE_SUPPLY_SCHEDULE[1])
@@ -158,7 +158,7 @@ describe("Chess", function () {
                     .add(CUMULATIVE_SUPPLY_SCHEDULE[1])
             );
 
-            advanceBlockAtTime(startWeek + WEEK * 2 + WEEK / 4);
+            await advanceBlockAtTime(startWeek + WEEK * 2 + WEEK / 4);
             expect(await chessSchedule.availableSupply()).to.equal(
                 CUMULATIVE_SUPPLY_SCHEDULE[3]
                     .sub(CUMULATIVE_SUPPLY_SCHEDULE[2])
@@ -168,12 +168,12 @@ describe("Chess", function () {
         });
 
         it("Should get available supply after the end of schedule", async function () {
-            advanceBlockAtTime(startWeek + WEEK * WEEKLY_SUPPLY_SCHEDULE.length);
+            await advanceBlockAtTime(startWeek + WEEK * WEEKLY_SUPPLY_SCHEDULE.length);
             expect(await chessSchedule.availableSupply()).to.equal(
                 CUMULATIVE_SUPPLY_SCHEDULE[CUMULATIVE_SUPPLY_SCHEDULE.length - 1]
             );
 
-            advanceBlockAtTime(startWeek + WEEK * WEEKLY_SUPPLY_SCHEDULE.length + DAY * 100);
+            await advanceBlockAtTime(startWeek + WEEK * WEEKLY_SUPPLY_SCHEDULE.length + DAY * 100);
             expect(await chessSchedule.availableSupply()).to.equal(
                 CUMULATIVE_SUPPLY_SCHEDULE[CUMULATIVE_SUPPLY_SCHEDULE.length - 1]
             );
@@ -220,7 +220,7 @@ describe("Chess", function () {
         });
 
         it("Should mint", async function () {
-            advanceBlockAtTime(startWeek + WEEK / 2);
+            await advanceBlockAtTime(startWeek + WEEK / 2);
             const mintingAmount = CUMULATIVE_SUPPLY_SCHEDULE[1]
                 .div(2)
                 .sub(CUMULATIVE_SUPPLY_SCHEDULE[0].mul(1).div(2));

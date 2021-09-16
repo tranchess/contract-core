@@ -158,7 +158,7 @@ describe("Share", function () {
         const newPrice = lastPrice.mul(navM).div(parseEther("1"));
         await twapOracle.mock.getTwap.returns(newPrice);
         await advanceOneDayAndSettle();
-        advanceBlockAtTime((await fund.currentDay()).toNumber() - HOUR);
+        await advanceBlockAtTime((await fund.currentDay()).toNumber() - HOUR);
     }
 
     // NAV before rebalance: (1.7, 1.1, 2.3)
