@@ -28,11 +28,6 @@ task("deploy_fee_distributor", "Deploy FeeDistributor")
         console.log(`FeeDistributor: ${feeDistributor.address}`);
         addressFile.set("feeDistributor", feeDistributor.address);
 
-        const VotingEscrowHelper = await ethers.getContractFactory("VotingEscrowHelper");
-        const votingEscrowHelper = await VotingEscrowHelper.deploy(
-            feeDistributor.address,
-            governanceAddresses.interestRateBallot
-        );
-        console.log(`VotingEscrowHelper: ${votingEscrowHelper.address}`);
-        addressFile.set("votingEscrowHelper", votingEscrowHelper.address);
+        console.log("Transfering ownership to Timelock");
+        await feeDistributor.transferOwnership(governanceAddresses.timelock);
     });

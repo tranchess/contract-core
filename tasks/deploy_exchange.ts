@@ -1,6 +1,5 @@
 import { task } from "hardhat/config";
 import { createAddressFile, selectAddressFile } from "./address_file";
-import { GOVERNANCE_CONFIG, FUND_CONFIG, EXCHANGE_CONFIG } from "../config";
 import { updateHreSigner } from "./signers";
 
 task("deploy_exchange", "Deploy exchange contracts")
@@ -9,40 +8,31 @@ task("deploy_exchange", "Deploy exchange contracts")
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
         const { ethers } = hre;
-        const { parseEther } = ethers.utils;
 
         await hre.run("compile");
         const addressFile = createAddressFile(hre, "exchange");
         const governanceAddresses = await selectAddressFile(hre, "governance", args.governance);
-        const fundAddresses = await selectAddressFile(hre, "fund", args.fund);
 
-        const quoteToken = await ethers.getContractAt("ERC20", EXCHANGE_CONFIG.QUOTE_ADDRESS);
-        const quoteDecimals = await quoteToken.decimals();
+        await hre.run("deploy_impl", {
+            governance: args.governance,
+            fund: args.fund,
+            silent: true,
+            deployExchange: true,
+        });
+        const implAddresses = await selectAddressFile(hre, "impl", "latest");
 
-        const Exchange = await ethers.getContractFactory("Exchange");
-        const exchangeImpl = await Exchange.deploy(
-            fundAddresses.fund,
-            governanceAddresses.chessSchedule,
-            governanceAddresses.chessController,
-            quoteToken.address,
-            quoteDecimals,
-            governanceAddresses.votingEscrow,
-            parseEther(EXCHANGE_CONFIG.MIN_ORDER_AMOUNT),
-            parseEther(EXCHANGE_CONFIG.MIN_ORDER_AMOUNT),
-            parseEther(EXCHANGE_CONFIG.MAKER_REQUIREMENT),
-            FUND_CONFIG.GUARDED_LAUNCH ? GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP : 0,
-            parseEther(EXCHANGE_CONFIG.GUARDED_LAUNCH_MIN_ORDER_AMOUNT)
-        );
-        console.log(`Exchange implementation: ${exchangeImpl.address}`);
+        const Exchange = await ethers.getContractFactory("ExchangeV2");
+        const exchangeImpl = Exchange.attach(implAddresses.exchangeImpl);
         addressFile.set("exchangeImpl", exchangeImpl.address);
 
         const TransparentUpgradeableProxy = await ethers.getContractFactory(
             "TransparentUpgradeableProxy"
         );
+        const initTx = await exchangeImpl.populateTransaction.initialize();
         const exchangeProxy = await TransparentUpgradeableProxy.deploy(
             exchangeImpl.address,
             governanceAddresses.proxyAdmin,
-            "0x",
+            initTx.data,
             { gasLimit: 1e6 } // Gas estimation may fail
         );
         const exchange = Exchange.attach(exchangeProxy.address);
@@ -57,8 +47,8 @@ task("deploy_exchange", "Deploy exchange contracts")
             await chessSchedule.addMinter(exchange.address);
             console.log("Exchange is a CHESS minter now");
 
-            console.log("Transfering ownership of ChessSchedule to TimelockController");
-            await chessSchedule.transferOwnership(governanceAddresses.timelockController);
+            console.log("Transfering ownership of ChessSchedule to Timelock");
+            await chessSchedule.transferOwnership(governanceAddresses.timelock);
         } else {
             console.log("NOTE: Please add Exchange as a minter of ChessSchedule");
         }

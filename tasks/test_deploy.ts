@@ -46,16 +46,41 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     await hre.run("deploy_exchange", { governance: "latest", fund: "latest" });
 
     console.log();
-    console.log("[+] Deploying misc contracts");
-    await hre.run("deploy_misc", { silent: true });
-
-    console.log();
     console.log("[+] Deploying fee distributor");
     await hre.run("deploy_fee_distributor", {
         governance: "latest",
         fund: "latest",
         admin: deployer.address,
         adminFeeRate: "0.5",
+    });
+
+    console.log();
+    console.log("[+] Deploying misc contracts");
+    await hre.run("deploy_misc", {
+        governance: "latest",
+        exchange: "latest",
+        feeDistributor: "latest",
+        silent: true,
+        deployProtocolDataProvider: true,
+        deployBatchSettleHelper: true,
+        deployVotingEscrowHelper: true,
+    });
+
+    console.log();
+    console.log("[+] Deploying address whitelist");
+    await hre.run("deploy_address_whitelist", {
+        addresses: deployer.address + "," + ethers.constants.AddressZero,
+    });
+
+    console.log();
+    console.log("[+] Deploying implementation contracts (again)");
+    await hre.run("deploy_impl", {
+        governance: "latest",
+        fund: "latest",
+        silent: true,
+        deployChessSchedule: true,
+        deployVotingEscrow: true,
+        deployExchange: true,
     });
 
     console.log();

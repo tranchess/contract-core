@@ -136,7 +136,7 @@ describe("VestingEscrow", function () {
         });
 
         it("Should unlock vestedAtStart at the start time", async function () {
-            advanceBlockAtTime(startWeek);
+            await advanceBlockAtTime(startWeek);
             expect(await vestingEscrow.vestedSupply()).to.equal(vestedAtStart);
             expect(await vestingEscrow.lockedSupply()).to.equal(
                 initialVestedSupply.sub(vestedAtStart)
@@ -149,7 +149,7 @@ describe("VestingEscrow", function () {
                 .sub(vestedAtStart)
                 .div(2)
                 .add(vestedAtStart);
-            advanceBlockAtTime(startWeek + WEEK);
+            await advanceBlockAtTime(startWeek + WEEK);
 
             expect(await vestingEscrow.totalClaimed()).to.equal(0);
             expect(await vestingEscrow.vestedSupply()).to.equal(halfVestedSupply);
@@ -168,7 +168,7 @@ describe("VestingEscrow", function () {
         });
 
         it("Should have nothing to claim at the end", async function () {
-            advanceBlockAtTime(startWeek + WEEK * 2);
+            await advanceBlockAtTime(startWeek + WEEK * 2);
 
             expect(await vestingEscrow.totalClaimed()).to.equal(0);
             expect(await vestingEscrow.vestedSupply()).to.equal(initialVestedSupply);

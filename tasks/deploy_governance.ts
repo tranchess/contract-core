@@ -1,5 +1,5 @@
 import { task } from "hardhat/config";
-import { createAddressFile } from "./address_file";
+import { createAddressFile, selectAddressFile } from "./address_file";
 import { GOVERNANCE_CONFIG } from "../config";
 import { updateHreSigner } from "./signers";
 
@@ -12,17 +12,13 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     const [deployer] = await ethers.getSigners();
     const addressFile = createAddressFile(hre, "governance");
 
-    const TimelockController = await ethers.getContractFactory("TimelockController");
-    const timelockController = await TimelockController.deploy(
-        GOVERNANCE_CONFIG.TIMELOCK_DELAY,
-        [GOVERNANCE_CONFIG.TIMELOCK_PROPOSER || deployer.address], // proposers
-        [ethers.constants.AddressZero] // executor
+    const Timelock = await ethers.getContractFactory("Timelock");
+    const timelock = await Timelock.deploy(
+        GOVERNANCE_CONFIG.TIMELOCK_PROPOSER || deployer.address, // admin
+        GOVERNANCE_CONFIG.TIMELOCK_DELAY
     );
-    console.log(`TimelockController: ${timelockController.address}`);
-    addressFile.set("timelockController", timelockController.address);
-
-    const TIMELOCK_ADMIN_ROLE = await timelockController.TIMELOCK_ADMIN_ROLE();
-    await timelockController.renounceRole(TIMELOCK_ADMIN_ROLE, deployer.address);
+    console.log(`Timelock: ${timelock.address}`);
+    addressFile.set("timelock", timelock.address);
 
     const TransparentUpgradeableProxy = await ethers.getContractFactory(
         "TransparentUpgradeableProxy"
@@ -37,12 +33,17 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     console.log(`Chess: ${chess.address}`);
     addressFile.set("chess", chess.address);
 
+    await hre.run("deploy_impl", {
+        governance: "latest",
+        fund: "skip",
+        silent: true,
+        deployChessSchedule: true,
+        deployVotingEscrow: true,
+    });
+    const implAddresses = await selectAddressFile(hre, "impl", "latest");
+
     const ChessSchedule = await ethers.getContractFactory("ChessSchedule");
-    const chessScheduleImpl = await ChessSchedule.deploy(
-        chess.address,
-        GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP
-    );
-    console.log(`ChessSchedule implementation: ${chessScheduleImpl.address}`);
+    const chessScheduleImpl = ChessSchedule.attach(implAddresses.chessScheduleImpl);
     addressFile.set("chessScheduleImpl", chessScheduleImpl.address);
 
     // Predict address of ChessSchedule proxy and approve CHESS to it.
@@ -50,7 +51,12 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
         from: deployer.address,
         nonce: (await deployer.getTransactionCount("pending")) + 1,
     });
-    await chess.approve(chessScheduleAddr, parseEther(GOVERNANCE_CONFIG.CHESS_SCHEDULE_MAX_SUPPLY));
+    await (
+        await chess.approve(
+            chessScheduleAddr,
+            parseEther(GOVERNANCE_CONFIG.CHESS_SCHEDULE_MAX_SUPPLY)
+        )
+    ).wait();
 
     const initTx = await chessScheduleImpl.populateTransaction.initialize();
     const chessScheduleProxy = await TransparentUpgradeableProxy.deploy(
@@ -63,18 +69,13 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     console.log(`ChessSchedule: ${chessSchedule.address}`);
     addressFile.set("chessSchedule", chessSchedule.address);
 
-    const VotingEscrow = await ethers.getContractFactory("VotingEscrow");
-    const votingEscrowImpl = await VotingEscrow.deploy(
-        chess.address,
-        ethers.constants.AddressZero,
-        "Vote-escrowed CHESS",
-        "veCHESS",
-        208 * 7 * 86400 // 208 weeks
-    );
-    console.log(`VotingEscrow implementation: ${votingEscrowImpl.address}`);
+    const VotingEscrow = await ethers.getContractFactory("VotingEscrowV2");
+    const votingEscrowImpl = VotingEscrow.attach(implAddresses.votingEscrowImpl);
     addressFile.set("votingEscrowImpl", votingEscrowImpl.address);
 
     const votingEscrowInitTx = await votingEscrowImpl.populateTransaction.initialize(
+        "Vote-escrowed CHESS",
+        "veCHESS",
         26 * 7 * 86400
     );
     const votingEscrowProxy = await TransparentUpgradeableProxy.deploy(
@@ -110,7 +111,7 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     console.log(`ChessController: ${chessController.address}`);
     addressFile.set("chessController", chessController.address);
 
-    console.log("Transfering ownership to TimelockController");
-    await proxyAdmin.transferOwnership(timelockController.address);
-    await votingEscrow.transferOwnership(timelockController.address);
+    console.log("Transfering ownership to Timelock");
+    await proxyAdmin.transferOwnership(timelock.address);
+    await votingEscrow.transferOwnership(timelock.address);
 });

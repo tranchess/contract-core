@@ -196,4 +196,31 @@ interface IFund {
     );
     event Settled(uint256 indexed day, uint256 navM, uint256 navA, uint256 navB);
     event InterestRateUpdated(uint256 baseInterestRate, uint256 floatingInterestRate);
+    event Transfer(
+        uint256 indexed tranche,
+        address indexed from,
+        address indexed to,
+        uint256 amount
+    );
+    event Approval(
+        uint256 indexed tranche,
+        address indexed owner,
+        address indexed spender,
+        uint256 amount
+    );
+    event BalancesRebalanced(
+        address indexed account,
+        uint256 version,
+        uint256 balanceM,
+        uint256 balanceA,
+        uint256 balanceB
+    );
+    event AllowancesRebalanced(
+        address indexed owner,
+        address indexed spender,
+        uint256 version,
+        uint256 allowanceM,
+        uint256 allowanceA,
+        uint256 allowanceB
+    );
 }

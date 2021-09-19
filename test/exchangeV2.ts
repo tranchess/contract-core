@@ -18,7 +18,9 @@ import {
 
 const EPOCH = 1800; // 30 min
 const USDC_TO_ETHER = parseUnits("1", 12);
-const MAKER_RESERVE_BPS = 11000; // 110%
+const MAKER_RESERVE_M_BPS = 10500; // 105%
+const MAKER_RESERVE_A_BPS = 10010; // 100.1%
+const MAKER_RESERVE_B_BPS = 11000; // 110%
 
 const USER1_USDC = parseEther("100000");
 const USER1_M = parseEther("10000");
@@ -39,7 +41,7 @@ const MIN_BID_AMOUNT = parseEther("0.8");
 const MIN_ASK_AMOUNT = parseEther("0.9");
 const MAKER_REQUIREMENT = parseEther("10000");
 
-describe("Exchange", function () {
+describe("ExchangeV2", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly startEpoch: number;
@@ -104,7 +106,7 @@ describe("Exchange", function () {
 
         const chessController = await deployMockForName(
             owner,
-            "contracts/exchange/Staking.sol:IChessController"
+            "contracts/interfaces/IChessController.sol:IChessController"
         );
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
 
@@ -113,7 +115,7 @@ describe("Exchange", function () {
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
 
-        const Exchange = await ethers.getContractFactory("Exchange");
+        const Exchange = await ethers.getContractFactory("ExchangeV2");
         const exchangeImpl = await Exchange.connect(owner).deploy(
             fund.address,
             chessSchedule.address,
@@ -130,10 +132,13 @@ describe("Exchange", function () {
         const TransparentUpgradeableProxy = await ethers.getContractFactory(
             "TransparentUpgradeableProxy"
         );
+        const ProxyAdmin = await ethers.getContractFactory("ProxyAdmin");
+        const proxyAdmin = await ProxyAdmin.connect(owner).deploy();
+        const initTx = await exchangeImpl.populateTransaction.initialize();
         const exchangeProxy = await TransparentUpgradeableProxy.connect(owner).deploy(
             exchangeImpl.address,
-            owner.address,
-            "0x"
+            proxyAdmin.address,
+            initTx.data
         );
         const exchange = Exchange.attach(exchangeProxy.address);
 
@@ -535,7 +540,7 @@ describe("Exchange", function () {
             const matchedUsdc = ASK_1_PD_0.div(2);
             const transferedUsdc = matchedUsdc.add(USDC_TO_ETHER).sub(1).div(USDC_TO_ETHER);
             const matchedShares = matchedUsdc
-                .mul(MAKER_RESERVE_BPS)
+                .mul(MAKER_RESERVE_M_BPS)
                 .div(10000)
                 .mul(parseEther("1"))
                 .div(estimatedNav);
@@ -590,7 +595,7 @@ describe("Exchange", function () {
             const matchedUsdc = ASK_1_PD_0.mul(estimatedNav)
                 .div(parseEther("1"))
                 .mul(10000)
-                .div(MAKER_RESERVE_BPS);
+                .div(MAKER_RESERVE_M_BPS);
             const transferedUsdc = matchedUsdc.add(USDC_TO_ETHER).sub(1).div(USDC_TO_ETHER);
             const matchedShares = ASK_1_PD_0;
             const buyTxBuilder = () => exchange.buyM(0, 42, ASK_1_PD_0);
@@ -647,25 +652,25 @@ describe("Exchange", function () {
         describe("Fill orders at multiple premium-discount level", function () {
             const matchedUsdc = parseEther("200");
             const transferedUsdc = parseUsdc("200");
-            const matchedUsdcAt0 = ASK_1_PD_0.mul(10000).div(MAKER_RESERVE_BPS);
+            const matchedUsdcAt0 = ASK_1_PD_0.mul(10000).div(MAKER_RESERVE_M_BPS);
             const matchedUsdcOrder1At1 = ASK_1_PD_1.mul(101)
                 .div(100)
                 .mul(10000)
-                .div(MAKER_RESERVE_BPS);
+                .div(MAKER_RESERVE_M_BPS);
             const matchedUsdcOrder2At1 = ASK_2_PD_1.mul(101)
                 .div(100)
                 .mul(10000)
-                .div(MAKER_RESERVE_BPS);
+                .div(MAKER_RESERVE_M_BPS);
             const matchedUsdcOrder3At1 = ASK_3_PD_1.mul(101)
                 .div(100)
                 .mul(10000)
-                .div(MAKER_RESERVE_BPS);
+                .div(MAKER_RESERVE_M_BPS);
             const matchedUsdcAt1 = matchedUsdcOrder1At1
                 .add(matchedUsdcOrder2At1)
                 .add(matchedUsdcOrder3At1);
             const matchedUsdcAt2 = matchedUsdc.sub(matchedUsdcAt0).sub(matchedUsdcAt1);
             const matchedSharesAt2 = matchedUsdcAt2
-                .mul(MAKER_RESERVE_BPS)
+                .mul(MAKER_RESERVE_M_BPS)
                 .div(10000)
                 .mul(100)
                 .div(102);
@@ -785,7 +790,7 @@ describe("Exchange", function () {
             // Partially fill the order
             await fund.mock.extrapolateNav.returns(parseEther("1"), 0, 0);
             await exchange.buyM(0, 42, ASK_1_PD_0.div(2));
-            const matchedShares = ASK_1_PD_0.div(2).mul(MAKER_RESERVE_BPS).div(10000);
+            const matchedShares = ASK_1_PD_0.div(2).mul(MAKER_RESERVE_M_BPS).div(10000);
 
             const oldAvailable = await exchange.availableBalanceOf(TRANCHE_M, addr2);
             await exchange.connect(user2).cancelAsk(0, TRANCHE_M, 41, 1);
@@ -798,7 +803,7 @@ describe("Exchange", function () {
             // Partially fill the order
             await fund.mock.extrapolateNav.returns(parseEther("1"), 0, 0);
             await exchange.buyM(0, 42, ASK_1_PD_0.div(2));
-            const matchedUsdc = ASK_1_PD_0.div(2).mul(MAKER_RESERVE_BPS).div(10000);
+            const matchedUsdc = ASK_1_PD_0.div(2).mul(MAKER_RESERVE_M_BPS).div(10000);
 
             await expect(exchange.connect(user2).cancelAsk(0, TRANCHE_M, 41, 1))
                 .to.emit(exchange, "AskOrderCanceled")
@@ -898,7 +903,7 @@ describe("Exchange", function () {
             const estimatedNav = parseEther("0.9");
             const matchedShares = BID_1_PD_0.div(2);
             const matchedUsdc = matchedShares
-                .mul(MAKER_RESERVE_BPS)
+                .mul(MAKER_RESERVE_M_BPS)
                 .div(10000)
                 .mul(estimatedNav)
                 .div(parseEther("1"));
@@ -952,7 +957,7 @@ describe("Exchange", function () {
             const matchedShares = BID_1_PD_0.mul(parseEther("1"))
                 .div(estimatedNav)
                 .mul(10000)
-                .div(MAKER_RESERVE_BPS);
+                .div(MAKER_RESERVE_M_BPS);
             const matchedUsdc = BID_1_PD_0;
             const sellTxBuilder = () => exchange.sellM(0, 40, BID_1_PD_0);
 
@@ -1006,25 +1011,25 @@ describe("Exchange", function () {
         // All orders at 0% and -1% are filled. The order at -2% is partially filled.
         describe("Fill orders at multiple premium-discount level", function () {
             const matchedShares = parseEther("200");
-            const matchedSharesAt0 = BID_1_PD_0.mul(10000).div(MAKER_RESERVE_BPS);
+            const matchedSharesAt0 = BID_1_PD_0.mul(10000).div(MAKER_RESERVE_M_BPS);
             const matchedSharesOrder1AtN1 = BID_1_PD_N1.mul(100)
                 .div(99)
                 .mul(10000)
-                .div(MAKER_RESERVE_BPS);
+                .div(MAKER_RESERVE_M_BPS);
             const matchedSharesOrder2AtN1 = BID_2_PD_N1.mul(100)
                 .div(99)
                 .mul(10000)
-                .div(MAKER_RESERVE_BPS);
+                .div(MAKER_RESERVE_M_BPS);
             const matchedSharesOrder3AtN1 = BID_3_PD_N1.mul(100)
                 .div(99)
                 .mul(10000)
-                .div(MAKER_RESERVE_BPS);
+                .div(MAKER_RESERVE_M_BPS);
             const matchedSharesAtN1 = matchedSharesOrder1AtN1
                 .add(matchedSharesOrder2AtN1)
                 .add(matchedSharesOrder3AtN1);
             const matchedSharesAtN2 = matchedShares.sub(matchedSharesAt0).sub(matchedSharesAtN1);
             const matchedUsdcAtN2 = matchedSharesAtN2
-                .mul(MAKER_RESERVE_BPS)
+                .mul(MAKER_RESERVE_M_BPS)
                 .div(10000)
                 .mul(98)
                 .div(100);
@@ -1146,7 +1151,7 @@ describe("Exchange", function () {
             // Partially fill the order
             await fund.mock.extrapolateNav.returns(parseEther("1"), 0, 0);
             await exchange.sellM(0, 40, BID_1_PD_0.div(2));
-            const matchedUsdc = BID_1_PD_0.div(2).mul(MAKER_RESERVE_BPS).div(10000);
+            const matchedUsdc = BID_1_PD_0.div(2).mul(MAKER_RESERVE_M_BPS).div(10000);
 
             const returnedUsdc = BID_1_PD_0.sub(matchedUsdc).div(USDC_TO_ETHER);
             await expect(() =>
@@ -1158,7 +1163,7 @@ describe("Exchange", function () {
             // Partially fill the order
             await fund.mock.extrapolateNav.returns(parseEther("1"), 0, 0);
             await exchange.sellM(0, 40, BID_1_PD_0.div(2));
-            const matchedUsdc = BID_1_PD_0.div(2).mul(MAKER_RESERVE_BPS).div(10000);
+            const matchedUsdc = BID_1_PD_0.div(2).mul(MAKER_RESERVE_M_BPS).div(10000);
 
             await expect(exchange.connect(user2).cancelBid(0, TRANCHE_M, 41, 1))
                 .to.emit(exchange, "BidOrderCanceled")
@@ -1187,13 +1192,13 @@ describe("Exchange", function () {
         let outerFixture: Fixture<FixtureData>;
         const frozenUsdcForM = parseEther("1");
         const effectiveUsdcForM = frozenUsdcForM.mul(100).div(105);
-        const reservedM = frozenUsdcForM.mul(MAKER_RESERVE_BPS).div(10000).mul(100).div(105);
+        const reservedM = frozenUsdcForM.mul(MAKER_RESERVE_M_BPS).div(10000).mul(100).div(105);
         const frozenUsdcForA = parseEther("2");
         const effectiveUsdcForA = frozenUsdcForA.mul(100).div(105);
-        const reservedA = frozenUsdcForA.mul(MAKER_RESERVE_BPS).div(10000).mul(100).div(105);
+        const reservedA = frozenUsdcForA.mul(MAKER_RESERVE_A_BPS).div(10000).mul(100).div(105);
         const frozenB = parseEther("3");
         const effectiveB = frozenB.mul(95).div(100);
-        const reservedUsdcForB = frozenB.mul(MAKER_RESERVE_BPS).div(10000).mul(95).div(100);
+        const reservedUsdcForB = frozenB.mul(MAKER_RESERVE_B_BPS).div(10000).mul(95).div(100);
 
         async function tradeFixture(): Promise<FixtureData> {
             const f = await loadFixture(deployFixture);
@@ -1454,7 +1459,9 @@ describe("Exchange", function () {
 
             // Taker pays nothing and gets all shares
             const takerResult = await exchange.callStatic.settleTaker(addr1, startEpoch);
-            expect(takerResult.amountB).to.equal(parseEther("1").mul(MAKER_RESERVE_BPS).div(10000));
+            expect(takerResult.amountB).to.equal(
+                parseEther("1").mul(MAKER_RESERVE_B_BPS).div(10000)
+            );
             expect(takerResult.quoteAmount).to.equal(parseEther("1"));
 
             // Maker sells all shares but gets nothing
@@ -1483,7 +1490,7 @@ describe("Exchange", function () {
             const makerResult = await exchange.callStatic.settleMaker(addr2, startEpoch);
             expect(makerResult.amountB).to.equal(parseEther("1"));
             expect(makerResult.quoteAmount).to.equal(
-                parseEther("1").mul(MAKER_RESERVE_BPS).div(10000)
+                parseEther("1").mul(MAKER_RESERVE_B_BPS).div(10000)
             );
         });
     });
@@ -1533,7 +1540,7 @@ describe("Exchange", function () {
         });
 
         it("Zero maker requirement", async function () {
-            const Exchange = await ethers.getContractFactory("Exchange");
+            const Exchange = await ethers.getContractFactory("ExchangeV2");
             exchange = await Exchange.connect(owner).deploy(
                 fund.address,
                 chessSchedule.address,
@@ -1557,7 +1564,7 @@ describe("Exchange", function () {
     describe("Expired ask order", function () {
         let outerFixture: Fixture<FixtureData>;
         const frozenUsdc = parseEther("0.1");
-        const reservedB = frozenUsdc.mul(MAKER_RESERVE_BPS).div(10000);
+        const reservedB = frozenUsdc.mul(MAKER_RESERVE_B_BPS).div(10000);
 
         async function expiredAskOrderFixture(): Promise<FixtureData> {
             const f = await loadFixture(deployFixture);
@@ -1655,7 +1662,7 @@ describe("Exchange", function () {
     describe("Expired bid order", function () {
         let outerFixture: Fixture<FixtureData>;
         const frozenA = parseEther("0.1");
-        const reservedUsdc = frozenA.mul(MAKER_RESERVE_BPS).div(10000);
+        const reservedUsdc = frozenA.mul(MAKER_RESERVE_A_BPS).div(10000);
 
         async function expiredBidOrderFixture(): Promise<FixtureData> {
             const f = await loadFixture(deployFixture);
@@ -1824,7 +1831,7 @@ describe("Exchange", function () {
         it("Should rebalance on settlement", async function () {
             const frozenUsdc = parseEther("1");
             const orderA = parseEther("2");
-            const reservedA = parseEther("1").mul(MAKER_RESERVE_BPS).div(10000);
+            const reservedA = parseEther("1").mul(MAKER_RESERVE_A_BPS).div(10000);
             const settledA = parseEther("1");
             await fund.mock.extrapolateNav.returns(0, parseEther("1"), 0);
             await exchange.connect(user2).placeAsk(TRANCHE_A, 41, orderA, 1);
@@ -1915,7 +1922,7 @@ describe("Exchange", function () {
         beforeEach(async function () {
             // Deploy a new Exchange using a mocked quote token
             mockUsdc = await deployMockForName(owner, "IERC20");
-            const Exchange = await ethers.getContractFactory("Exchange");
+            const Exchange = await ethers.getContractFactory("ExchangeV2");
             exchange = await Exchange.connect(owner).deploy(
                 fund.address,
                 chessSchedule.address,
@@ -1963,8 +1970,13 @@ describe("Exchange", function () {
             expect(await exchange.makerRequirement()).to.equal(MAKER_REQUIREMENT);
         });
 
+        it("Should revert if initialized again", async function () {
+            await expect(exchange.initialize()).to.be.reverted;
+            await expect(exchange.initializeV2(owner.address)).to.be.reverted;
+        });
+
         it("Should check quote decimal places", async function () {
-            const Exchange = await ethers.getContractFactory("Exchange");
+            const Exchange = await ethers.getContractFactory("ExchangeV2");
             await expect(
                 Exchange.connect(owner).deploy(
                     fund.address,
@@ -2003,7 +2015,7 @@ describe("Exchange", function () {
         beforeEach(async function () {
             guardedLaunchStart = startEpoch + 12345;
 
-            const Exchange = await ethers.getContractFactory("Exchange");
+            const Exchange = await ethers.getContractFactory("ExchangeV2");
             exchange = await Exchange.connect(owner).deploy(
                 fund.address,
                 chessSchedule.address,
@@ -2056,6 +2068,118 @@ describe("Exchange", function () {
             await expect(
                 exchange.placeAsk(TRANCHE_M, 42, guardedLaunchMinOrderAmount, 0)
             ).to.be.revertedWith("Base amount too low");
+        });
+    });
+
+    describe("pause() and unpause()", function () {
+        it("Should pause placeBid()", async function () {
+            await shareM.mock.transferFrom.returns(true);
+            await exchange.connect(owner).pause();
+            await expect(exchange.placeBid(TRANCHE_M, 41, parseEther("1"), 0)).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await exchange.connect(owner).unpause();
+            await exchange.placeBid(TRANCHE_M, 41, parseEther("1"), 0);
+        });
+
+        it("Should pause placeAsk()", async function () {
+            await exchange.connect(owner).pause();
+            await expect(exchange.placeAsk(TRANCHE_M, 41, parseEther("1"), 0)).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await exchange.connect(owner).unpause();
+            await exchange.placeAsk(TRANCHE_M, 41, parseEther("1"), 0);
+        });
+
+        it("Should pause cancelBid()", async function () {
+            await shareM.mock.transferFrom.returns(true);
+            await exchange.placeBid(TRANCHE_M, 41, parseEther("1"), 0);
+            await exchange.connect(owner).pause();
+            await expect(exchange.cancelBid(0, TRANCHE_M, 41, 1)).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await exchange.connect(owner).unpause();
+            await exchange.cancelBid(0, TRANCHE_M, 41, 1);
+        });
+
+        it("Should pause cancelAsk()", async function () {
+            await exchange.placeAsk(TRANCHE_M, 41, parseEther("1"), 0);
+            await exchange.connect(owner).pause();
+            await expect(exchange.cancelAsk(0, TRANCHE_M, 41, 1)).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await exchange.connect(owner).unpause();
+            await exchange.cancelAsk(0, TRANCHE_M, 41, 1);
+        });
+
+        it("Should pause buyM(), buyA() and buyB()", async function () {
+            await fund.mock.extrapolateNav.returns(
+                parseEther("1"),
+                parseEther("1"),
+                parseEther("1")
+            );
+            await exchange.placeAsk(TRANCHE_M, 41, parseEther("1"), 0);
+            await exchange.placeAsk(TRANCHE_A, 41, parseEther("1"), 0);
+            await exchange.placeAsk(TRANCHE_B, 41, parseEther("1"), 0);
+            await exchange.connect(owner).pause();
+            await expect(exchange.buyM(0, 41, parseEther("1"))).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await expect(exchange.buyA(0, 41, parseEther("1"))).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await expect(exchange.buyB(0, 41, parseEther("1"))).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await exchange.connect(owner).unpause();
+            await exchange.buyM(0, 41, parseEther("1"));
+            await exchange.buyA(0, 41, parseEther("1"));
+            await exchange.buyB(0, 41, parseEther("1"));
+        });
+
+        it("Should pause sellM(), sellA() and sellB()", async function () {
+            await fund.mock.extrapolateNav.returns(
+                parseEther("1"),
+                parseEther("1"),
+                parseEther("1")
+            );
+            await exchange.placeBid(TRANCHE_M, 41, parseEther("1"), 0);
+            await exchange.placeBid(TRANCHE_A, 41, parseEther("1"), 0);
+            await exchange.placeBid(TRANCHE_B, 41, parseEther("1"), 0);
+            await exchange.connect(owner).pause();
+            await expect(exchange.sellM(0, 41, parseEther("1"))).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await expect(exchange.sellA(0, 41, parseEther("1"))).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await expect(exchange.sellB(0, 41, parseEther("1"))).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await exchange.connect(owner).unpause();
+            await exchange.sellM(0, 41, parseEther("1"));
+            await exchange.sellA(0, 41, parseEther("1"));
+            await exchange.sellB(0, 41, parseEther("1"));
+        });
+
+        it("Should pause settleMaker() and settleTaker()", async function () {
+            await fund.mock.extrapolateNav.returns(
+                parseEther("1"),
+                parseEther("1"),
+                parseEther("1")
+            );
+            await exchange.placeAsk(TRANCHE_M, 41, parseEther("1"), 0);
+            await exchange.buyM(0, 41, parseEther("1"));
+            await exchange.connect(owner).pause();
+            await expect(exchange.settleMaker(addr1, startEpoch)).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await expect(exchange.settleTaker(addr1, startEpoch)).to.be.revertedWith(
+                "Pausable: paused"
+            );
+            await exchange.connect(owner).unpause();
+            await exchange.settleMaker(addr1, startEpoch);
+            await exchange.settleTaker(addr1, startEpoch);
         });
     });
 

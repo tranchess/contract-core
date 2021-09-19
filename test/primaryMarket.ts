@@ -815,12 +815,12 @@ describe("PrimaryMarket", function () {
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
 
-            advanceBlockAtTime(currentTimestamp + DAY * 14 - 100);
+            await advanceBlockAtTime(currentTimestamp + DAY * 14 - 100);
             await expect(primaryMarket.split(parseEther("1"))).to.be.revertedWith(
                 "Guarded launch: split not ready yet"
             );
 
-            advanceBlockAtTime(currentTimestamp + DAY * 14);
+            await advanceBlockAtTime(currentTimestamp + DAY * 14);
             await primaryMarket.split(parseEther("1"));
         });
     });
