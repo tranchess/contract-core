@@ -1,7 +1,7 @@
 {
     "name": "tranchess-core",
     "scripts": {
-        "check": "npm run lint && prettier --ignore-path .gitignore -c .",
+        "check": "yarn run lint && prettier --ignore-path .gitignore -c .",
         "fmt": "prettier --ignore-path .gitignore -w .",
         "lint": "eslint --ext .js,.ts --ignore-path .gitignore .",
         "test": "hardhat test",
