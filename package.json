@@ -1,7 +1,6 @@
 {
     "name": "tranchess-core",
     "scripts": {
-        "preinstall": "npx npm-force-resolutions && npx prettier -w package-lock.json",
         "check": "npm run lint && prettier --ignore-path .gitignore -c .",
         "fmt": "prettier --ignore-path .gitignore -w .",
         "lint": "eslint --ext .js,.ts --ignore-path .gitignore .",
@@ -36,7 +35,6 @@
         "ethers": "^5.0.30",
         "hardhat": "^2.1.1",
         "hardhat-gas-reporter": "^1.0.4",
-        "npm-force-resolutions": "0.0.10",
         "prettier": "^2.2.1",
         "prettier-plugin-solidity": "^1.0.0-beta.3",
         "readline-sync": "^1.4.10",
