@@ -16,12 +16,23 @@ contract ChessControllerV2 is CoreUtility, Ownable {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
 
+    uint256 public immutable guardedLaunchStart;
+    mapping(address => uint256) private guardedPoolRatio;
+
     address[2] private authorizedFunds;
+    mapping(address => mapping(uint256 => uint256)) public relativeWeights;
 
-    mapping(address => mapping(uint256 => uint256)) relativeWeights;
-
-    constructor(address[2] memory authorizedFunds_) public {
+    constructor(
+        address[2] memory authorizedFunds_,
+        uint256 guardedLaunchStart_,
+        uint256 pool0Ratio_,
+        uint256 pool1Ratio_
+    ) public Ownable() {
         authorizedFunds = authorizedFunds_;
+        guardedLaunchStart = guardedLaunchStart_;
+        require(pool0Ratio_.add(pool1Ratio_) == 1e18, "invalid ratio");
+        guardedPoolRatio[authorizedFunds_[0]] = pool0Ratio_;
+        guardedPoolRatio[authorizedFunds_[1]] = pool1Ratio_;
     }
 
     /// @notice Get Fund relative weight (not more than 1.0) normalized to 1e18
@@ -32,6 +43,10 @@ contract ChessControllerV2 is CoreUtility, Ownable {
         view
         returns (uint256 relativeWeight)
     {
+        if (timestamp < guardedLaunchStart + 4 weeks) {
+            return guardedPoolRatio[fundAddress];
+        }
+
         uint256 weekTimestamp = _endOfWeek(timestamp).sub(1 weeks);
         relativeWeight = relativeWeights[fundAddress][weekTimestamp];
         if (relativeWeight != 0) {
@@ -95,5 +110,11 @@ contract ChessControllerV2 is CoreUtility, Ownable {
                     .divideDecimal(totalValueLocked);
             }
         }
+    }
+
+    function updateGuardedLaunchRatio(uint256 pool0Ratio, uint256 pool1Ratio) external onlyOwner {
+        require(pool0Ratio.add(pool1Ratio) == 1e18, "Invalid ratio");
+        guardedPoolRatio[authorizedFunds[0]] = pool0Ratio;
+        guardedPoolRatio[authorizedFunds[1]] = pool1Ratio;
     }
 }
