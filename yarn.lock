@@ -687,7 +687,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@ledgerhq/cryptoassets@npm:^5.50.0":
+"@ledgerhq/cryptoassets@npm:^5.27.2":
   version: 5.53.0
   resolution: "@ledgerhq/cryptoassets@npm:5.53.0"
   dependencies:
@@ -715,16 +715,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@ledgerhq/hw-app-eth@npm:5.50.0":
-  version: 5.50.0
-  resolution: "@ledgerhq/hw-app-eth@npm:5.50.0"
+"@ledgerhq/hw-app-eth@npm:5.27.2":
+  version: 5.27.2
+  resolution: "@ledgerhq/hw-app-eth@npm:5.27.2"
   dependencies:
-    "@ledgerhq/cryptoassets": ^5.50.0
-    "@ledgerhq/errors": ^5.50.0
-    "@ledgerhq/hw-transport": ^5.50.0
+    "@ledgerhq/cryptoassets": ^5.27.2
+    "@ledgerhq/errors": ^5.26.0
+    "@ledgerhq/hw-transport": ^5.26.0
     bignumber.js: ^9.0.1
     rlp: ^2.2.6
-  checksum: 6158d48b209ead73e4079d9c87564e3b29500f6eb848867d9744c4849e6e6666a1b924d2828aba6da10a694e95c4747027e420d2ed60dced7cf070abb67e90c8
+  checksum: 63fe348442fbb30090de1e296e8044a379644377b23b0adb90401c52857d53924d900c264f75f9c308b5317b7be11974f45218a923b612cfde2f93bff87bbaca
   languageName: node
   linkType: hard
 
@@ -780,7 +780,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@ledgerhq/hw-transport@npm:^5.26.0, @ledgerhq/hw-transport@npm:^5.50.0, @ledgerhq/hw-transport@npm:^5.51.1":
+"@ledgerhq/hw-transport@npm:^5.26.0, @ledgerhq/hw-transport@npm:^5.51.1":
   version: 5.51.1
   resolution: "@ledgerhq/hw-transport@npm:5.51.1"
   dependencies:
