@@ -1066,6 +1066,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@solidity-parser/parser@npm:^0.13.2":
+  version: 0.13.2
+  resolution: "@solidity-parser/parser@npm:0.13.2"
+  dependencies:
+    antlr4ts: ^0.5.0-alpha.4
+  checksum: bfdd8ec7f7b88f3cc75e333e03202cde5e5dacbec7f00612f22dec5e22b0995713637872ce202064d182bae56a274fcb2ca8715ad5482af5e8b38728a0216cf7
+  languageName: node
+  linkType: hard
+
 "@szmarczak/http-timer@npm:^1.1.2":
   version: 1.1.2
   resolution: "@szmarczak/http-timer@npm:1.1.2"
@@ -1819,6 +1828,15 @@ __metadata:
   dependencies:
     color-convert: ^2.0.1
   checksum: 513b44c3b2105dd14cc42a19271e80f386466c4be574bccf60b627432f9198571ebf4ab1e4c3ba17347658f4ee1711c163d574248c0c1cdc2d5917a0ad582ec4
+  languageName: node
+  linkType: hard
+
+"antlr4ts@npm:^0.5.0-alpha.4":
+  version: 0.5.0-dev
+  resolution: "antlr4ts@npm:0.5.0-dev"
+  dependencies:
+    source-map-support: ^0.5.16
+  checksum: 640dae2229124372b0329315e9614ae983bb80b1af237d8c0b3e90a2d85fb534e851c51d65d1897c92b36d27851d041ad8d95aab44af19cf7355b3ad11a3ddbf
   languageName: node
   linkType: hard
 
@@ -5948,7 +5966,7 @@ fsevents@~2.3.1:
   languageName: node
   linkType: hard
 
-"ganache-cli@npm:^6.11.0":
+"ganache-cli@npm:^6.12.2":
   version: 6.12.2
   resolution: "ganache-cli@npm:6.12.2"
   dependencies:
@@ -11177,17 +11195,17 @@ resolve@1.1.x:
   languageName: node
   linkType: hard
 
-"solidity-coverage@npm:^0.7.16":
-  version: 0.7.16
-  resolution: "solidity-coverage@npm:0.7.16"
+"solidity-coverage@npm:^0.7.17":
+  version: 0.7.17
+  resolution: "solidity-coverage@npm:0.7.17"
   dependencies:
-    "@solidity-parser/parser": ^0.12.0
+    "@solidity-parser/parser": ^0.13.2
     "@truffle/provider": ^0.2.24
     chalk: ^2.4.2
     death: ^1.1.0
     detect-port: ^1.3.0
     fs-extra: ^8.1.0
-    ganache-cli: ^6.11.0
+    ganache-cli: ^6.12.2
     ghost-testrpc: ^0.0.2
     global-modules: ^2.0.0
     globby: ^10.0.1
@@ -11202,7 +11220,7 @@ resolve@1.1.x:
     web3-utils: ^1.3.0
   bin:
     solidity-coverage: plugins/bin.js
-  checksum: 6f4cb064097e43117032e9f59c9bfc4e9d122df97cc3aef058fc5889e2c1c7f0db8defd4e337533b5908befe69cc52008d6ae73ec25172b28340ea7561ef1141
+  checksum: 8bc04823943483ad84457d52a6c046dadfd861ef9cf4d0864cfaecf882d33fd26a73120f05f01b2ac14a0c62e93ced0dbd2908c85840c0c86b06b200e89a5519
   languageName: node
   linkType: hard
 
@@ -11238,13 +11256,13 @@ resolve@1.1.x:
   languageName: node
   linkType: hard
 
-"source-map-support@npm:^0.5.13":
-  version: 0.5.19
-  resolution: "source-map-support@npm:0.5.19"
+"source-map-support@npm:^0.5.13, source-map-support@npm:^0.5.16":
+  version: 0.5.20
+  resolution: "source-map-support@npm:0.5.20"
   dependencies:
     buffer-from: ^1.0.0
     source-map: ^0.6.0
-  checksum: c72802fdba9cb62b92baef18cc14cc4047608b77f0353e6c36dd993444149a466a2845332c5540d4a6630957254f0f68f4ef5a0120c33d2e83974c51a05afbac
+  checksum: 43946aff452011960d16154304b11011e0185549493e65dd90da045959409fb2d266ba1c854fff3d5949f8e59382e3fcc7f7c5fa66136007a6750ad06c6c0baa
   languageName: node
   linkType: hard
 
@@ -11960,7 +11978,7 @@ resolve@1.1.x:
     prettier: ^2.4.1
     prettier-plugin-solidity: ^1.0.0-beta.3
     readline-sync: ^1.4.10
-    solidity-coverage: ^0.7.16
+    solidity-coverage: ^0.7.17
     ts-node: ^10.2.1
     typescript: ^4.4.3
   languageName: unknown
