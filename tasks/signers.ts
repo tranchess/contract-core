@@ -24,7 +24,8 @@ export async function updateHreSigner(hre: HardhatRuntimeEnvironment): Promise<v
             return await oldSignTransaction.apply(this, [transaction]);
         };
 
-        const ledgerWithAddress = await SignerWithAddress.create(ledger);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ledgerWithAddress = await SignerWithAddress.create(ledger as any);
         hre.ethers.getSigners = async function () {
             return [ledgerWithAddress];
         };
