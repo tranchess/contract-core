@@ -20,7 +20,7 @@ jobs:
               with:
                   node-version: ${{ matrix.node-version }}
             - name: Install dependencies
-              run: yarn install
+              run: yarn install --immutable
             - name: Run unit test coverage
               run: yarn run coverage
     check:
@@ -33,6 +33,6 @@ jobs:
               with:
                   node-version: 12.x
             - name: Install dependencies
-              run: yarn install
+              run: yarn install --immutable
             - name: Check lint and format
               run: yarn run check
