@@ -9,7 +9,7 @@
 
 /cache/
 /artifacts/
-/deploy/
+/deployed_addresses/
 /coverage/
 /coverage.json
 /.env

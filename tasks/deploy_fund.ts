@@ -1,28 +1,69 @@
+import { strict as assert } from "assert";
 import { task } from "hardhat/config";
-import { createAddressFile, selectAddressFile } from "./address_file";
+import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./address_file";
+import type { GovernanceAddresses } from "./deploy_governance";
+import type { TwapOracleAddresses } from "./deploy_twap_oracle";
+import type { BscAprOracleAddresses } from "./deploy_bsc_apr_oracle";
 import { GOVERNANCE_CONFIG, FUND_CONFIG } from "../config";
 import { updateHreSigner } from "./signers";
 
+export interface FundAddresses extends Addresses {
+    underlyingSymbol: string;
+    underlying: string;
+    quoteSymbol: string;
+    quote: string;
+    twapOracle: string;
+    aprOracle: string;
+    feeDistributor: string;
+    fund: string;
+    shareM: string;
+    shareA: string;
+    shareB: string;
+    primaryMarket: string;
+}
+
 task("deploy_fund", "Deploy fund contracts")
-    .addOptionalParam("governance", "Path to the governance address file", "")
+    .addParam("underlyingSymbol", "Underlying token symbol")
+    .addParam("quoteSymbol", "Quote token symbol")
+    .addParam("adminFeeRate", "Admin fraction in the fee distributor")
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
         const { ethers } = hre;
         const { parseEther, parseUnits } = ethers.utils;
-
         await hre.run("compile");
-        const [deployer] = await ethers.getSigners();
-        const addressFile = createAddressFile(hre, "fund");
-        const governanceAddresses = await selectAddressFile(hre, "governance", args.governance);
 
-        const underlyingToken = await ethers.getContractAt("ERC20", FUND_CONFIG.UNDERLYING_ADDRESS);
+        const underlyingSymbol: string = args.underlyingSymbol;
+        assert.ok(underlyingSymbol.match(/[a-zA-Z]+/), "Invalid symbol");
+        const quoteSymbol: string = args.quoteSymbol;
+        assert.ok(quoteSymbol.match(/[a-zA-Z]+/), "Invalid symbol");
+        const adminFeeRate = parseEther(args.adminFeeRate);
+
+        const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
+        const twapOracleAddresses = loadAddressFile<TwapOracleAddresses>(
+            hre,
+            `twap_oracle_${underlyingSymbol.toLowerCase()}`
+        );
+        const bscAprOracleAddresses = loadAddressFile<BscAprOracleAddresses>(
+            hre,
+            `bsc_apr_oracle_${quoteSymbol.toLowerCase()}`
+        );
+
+        const underlyingToken = await ethers.getContractAt("ERC20", twapOracleAddresses.token);
         const underlyingDecimals = await underlyingToken.decimals();
-        const underlyingSymbol = await underlyingToken.symbol();
+        assert.strictEqual(underlyingSymbol, await underlyingToken.symbol());
+        const quoteToken = await ethers.getContractAt("ERC20", bscAprOracleAddresses.token);
+        assert.strictEqual(quoteSymbol, await quoteToken.symbol());
         console.log(`Underlying: ${underlyingToken.address}`);
-        addressFile.set("underlying", underlyingToken.address);
+        console.log(`Quote: ${quoteToken.address}`);
 
-        addressFile.set("twapOracle", FUND_CONFIG.TWAP_ORACLE_ADDRESS);
-        addressFile.set("aprOracle", FUND_CONFIG.APR_ORACLE_ADDRESS);
+        const FeeDistributor = await ethers.getContractFactory("FeeDistributor");
+        const feeDistributor = await FeeDistributor.deploy(
+            underlyingToken.address,
+            governanceAddresses.votingEscrow,
+            GOVERNANCE_CONFIG.TREASURY || (await FeeDistributor.signer.getAddress()), // admin
+            adminFeeRate
+        );
+        console.log(`FeeDistributor: ${feeDistributor.address}`);
 
         const Fund = await ethers.getContractFactory("Fund");
         const fund = await Fund.deploy(
@@ -31,14 +72,13 @@ task("deploy_fund", "Deploy fund contracts")
             parseEther("0.000027534787632697"), // 1 - 0.99 ^ (1/365)
             parseEther("2"),
             parseEther("0.5"),
-            FUND_CONFIG.TWAP_ORACLE_ADDRESS,
-            FUND_CONFIG.APR_ORACLE_ADDRESS,
+            twapOracleAddresses.twapOracle,
+            bscAprOracleAddresses.bscAprOracle,
             governanceAddresses.interestRateBallot,
-            deployer.address, // FIXME read from configuration
+            feeDistributor.address,
             { gasLimit: 5e6 } // Gas estimation may fail
         );
         console.log(`Fund: ${fund.address}`);
-        addressFile.set("fund", fund.address);
 
         const Share = await ethers.getContractFactory("Share");
         const shareM = await Share.deploy(
@@ -48,7 +88,6 @@ task("deploy_fund", "Deploy fund contracts")
             0
         );
         console.log(`ShareM: ${shareM.address}`);
-        addressFile.set("shareM", shareM.address);
 
         const shareA = await Share.deploy(
             `Tranchess ${underlyingSymbol} BISHOP`,
@@ -57,7 +96,6 @@ task("deploy_fund", "Deploy fund contracts")
             1
         );
         console.log(`ShareA: ${shareA.address}`);
-        addressFile.set("shareA", shareA.address);
 
         const shareB = await Share.deploy(
             `Tranchess ${underlyingSymbol} ROOK`,
@@ -66,20 +104,18 @@ task("deploy_fund", "Deploy fund contracts")
             2
         );
         console.log(`ShareB: ${shareB.address}`);
-        addressFile.set("shareB", shareB.address);
 
         const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
         const primaryMarket = await PrimaryMarket.deploy(
             fund.address,
             FUND_CONFIG.GUARDED_LAUNCH ? GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP : 0,
-            parseEther("0.001"),
+            parseEther("0.002"),
             parseEther("0.0005"),
             parseEther("0.0005"),
             parseUnits(FUND_CONFIG.MIN_CREATION, underlyingDecimals),
             { gasLimit: 5e6 } // Gas estimation may fail
         );
         console.log(`PrimaryMarket: ${primaryMarket.address}`);
-        addressFile.set("primaryMarket", primaryMarket.address);
 
         console.log("Initializing Fund");
         await fund.initialize(
@@ -89,7 +125,25 @@ task("deploy_fund", "Deploy fund contracts")
             primaryMarket.address
         );
 
-        console.log("Transfering ownership to Timelock");
-        await primaryMarket.transferOwnership(governanceAddresses.timelock);
-        await fund.transferOwnership(governanceAddresses.timelock);
+        console.log("Transfering ownership to TimelockController");
+        await feeDistributor.transferOwnership(governanceAddresses.timelockController);
+        await primaryMarket.transferOwnership(governanceAddresses.timelockController);
+        await fund.transferOwnership(governanceAddresses.timelockController);
+
+        const addresses: FundAddresses = {
+            ...newAddresses(hre),
+            underlyingSymbol,
+            underlying: underlyingToken.address,
+            quoteSymbol,
+            quote: quoteToken.address,
+            twapOracle: twapOracleAddresses.twapOracle,
+            aprOracle: bscAprOracleAddresses.bscAprOracle,
+            feeDistributor: feeDistributor.address,
+            fund: fund.address,
+            shareM: shareM.address,
+            shareA: shareA.address,
+            shareB: shareB.address,
+            primaryMarket: primaryMarket.address,
+        };
+        saveAddressFile(hre, `fund_${underlyingSymbol.toLowerCase()}`, addresses);
     });

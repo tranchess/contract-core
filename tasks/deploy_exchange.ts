@@ -1,29 +1,45 @@
+import { strict as assert } from "assert";
 import { task } from "hardhat/config";
-import { createAddressFile, selectAddressFile } from "./address_file";
+import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./address_file";
+import type { GovernanceAddresses } from "./deploy_governance";
+import type { FundAddresses } from "./deploy_fund";
+import type { ExchangeImplAddresses } from "./deploy_exchange_impl";
 import { updateHreSigner } from "./signers";
 
+export interface ExchangeAddresses extends Addresses {
+    underlyingSymbol: string;
+    quoteSymbol: string;
+    fund: string;
+    exchangeImpl: string;
+    exchange: string;
+}
+
 task("deploy_exchange", "Deploy exchange contracts")
-    .addOptionalParam("governance", "Path to the governance address file", "")
-    .addOptionalParam("fund", "Path to the fund address file", "")
+    .addParam("underlyingSymbol", "Underlying token symbol of the fund")
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
         const { ethers } = hre;
-
         await hre.run("compile");
-        const addressFile = createAddressFile(hre, "exchange");
-        const governanceAddresses = await selectAddressFile(hre, "governance", args.governance);
 
-        await hre.run("deploy_impl", {
-            governance: args.governance,
-            fund: args.fund,
-            silent: true,
-            deployExchange: true,
-        });
-        const implAddresses = await selectAddressFile(hre, "impl", "latest");
+        const underlyingSymbol: string = args.underlyingSymbol;
+        assert.ok(underlyingSymbol.match(/[a-zA-Z]+/), "Invalid symbol");
+
+        const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
+        const fundAddresses = loadAddressFile<FundAddresses>(
+            hre,
+            `fund_${underlyingSymbol.toLowerCase()}`
+        );
+
+        await hre.run("deploy_exchange_impl", { underlyingSymbol });
+        const exchangeImplAddresses = loadAddressFile<ExchangeImplAddresses>(
+            hre,
+            `exchange_v2_impl_${underlyingSymbol.toLowerCase()}`
+        );
+        assert.strictEqual(underlyingSymbol, exchangeImplAddresses.underlyingSymbol);
+        assert.strictEqual(fundAddresses.quoteSymbol, exchangeImplAddresses.quoteSymbol);
 
         const Exchange = await ethers.getContractFactory("ExchangeV2");
-        const exchangeImpl = Exchange.attach(implAddresses.exchangeImpl);
-        addressFile.set("exchangeImpl", exchangeImpl.address);
+        const exchangeImpl = Exchange.attach(exchangeImplAddresses.exchangeImpl);
 
         const TransparentUpgradeableProxy = await ethers.getContractFactory(
             "TransparentUpgradeableProxy"
@@ -37,7 +53,6 @@ task("deploy_exchange", "Deploy exchange contracts")
         );
         const exchange = Exchange.attach(exchangeProxy.address);
         console.log(`Exchange: ${exchange.address}`);
-        addressFile.set("exchange", exchange.address);
 
         const chessSchedule = await ethers.getContractAt(
             "ChessSchedule",
@@ -46,10 +61,18 @@ task("deploy_exchange", "Deploy exchange contracts")
         if ((await chessSchedule.owner()) === (await chessSchedule.signer.getAddress())) {
             await chessSchedule.addMinter(exchange.address);
             console.log("Exchange is a CHESS minter now");
-
-            console.log("Transfering ownership of ChessSchedule to Timelock");
-            await chessSchedule.transferOwnership(governanceAddresses.timelock);
+            console.log("NOTE: Please transfer ownership of ChessSchedule to Timelock later");
         } else {
             console.log("NOTE: Please add Exchange as a minter of ChessSchedule");
         }
+
+        const addresses: ExchangeAddresses = {
+            ...newAddresses(hre),
+            underlyingSymbol,
+            quoteSymbol: fundAddresses.quoteSymbol,
+            fund: fundAddresses.fund,
+            exchangeImpl: exchangeImpl.address,
+            exchange: exchange.address,
+        };
+        saveAddressFile(hre, `exchange_${underlyingSymbol.toLowerCase()}`, addresses);
     });
