@@ -82,6 +82,8 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     /// @notice Start timestamp of the current exchange activity window.
     uint256 public override exchangeActivityStartTime;
 
+    uint256 public activityDelayTimeAfterRebalance;
+
     /// @dev Historical rebalances. Rebalances are often accessed in loops with bounds checking.
     ///      So we store them in a fixed-length array, in order to make compiler-generated
     ///      bounds checking on every access cheaper. The actual length of this array is stored in
@@ -169,6 +171,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         historicalInterestRate[_endOfWeek(lastDay)] = MAX_INTEREST_RATE.min(aprOracle.capture());
         fundActivityStartTime = lastDay;
         exchangeActivityStartTime = lastDay + 30 minutes;
+        activityDelayTimeAfterRebalance = 12 hours;
     }
 
     function initialize(
@@ -783,8 +786,8 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
             navA = UNIT;
             navB = UNIT;
             totalShares = getTotalShares();
-            fundActivityStartTime = day + 12 hours;
-            exchangeActivityStartTime = day + 12 hours;
+            fundActivityStartTime = day + activityDelayTimeAfterRebalance;
+            exchangeActivityStartTime = day + activityDelayTimeAfterRebalance;
         } else {
             fundActivityStartTime = day;
             exchangeActivityStartTime = day + 30 minutes;
@@ -850,6 +853,14 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
 
     function updateFeeCollector(address newFeeCollector) external onlyOwner {
         feeCollector = newFeeCollector;
+    }
+
+    function updateActivityDelayTime(uint256 delayTime) external onlyOwner {
+        require(
+            delayTime >= 30 minutes && delayTime <= 12 hours,
+            "Exceed allowed delay time range"
+        );
+        activityDelayTimeAfterRebalance = delayTime;
     }
 
     /// @dev Transfer protocol fee of the current trading day to the fee collector.
