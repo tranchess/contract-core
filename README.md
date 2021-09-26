@@ -6,19 +6,19 @@ Tranchess core.
 
 ## Install Dependencies
 
-`npm install`
+`yarn install`
 
 ## Compile Contracts
 
-`npx hardhat compile`
+`yarn hardhat compile`
 
 ## Run Tests
 
-`npm run test`
+`yarn run test`
 
 ## Check Lint and Format
 
-`npm run check`
+`yarn run check`
 
 ## Deploy Contracts
 
@@ -39,29 +39,29 @@ This project depends on a few external contracts. On a public blockchain, please
 their addresses in `.env`. On a private blockchain, deploy mock contracts using the following
 command.
 
-`npx hardhat deploy_mock --network remote`
+`yarn hardhat deploy_mock --network remote`
 
 ### Oracle Contracts
 
-`npx hardhat deploy_oracle --network remote`
+`yarn hardhat deploy_oracle --network remote`
 
 On a private blockchain, you may want to use mock oracles instead of contracts deployed
 by this task.
 
 ### Governance Contracts
 
-`npx hardhat deploy_governance --network remote`
+`yarn hardhat deploy_governance --network remote`
 
 ### Fund Contracts
 
-`npx hardhat deploy_fund --network remote`
+`yarn hardhat deploy_fund --network remote`
 
 It needs governance contract addresses. Use the optional argument `--governance <file>`
 to specify an address file.
 
 ### Exchange Contracts
 
-`npx hardhat deploy_exchange --network remote`
+`yarn hardhat deploy_exchange --network remote`
 
 It needs governance and fund contract addresses. Use the optional arguments `--governance <file>`
 and `--fund <file>` to specify address files.
@@ -71,4 +71,4 @@ and `--fund <file>` to specify address files.
 The Hardhat task `test_deploy` runs all the above deployment tasks on a temporary local
 Hardhat network. It can be used as a preliminary test.
 
-`npx hardhat test_deploy`
+`yarn hardhat test_deploy`
