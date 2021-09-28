@@ -1,38 +1,61 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
 import "../utils/CoreUtility.sol";
 import "../utils/SafeDecimalMath.sol";
+import "../interfaces/IChessController.sol";
 import "../interfaces/IFund.sol";
 
 interface IExchange {
     function fund() external view returns (IFund);
 }
 
-contract ChessControllerV2 is CoreUtility, Ownable {
+contract ChessControllerV2 is IChessController, CoreUtility {
+    /// @dev Reserved storage slots for future base contract upgrades
+    uint256[32] private _reservedSlots;
+
+    using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
 
-    uint256 public immutable guardedLaunchStart;
-    mapping(address => uint256) private guardedPoolRatio;
+    uint256 public constant WINDOW_SIZE = 4;
+    uint256 public immutable minRatio;
 
-    address[2] private authorizedFunds;
+    bool public initialized;
+
+    address public immutable fund0;
+    address public immutable fund1;
     mapping(address => mapping(uint256 => uint256)) public relativeWeights;
 
+    uint256 public immutable guardedLaunchStart;
+    uint256 public guardedLaunchDuration;
+
     constructor(
-        address[2] memory authorizedFunds_,
+        address fund0_,
+        address fund1_,
         uint256 guardedLaunchStart_,
-        uint256 pool0Ratio_,
-        uint256 pool1Ratio_
-    ) public Ownable() {
-        authorizedFunds = authorizedFunds_;
+        uint256 minRatio_
+    ) public {
+        fund0 = fund0_;
+        fund1 = fund1_;
         guardedLaunchStart = guardedLaunchStart_;
-        require(pool0Ratio_.add(pool1Ratio_) == 1e18, "invalid ratio");
-        guardedPoolRatio[authorizedFunds_[0]] = pool0Ratio_;
-        guardedPoolRatio[authorizedFunds_[1]] = pool1Ratio_;
+        minRatio = minRatio_;
+    }
+
+    function initialize(uint256[] memory weeklyPoolRatios0_) public {
+        require(!initialized, "Already Initialized");
+        require(_endOfWeek(guardedLaunchStart) == guardedLaunchStart + 1 weeks, "Not end of week");
+        guardedLaunchDuration = weeklyPoolRatios0_.length * 1 weeks;
+        for (uint256 i = 0; i < weeklyPoolRatios0_.length; i++) {
+            relativeWeights[fund0][guardedLaunchStart + i * 1 weeks] = weeklyPoolRatios0_[i];
+            relativeWeights[fund1][guardedLaunchStart + i * 1 weeks] = uint256(1e18).sub(
+                weeklyPoolRatios0_[i]
+            );
+        }
+        initialized = true;
     }
 
     /// @notice Get Fund relative weight (not more than 1.0) normalized to 1e18
@@ -40,81 +63,80 @@ contract ChessControllerV2 is CoreUtility, Ownable {
     /// @return relativeWeight Value of relative weight normalized to 1e18
     function getFundRelativeWeight(address fundAddress, uint256 timestamp)
         external
-        view
+        override
         returns (uint256 relativeWeight)
     {
-        if (timestamp < guardedLaunchStart + 4 weeks) {
-            return guardedPoolRatio[fundAddress];
+        if (timestamp < guardedLaunchStart) {
+            if (fundAddress == fund0) {
+                return 1e18;
+            } else {
+                return 0;
+            }
         }
 
         uint256 weekTimestamp = _endOfWeek(timestamp).sub(1 weeks);
-        relativeWeight = relativeWeights[fundAddress][weekTimestamp];
-        if (relativeWeight != 0) {
-            return relativeWeight;
+        if (timestamp < guardedLaunchStart + guardedLaunchDuration) {
+            return relativeWeights[fundAddress][weekTimestamp];
         }
 
-        // Calculate the relative weight if it has not been recorded beforehand
-        uint256 fundValueLocked = 0;
-        uint256 totalValueLocked = 0;
-        for (uint256 i = 0; i < authorizedFunds.length; i++) {
-            address authorizedFund = authorizedFunds[i];
-            IFund fund = IFund(authorizedFund);
-
-            // If any one of the funds has not been settled yet, return last week's relative weight
-            uint256 currentDay = fund.currentDay();
-            if (currentDay < weekTimestamp) {
-                return relativeWeights[fundAddress][weekTimestamp.sub(1 weeks)];
-            }
-
-            // Calculate per-fund TVL
-            uint256 price = fund.twapOracle().getTwap(weekTimestamp);
-            uint256 valueLocked = fund.historicalUnderlying(weekTimestamp).multiplyDecimal(price);
-            totalValueLocked = totalValueLocked.add(valueLocked);
-            if (authorizedFund == fundAddress) {
-                fundValueLocked = valueLocked;
-            }
+        (uint256 relativeWeight0, uint256 relativeWeight1) = updateFundRelativeWeight();
+        if (fundAddress == fund0) {
+            relativeWeight = relativeWeight0;
+        } else {
+            relativeWeight = relativeWeight1;
         }
-
-        relativeWeight = fundValueLocked.divideDecimal(totalValueLocked);
     }
 
-    function updateFundRelativeWeight() public {
+    function updateFundRelativeWeight()
+        public
+        returns (uint256 relativeWeightMovingAverage0, uint256 relativeWeightMovingAverage1)
+    {
         uint256 currentTimestamp = _endOfWeek(block.timestamp) - 1 weeks;
 
-        uint256 totalValueLocked = 0;
-        address[2] memory authorizedFunds_ = authorizedFunds;
-        uint256[2] memory fundValueLockeds;
-
-        // 1st PASS: get individual and sum of TVLs
-        for (uint256 i = 0; i < authorizedFunds_.length; i++) {
-            address authorizedFund = authorizedFunds_[i];
-            IFund fund = IFund(authorizedFund);
-
-            // If any one of the funds has not been settled yet, skip the update
-            uint256 currentDay = fund.currentDay();
-            require(currentDay >= currentTimestamp, "Fund not been settled yet");
-
-            // Calculate per-fund TVL
-            uint256 price = fund.twapOracle().getTwap(currentTimestamp);
-            uint256 valueLocked =
-                fund.historicalUnderlying(currentTimestamp).multiplyDecimal(price);
-            fundValueLockeds[i] = valueLocked;
-            totalValueLocked = totalValueLocked.add(valueLocked);
-        }
+        // 1st PASS: get individual and sum of TVLs. Avoids 0 TVLs
+        uint256 fundValueLocked0 = getFundTVL(fund0);
+        uint256 fundValueLocked1 = getFundTVL(fund1);
+        uint256 totalValueLocked = fundValueLocked0.add(fundValueLocked1);
 
         // 2nd PASS: calculate the relative weights of each fund
-        for (uint256 i = 0; i < authorizedFunds_.length; i++) {
-            address authorizedFund = authorizedFunds_[i];
-            if (relativeWeights[authorizedFund][currentTimestamp] == 0) {
-                relativeWeights[authorizedFund][currentTimestamp] = fundValueLockeds[i]
-                    .divideDecimal(totalValueLocked);
-            }
+        if (totalValueLocked == 0) {
+            relativeWeightMovingAverage0 = relativeWeights[fund0][currentTimestamp - 1 weeks];
+            relativeWeightMovingAverage1 = relativeWeights[fund1][currentTimestamp - 1 weeks];
+        } else {
+            uint256 latestRelativeWeight0 = fundValueLocked0.divideDecimal(totalValueLocked);
+            relativeWeightMovingAverage0 = _getMovingAverage(
+                fund0,
+                currentTimestamp,
+                latestRelativeWeight0
+            );
+            relativeWeightMovingAverage1 = uint256(1e18).sub(relativeWeightMovingAverage0);
+        }
+        if (
+            relativeWeights[fund0][currentTimestamp] == 0 &&
+            relativeWeights[fund1][currentTimestamp] == 0
+        ) {
+            relativeWeights[fund0][currentTimestamp] = relativeWeightMovingAverage0;
+            relativeWeights[fund1][currentTimestamp] = relativeWeightMovingAverage1;
         }
     }
 
-    function updateGuardedLaunchRatio(uint256 pool0Ratio, uint256 pool1Ratio) external onlyOwner {
-        require(pool0Ratio.add(pool1Ratio) == 1e18, "Invalid ratio");
-        guardedPoolRatio[authorizedFunds[0]] = pool0Ratio;
-        guardedPoolRatio[authorizedFunds[1]] = pool1Ratio;
+    function getFundTVL(address fund) public view returns (uint256 fundValueLocked) {
+        uint256 currentDay = IFund(fund).currentDay();
+        uint256 price = IFund(fund).twapOracle().getTwap(currentDay - 1 days);
+        fundValueLocked = IFund(fund).historicalUnderlying(currentDay - 1 days).multiplyDecimal(
+            price
+        );
+    }
+
+    /// @dev Ratio of week T is 25% of the latest ratio plus 75% of ratio from last week
+    function _getMovingAverage(
+        address fundAddress,
+        uint256 weekTimestamp,
+        uint256 latestRelativeWeight
+    ) private view returns (uint256 movingAverage) {
+        movingAverage =
+            relativeWeights[fundAddress][weekTimestamp - 1 weeks].mul(3) +
+            latestRelativeWeight;
+        movingAverage = (movingAverage / WINDOW_SIZE).max(minRatio).min(1e18 - minRatio);
     }
 }

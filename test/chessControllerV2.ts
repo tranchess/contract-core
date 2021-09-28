@@ -29,6 +29,8 @@ describe("ChessControllerV2", function () {
     let twapOracle2: MockContract;
     let chessController: Contract;
 
+    const minRatio = parseEther("0.47");
+
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
         const [user1, owner] = provider.getWallets();
 
@@ -45,12 +47,29 @@ describe("ChessControllerV2", function () {
         await fund2.mock.twapOracle.returns(twapOracle2.address);
 
         const ChessControllerV2 = await ethers.getContractFactory("ChessControllerV2");
-        const chessController = await ChessControllerV2.connect(owner).deploy(
-            [fund1.address, fund2.address],
+        const chessControllerImpl = await ChessControllerV2.connect(owner).deploy(
+            fund1.address,
+            fund2.address,
             startWeek,
-            parseEther("0.2"),
-            parseEther("0.8")
+            minRatio
         );
+        const TransparentUpgradeableProxy = await ethers.getContractFactory(
+            "TransparentUpgradeableProxy"
+        );
+        const ProxyAdmin = await ethers.getContractFactory("ProxyAdmin");
+        const proxyAdmin = await ProxyAdmin.connect(owner).deploy();
+        const initTx = await chessControllerImpl.populateTransaction.initialize([
+            parseEther("0.2"),
+            parseEther("0.3"),
+            parseEther("0.4"),
+            parseEther("0.5"),
+        ]);
+        const chessControllerProxy = await TransparentUpgradeableProxy.connect(owner).deploy(
+            chessControllerImpl.address,
+            proxyAdmin.address,
+            initTx.data
+        );
+        const chessController = ChessControllerV2.attach(chessControllerProxy.address);
 
         return {
             wallets: { user1, owner },
@@ -76,84 +95,195 @@ describe("ChessControllerV2", function () {
         twapOracle1 = fixtureData.twapOracle1;
         twapOracle2 = fixtureData.twapOracle2;
         chessController = fixtureData.chessController;
+
+        // The tvl ratio: 9%, 21%, 25%, 33%, 45%, 57%
+        await fund1.mock.historicalUnderlying.withArgs(startWeek).returns(parseEther("3"));
+        await fund1.mock.historicalUnderlying.withArgs(startWeek + WEEK).returns(parseEther("7"));
+        await fund1.mock.historicalUnderlying
+            .withArgs(startWeek + WEEK * 2)
+            .returns(parseEther("5"));
+        await fund1.mock.historicalUnderlying
+            .withArgs(startWeek + WEEK * 3)
+            .returns(parseEther("11"));
+        await fund1.mock.historicalUnderlying
+            .withArgs(startWeek + WEEK * 4)
+            .returns(parseEther("9"));
+        await fund1.mock.historicalUnderlying
+            .withArgs(startWeek + WEEK * 5)
+            .returns(parseEther("3"));
+
+        await twapOracle1.mock.getTwap.withArgs(startWeek).returns(parseEther("3"));
+        await twapOracle1.mock.getTwap.withArgs(startWeek + WEEK).returns(parseEther("3"));
+        await twapOracle1.mock.getTwap.withArgs(startWeek + WEEK * 2).returns(parseEther("5"));
+        await twapOracle1.mock.getTwap.withArgs(startWeek + WEEK * 3).returns(parseEther("3"));
+        await twapOracle1.mock.getTwap.withArgs(startWeek + WEEK * 4).returns(parseEther("5"));
+        await twapOracle1.mock.getTwap.withArgs(startWeek + WEEK * 5).returns(parseEther("19"));
+
+        await fund2.mock.historicalUnderlying.withArgs(startWeek).returns(parseEther("7"));
+        await fund2.mock.historicalUnderlying.withArgs(startWeek + WEEK).returns(parseEther("1"));
+        await fund2.mock.historicalUnderlying
+            .withArgs(startWeek + WEEK * 2)
+            .returns(parseEther("5"));
+        await fund2.mock.historicalUnderlying
+            .withArgs(startWeek + WEEK * 3)
+            .returns(parseEther("67"));
+        await fund2.mock.historicalUnderlying
+            .withArgs(startWeek + WEEK * 4)
+            .returns(parseEther("11"));
+        await fund2.mock.historicalUnderlying
+            .withArgs(startWeek + WEEK * 5)
+            .returns(parseEther("43"));
+
+        await twapOracle2.mock.getTwap.withArgs(startWeek).returns(parseEther("13"));
+        await twapOracle2.mock.getTwap.withArgs(startWeek + WEEK).returns(parseEther("79"));
+        await twapOracle2.mock.getTwap.withArgs(startWeek + WEEK * 2).returns(parseEther("15"));
+        await twapOracle2.mock.getTwap.withArgs(startWeek + WEEK * 3).returns(parseEther("1"));
+        await twapOracle2.mock.getTwap.withArgs(startWeek + WEEK * 4).returns(parseEther("5"));
+        await twapOracle2.mock.getTwap.withArgs(startWeek + WEEK * 5).returns(parseEther("1"));
     });
 
     describe("updateGuardedLaunchRatio()", function () {
         it("Should return guarded launch ratio", async function () {
             expect(
-                await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK)
+                await chessController.callStatic["getFundRelativeWeight"](
+                    fund1.address,
+                    startWeek - 1
+                )
+            ).to.equal(parseEther("1"));
+            expect(
+                await chessController.callStatic["getFundRelativeWeight"](
+                    fund2.address,
+                    startWeek - 1
+                )
+            ).to.equal(parseEther("0"));
+
+            await fund1.mock.currentDay.returns(startWeek + DAY);
+            await fund2.mock.currentDay.returns(startWeek + DAY);
+            expect(
+                await chessController.callStatic["getFundRelativeWeight"](fund1.address, startWeek)
             ).to.equal(parseEther("0.2"));
             expect(
-                await chessController.getFundRelativeWeight(fund2.address, startWeek + WEEK)
+                await chessController.callStatic["getFundRelativeWeight"](fund2.address, startWeek)
             ).to.equal(parseEther("0.8"));
-        });
 
-        it("Should revert if not owner", async function () {
-            await expect(
-                chessController.updateGuardedLaunchRatio(parseEther("0.3"), parseEther("0.7"))
-            ).to.be.revertedWith("Ownable: caller is not the owner");
-        });
-
-        it("Should revert on invalid guarded launch ratio", async function () {
-            await expect(
-                chessController
-                    .connect(owner)
-                    .updateGuardedLaunchRatio(parseEther("0.3"), parseEther("0.6"))
-            ).to.be.revertedWith("Invalid ratio");
-        });
-
-        it("Should return guarded launch ratio", async function () {
-            await chessController
-                .connect(owner)
-                .updateGuardedLaunchRatio(parseEther("0.3"), parseEther("0.7"));
+            await fund1.mock.currentDay.returns(startWeek + WEEK + DAY);
+            await fund2.mock.currentDay.returns(startWeek + WEEK + DAY);
             expect(
-                await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK)
+                await chessController.callStatic["getFundRelativeWeight"](
+                    fund1.address,
+                    startWeek + WEEK
+                )
             ).to.equal(parseEther("0.3"));
             expect(
-                await chessController.getFundRelativeWeight(fund2.address, startWeek + WEEK)
+                await chessController.callStatic["getFundRelativeWeight"](
+                    fund2.address,
+                    startWeek + WEEK
+                )
             ).to.equal(parseEther("0.7"));
         });
     });
 
     describe("getFundRelativeWeight()", function () {
-        before(async function () {
-            await advanceBlockAtTime(startWeek + WEEK * 4);
-        });
+        const week4Ratio0 = parseEther("0.5").mul(75).add(parseEther("0.45").mul(25)).div(100);
+        const week5Ratio0 = week4Ratio0.mul(75).add(parseEther("0.57").mul(25)).div(100);
 
         beforeEach(async function () {
-            await fund1.mock.currentDay.returns(startWeek + WEEK * 5 - DAY);
-            await fund2.mock.currentDay.returns(startWeek + WEEK * 5 - DAY);
-            await fund1.mock.historicalUnderlying.returns(parseEther("6"));
-            await fund2.mock.historicalUnderlying.returns(parseEther("2"));
-            await twapOracle1.mock.getTwap.returns(parseEther("7"));
-            await twapOracle2.mock.getTwap.returns(parseEther("29"));
+            await fund1.mock.currentDay.returns(startWeek + DAY);
+            await fund2.mock.currentDay.returns(startWeek + DAY);
+            await chessController.updateFundRelativeWeight();
+
+            await advanceBlockAtTime(startWeek + WEEK);
+            await fund1.mock.currentDay.returns(startWeek + WEEK + DAY);
+            await fund2.mock.currentDay.returns(startWeek + WEEK + DAY);
+            await chessController.updateFundRelativeWeight();
+
+            await advanceBlockAtTime(startWeek + WEEK * 2);
+            await fund1.mock.currentDay.returns(startWeek + WEEK * 2 + DAY);
+            await fund2.mock.currentDay.returns(startWeek + WEEK * 2 + DAY);
+            await chessController.updateFundRelativeWeight();
+
+            await advanceBlockAtTime(startWeek + WEEK * 3);
+            await fund1.mock.currentDay.returns(startWeek + WEEK * 3 + DAY);
+            await fund2.mock.currentDay.returns(startWeek + WEEK * 3 + DAY);
+            await chessController.updateFundRelativeWeight();
+
+            await advanceBlockAtTime(startWeek + WEEK * 4);
+            await fund1.mock.currentDay.returns(startWeek + WEEK * 4 + DAY);
+            await fund2.mock.currentDay.returns(startWeek + WEEK * 4 + DAY);
+            await chessController.updateFundRelativeWeight();
         });
 
         it("Should return previous recorded weight", async function () {
             expect(
-                await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK * 5)
-            ).to.equal(parseEther("0"));
+                await chessController.callStatic["getFundRelativeWeight"](
+                    fund1.address,
+                    startWeek + WEEK * 4
+                )
+            ).to.equal(week4Ratio0);
         });
 
         it("Should return relative weight for funds", async function () {
+            await advanceBlockAtTime(startWeek + WEEK * 5);
+            await fund1.mock.currentDay.returns(startWeek + WEEK * 5 + DAY);
+            await fund2.mock.currentDay.returns(startWeek + WEEK * 5 + DAY);
             expect(
-                await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK * 4)
-            ).to.equal(parseEther("0.42"));
+                await chessController.callStatic["getFundRelativeWeight"](
+                    fund1.address,
+                    startWeek + WEEK * 4
+                )
+            ).to.equal(week5Ratio0);
             expect(
-                await chessController.getFundRelativeWeight(fund2.address, startWeek + WEEK * 4)
-            ).to.equal(parseEther("0.58"));
+                await chessController.callStatic["getFundRelativeWeight"](
+                    fund2.address,
+                    startWeek + WEEK * 4
+                )
+            ).to.equal(parseEther("1").sub(week5Ratio0));
+        });
+
+        it("Should return min weight", async function () {
+            await twapOracle1.mock.getTwap.returns(parseEther("0"));
+            await twapOracle2.mock.getTwap.returns(parseEther("1"));
+            await fund1.mock.historicalUnderlying.returns(parseEther("0"));
+            await fund2.mock.historicalUnderlying.returns(parseEther("1"));
+            await fund1.mock.currentDay.returns(startWeek + WEEK * 5);
+            await fund2.mock.currentDay.returns(startWeek + WEEK * 5);
+            await advanceBlockAtTime(startWeek + WEEK * 5);
+            await chessController.updateFundRelativeWeight();
+
+            expect(
+                await chessController.callStatic["getFundRelativeWeight"](
+                    fund1.address,
+                    startWeek + WEEK * 8
+                )
+            ).to.equal(minRatio);
+        });
+
+        it("Should return max weight", async function () {
+            await twapOracle1.mock.getTwap.returns(parseEther("1"));
+            await twapOracle2.mock.getTwap.returns(parseEther("0"));
+            await fund1.mock.historicalUnderlying.returns(parseEther("1"));
+            await fund2.mock.historicalUnderlying.returns(parseEther("0"));
+            await fund1.mock.currentDay.returns(startWeek + WEEK * 5);
+            await fund2.mock.currentDay.returns(startWeek + WEEK * 5);
+            await advanceBlockAtTime(startWeek + WEEK * 5);
+            await chessController.updateFundRelativeWeight();
+
+            expect(
+                await chessController.callStatic["getFundRelativeWeight"](
+                    fund1.address,
+                    startWeek + WEEK * 8
+                )
+            ).to.equal(parseEther("1").sub(minRatio));
         });
     });
 
     describe("updateFundRelativeWeight()", function () {
+        const week4Ratio0 = parseEther("0.5").mul(75).add(parseEther("0.45").mul(25)).div(100);
+
         beforeEach(async function () {
             await advanceBlockAtTime(startWeek + WEEK * 4);
-            await fund1.mock.currentDay.returns(startWeek + WEEK * 5 - DAY);
-            await fund2.mock.currentDay.returns(startWeek + WEEK * 5 - DAY);
-            await fund1.mock.historicalUnderlying.returns(parseEther("6"));
-            await fund2.mock.historicalUnderlying.returns(parseEther("2"));
-            await twapOracle1.mock.getTwap.returns(parseEther("7"));
-            await twapOracle2.mock.getTwap.returns(parseEther("29"));
+            await fund1.mock.currentDay.returns(startWeek + WEEK * 4 + DAY);
+            await fund2.mock.currentDay.returns(startWeek + WEEK * 4 + DAY);
         });
 
         it("Should return relative weight for funds", async function () {
@@ -165,10 +295,26 @@ describe("ChessControllerV2", function () {
 
             expect(
                 await chessController.relativeWeights(fund1.address, startWeek + WEEK * 4)
-            ).to.equal(parseEther("0.42"));
+            ).to.equal(week4Ratio0);
             expect(
                 await chessController.relativeWeights(fund2.address, startWeek + WEEK * 4)
-            ).to.equal(parseEther("0.58"));
+            ).to.equal(parseEther("1").sub(week4Ratio0));
+        });
+
+        it("Should return old relative weight for funds", async function () {
+            await chessController.updateFundRelativeWeight();
+            await fund1.mock.historicalUnderlying.returns(parseEther("2"));
+            await fund2.mock.historicalUnderlying.returns(parseEther("4"));
+            await twapOracle1.mock.getTwap.returns(parseEther("3"));
+            await twapOracle2.mock.getTwap.returns(parseEther("1"));
+            await chessController.updateFundRelativeWeight();
+
+            expect(
+                await chessController.relativeWeights(fund1.address, startWeek + WEEK * 4)
+            ).to.equal(week4Ratio0);
+            expect(
+                await chessController.relativeWeights(fund2.address, startWeek + WEEK * 4)
+            ).to.equal(parseEther("1").sub(week4Ratio0));
         });
     });
 });
