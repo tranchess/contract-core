@@ -31,7 +31,6 @@ contract ChessControllerV2 is IChessController, CoreUtility {
     mapping(address => mapping(uint256 => uint256)) public relativeWeights;
 
     uint256 public immutable guardedLaunchStart;
-    uint256 public guardedLaunchDuration;
 
     constructor(
         address fund0_,
@@ -48,8 +47,11 @@ contract ChessControllerV2 is IChessController, CoreUtility {
     function initialize(uint256[] memory weeklyPoolRatios0_) public {
         require(!initialized, "Already Initialized");
         require(_endOfWeek(guardedLaunchStart) == guardedLaunchStart + 1 weeks, "Not end of week");
-        guardedLaunchDuration = weeklyPoolRatios0_.length * 1 weeks;
         for (uint256 i = 0; i < weeklyPoolRatios0_.length; i++) {
+            require(
+                weeklyPoolRatios0_[i] > minRatio && weeklyPoolRatios0_[i] < (1e18 - minRatio),
+                "Invalid ratio"
+            );
             relativeWeights[fund0][guardedLaunchStart + i * 1 weeks] = weeklyPoolRatios0_[i];
             relativeWeights[fund1][guardedLaunchStart + i * 1 weeks] = uint256(1e18).sub(
                 weeklyPoolRatios0_[i]
@@ -66,6 +68,9 @@ contract ChessControllerV2 is IChessController, CoreUtility {
         override
         returns (uint256 relativeWeight)
     {
+        if (fundAddress != fund0 && fundAddress != fund1) {
+            return 0;
+        }
         if (timestamp < guardedLaunchStart) {
             if (fundAddress == fund0) {
                 return 1e18;
@@ -75,11 +80,11 @@ contract ChessControllerV2 is IChessController, CoreUtility {
         }
 
         uint256 weekTimestamp = _endOfWeek(timestamp).sub(1 weeks);
-        if (timestamp < guardedLaunchStart + guardedLaunchDuration) {
+        if (relativeWeights[fundAddress][weekTimestamp] != 0) {
             return relativeWeights[fundAddress][weekTimestamp];
         }
 
-        (uint256 relativeWeight0, uint256 relativeWeight1) = updateFundRelativeWeight();
+        (uint256 relativeWeight0, uint256 relativeWeight1) = _updateFundRelativeWeight();
         if (fundAddress == fund0) {
             relativeWeight = relativeWeight0;
         } else {
@@ -87,8 +92,8 @@ contract ChessControllerV2 is IChessController, CoreUtility {
         }
     }
 
-    function updateFundRelativeWeight()
-        public
+    function _updateFundRelativeWeight()
+        private
         returns (uint256 relativeWeightMovingAverage0, uint256 relativeWeightMovingAverage1)
     {
         uint256 currentTimestamp = _endOfWeek(block.timestamp) - 1 weeks;
@@ -135,7 +140,7 @@ contract ChessControllerV2 is IChessController, CoreUtility {
         uint256 latestRelativeWeight
     ) private view returns (uint256 movingAverage) {
         movingAverage =
-            relativeWeights[fundAddress][weekTimestamp - 1 weeks].mul(3) +
+            relativeWeights[fundAddress][weekTimestamp - 1 weeks].mul(WINDOW_SIZE - 1) +
             latestRelativeWeight;
         movingAverage = (movingAverage / WINDOW_SIZE).max(minRatio).min(1e18 - minRatio);
     }

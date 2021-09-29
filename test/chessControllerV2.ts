@@ -29,7 +29,7 @@ describe("ChessControllerV2", function () {
     let twapOracle2: MockContract;
     let chessController: Contract;
 
-    const minRatio = parseEther("0.47");
+    const minRatio = parseEther("0.15");
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
         const [user1, owner] = provider.getWallets();
@@ -190,27 +190,27 @@ describe("ChessControllerV2", function () {
         beforeEach(async function () {
             await fund1.mock.currentDay.returns(startWeek + DAY);
             await fund2.mock.currentDay.returns(startWeek + DAY);
-            await chessController.updateFundRelativeWeight();
+            await chessController.getFundRelativeWeight(fund1.address, startWeek);
 
             await advanceBlockAtTime(startWeek + WEEK);
             await fund1.mock.currentDay.returns(startWeek + WEEK + DAY);
             await fund2.mock.currentDay.returns(startWeek + WEEK + DAY);
-            await chessController.updateFundRelativeWeight();
+            await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK);
 
             await advanceBlockAtTime(startWeek + WEEK * 2);
             await fund1.mock.currentDay.returns(startWeek + WEEK * 2 + DAY);
             await fund2.mock.currentDay.returns(startWeek + WEEK * 2 + DAY);
-            await chessController.updateFundRelativeWeight();
+            await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK * 2);
 
             await advanceBlockAtTime(startWeek + WEEK * 3);
             await fund1.mock.currentDay.returns(startWeek + WEEK * 3 + DAY);
             await fund2.mock.currentDay.returns(startWeek + WEEK * 3 + DAY);
-            await chessController.updateFundRelativeWeight();
+            await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK * 3);
 
             await advanceBlockAtTime(startWeek + WEEK * 4);
             await fund1.mock.currentDay.returns(startWeek + WEEK * 4 + DAY);
             await fund2.mock.currentDay.returns(startWeek + WEEK * 4 + DAY);
-            await chessController.updateFundRelativeWeight();
+            await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK * 4);
         });
 
         it("Should return previous recorded weight", async function () {
@@ -229,13 +229,13 @@ describe("ChessControllerV2", function () {
             expect(
                 await chessController.callStatic["getFundRelativeWeight"](
                     fund1.address,
-                    startWeek + WEEK * 4
+                    startWeek + WEEK * 5
                 )
             ).to.equal(week5Ratio0);
             expect(
                 await chessController.callStatic["getFundRelativeWeight"](
                     fund2.address,
-                    startWeek + WEEK * 4
+                    startWeek + WEEK * 5
                 )
             ).to.equal(parseEther("1").sub(week5Ratio0));
         });
@@ -247,13 +247,14 @@ describe("ChessControllerV2", function () {
             await fund2.mock.historicalUnderlying.returns(parseEther("1"));
             await fund1.mock.currentDay.returns(startWeek + WEEK * 5);
             await fund2.mock.currentDay.returns(startWeek + WEEK * 5);
-            await advanceBlockAtTime(startWeek + WEEK * 5);
-            await chessController.updateFundRelativeWeight();
-
+            for (let i = 5; i < 10; i++) {
+                await advanceBlockAtTime(startWeek + WEEK * i);
+                await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK * i);
+            }
             expect(
                 await chessController.callStatic["getFundRelativeWeight"](
                     fund1.address,
-                    startWeek + WEEK * 8
+                    startWeek + WEEK * 9
                 )
             ).to.equal(minRatio);
         });
@@ -265,13 +266,14 @@ describe("ChessControllerV2", function () {
             await fund2.mock.historicalUnderlying.returns(parseEther("0"));
             await fund1.mock.currentDay.returns(startWeek + WEEK * 5);
             await fund2.mock.currentDay.returns(startWeek + WEEK * 5);
-            await advanceBlockAtTime(startWeek + WEEK * 5);
-            await chessController.updateFundRelativeWeight();
-
+            for (let i = 5; i < 10; i++) {
+                await advanceBlockAtTime(startWeek + WEEK * i);
+                await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK * i);
+            }
             expect(
                 await chessController.callStatic["getFundRelativeWeight"](
                     fund1.address,
-                    startWeek + WEEK * 8
+                    startWeek + WEEK * 9
                 )
             ).to.equal(parseEther("1").sub(minRatio));
         });
@@ -291,7 +293,7 @@ describe("ChessControllerV2", function () {
                 await chessController.relativeWeights(fund1.address, startWeek + WEEK * 4)
             ).to.equal(parseEther("0"));
 
-            await chessController.updateFundRelativeWeight();
+            await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK * 4);
 
             expect(
                 await chessController.relativeWeights(fund1.address, startWeek + WEEK * 4)
@@ -302,12 +304,12 @@ describe("ChessControllerV2", function () {
         });
 
         it("Should return old relative weight for funds", async function () {
-            await chessController.updateFundRelativeWeight();
+            await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK * 4);
             await fund1.mock.historicalUnderlying.returns(parseEther("2"));
             await fund2.mock.historicalUnderlying.returns(parseEther("4"));
             await twapOracle1.mock.getTwap.returns(parseEther("3"));
             await twapOracle2.mock.getTwap.returns(parseEther("1"));
-            await chessController.updateFundRelativeWeight();
+            await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK * 4);
 
             expect(
                 await chessController.relativeWeights(fund1.address, startWeek + WEEK * 4)
