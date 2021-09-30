@@ -29,7 +29,7 @@ describe("ChessControllerV2", function () {
     let twapOracle2: MockContract;
     let chessController: Contract;
 
-    const minRatio = parseEther("0.15");
+    const minWeight = parseEther("0.15");
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
         const [user1, owner] = provider.getWallets();
@@ -51,7 +51,7 @@ describe("ChessControllerV2", function () {
             fund1.address,
             fund2.address,
             startWeek,
-            minRatio
+            minWeight
         );
         const TransparentUpgradeableProxy = await ethers.getContractFactory(
             "TransparentUpgradeableProxy"
@@ -166,6 +166,7 @@ describe("ChessControllerV2", function () {
                 await chessController.callStatic["getFundRelativeWeight"](fund2.address, startWeek)
             ).to.equal(parseEther("0.8"));
 
+            advanceBlockAtTime(startWeek + WEEK);
             await fund1.mock.currentDay.returns(startWeek + WEEK + DAY);
             await fund2.mock.currentDay.returns(startWeek + WEEK + DAY);
             expect(
@@ -256,7 +257,7 @@ describe("ChessControllerV2", function () {
                     fund1.address,
                     startWeek + WEEK * 9
                 )
-            ).to.equal(minRatio);
+            ).to.equal(minWeight);
         });
 
         it("Should return max weight", async function () {
@@ -275,11 +276,11 @@ describe("ChessControllerV2", function () {
                     fund1.address,
                     startWeek + WEEK * 9
                 )
-            ).to.equal(parseEther("1").sub(minRatio));
+            ).to.equal(parseEther("1").sub(minWeight));
         });
     });
 
-    describe("updateFundRelativeWeight()", function () {
+    describe("updateFundWeight()", function () {
         const week4Ratio0 = parseEther("0.5").mul(75).add(parseEther("0.45").mul(25)).div(100);
 
         beforeEach(async function () {
@@ -289,18 +290,18 @@ describe("ChessControllerV2", function () {
         });
 
         it("Should return relative weight for funds", async function () {
-            expect(
-                await chessController.relativeWeights(fund1.address, startWeek + WEEK * 4)
-            ).to.equal(parseEther("0"));
+            expect(await chessController.weights(startWeek + WEEK * 4, fund1.address)).to.equal(
+                parseEther("0")
+            );
 
             await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK * 4);
 
-            expect(
-                await chessController.relativeWeights(fund1.address, startWeek + WEEK * 4)
-            ).to.equal(week4Ratio0);
-            expect(
-                await chessController.relativeWeights(fund2.address, startWeek + WEEK * 4)
-            ).to.equal(parseEther("1").sub(week4Ratio0));
+            expect(await chessController.weights(startWeek + WEEK * 4, fund1.address)).to.equal(
+                week4Ratio0
+            );
+            expect(await chessController.weights(startWeek + WEEK * 4, fund2.address)).to.equal(
+                parseEther("1").sub(week4Ratio0)
+            );
         });
 
         it("Should return old relative weight for funds", async function () {
@@ -311,12 +312,12 @@ describe("ChessControllerV2", function () {
             await twapOracle2.mock.getTwap.returns(parseEther("1"));
             await chessController.getFundRelativeWeight(fund1.address, startWeek + WEEK * 4);
 
-            expect(
-                await chessController.relativeWeights(fund1.address, startWeek + WEEK * 4)
-            ).to.equal(week4Ratio0);
-            expect(
-                await chessController.relativeWeights(fund2.address, startWeek + WEEK * 4)
-            ).to.equal(parseEther("1").sub(week4Ratio0));
+            expect(await chessController.weights(startWeek + WEEK * 4, fund1.address)).to.equal(
+                week4Ratio0
+            );
+            expect(await chessController.weights(startWeek + WEEK * 4, fund2.address)).to.equal(
+                parseEther("1").sub(week4Ratio0)
+            );
         });
     });
 });
