@@ -36,6 +36,7 @@ contract ChessControllerV2 is IChessController, CoreUtility {
         uint256 guardedLaunchStart_,
         uint256 minWeight_
     ) public {
+        require(minWeight_ > 0 && minWeight_ < 1e18);
         fund0 = fund0_;
         fund1 = fund1_;
         guardedLaunchStart = guardedLaunchStart_;
@@ -49,11 +50,11 @@ contract ChessControllerV2 is IChessController, CoreUtility {
         for (uint256 i = 0; i < guardedWeights0_.length; i++) {
             uint256 guardedWeight0 = guardedWeights0_[i];
             require(
-                guardedWeight0 >= minWeight && guardedWeight0 <= (1e18 - minWeight),
+                guardedWeight0 >= minWeight && guardedWeight0 <= 1e18 - minWeight,
                 "Invalid weight"
             );
             weights[guardedLaunchStart + i * 1 weeks][fund0] = guardedWeight0;
-            weights[guardedLaunchStart + i * 1 weeks][fund1] = uint256(1e18) - guardedWeight0;
+            weights[guardedLaunchStart + i * 1 weeks][fund1] = 1e18 - guardedWeight0;
         }
     }
 
@@ -94,11 +95,12 @@ contract ChessControllerV2 is IChessController, CoreUtility {
             weightMovingAverage0 = weights[weekTimestamp - 1 weeks][fund0];
             weightMovingAverage1 = weights[weekTimestamp - 1 weeks][fund1];
         } else {
-            weightMovingAverage0 = ((weights[weekTimestamp - 1 weeks][fund0].mul(WINDOW_SIZE - 1) +
-                fundValueLocked0.divideDecimal(totalValueLocked)) / WINDOW_SIZE)
+            weightMovingAverage0 = (weights[weekTimestamp - 1 weeks][fund0]
+                .mul(WINDOW_SIZE - 1)
+                .add(fundValueLocked0.divideDecimal(totalValueLocked)) / WINDOW_SIZE)
                 .max(minWeight)
                 .min(1e18 - minWeight);
-            weightMovingAverage1 = uint256(1e18).sub(weightMovingAverage0);
+            weightMovingAverage1 = 1e18 - weightMovingAverage0;
         }
 
         weights[weekTimestamp][fund0] = weightMovingAverage0;
