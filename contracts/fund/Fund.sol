@@ -118,13 +118,13 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     ///
     ///         Key is the end timestamp of a trading day. Value is the total fund shares after
     ///         settlement of that trading day, as if all Token A and B are merged.
-    mapping(uint256 => uint256) public historicalTotalShares;
+    mapping(uint256 => uint256) public override historicalTotalShares;
 
     /// @notice Mapping of trading day => underlying assets in the fund.
     ///
     ///         Key is the end timestamp of a trading day. Value is the underlying assets in
     ///         the fund after settlement of that trading day.
-    mapping(uint256 => uint256) public override historicalUnderlying;
+    mapping(uint256 => uint256) public historicalUnderlying;
 
     /// @notice Mapping of trading week => interest rate of Token A.
     ///
@@ -283,6 +283,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     function historicalNavs(uint256 day)
         external
         view
+        override
         returns (
             uint256,
             uint256,

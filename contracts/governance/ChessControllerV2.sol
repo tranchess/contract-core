@@ -90,14 +90,16 @@ contract ChessControllerV2 is IChessController, CoreUtility {
     {
         uint256 fundValueLocked0 = getFundValueLocked(fund0, weekTimestamp);
         uint256 totalValueLocked = fundValueLocked0.add(getFundValueLocked(fund1, weekTimestamp));
+        uint256 prevFundWeight0 = weights[weekTimestamp - 1 weeks][fund0];
+        require(prevFundWeight0 != 0, "Previous week is empty");
 
         if (totalValueLocked == 0) {
-            weightMovingAverage0 = weights[weekTimestamp - 1 weeks][fund0];
+            weightMovingAverage0 = prevFundWeight0;
             weightMovingAverage1 = weights[weekTimestamp - 1 weeks][fund1];
         } else {
-            weightMovingAverage0 = (weights[weekTimestamp - 1 weeks][fund0]
-                .mul(WINDOW_SIZE - 1)
-                .add(fundValueLocked0.divideDecimal(totalValueLocked)) / WINDOW_SIZE)
+            weightMovingAverage0 = (prevFundWeight0.mul(WINDOW_SIZE - 1).add(
+                fundValueLocked0.divideDecimal(totalValueLocked)
+            ) / WINDOW_SIZE)
                 .max(minWeight)
                 .min(1e18 - minWeight);
             weightMovingAverage1 = 1e18 - weightMovingAverage0;
@@ -113,7 +115,7 @@ contract ChessControllerV2 is IChessController, CoreUtility {
         returns (uint256 fundValueLocked)
     {
         uint256 timestamp = (IFund(fund).currentDay() - 1 days).min(weekTimestamp);
-        uint256 price = IFund(fund).twapOracle().getTwap(timestamp);
-        fundValueLocked = IFund(fund).historicalUnderlying(timestamp).multiplyDecimal(price);
+        (uint256 navM, , ) = IFund(fund).historicalNavs(timestamp);
+        fundValueLocked = IFund(fund).historicalTotalShares(timestamp).multiplyDecimal(navM);
     }
 }
