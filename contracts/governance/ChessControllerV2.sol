@@ -24,8 +24,6 @@ contract ChessControllerV2 is IChessController, CoreUtility {
     uint256 public constant WINDOW_SIZE = 4;
     uint256 public immutable minWeight;
 
-    bool private initialized;
-
     address public immutable fund0;
     address public immutable fund1;
     mapping(uint256 => mapping(address => uint256)) public weights;
@@ -44,19 +42,19 @@ contract ChessControllerV2 is IChessController, CoreUtility {
         minWeight = minWeight_;
     }
 
-    function initialize(uint256[] memory guardedWeights0_) public {
-        require(!initialized);
+    function initialize(uint256[] calldata guardedWeights0_) external {
+        require(weights[guardedLaunchStart][fund0] == 0);
+        require(guardedWeights0_.length > 0);
         require(_endOfWeek(guardedLaunchStart) == guardedLaunchStart + 1 weeks, "Not end of week");
         for (uint256 i = 0; i < guardedWeights0_.length; i++) {
             uint256 guardedWeight0 = guardedWeights0_[i];
             require(
-                guardedWeight0 >= minWeight && guardedWeight0 < (1e18 - minWeight),
+                guardedWeight0 >= minWeight && guardedWeight0 <= (1e18 - minWeight),
                 "Invalid weight"
             );
             weights[guardedLaunchStart + i * 1 weeks][fund0] = guardedWeight0;
             weights[guardedLaunchStart + i * 1 weeks][fund1] = uint256(1e18) - guardedWeight0;
         }
-        initialized = true;
     }
 
     /// @notice Get Fund relative weight (not more than 1.0) normalized to 1e18
@@ -89,11 +87,9 @@ contract ChessControllerV2 is IChessController, CoreUtility {
         private
         returns (uint256 weightMovingAverage0, uint256 weightMovingAverage1)
     {
-        // 1st PASS: get individual and sum of TVLs. Avoids 0 TVLs
-        uint256 fundValueLocked0 = getFundValueLocked(fund0);
-        uint256 totalValueLocked = fundValueLocked0.add(getFundValueLocked(fund1));
+        uint256 fundValueLocked0 = getFundValueLocked(fund0, weekTimestamp);
+        uint256 totalValueLocked = fundValueLocked0.add(getFundValueLocked(fund1, weekTimestamp));
 
-        // 2nd PASS: calculate the relative weights of each fund
         if (totalValueLocked == 0) {
             weightMovingAverage0 = weights[weekTimestamp - 1 weeks][fund0];
             weightMovingAverage1 = weights[weekTimestamp - 1 weeks][fund1];
@@ -109,11 +105,13 @@ contract ChessControllerV2 is IChessController, CoreUtility {
         weights[weekTimestamp][fund1] = weightMovingAverage1;
     }
 
-    function getFundValueLocked(address fund) public view returns (uint256 fundValueLocked) {
-        uint256 currentDay = IFund(fund).currentDay();
-        uint256 price = IFund(fund).twapOracle().getTwap(currentDay - 1 days);
-        fundValueLocked = IFund(fund).historicalUnderlying(currentDay - 1 days).multiplyDecimal(
-            price
-        );
+    function getFundValueLocked(address fund, uint256 weekTimestamp)
+        public
+        view
+        returns (uint256 fundValueLocked)
+    {
+        uint256 timestamp = (IFund(fund).currentDay() - 1 days).min(weekTimestamp);
+        uint256 price = IFund(fund).twapOracle().getTwap(timestamp);
+        fundValueLocked = IFund(fund).historicalUnderlying(timestamp).multiplyDecimal(price);
     }
 }
