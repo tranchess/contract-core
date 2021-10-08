@@ -617,7 +617,7 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
         uint256 integral = _invTotalWeightIntegral;
         uint256 endWeek = _endOfWeek(timestamp);
         uint256 weeklyPercentage =
-            chessController.getFundRelativeWeight(address(this), endWeek - 1 weeks);
+            chessController.getFundRelativeWeight(address(fund), endWeek - 1 weeks);
         uint256 version = _totalSupplyVersion;
         uint256 rebalanceTimestamp;
         if (version < rebalanceSize) {
@@ -669,7 +669,7 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
             }
             if (endTimestamp == endWeek) {
                 rate = chessSchedule.getRate(endWeek);
-                weeklyPercentage = chessController.getFundRelativeWeight(address(this), endWeek);
+                weeklyPercentage = chessController.getFundRelativeWeight(address(fund), endWeek);
                 endWeek += 1 weeks;
             }
 
