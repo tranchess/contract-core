@@ -22,11 +22,8 @@ describe("ChessControllerV2", function () {
     let fixtureData: FixtureData;
 
     let startWeek: number;
-    let owner: Wallet;
     let fund1: MockContract;
     let fund2: MockContract;
-    let twapOracle1: MockContract;
-    let twapOracle2: MockContract;
     let chessController: Contract;
 
     const minWeight = parseEther("0.15");
@@ -89,11 +86,8 @@ describe("ChessControllerV2", function () {
     beforeEach(async function () {
         fixtureData = await loadFixture(currentFixture);
         startWeek = fixtureData.startWeek;
-        owner = fixtureData.wallets.owner;
         fund1 = fixtureData.fund1;
         fund2 = fixtureData.fund2;
-        twapOracle1 = fixtureData.twapOracle1;
-        twapOracle2 = fixtureData.twapOracle2;
         chessController = fixtureData.chessController;
 
         // The tvl ratio: 9%, 21%, 25%, 33%, 45%, 57%, 65%
