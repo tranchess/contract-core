@@ -19,6 +19,7 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     console.log();
     console.log("[+] Deploying TwapOracle");
     await hre.run("deploy_twap_oracle", { token: mockAddresses.mockBtc, oracleSymbol: "BTC" });
+    await hre.run("deploy_twap_oracle", { token: mockAddresses.mockEth, oracleSymbol: "ETH" });
 
     console.log();
     console.log("[+] Deploying BscAprOracle");
@@ -35,14 +36,16 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     console.log();
     console.log("[+] Changing TwapOracle address files for test");
     const addressDir = getAddressDir(hre);
-    const btcTwapAddressFile = loadAddressFile<TwapOracleAddresses>(hre, "twap_oracle_btc");
-    const btcTwapAddressFilename = path.join(
-        addressDir,
-        listAddressFile(addressDir, "twap_oracle_btc")[0]
-    );
-    fs.renameSync(btcTwapAddressFilename, btcTwapAddressFilename + ".orig");
-    btcTwapAddressFile.twapOracle = mockAddresses.mockTwapOracle;
-    saveAddressFile(hre, "twap_oracle_btc", btcTwapAddressFile);
+    for (const symbol of ["btc", "eth"]) {
+        const twapAddressFile = loadAddressFile<TwapOracleAddresses>(hre, `twap_oracle_${symbol}`);
+        const twapAddressFilename = path.join(
+            addressDir,
+            listAddressFile(addressDir, `twap_oracle_${symbol}`)[0]
+        );
+        fs.renameSync(twapAddressFilename, twapAddressFilename + ".orig");
+        twapAddressFile.twapOracle = mockAddresses.mockTwapOracle;
+        saveAddressFile(hre, `twap_oracle_${symbol}`, twapAddressFile);
+    }
 
     console.log();
     console.log("[+] Deploying fund contracts");
@@ -53,10 +56,16 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         quoteSymbol: "USDC",
         adminFeeRate: "0.5",
     });
+    await hre.run("deploy_fund", {
+        underlyingSymbol: "ETH",
+        quoteSymbol: "USDC",
+        adminFeeRate: "0.5",
+    });
 
     console.log();
     console.log("[+] Deploying exchange contracts");
     await hre.run("deploy_exchange", { underlyingSymbol: "BTC" });
+    await hre.run("deploy_exchange", { underlyingSymbol: "ETH" });
 
     console.log();
     console.log("[+] Deploying misc contracts");
@@ -76,6 +85,10 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
 
     console.log();
     console.log("[+] Deploying implementation contracts (again)");
+    await hre.run("deploy_chess_controller_impl", {
+        underlyingSymbols: "BTC,ETH",
+        launchDate: new Date().toJSON().split("T")[0],
+    });
     await hre.run("deploy_chess_schedule_impl");
     await hre.run("deploy_voting_escrow_impl");
     await hre.run("deploy_exchange_impl", { underlyingSymbol: "BTC" });

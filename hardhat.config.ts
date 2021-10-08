@@ -5,6 +5,7 @@ import "solidity-coverage";
 import "./tasks/accounts";
 import "./tasks/deploy_address_whitelist";
 import "./tasks/deploy_bsc_apr_oracle";
+import "./tasks/deploy_chess_controller_impl";
 import "./tasks/deploy_chess_schedule_impl";
 import "./tasks/deploy_exchange";
 import "./tasks/deploy_exchange_impl";
