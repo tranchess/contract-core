@@ -9,10 +9,6 @@ import "../utils/SafeDecimalMath.sol";
 import "../interfaces/IChessController.sol";
 import "../interfaces/IFund.sol";
 
-interface IExchange {
-    function fund() external view returns (IFund);
-}
-
 contract ChessControllerV2 is IChessController, CoreUtility {
     /// @dev Reserved storage slots for future base contract upgrades
     uint256[192] private _reservedSlots;

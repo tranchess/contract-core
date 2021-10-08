@@ -92,7 +92,7 @@ interface IFund {
 
     function historicalTotalShares(uint256 timestamp) external view returns (uint256);
 
-    function historicalNavs(uint256 day)
+    function historicalNavs(uint256 timestamp)
         external
         view
         returns (
