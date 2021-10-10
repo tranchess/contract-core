@@ -1,10 +1,16 @@
+import { strict as assert } from "assert";
 import { task } from "hardhat/config";
-import { createAddressFile, selectAddressFile } from "./address_file";
+import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./address_file";
+import type { GovernanceAddresses } from "./deploy_governance";
 import { GOVERNANCE_CONFIG } from "../config";
 import { updateHreSigner } from "./signers";
 
+export interface VestingAddresses extends Addresses {
+    recipient: string;
+    vestingEscrow: string;
+}
+
 task("deploy_vesting", "Deploy and fund a VestingEscrow")
-    .addOptionalParam("governance", "Path to the governance address file", "")
     .addParam("amount", "Amount of locked tokens")
     .addParam("recipient", "Recipient of the tokens")
     .addParam("startWeek", "Locked time in weeks before the first token is vested")
@@ -14,24 +20,23 @@ task("deploy_vesting", "Deploy and fund a VestingEscrow")
         await updateHreSigner(hre);
         const { ethers } = hre;
         const { parseEther, getAddress } = ethers.utils;
-
         await hre.run("compile");
         const [deployer] = await ethers.getSigners();
-        const addressFile = createAddressFile(hre, "vesting");
-        const governanceAddresses = await selectAddressFile(hre, "governance", args.governance);
 
-        const chess = await ethers.getContractAt("Chess", governanceAddresses.chess);
         const amount = parseEther(args.amount);
-        if (amount.gt(await chess.balanceOf(deployer.address))) {
-            console.error("Insufficient CHESS in the deployer's account");
-            return;
-        }
         const recipient = getAddress(args.recipient);
-        addressFile.set("recipient", recipient);
         const WEEK = 7 * 86400;
         const startTime = GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP + parseInt(args.startWeek) * WEEK;
         const endTime = startTime + parseInt(args.durationWeek) * WEEK;
         const cliffAmount = amount.mul(parseInt(args.cliffPercent)).div(100);
+
+        const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
+
+        const chess = await ethers.getContractAt("Chess", governanceAddresses.chess);
+        assert.ok(
+            amount.lte(await chess.balanceOf(deployer.address)),
+            "Insufficient CHESS in the deployer's account"
+        );
 
         const VestingEscrow = await ethers.getContractFactory("VestingEscrow");
         const vestingEscrow = await VestingEscrow.deploy(
@@ -42,9 +47,15 @@ task("deploy_vesting", "Deploy and fund a VestingEscrow")
             true
         );
         console.log(`VestingEscrow: ${vestingEscrow.address}`);
-        addressFile.set("vestingEscrow", vestingEscrow.address);
 
         console.log("Initializing the VestingEscrow");
         await (await chess.approve(vestingEscrow.address, amount)).wait();
         await vestingEscrow.initialize(amount, cliffAmount);
+
+        const addresses: VestingAddresses = {
+            ...newAddresses(hre),
+            recipient,
+            vestingEscrow: vestingEscrow.address,
+        };
+        saveAddressFile(hre, "vesting", addresses);
     });

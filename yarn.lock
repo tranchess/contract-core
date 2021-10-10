@@ -1201,15 +1201,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/edit-json-file@npm:^1.4.0":
-  version: 1.4.0
-  resolution: "@types/edit-json-file@npm:1.4.0"
-  dependencies:
-    "@types/node": "*"
-  checksum: e57835b21fd323536e722dfefd954a6bc0b4e250debe54025ded5e43950a324eac8fb6578f08d5c5b32180c401ea36379d646f8187f9aa90718877f6304ef947
-  languageName: node
-  linkType: hard
-
 "@types/form-data@npm:0.0.33":
   version: 0.0.33
   resolution: "@types/form-data@npm:0.0.33"
@@ -4226,19 +4217,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"edit-json-file@npm:^1.5.0":
-  version: 1.5.0
-  resolution: "edit-json-file@npm:1.5.0"
-  dependencies:
-    find-value: ^1.0.3
-    iterate-object: ^1.3.2
-    r-json: ^1.2.5
-    set-value: ^3.0.1
-    w-json: ^1.3.5
-  checksum: ac8cb63ec52c2244195a8d2d60813223b7e8c90947b9adfe293dae4cc82b6037448a8f78593f327f03d180402b2e7274a737f30bce813c8500593232b4c50511
-  languageName: node
-  linkType: hard
-
 "ee-first@npm:1.1.1":
   version: 1.1.1
   resolution: "ee-first@npm:1.1.1"
@@ -5684,13 +5662,6 @@ __metadata:
   dependencies:
     locate-path: ^2.0.0
   checksum: 43284fe4da09f89011f08e3c32cd38401e786b19226ea440b75386c1b12a4cb738c94969808d53a84f564ede22f732c8409e3cfc3f7fb5b5c32378ad0bbf28bd
-  languageName: node
-  linkType: hard
-
-"find-value@npm:^1.0.3":
-  version: 1.0.12
-  resolution: "find-value@npm:1.0.12"
-  checksum: 5cab63c88e5090744de582c8c331c05b134f3501935da270f24c95b395c4fea3e7d0df5e9cfdd6c2a25b80ac7cde3bc06d6dd388e4fdc6cd52f6580ed95e14e1
   languageName: node
   linkType: hard
 
@@ -7382,13 +7353,6 @@ fsevents@~2.3.1:
     has-to-string-tag-x: ^1.2.0
     is-object: ^1.0.1
   checksum: 28a96e019269d57015fa5869f19dda5a3ed1f7b21e3e0c4ff695419bd0541547db352aa32ee4a3659e811a177b0e37a5bc1a036731e71939dd16b59808ab92bd
-  languageName: node
-  linkType: hard
-
-"iterate-object@npm:^1.3.2":
-  version: 1.3.4
-  resolution: "iterate-object@npm:1.3.4"
-  checksum: b63496c489177babccb4b487322279ea4377e08d02b93902c3ffba3032a788f014a74e03c615da2a24807fa3fca872f69c9570f7801c8e88181df7a49298904b
   languageName: node
   linkType: hard
 
@@ -10057,13 +10021,6 @@ fsevents@~2.3.1:
   languageName: node
   linkType: hard
 
-"r-json@npm:^1.2.5":
-  version: 1.2.10
-  resolution: "r-json@npm:1.2.10"
-  checksum: 8ecf97b5a5d53b96f5962aa485411c7e9e406f400e1ebeaf6549c5f88f4cc219b6863423c144c8d27fbf23d5ecb32d9b88795469a08d6f3e9b9ba6c249f3d070
-  languageName: node
-  linkType: hard
-
 "randombytes@npm:^2.0.0, randombytes@npm:^2.0.1, randombytes@npm:^2.0.5, randombytes@npm:^2.0.6, randombytes@npm:^2.1.0":
   version: 2.1.0
   resolution: "randombytes@npm:2.1.0"
@@ -10893,15 +10850,6 @@ resolve@1.1.x:
     is-plain-object: ^2.0.3
     split-string: ^3.0.1
   checksum: 09a4bc72c94641aeae950eb60dc2755943b863780fcc32e441eda964b64df5e3f50603d5ebdd33394ede722528bd55ed43aae26e9df469b4d32e2292b427b601
-  languageName: node
-  linkType: hard
-
-"set-value@npm:^3.0.1":
-  version: 3.0.2
-  resolution: "set-value@npm:3.0.2"
-  dependencies:
-    is-plain-object: ^2.0.4
-  checksum: cb7a36004f7f0ec3ab654612fecb2ce706f381322e9dad54d2ebae40aa8e00653b46fca476489b6872b34707f496d48373c3420adba5f58bbb58c1fb231c1c0b
   languageName: node
   linkType: hard
 
@@ -11956,7 +11904,6 @@ resolve@1.1.x:
     "@openzeppelin/contracts": ^3.4.2
     "@openzeppelin/contracts-upgradeable": ^3.4.2
     "@types/chai": ^4.2.15
-    "@types/edit-json-file": ^1.4.0
     "@types/mocha": ^8.2.0
     "@types/node": "*"
     "@types/readline-sync": ^1.4.3
@@ -11964,7 +11911,6 @@ resolve@1.1.x:
     "@typescript-eslint/parser": ^4.31.2
     chai: ^4.3.0
     dotenv: ^8.2.0
-    edit-json-file: ^1.5.0
     eslint: ^7.32.0
     eslint-config-prettier: ^8.3.0
     eslint-config-standard: ^16.0.3
@@ -12591,13 +12537,6 @@ typescript@^4.4.3:
     core-util-is: 1.0.2
     extsprintf: ^1.2.0
   checksum: c431df0bedf2088b227a4e051e0ff4ca54df2c114096b0c01e1cbaadb021c30a04d7dd5b41ab277bcd51246ca135bf931d4c4c796ecae7a4fef6d744ecef36ea
-  languageName: node
-  linkType: hard
-
-"w-json@npm:^1.3.5":
-  version: 1.3.10
-  resolution: "w-json@npm:1.3.10"
-  checksum: 8535a207e579e616797efc4d5140acc7c0aefd11f0c9f846e6739816a2db8637d235492d86fc5c47bb2dba5821413d72b2d62df9184ee9d6e22e67b3f90d205b
   languageName: node
   linkType: hard
 
