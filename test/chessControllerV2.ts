@@ -8,6 +8,8 @@ import { deployMockForName } from "./mock";
 import { parseEther } from "@ethersproject/units";
 
 describe("ChessControllerV2", function () {
+    const WINDOW_SIZE = 2;
+
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly startWeek: number;
@@ -215,9 +217,18 @@ describe("ChessControllerV2", function () {
     });
 
     describe("getFundRelativeWeight()", function () {
-        const week4Ratio0 = parseEther("0.5").mul(75).add(parseEther("0.45").mul(25)).div(100);
-        const week5Ratio0 = week4Ratio0.mul(75).add(parseEther("0.57").mul(25)).div(100);
-        const week6Ratio0 = week5Ratio0.mul(75).add(parseEther("0.65").mul(25)).div(100);
+        const week4Ratio0 = parseEther("0.5")
+            .mul(WINDOW_SIZE - 1)
+            .add(parseEther("0.45"))
+            .div(WINDOW_SIZE);
+        const week5Ratio0 = week4Ratio0
+            .mul(WINDOW_SIZE - 1)
+            .add(parseEther("0.57"))
+            .div(WINDOW_SIZE);
+        const week6Ratio0 = week5Ratio0
+            .mul(WINDOW_SIZE - 1)
+            .add(parseEther("0.65"))
+            .div(WINDOW_SIZE);
 
         beforeEach(async function () {
             await fund1.mock.currentDay.returns(startWeek + DAY);
@@ -351,7 +362,10 @@ describe("ChessControllerV2", function () {
     });
 
     describe("updateFundWeight()", function () {
-        const week4Ratio0 = parseEther("0.5").mul(75).add(parseEther("0.45").mul(25)).div(100);
+        const week4Ratio0 = parseEther("0.5")
+            .mul(WINDOW_SIZE - 1)
+            .add(parseEther("0.45"))
+            .div(WINDOW_SIZE);
 
         beforeEach(async function () {
             await advanceBlockAtTime(startWeek + WEEK * 4);

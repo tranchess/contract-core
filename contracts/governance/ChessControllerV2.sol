@@ -17,7 +17,7 @@ contract ChessControllerV2 is IChessController, CoreUtility {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
 
-    uint256 public constant WINDOW_SIZE = 4;
+    uint256 public constant WINDOW_SIZE = 2;
     uint256 public immutable minWeight;
 
     address public immutable fund0;
