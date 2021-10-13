@@ -5,23 +5,31 @@ pragma experimental ABIEncoderV2;
 import {IVotingEscrowCallback} from "../governance/VotingEscrowV2.sol";
 
 contract VotingEscrowHelper is IVotingEscrowCallback {
-    IVotingEscrowCallback public immutable distributor;
     IVotingEscrowCallback public immutable ballot;
-    IVotingEscrowCallback public immutable exchange;
+    IVotingEscrowCallback public immutable distributor0;
+    IVotingEscrowCallback public immutable exchange0;
+    IVotingEscrowCallback public immutable distributor1;
+    IVotingEscrowCallback public immutable exchange1;
 
     constructor(
-        address distributor_,
         address ballot_,
-        address exchange_
+        address distributor0_,
+        address exchange0_,
+        address distributor1_,
+        address exchange1_
     ) public {
-        distributor = IVotingEscrowCallback(distributor_);
         ballot = IVotingEscrowCallback(ballot_);
-        exchange = IVotingEscrowCallback(exchange_);
+        distributor0 = IVotingEscrowCallback(distributor0_);
+        exchange0 = IVotingEscrowCallback(exchange0_);
+        distributor1 = IVotingEscrowCallback(distributor1_);
+        exchange1 = IVotingEscrowCallback(exchange1_);
     }
 
     function syncWithVotingEscrow(address account) external override {
-        distributor.syncWithVotingEscrow(account);
         ballot.syncWithVotingEscrow(account);
-        exchange.syncWithVotingEscrow(account);
+        distributor0.syncWithVotingEscrow(account);
+        exchange0.syncWithVotingEscrow(account);
+        distributor1.syncWithVotingEscrow(account);
+        exchange1.syncWithVotingEscrow(account);
     }
 }

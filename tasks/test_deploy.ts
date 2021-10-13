@@ -74,7 +74,7 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         deployProtocolDataProvider: true,
         deployBatchSettleHelper: true,
         deployVotingEscrowHelper: true,
-        underlyingSymbol: "BTC",
+        underlyingSymbols: "BTC,ETH",
     });
 
     console.log();
