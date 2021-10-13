@@ -18,7 +18,7 @@ task("deploy_misc", "Deploy misc contracts interactively")
     .addFlag("deployProtocolDataProvider", "Deploy ProtocolDataProvider without prompt")
     .addFlag("deployBatchSettleHelper", "Deploy BatchSettleHelper without prompt")
     .addFlag("deployVotingEscrowHelper", "Deploy VotingEscrowHelper without prompt")
-    .addOptionalParam("underlyingSymbol", "Symbol of the fund underlying", "")
+    .addOptionalParam("underlyingSymbols", "Comma-separated fund underlying symbols", "")
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
         const { ethers } = hre;
@@ -52,22 +52,34 @@ task("deploy_misc", "Deploy misc contracts interactively")
             (!args.silent &&
                 keyInYNStrict("Deploy VotingEscrowHelper implementation?", { guide: true }))
         ) {
-            const underlyingSymbol: string = args.underlyingSymbol;
-            assert.ok(underlyingSymbol.match(/[a-zA-Z]+/), "Invalid symbol");
-            const fundAddresses = loadAddressFile<FundAddresses>(
+            const symbols: string[] = args.underlyingSymbols.split(",");
+            assert.strictEqual(symbols.length, 2);
+            assert.ok(symbols[0].match(/[a-zA-Z]+/), "Invalid symbol");
+            assert.ok(symbols[1].match(/[a-zA-Z]+/), "Invalid symbol");
+            const fund0Addresses = loadAddressFile<FundAddresses>(
                 hre,
-                `fund_${underlyingSymbol.toLowerCase()}`
+                `fund_${symbols[0].toLowerCase()}`
             );
-            const exchangeAddresses = loadAddressFile<ExchangeAddresses>(
+            const exchange0Addresses = loadAddressFile<ExchangeAddresses>(
                 hre,
-                `exchange_${underlyingSymbol.toLowerCase()}`
+                `exchange_${symbols[0].toLowerCase()}`
+            );
+            const fund1Addresses = loadAddressFile<FundAddresses>(
+                hre,
+                `fund_${symbols[0].toLowerCase()}`
+            );
+            const exchange1Addresses = loadAddressFile<ExchangeAddresses>(
+                hre,
+                `exchange_${symbols[0].toLowerCase()}`
             );
 
             const VotingEscrowHelper = await ethers.getContractFactory("VotingEscrowHelper");
             const votingEscrowHelper = await VotingEscrowHelper.deploy(
-                fundAddresses.feeDistributor,
                 governanceAddresses.interestRateBallot,
-                exchangeAddresses.exchange
+                fund0Addresses.feeDistributor,
+                exchange0Addresses.exchange,
+                fund1Addresses.feeDistributor,
+                exchange1Addresses.exchange
             );
             console.log(`VotingEscrowHelper: ${votingEscrowHelper.address}`);
             addresses.votingEscrowHelper = votingEscrowHelper.address;
