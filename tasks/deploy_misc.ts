@@ -66,11 +66,11 @@ task("deploy_misc", "Deploy misc contracts interactively")
             );
             const fund1Addresses = loadAddressFile<FundAddresses>(
                 hre,
-                `fund_${symbols[0].toLowerCase()}`
+                `fund_${symbols[1].toLowerCase()}`
             );
             const exchange1Addresses = loadAddressFile<ExchangeAddresses>(
                 hre,
-                `exchange_${symbols[0].toLowerCase()}`
+                `exchange_${symbols[1].toLowerCase()}`
             );
 
             const VotingEscrowHelper = await ethers.getContractFactory("VotingEscrowHelper");
