@@ -111,6 +111,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         uint256 rebalanceSize;
         uint256 currentInterestRate;
         Fund.Rebalance lastRebalance;
+        uint256 relativeWeight;
     }
 
     struct PrimaryMarketData {
@@ -167,13 +168,6 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         uint256 currentRewards;
         uint256 currentSupply;
         uint256 tradingWeekTotalSupply;
-        HistoricalRewardData[3] historicalRewards;
-    }
-
-    struct HistoricalRewardData {
-        uint256 timestamp;
-        uint256 veSupply;
-        uint256 rewards;
     }
 
     struct FeeDistributorAccountData {
@@ -189,6 +183,8 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         address token0;
         address token1;
     }
+
+    string public constant VERSION = "1.1.1";
 
     /// @dev This function should be call as a "view" function off-chain to get the return value,
     ///      e.g. using `contract.getProtocolData.call()` in web3
@@ -260,6 +256,10 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.fund.currentInterestRate = fund.historicalInterestRate(data.fund.currentWeek);
         uint256 rebalanceSize = fund.getRebalanceSize();
         data.fund.lastRebalance = fund.getRebalance(rebalanceSize == 0 ? 0 : rebalanceSize - 1);
+        data.fund.relativeWeight = exchange.chessController().getFundRelativeWeight(
+            address(fund),
+            block.timestamp
+        );
 
         PrimaryMarket primaryMarket = PrimaryMarket(primaryMarketAddress);
         data.primaryMarket.currentCreatingUnderlying = primaryMarket.currentCreatingUnderlying();
@@ -329,14 +329,6 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
             );
             data.governance.feeDistributor.tradingWeekTotalSupply = feeDistributor
                 .totalSupplyAtTimestamp(blockCurrentWeek);
-            for (uint256 i = 0; i < 3; i++) {
-                uint256 weekEnd = blockCurrentWeek - (i + 1) * 1 weeks;
-                data.governance.feeDistributor.historicalRewards[i].timestamp = weekEnd;
-                data.governance.feeDistributor.historicalRewards[i].veSupply = feeDistributor
-                    .veSupplyPerWeek(weekEnd - 1 weeks);
-                data.governance.feeDistributor.historicalRewards[i].rewards = feeDistributor
-                    .rewardsPerWeek(weekEnd - 1 weeks);
-            }
         }
 
         IPancakePair pair = IPancakePair(pancakePairAddress);
