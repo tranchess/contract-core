@@ -10,6 +10,7 @@ import { updateHreSigner } from "./signers";
 export interface MiscAddresses extends Addresses {
     protocolDataProvier?: string;
     batchSettleHelper?: string;
+    batchOperationHelper?: string;
     votingEscrowHelper?: string;
 }
 
@@ -17,6 +18,7 @@ task("deploy_misc", "Deploy misc contracts interactively")
     .addFlag("silent", "Run non-interactively and only deploy contracts specified by --deploy-*")
     .addFlag("deployProtocolDataProvider", "Deploy ProtocolDataProvider without prompt")
     .addFlag("deployBatchSettleHelper", "Deploy BatchSettleHelper without prompt")
+    .addFlag("deployBatchOperationHelper", "Deploy BatchOperationHelper without prompt")
     .addFlag("deployVotingEscrowHelper", "Deploy VotingEscrowHelper without prompt")
     .addOptionalParam("underlyingSymbols", "Comma-separated fund underlying symbols", "")
     .setAction(async function (args, hre) {
@@ -48,6 +50,16 @@ task("deploy_misc", "Deploy misc contracts interactively")
             addresses.batchSettleHelper = batchSettleHelper.address;
         }
         if (
+            args.deployBatchOperationHelper ||
+            (!args.silent &&
+                keyInYNStrict("Deploy BatchOperationHelper implementation?", { guide: true }))
+        ) {
+            const BatchOperationHelper = await ethers.getContractFactory("BatchOperationHelper");
+            const batchOperationHelper = await BatchOperationHelper.deploy();
+            console.log(`BatchOperationHelper: ${batchOperationHelper.address}`);
+            addresses.batchOperationHelper = batchOperationHelper.address;
+        }
+        if (
             args.deployVotingEscrowHelper ||
             (!args.silent &&
                 keyInYNStrict("Deploy VotingEscrowHelper implementation?", { guide: true }))
@@ -66,11 +78,11 @@ task("deploy_misc", "Deploy misc contracts interactively")
             );
             const fund1Addresses = loadAddressFile<FundAddresses>(
                 hre,
-                `fund_${symbols[0].toLowerCase()}`
+                `fund_${symbols[1].toLowerCase()}`
             );
             const exchange1Addresses = loadAddressFile<ExchangeAddresses>(
                 hre,
-                `exchange_${symbols[0].toLowerCase()}`
+                `exchange_${symbols[1].toLowerCase()}`
             );
 
             const VotingEscrowHelper = await ethers.getContractFactory("VotingEscrowHelper");
