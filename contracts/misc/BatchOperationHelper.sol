@@ -25,7 +25,7 @@ contract BatchOperationHelper {
     /// @dev Each value of `encodedEpochs` encodes an exchange index (32 bits),
     ///      a maker/taker flag (32 bits, 0 for maker, 1 for taker) and the epoch timestamp.
     function settleTrades(
-        address[] memory exchanges,
+        address[] calldata exchanges,
         uint256[] calldata encodedEpochs,
         address account
     )
@@ -53,14 +53,14 @@ contract BatchOperationHelper {
         }
     }
 
-    function batchClaim(address[] memory contracts, address account) external {
+    function batchClaim(address[] calldata contracts, address account) external {
         uint256 count = contracts.length;
         for (uint256 i = 0; i < count; i++) {
             IClaim(contracts[i]).claim(account);
         }
     }
 
-    function batchClaimRewards(address[] memory exchanges, address account) external {
+    function batchClaimRewards(address[] calldata exchanges, address account) external {
         uint256 count = exchanges.length;
         for (uint256 i = 0; i < count; i++) {
             IClaimRewards(exchanges[i]).claimRewards(account);
