@@ -57,10 +57,10 @@ contract BatchOperationHelper {
         }
     }
 
-    function batchClaimRewards(address[] calldata exchanges, address account) external {
-        uint256 count = exchanges.length;
+    function batchClaimRewards(address[] calldata contracts, address account) external {
+        uint256 count = contracts.length;
         for (uint256 i = 0; i < count; i++) {
-            IClaimRewards(exchanges[i]).claimRewards(account);
+            IClaimRewards(contracts[i]).claimRewards(account);
         }
     }
 }
