@@ -75,10 +75,13 @@ task("deploy_fund", "Deploy fund contracts")
             twapOracleAddresses.twapOracle,
             bscAprOracleAddresses.bscAprOracle,
             governanceAddresses.interestRateBallot,
-            feeDistributor.address,
+            GOVERNANCE_CONFIG.TREASURY || (await Fund.signer.getAddress()), // fee collector
             { gasLimit: 5e6 } // Gas estimation may fail
         );
         console.log(`Fund: ${fund.address}`);
+        console.log(
+            "Please change fee collector address to FeeDistributor after people call syncWithVotingEscrow()"
+        );
 
         const Share = await ethers.getContractFactory("Share");
         const shareM = await Share.deploy(
