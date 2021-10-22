@@ -25,6 +25,7 @@ export interface FundAddresses extends Addresses {
 task("deploy_fund", "Deploy fund contracts")
     .addParam("underlyingSymbol", "Underlying token symbol")
     .addParam("quoteSymbol", "Quote token symbol")
+    .addParam("shareSymbolPrefix", "Symbol prefix of share tokens")
     .addParam("adminFeeRate", "Admin fraction in the fee distributor")
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
@@ -36,6 +37,9 @@ task("deploy_fund", "Deploy fund contracts")
         assert.ok(underlyingSymbol.match(/[a-zA-Z]+/), "Invalid symbol");
         const quoteSymbol: string = args.quoteSymbol;
         assert.ok(quoteSymbol.match(/[a-zA-Z]+/), "Invalid symbol");
+        const shareSymbolPrefix: string = args.shareSymbolPrefix;
+        assert.ok(shareSymbolPrefix.match(/[a-zA-Z.]+/), "Invalid symbol prefix");
+        assert.ok(shareSymbolPrefix.length <= 5, "Symbol prefix too long");
         const adminFeeRate = parseEther(args.adminFeeRate);
 
         const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
@@ -75,15 +79,18 @@ task("deploy_fund", "Deploy fund contracts")
             twapOracleAddresses.twapOracle,
             bscAprOracleAddresses.bscAprOracle,
             governanceAddresses.interestRateBallot,
-            feeDistributor.address,
+            GOVERNANCE_CONFIG.TREASURY || (await Fund.signer.getAddress()), // fee collector
             { gasLimit: 5e6 } // Gas estimation may fail
         );
         console.log(`Fund: ${fund.address}`);
+        console.log(
+            "Please change fee collector address to FeeDistributor after people call syncWithVotingEscrow()"
+        );
 
         const Share = await ethers.getContractFactory("Share");
         const shareM = await Share.deploy(
             `Tranchess ${underlyingSymbol} QUEEN`,
-            `t${underlyingSymbol}.QUEEN`,
+            `${shareSymbolPrefix}QUEEN`,
             fund.address,
             0
         );
@@ -91,7 +98,7 @@ task("deploy_fund", "Deploy fund contracts")
 
         const shareA = await Share.deploy(
             `Tranchess ${underlyingSymbol} BISHOP`,
-            `t${underlyingSymbol}.BISHOP`,
+            `${shareSymbolPrefix}BISHOP`,
             fund.address,
             1
         );
@@ -99,7 +106,7 @@ task("deploy_fund", "Deploy fund contracts")
 
         const shareB = await Share.deploy(
             `Tranchess ${underlyingSymbol} ROOK`,
-            `t${underlyingSymbol}.ROOK`,
+            `${shareSymbolPrefix}ROOK`,
             fund.address,
             2
         );

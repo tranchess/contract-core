@@ -54,11 +54,13 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     await hre.run("deploy_fund", {
         underlyingSymbol: "BTC",
         quoteSymbol: "USDC",
+        shareSymbolPrefix: "b",
         adminFeeRate: "0.5",
     });
     await hre.run("deploy_fund", {
         underlyingSymbol: "ETH",
         quoteSymbol: "USDC",
+        shareSymbolPrefix: "e",
         adminFeeRate: "0.5",
     });
 
