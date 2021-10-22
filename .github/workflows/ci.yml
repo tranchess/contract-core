@@ -12,7 +12,7 @@ jobs:
         runs-on: ubuntu-latest
         strategy:
             matrix:
-                node-version: [12.x]
+                node-version: [14.x]
         steps:
             - uses: actions/checkout@v2
             - name: Setup Node.js ${{ matrix.node-version }} environment
@@ -20,9 +20,9 @@ jobs:
               with:
                   node-version: ${{ matrix.node-version }}
             - name: Install dependencies
-              run: npm ci
+              run: yarn install --immutable
             - name: Run unit test coverage
-              run: npm run coverage
+              run: yarn run coverage
     check:
         name: Lint and Format Check
         runs-on: ubuntu-latest
@@ -33,6 +33,6 @@ jobs:
               with:
                   node-version: 12.x
             - name: Install dependencies
-              run: npm ci
+              run: yarn install --immutable
             - name: Check lint and format
-              run: npm run check
+              run: yarn run check

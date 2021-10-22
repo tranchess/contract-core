@@ -90,6 +90,17 @@ interface IFund {
 
     function getTotalShares() external view returns (uint256);
 
+    function historicalTotalShares(uint256 timestamp) external view returns (uint256);
+
+    function historicalNavs(uint256 timestamp)
+        external
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256
+        );
+
     function extrapolateNav(uint256 timestamp, uint256 price)
         external
         view
