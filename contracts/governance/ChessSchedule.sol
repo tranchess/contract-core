@@ -37,7 +37,6 @@ contract ChessSchedule is IChessSchedule, OwnableUpgradeable, ChessRoles, CoreUt
     uint256 public minted;
 
     constructor(address chess_, uint256 startTimestamp_) public ChessRoles() {
-        require(startTimestamp_ > block.timestamp, "Start timestamp is not in future");
         require(
             _endOfWeek(startTimestamp_ - 1) == startTimestamp_,
             "Start timestamp is not start of a trading week"
