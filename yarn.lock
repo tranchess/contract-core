@@ -32,6 +32,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@chainlink/contracts@npm:^0.2.2":
+  version: 0.2.2
+  resolution: "@chainlink/contracts@npm:0.2.2"
+  checksum: 48fedfd6011ef180d2fc8438f75c79e86d42f5d6c461bc4d6e3284450410956366f5b521a2333259edff694e5150bf38675c4614e05ae9d0bc4a3a41e9d1ccd7
+  languageName: node
+  linkType: hard
+
 "@cspotcode/source-map-consumer@npm:0.8.0":
   version: 0.8.0
   resolution: "@cspotcode/source-map-consumer@npm:0.8.0"
@@ -11897,6 +11904,7 @@ resolve@1.1.x:
   version: 0.0.0-use.local
   resolution: "tranchess-core@workspace:."
   dependencies:
+    "@chainlink/contracts": ^0.2.2
     "@ethersproject/hardware-wallets": ^5.4.0
     "@nomiclabs/hardhat-ethers": ^2.0.2
     "@nomiclabs/hardhat-etherscan": ^2.1.6
