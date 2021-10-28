@@ -56,10 +56,17 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         chainlinkAggregator = AggregatorV2V3Interface(chainlinkAggregator_);
         swapPair = swapPair_;
         symbol = symbol_;
-        _currentTimestamp = (block.timestamp / EPOCH) * EPOCH;
+        _currentTimestamp = (block.timestamp / EPOCH) * EPOCH + EPOCH;
         uint256 decimal = AggregatorV2V3Interface(chainlinkAggregator_).decimals();
         _chainlinkAggregatorPricePrecision = 10**(18.sub(decimal));
         (_currentRoundID, , , , ) = AggregatorV2V3Interface(chainlinkAggregator_).latestRoundData();
+
+        // updateCumulativeFromSwap
+        (uint256 price0Cumulative, , uint32 blockTimestamp) =
+            UniswapV2OracleLibrary.currentCumulativePrices(swapPair_);
+        uint256 epoch = (blockTimestamp / EPOCH) * EPOCH + EPOCH;
+        observations[epoch].timestamp = blockTimestamp;
+        observations[epoch].cumulative = price0Cumulative;
     }
 
     /// @notice Return TWAP with 18 decimal places in the epoch ending at the specified timestamp.
@@ -100,16 +107,17 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         uint256 timestamp = _currentTimestamp;
         uint80 roundID = _currentRoundID;
         (uint80 latestRoundID, , , uint256 updatedAt, ) = chainlinkAggregator.latestRoundData();
-        if (latestRoundID <= roundID || updatedAt < timestamp + EPOCH) {
+        if (latestRoundID <= roundID || updatedAt < timestamp) {
             return;
         }
 
         (, , , updatedAt, ) = chainlinkAggregator.getRoundData(roundID - 1);
+        uint256 startTimestamp = timestamp.sub(EPOCH);
         // Binary search for the start round ID if twap has been updated by oracles other than chainlink
-        if (updatedAt + EPOCH > timestamp) {
-            roundID = nearestRoundID(latestRoundID, timestamp) + 1;
+        if (updatedAt + EPOCH * 2 > timestamp) {
+            roundID = nearestRoundID(latestRoundID, startTimestamp) + 1;
         }
-        (uint256 average, uint80 nextRoundID) = _getChainlinkTwap(roundID, timestamp + EPOCH);
+        (uint256 average, uint80 nextRoundID) = _getChainlinkTwap(roundID, timestamp);
         if (nextRoundID == 0) return;
         if (_prices[timestamp] == 0) {
             _prices[timestamp] = average;
@@ -131,11 +139,11 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     /// @dev Sequentially update TWAP oracle with Swap oracle
     function updateTwapFromSwap() external {
         uint256 timestamp = _currentTimestamp;
-        Observation memory startObservation = observations[timestamp];
-        Observation memory endObservation = observations[timestamp.add(EPOCH)];
+        Observation memory startObservation = observations[timestamp.sub(EPOCH)];
+        Observation memory endObservation = observations[timestamp];
         // If the interval between two epochs is less than one epoch, look one epoch further
         if (endObservation.timestamp.sub(startObservation.timestamp) < EPOCH) {
-            startObservation = observations[timestamp.sub(EPOCH)];
+            startObservation = observations[timestamp.sub(EPOCH * 2)];
         }
         require(
             _prices[timestamp] == 0 && timestamp < block.timestamp - SWAP_DELAY,
@@ -199,16 +207,15 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     {
         uint80 startRoundID = _currentRoundID;
         while (startRoundID <= latestRoundID) {
-            uint80 nextRoundID = (startRoundID + latestRoundID) >> 1;
-            (, , , uint256 updatedAt, ) = chainlinkAggregator.getRoundData(nextRoundID);
-            if (updatedAt > endTimestamp) {
-                latestRoundID = nextRoundID - 1;
-            } else if (updatedAt < endTimestamp) {
-                targetRoundID = nextRoundID;
-                startRoundID = nextRoundID + 1;
+            uint80 midRoundID = (startRoundID + latestRoundID) / 2;
+            (, , , uint256 updatedAt, ) = chainlinkAggregator.getRoundData(midRoundID);
+            if (updatedAt >= endTimestamp) {
+                latestRoundID = midRoundID - 1;
             } else {
-                return startRoundID;
+                targetRoundID = midRoundID;
+                startRoundID = midRoundID + 1;
             }
         }
+        return targetRoundID;
     }
 }
