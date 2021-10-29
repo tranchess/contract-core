@@ -14,6 +14,13 @@ import "../interfaces/ITwapOracle.sol";
 ///         time-weighted average price (TWAP) in every 30-minute epoch.
 /// @author Tranchess
 
+interface IAggregatorProxy is AggregatorV2V3Interface {
+    /**
+     * @notice returns the current phase's ID.
+     */
+    function phaseId() external view returns (uint16);
+}
+
 struct Observation {
     uint256 timestamp;
     uint256 cumulative;
@@ -31,7 +38,7 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
 
     event Update(uint256 timestamp, uint256 price, UpdateType updateType);
 
-    AggregatorV2V3Interface public immutable chainlinkAggregator;
+    IAggregatorProxy public immutable chainlinkAggregator;
     uint256 private immutable _chainlinkAggregatorPricePrecision;
 
     address public immutable swapPair;
@@ -39,8 +46,9 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
 
     string public symbol;
 
-    uint80 private _currentRoundID;
-    uint256 private _currentTimestamp;
+    uint16 public currentPhaseID;
+    uint80 public currentRoundID;
+    uint256 public currentTimestamp;
 
     /// @dev Mapping of epoch end timestamp => TWAP
     mapping(uint256 => uint256) private _prices;
@@ -53,13 +61,16 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         address swapPair_,
         string memory symbol_
     ) public {
-        chainlinkAggregator = AggregatorV2V3Interface(chainlinkAggregator_);
+        chainlinkAggregator = IAggregatorProxy(chainlinkAggregator_);
         swapPair = swapPair_;
         symbol = symbol_;
-        _currentTimestamp = (block.timestamp / EPOCH) * EPOCH + EPOCH;
-        uint256 decimal = AggregatorV2V3Interface(chainlinkAggregator_).decimals();
+        uint256 decimal = IAggregatorProxy(chainlinkAggregator_).decimals();
         _chainlinkAggregatorPricePrecision = 10**(18.sub(decimal));
-        (_currentRoundID, , , , ) = AggregatorV2V3Interface(chainlinkAggregator_).latestRoundData();
+        currentPhaseID = IAggregatorProxy(chainlinkAggregator_).phaseId();
+        uint256 updatedAt;
+        (currentRoundID, , , updatedAt, ) = IAggregatorProxy(chainlinkAggregator_)
+            .latestRoundData();
+        currentTimestamp = (updatedAt / EPOCH) * EPOCH + EPOCH;
 
         // updateCumulativeFromSwap
         (uint256 price0Cumulative, , uint32 blockTimestamp) =
@@ -83,9 +94,12 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
 
         // Chainlink
         if (updatedAt >= timestamp) {
-            uint80 roundID = nearestRoundID(latestRoundID, timestamp.sub(EPOCH)) + 1;
-            (uint256 average, uint256 nextRoundID) = _getChainlinkTwap(roundID, timestamp);
-            if (nextRoundID != 0) return average;
+            uint16 phaseID = chainlinkAggregator.phaseId();
+            if (phaseID == currentPhaseID) {
+                uint80 roundID = nearestRoundID(latestRoundID, timestamp.sub(EPOCH)) + 1;
+                (uint256 average, uint256 nextRoundID) = _getChainlinkTwap(roundID, timestamp);
+                if (nextRoundID != 0) return average;
+            }
         }
 
         // Swap
@@ -104,17 +118,18 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
 
     /// @dev Sequentially update TWAP oracle with Chainlink oracle
     function updateTwapFromChainlink() public {
-        uint256 timestamp = _currentTimestamp;
-        uint80 roundID = _currentRoundID;
+        uint256 timestamp = currentTimestamp;
+        uint80 roundID = currentRoundID;
+        uint16 phaseID = chainlinkAggregator.phaseId();
         (uint80 latestRoundID, , , uint256 updatedAt, ) = chainlinkAggregator.latestRoundData();
-        if (latestRoundID <= roundID || updatedAt < timestamp) {
+        if (phaseID != currentPhaseID || latestRoundID <= roundID || updatedAt < timestamp) {
             return;
         }
 
         (, , , updatedAt, ) = chainlinkAggregator.getRoundData(roundID - 1);
         uint256 startTimestamp = timestamp.sub(EPOCH);
         // Binary search for the start round ID if twap has been updated by oracles other than chainlink
-        if (updatedAt + EPOCH * 2 > timestamp) {
+        if (updatedAt + EPOCH < startTimestamp) {
             roundID = nearestRoundID(latestRoundID, startTimestamp) + 1;
         }
         (uint256 average, uint80 nextRoundID) = _getChainlinkTwap(roundID, timestamp);
@@ -124,8 +139,8 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
             emit Update(timestamp, average, UpdateType.CHAINLINK);
         }
         timestamp += EPOCH;
-        _currentTimestamp = timestamp;
-        _currentRoundID = nextRoundID;
+        currentTimestamp = timestamp;
+        currentRoundID = nextRoundID;
     }
 
     function updateCumulativeFromSwap() public {
@@ -138,7 +153,7 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
 
     /// @dev Sequentially update TWAP oracle with Swap oracle
     function updateTwapFromSwap() external {
-        uint256 timestamp = _currentTimestamp;
+        uint256 timestamp = currentTimestamp;
         Observation memory startObservation = observations[timestamp.sub(EPOCH)];
         Observation memory endObservation = observations[timestamp];
         // If the interval between two epochs is less than one epoch, look one epoch further
@@ -157,7 +172,7 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         uint256 average = _getSwapTwap(startObservation, endObservation);
         _prices[timestamp] = average;
         emit Update(timestamp, average, UpdateType.SWAP);
-        _currentTimestamp = timestamp + EPOCH;
+        currentTimestamp = timestamp + EPOCH;
     }
 
     function _getChainlinkTwap(uint80 roundID, uint256 endTimestamp)
@@ -205,7 +220,8 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         view
         returns (uint80 targetRoundID)
     {
-        uint80 startRoundID = _currentRoundID;
+        uint80 startRoundID = currentRoundID;
+        targetRoundID = startRoundID - 1;
         while (startRoundID <= latestRoundID) {
             uint80 midRoundID = (startRoundID + latestRoundID) / 2;
             (, , , uint256 updatedAt, ) = chainlinkAggregator.getRoundData(midRoundID);
