@@ -42,7 +42,7 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     uint256 private immutable _chainlinkAggregatorPricePrecision;
 
     address public immutable swapPair;
-    mapping(uint256 => Observation) observations;
+    mapping(uint256 => Observation) public observations;
 
     string public symbol;
 
@@ -73,11 +73,11 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         currentTimestamp = (updatedAt / EPOCH) * EPOCH + EPOCH;
 
         // updateCumulativeFromSwap
-        (uint256 price0Cumulative, , uint32 blockTimestamp) =
+        (, uint256 priceCumulative, uint32 blockTimestamp) =
             UniswapV2OracleLibrary.currentCumulativePrices(swapPair_);
         uint256 epoch = (blockTimestamp / EPOCH) * EPOCH + EPOCH;
         observations[epoch].timestamp = blockTimestamp;
-        observations[epoch].cumulative = price0Cumulative;
+        observations[epoch].cumulative = priceCumulative;
     }
 
     /// @notice Return TWAP with 18 decimal places in the epoch ending at the specified timestamp.
@@ -144,11 +144,11 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     }
 
     function updateCumulativeFromSwap() public {
-        (uint256 price0Cumulative, , uint32 blockTimestamp) =
+        (, uint256 priceCumulative, uint32 blockTimestamp) =
             UniswapV2OracleLibrary.currentCumulativePrices(swapPair);
         uint256 epoch = (blockTimestamp / EPOCH) * EPOCH + EPOCH;
         observations[epoch].timestamp = blockTimestamp;
-        observations[epoch].cumulative = price0Cumulative;
+        observations[epoch].cumulative = priceCumulative;
     }
 
     /// @dev Sequentially update TWAP oracle with Swap oracle
@@ -201,8 +201,6 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         pure
         returns (uint256)
     {
-        // overflow is desired, casting never truncates
-        // cumulative price is in (uq112x112 price * seconds) units so we simply wrap it after division by time elapsed
         return
             FixedPoint
                 .uq112x112(
@@ -211,7 +209,8 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
                         (endObservation.timestamp.sub(startObservation.timestamp))
                 )
             )
-                .decode();
+                .mul(1e18)
+                .decode144();
     }
 
     /// @dev Binary search for the clostest roundID that's less than endTimestamp
