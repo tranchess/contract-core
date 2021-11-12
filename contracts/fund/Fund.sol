@@ -12,16 +12,17 @@ import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
 
 import "../interfaces/IPrimaryMarket.sol";
-import "../interfaces/IFund.sol";
+import "../interfaces/IManagedFund.sol";
 import "../interfaces/ITwapOracle.sol";
 import "../interfaces/IAprOracle.sol";
 import "../interfaces/IBallot.sol";
 import "../interfaces/IVotingEscrow.sol";
 import "../interfaces/ITrancheIndex.sol";
+import "../interfaces/IStrategy.sol";
 
 import "./FundRoles.sol";
 
-contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITrancheIndex {
+contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITrancheIndex {
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
@@ -61,6 +62,8 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
 
     /// @notice Fee Collector address.
     address public override feeCollector;
+
+    uint256 public collectedFee;
 
     /// @notice Address of Token M.
     address public override tokenM;
@@ -178,13 +181,14 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         address tokenM_,
         address tokenA_,
         address tokenB_,
-        address primaryMarket_
+        address primaryMarket_,
+        address strategy_
     ) external onlyOwner {
         require(tokenM == address(0) && tokenM_ != address(0), "Already initialized");
         tokenM = tokenM_;
         tokenA = tokenA_;
         tokenB = tokenB_;
-        _initializeRoles(tokenM_, tokenA_, tokenB_, primaryMarket_);
+        _initializeRoles(tokenM_, tokenA_, tokenB_, primaryMarket_, strategy_);
     }
 
     /// @notice Return weights of Token A and B when splitting Token M.
@@ -599,6 +603,21 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         return _totalSupplies[tranche];
     }
 
+    function getTotalUnderlying()
+        public
+        view
+        override
+        returns (
+            uint256 hotUnderlying,
+            uint256 coldUnderlying,
+            uint256 totalUnderlying
+        )
+    {
+        hotUnderlying = IERC20(tokenUnderlying).balanceOf(address(this));
+        coldUnderlying = IStrategy(getStrategy()).getUnderlying();
+        totalUnderlying = hotUnderlying.add(coldUnderlying).sub(collectedFee);
+    }
+
     function mint(
         uint256 tranche,
         address account,
@@ -759,7 +778,7 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
 
         // Calculate NAV
         uint256 totalShares = getTotalShares();
-        uint256 underlying = IERC20(tokenUnderlying).balanceOf(address(this));
+        (, , uint256 underlying) = getTotalUnderlying();
         uint256 navA = _historicalNavs[day - 1 days][TRANCHE_A];
         uint256 navM;
         if (totalShares > 0) {
@@ -822,6 +841,15 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
         emit Settled(day, navM, navA, navB);
     }
 
+    function collectFee() external onlyStrategy {
+        IERC20(tokenUnderlying).safeTransfer(address(feeCollector), collectedFee);
+        collectedFee = 0;
+    }
+
+    function notifyTransfer(uint256 amount) external onlyStrategy {
+        IERC20(tokenUnderlying).safeTransfer(address(getStrategy()), amount);
+    }
+
     function addObsoletePrimaryMarket(address obsoletePrimaryMarket) external onlyOwner {
         require(isPrimaryMarket(obsoletePrimaryMarket), "The address is not a primary market");
         obsoletePrimaryMarkets.push(obsoletePrimaryMarket);
@@ -868,17 +896,17 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
     ///      This function should be called before creation and redemption on the same day
     ///      are settled.
     function _collectFee() private {
-        uint256 currentUnderlying = IERC20(tokenUnderlying).balanceOf(address(this));
+        (, , uint256 currentUnderlying) = getTotalUnderlying();
         uint256 fee = currentUnderlying.multiplyDecimal(dailyProtocolFeeRate);
         if (fee > 0) {
-            IERC20(tokenUnderlying).safeTransfer(address(feeCollector), fee);
+            collectedFee = collectedFee.add(fee);
         }
     }
 
     /// @dev Settle primary market operations in every PrimaryMarket contract.
     function _settlePrimaryMarkets(uint256 day, uint256 price) private {
         uint256 totalShares = getTotalShares();
-        uint256 underlying = IERC20(tokenUnderlying).balanceOf(address(this));
+        (, , uint256 underlying) = getTotalUnderlying();
         uint256 prevNavM = _historicalNavs[day - 1 days][TRANCHE_M];
         uint256 primaryMarketCount = getPrimaryMarketCount();
         for (uint256 i = 0; i < primaryMarketCount; i++) {
@@ -903,13 +931,14 @@ contract Fund is IFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITranc
                     creationUnderlying - redemptionUnderlying
                 );
             } else if (redemptionUnderlying > creationUnderlying) {
+                uint256 hotFundUnderlying = IERC20(tokenUnderlying).balanceOf(address(this));
                 IERC20(tokenUnderlying).safeTransfer(
                     address(pm),
-                    redemptionUnderlying - creationUnderlying
+                    hotFundUnderlying.min(redemptionUnderlying - creationUnderlying)
                 );
             }
             if (fee > 0) {
-                IERC20(tokenUnderlying).safeTransfer(address(feeCollector), fee);
+                collectedFee = collectedFee.add(fee);
             }
         }
     }

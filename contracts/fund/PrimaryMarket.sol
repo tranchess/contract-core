@@ -12,7 +12,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../utils/SafeDecimalMath.sol";
 
 import "../interfaces/IPrimaryMarket.sol";
-import "../interfaces/IFund.sol";
+import "../interfaces/IManagedFund.sol";
 import "../interfaces/ITrancheIndex.sol";
 
 contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownable {
@@ -56,10 +56,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
 
     uint256 public immutable guardedLaunchStart;
     uint256 public guardedLaunchTotalCap;
-    uint256 public guardedLaunchIndividualCap;
-    mapping(address => uint256) public guardedLaunchCreations;
 
-    IFund public fund;
+    IManagedFund public fund;
 
     uint256 public redemptionFeeRate;
     uint256 public splitFeeRate;
@@ -76,6 +74,10 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     mapping(uint256 => uint256) private _historicalCreationRate;
     mapping(uint256 => uint256) private _historicalRedemptionRate;
 
+    mapping(uint256 => mapping(address => uint256)) private _delayedUnderlyings;
+    uint256 delayedTotalUnderlying;
+    uint256 currentDelayedDay;
+
     constructor(
         address fund_,
         uint256 guardedLaunchStart_,
@@ -87,13 +89,14 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         require(redemptionFeeRate_ <= MAX_REDEMPTION_FEE_RATE, "Exceed max redemption fee rate");
         require(splitFeeRate_ <= MAX_SPLIT_FEE_RATE, "Exceed max split fee rate");
         require(mergeFeeRate_ <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
-        fund = IFund(fund_);
+        fund = IManagedFund(fund_);
         guardedLaunchStart = guardedLaunchStart_;
         redemptionFeeRate = redemptionFeeRate_;
         splitFeeRate = splitFeeRate_;
         mergeFeeRate = mergeFeeRate_;
         minCreationUnderlying = minCreationUnderlying_;
         currentDay = fund.currentDay();
+        currentDelayedDay = currentDay;
     }
 
     function creationRedemptionOf(address account)
@@ -114,19 +117,11 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
 
         currentCreatingUnderlying = currentCreatingUnderlying.add(underlying);
 
-        if (block.timestamp < guardedLaunchStart + 4 weeks) {
-            guardedLaunchCreations[msg.sender] = guardedLaunchCreations[msg.sender].add(underlying);
-            require(
-                IERC20(fund.tokenUnderlying()).balanceOf(address(fund)).add(
-                    currentCreatingUnderlying
-                ) <= guardedLaunchTotalCap,
-                "Guarded launch: exceed total cap"
-            );
-            require(
-                guardedLaunchCreations[msg.sender] <= guardedLaunchIndividualCap,
-                "Guarded launch: exceed individual cap"
-            );
-        }
+        (, , uint256 totalUnderlying) = fund.getTotalUnderlying();
+        require(
+            totalUnderlying.add(currentCreatingUnderlying) <= guardedLaunchTotalCap,
+            "Guarded launch: exceed total cap"
+        );
 
         emit Created(msg.sender, underlying);
     }
@@ -160,7 +155,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
             cr.createdShares = 0;
         }
         if (redeemedUnderlying > 0) {
-            IERC20(fund.tokenUnderlying()).safeTransfer(account, redeemedUnderlying);
+            _delayedUnderlyings[cr.day][account] = redeemedUnderlying;
             cr.redeemedUnderlying = 0;
         }
         _updateCreationRedemption(account, cr);
@@ -302,11 +297,24 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         // Approve the fund to take underlying if creation is more than redemption.
         // Instead of directly transfering underlying to the fund, this implementation
         // makes testing much easier.
+        redemptionUnderlying = redemptionUnderlying.add(delayedTotalUnderlying);
+        uint256 hotFundUnderlying = IERC20(fund.tokenUnderlying()).balanceOf(address(fund));
         if (creationUnderlying > redemptionUnderlying) {
             IERC20(fund.tokenUnderlying()).safeApprove(
                 address(fund),
                 creationUnderlying - redemptionUnderlying
             );
+            _updateDelayedRedemption(day);
+        } else if (redemptionUnderlying > creationUnderlying) {
+            creationUnderlying = creationUnderlying + hotFundUnderlying;
+            if (redemptionUnderlying <= creationUnderlying) {
+                _updateDelayedRedemption(day);
+            } else {
+                delayedTotalUnderlying =
+                    delayedTotalUnderlying +
+                    redemptionUnderlying -
+                    creationUnderlying;
+            }
         }
 
         // This loop should never execute, because this function is called by Fund
@@ -330,12 +338,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         );
     }
 
-    function updateGuardedLaunchCap(uint256 newTotalCap, uint256 newIndividualCap)
-        external
-        onlyOwner
-    {
+    function updateGuardedLaunchCap(uint256 newTotalCap) external onlyOwner {
         guardedLaunchTotalCap = newTotalCap;
-        guardedLaunchIndividualCap = newIndividualCap;
     }
 
     function updateRedemptionFeeRate(uint256 newRedemptionFeeRate) external onlyOwner {
@@ -413,6 +417,18 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         }
         if (old.version != cr.version) {
             old.version = cr.version;
+        }
+    }
+
+    function _updateDelayedRedemption(uint256 day) private {
+        delayedTotalUnderlying = 0;
+        currentDelayedDay = day;
+    }
+
+    function _claimDelayedUnderlying(uint256 day, address account) private {
+        if (day <= currentDelayedDay) {
+            IERC20(fund.tokenUnderlying()).safeTransfer(account, _delayedUnderlyings[day][account]);
+            _delayedUnderlyings[day][account] = 0;
         }
     }
 

@@ -9,6 +9,8 @@ abstract contract FundRoles {
     EnumerableSet.AddressSet private _primaryMarketMembers;
     mapping(address => bool) private _shareMembers;
 
+    address private _strategy;
+
     event PrimaryMarketAdded(address indexed primaryMarket);
     event PrimaryMarketRemoved(address indexed primaryMarket);
 
@@ -16,13 +18,16 @@ abstract contract FundRoles {
         address tokenM_,
         address tokenA_,
         address tokenB_,
-        address primaryMarket_
+        address primaryMarket_,
+        address strategy_
     ) internal {
         _shareMembers[tokenM_] = true;
         _shareMembers[tokenA_] = true;
         _shareMembers[tokenB_] = true;
 
         _addPrimaryMarket(primaryMarket_);
+
+        _strategy = strategy_;
     }
 
     modifier onlyPrimaryMarket() {
@@ -61,5 +66,18 @@ abstract contract FundRoles {
 
     function isShare(address account) public view returns (bool) {
         return _shareMembers[account];
+    }
+
+    modifier onlyStrategy() {
+        require(isStrategy(msg.sender), "FundRoles: only strategy");
+        _;
+    }
+
+    function isStrategy(address account) public view returns (bool) {
+        return _strategy == account;
+    }
+
+    function getStrategy() public view returns (address) {
+        return _strategy;
     }
 }
