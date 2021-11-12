@@ -13,4 +13,8 @@ interface IManagedFund is IFund {
             uint256 coldUnderlying,
             uint256 totalUnderlying
         );
+
+    function getTotalDelayedUnderlying() external returns (uint256 totalDelayedUnderlying);
+
+    function invest(uint256 amount) external;
 }

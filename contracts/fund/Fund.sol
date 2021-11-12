@@ -396,6 +396,19 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         }
     }
 
+    function getTotalDelayedUnderlying()
+        external
+        override
+        returns (uint256 totalDelayedUnderlying)
+    {
+        uint256 primaryMarketCount = getPrimaryMarketCount();
+        for (uint256 i = 0; i < primaryMarketCount; i++) {
+            totalDelayedUnderlying = totalDelayedUnderlying.add(
+                IPrimaryMarket(getPrimaryMarketMember(i)).delayedTotalUnderlying()
+            );
+        }
+    }
+
     /// @notice Transform share amounts according to the rebalance at a given index.
     ///         This function performs no bounds checking on the given index. A non-existent
     ///         rebalance transforms anything to a zero vector.
@@ -614,7 +627,7 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         )
     {
         hotUnderlying = IERC20(tokenUnderlying).balanceOf(address(this));
-        coldUnderlying = IStrategy(getStrategy()).getUnderlying();
+        coldUnderlying = IStrategy(getStrategy()).getColdUnderlying();
         totalUnderlying = hotUnderlying.add(coldUnderlying).sub(collectedFee);
     }
 
@@ -846,8 +859,12 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         collectedFee = 0;
     }
 
-    function notifyTransfer(uint256 amount) external onlyStrategy {
-        IERC20(tokenUnderlying).safeTransfer(address(getStrategy()), amount);
+    function invest(uint256 amount) external override onlyOwner {
+        uint256 newAmount = IStrategy(getStrategy()).getTransferAmount(amount);
+        if (newAmount > 0) {
+            IERC20(tokenUnderlying).safeApprove(address(getStrategy()), newAmount);
+        }
+        IStrategy(getStrategy()).execute(amount, newAmount);
     }
 
     function addObsoletePrimaryMarket(address obsoletePrimaryMarket) external onlyOwner {

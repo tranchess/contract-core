@@ -75,8 +75,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     mapping(uint256 => uint256) private _historicalRedemptionRate;
 
     mapping(uint256 => mapping(address => uint256)) private _delayedUnderlyings;
-    uint256 delayedTotalUnderlying;
-    uint256 currentDelayedDay;
+    uint256 public override delayedTotalUnderlying;
+    uint256 public override currentDelayedDay;
 
     constructor(
         address fund_,
