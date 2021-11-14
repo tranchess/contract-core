@@ -127,7 +127,7 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
     ///
     ///         Key is the end timestamp of a trading day. Value is the underlying assets in
     ///         the fund after settlement of that trading day.
-    mapping(uint256 => uint256) public historicalUnderlying;
+    mapping(uint256 => uint256) public override historicalUnderlying;
 
     /// @notice Mapping of trading week => interest rate of Token A.
     ///

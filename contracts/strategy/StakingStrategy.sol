@@ -22,24 +22,40 @@ interface IWrappedERC20 is IERC20 {
 
 contract StakingStrategy is IStrategy, Ownable, ReentrancyGuard {
     using SafeMath for uint256;
+    using SafeDecimalMath for uint256;
     using SafeERC20 for IWrappedERC20;
 
-    uint256 private immutable _interestRate;
+    uint256 private immutable _dailyInterestRate;
     address private immutable _fund;
     address private immutable _tokenUnderlying;
+    address private immutable _feeCollector;
     address payable private immutable _staker;
 
     uint256 private _coldUnderlying;
+    uint256 public splitRatio;
+    uint256 public lastHarvestTimestamp;
+
+    event Reported(
+        uint256 startTimestamp,
+        uint256 endTimestamp,
+        uint256 estimated,
+        uint256 feeRebate,
+        uint256 fundIncome
+    );
 
     constructor(
-        uint256 interestRate_,
+        uint256 dailyInterestRate_,
+        uint256 splitRatio_,
         address fund_,
         address payable staker_
     ) public {
-        _interestRate = interestRate_;
+        _dailyInterestRate = dailyInterestRate_;
         _fund = fund_;
         _tokenUnderlying = IManagedFund(fund_).tokenUnderlying();
+        _feeCollector = IManagedFund(fund_).feeCollector();
         _staker = staker_;
+        splitRatio = splitRatio_;
+        lastHarvestTimestamp = IManagedFund(fund_).endOfDay(block.timestamp);
     }
 
     function getColdUnderlying() external view override returns (uint256 underlying) {
@@ -56,6 +72,16 @@ contract StakingStrategy is IStrategy, Ownable, ReentrancyGuard {
         uint256 wrappedBalance = IWrappedERC20(_tokenUnderlying).balanceOf(address(this));
         if (requestAmount > unwrappedBalance + wrappedBalance) {
             transferAmount = requestAmount - unwrappedBalance + wrappedBalance;
+        }
+    }
+
+    function getEstimatedInterest(uint256 startDay, uint256 endDay)
+        public
+        view
+        returns (uint256 interest)
+    {
+        for (uint256 iDay = startDay; iDay < endDay; iDay += 1 days) {
+            interest = IFund(_fund).historicalUnderlying(iDay).multiplyDecimal(_dailyInterestRate);
         }
     }
 
@@ -93,10 +119,44 @@ contract StakingStrategy is IStrategy, Ownable, ReentrancyGuard {
         IWrappedERC20(_tokenUnderlying).safeTransfer(_fund, returnAmount);
     }
 
-    function harvest(uint256 profit) external payable nonReentrant {
-        // TODO: Split the profit
-        _wrap(profit);
-        IWrappedERC20(_tokenUnderlying).safeTransfer(_fund, profit);
+    function harvest() external payable onlyKeeper nonReentrant {
+        uint256 startTimestamp = lastHarvestTimestamp;
+        uint256 endTimestamp = IManagedFund(_fund).endOfDay(block.timestamp);
+        uint256 estimatedInterest = getEstimatedInterest(startTimestamp, endTimestamp);
+        lastHarvestTimestamp = endTimestamp;
+
+        // Split the profit
+        (uint256 feeRebate, uint256 fundIncome) = _splitProfit(msg.value);
+        _wrap(feeRebate);
+        IWrappedERC20(_tokenUnderlying).safeTransfer(_feeCollector, feeRebate);
+        _coldUnderlying = _coldUnderlying.add(fundIncome);
+
+        emit Reported(startTimestamp, endTimestamp, estimatedInterest, feeRebate, fundIncome);
+    }
+
+    function report(uint256 gain, uint256 loss) external onlyOwner nonReentrant {
+        // For Staking Strategy, the minimal gross profit is 0
+        uint256 profit = gain.sub(loss, "too much loss");
+
+        // Split the profit
+        (uint256 feeRebate, uint256 fundIncome) = _splitProfit(profit);
+        uint256 wrappedBalance = IWrappedERC20(_tokenUnderlying).balanceOf(address(this));
+        if (wrappedBalance < feeRebate) {
+            _wrap(feeRebate - wrappedBalance);
+        }
+        IWrappedERC20(_tokenUnderlying).safeTransfer(_feeCollector, feeRebate);
+        _coldUnderlying = _coldUnderlying.add(fundIncome);
+
+        emit Reported(lastHarvestTimestamp, 0, 0, feeRebate, fundIncome);
+    }
+
+    function _splitProfit(uint256 profit)
+        private
+        view
+        returns (uint256 feeRebate, uint256 fundIncome)
+    {
+        feeRebate = profit.multiplyDecimal(splitRatio);
+        fundIncome = profit.sub(feeRebate);
     }
 
     /// @dev Convert BNB into WBNB
@@ -110,7 +170,10 @@ contract StakingStrategy is IStrategy, Ownable, ReentrancyGuard {
     }
 
     modifier onlyKeeper() {
-        require(owner() == msg.sender || _fund == msg.sender, "Caller is not a keeper");
+        require(
+            owner() == msg.sender || _fund == msg.sender || _staker == msg.sender,
+            "Caller is not a keeper"
+        );
         _;
     }
 }
