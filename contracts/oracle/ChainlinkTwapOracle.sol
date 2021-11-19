@@ -68,12 +68,6 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     /// @notice The last Chainlink round ID that has been read.
     uint80 public lastRoundID;
 
-    /// @notice Answer of the last Chainlink round (`lastRoundID`).
-    int256 public lastRoundAnswer;
-
-    /// @notice Timestamp of the last Chainlink round (`lastRoundID`).
-    uint256 public lastUpdatedAt;
-
     /// @notice The last observation of the Uniswap V2 pair cumulative price.
     uint256 public lastSwapCumulativePrice;
 
@@ -114,10 +108,7 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
 
         symbol = symbol_;
         lastTimestamp = (block.timestamp / EPOCH) * EPOCH + EPOCH;
-        (lastRoundID, lastRoundAnswer, , lastUpdatedAt, ) = AggregatorV3Interface(
-            chainlinkAggregator_
-        )
-            .latestRoundData();
+        (lastRoundID, , , , ) = AggregatorV3Interface(chainlinkAggregator_).latestRoundData();
     }
 
     /// @notice Return TWAP with 18 decimal places in the epoch ending at the specified timestamp.
@@ -176,16 +167,15 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     /// @param timestamp End timestamp of the epoch to be updated
     /// @return TWAP of the epoch calculated from Chainlink, or zero if there's no sufficient data
     function _updateTwapFromChainlink(uint256 timestamp) private returns (uint256) {
-        uint80 roundID = lastRoundID;
-        int256 oldAnswer = lastRoundAnswer;
-        uint256 updatedAt = lastUpdatedAt;
+        (uint80 roundID, int256 oldAnswer, , uint256 oldUpdatedAt, ) =
+            chainlinkAggregator.getRoundData(lastRoundID);
         uint256 sum = 0;
         uint256 sumTimestamp = timestamp - EPOCH;
         uint256 messageCount = 0;
         for (uint256 i = 0; i < MAX_ITERATION; i++) {
             (, int256 newAnswer, , uint256 newUpdatedAt, ) =
                 chainlinkAggregator.getRoundData(++roundID);
-            if (newUpdatedAt < updatedAt || newUpdatedAt > timestamp) {
+            if (newUpdatedAt < oldUpdatedAt || newUpdatedAt > timestamp) {
                 // This round is either not available yet (newUpdatedAt < updatedAt)
                 // or beyond the current epoch (newUpdatedAt > timestamp).
                 roundID--;
@@ -197,11 +187,9 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
                 messageCount++;
             }
             oldAnswer = newAnswer;
-            updatedAt = newUpdatedAt;
+            oldUpdatedAt = newUpdatedAt;
         }
         lastRoundID = roundID;
-        lastRoundAnswer = oldAnswer;
-        lastUpdatedAt = updatedAt;
 
         if (messageCount >= MIN_MESSAGE_COUNT) {
             sum = sum.add(uint256(oldAnswer).mul(timestamp - sumTimestamp));
@@ -258,13 +246,13 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     ///         at an old round, due to either incontinuous round IDs caused by a phase change or
     ///         an abnormal `updatedAt` timestamp.
     function fastForwardRoundID(uint80 roundID) external onlyOwner {
-        require(roundID > lastRoundID, "Round ID too low");
-        (, int256 answer, , uint256 updatedAt, ) = chainlinkAggregator.getRoundData(roundID);
+        uint80 lastRoundID_ = lastRoundID;
+        require(roundID > lastRoundID_, "Round ID too low");
+        (, , , uint256 lastUpdatedAt, ) = chainlinkAggregator.getRoundData(lastRoundID_);
+        (, , , uint256 updatedAt, ) = chainlinkAggregator.getRoundData(roundID);
         require(updatedAt > lastUpdatedAt, "Invalid round timestamp");
         require(updatedAt <= lastTimestamp, "Round too new");
         lastRoundID = roundID;
-        lastRoundAnswer = answer;
-        lastUpdatedAt = updatedAt;
     }
 
     /// @notice Submit a TWAP with 18 decimal places by the owner.
