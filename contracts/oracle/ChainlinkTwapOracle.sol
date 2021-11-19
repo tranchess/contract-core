@@ -45,7 +45,7 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     event SkipDeviation(uint256 timestamp, uint256 chainlinkTwap, uint256 swapTwap);
 
     /// @notice Chainlink aggregator used as the primary data source.
-    AggregatorV3Interface public immutable chainlinkAggregator;
+    address public immutable chainlinkAggregator;
 
     /// @dev A multipler that normalizes price from the Chainlink aggregator to 18 decimal places.
     uint256 private immutable _chainlinkPriceMultiplier;
@@ -85,7 +85,7 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         address swapPair_,
         string memory symbol_
     ) public {
-        chainlinkAggregator = AggregatorV3Interface(chainlinkAggregator_);
+        chainlinkAggregator = chainlinkAggregator_;
         uint256 decimal = AggregatorV3Interface(chainlinkAggregator_).decimals();
         _chainlinkPriceMultiplier = 10**(uint256(18).sub(decimal));
 
@@ -168,13 +168,12 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     /// @return TWAP of the epoch calculated from Chainlink, or zero if there's no sufficient data
     function _updateTwapFromChainlink(uint256 timestamp) private returns (uint256) {
         (uint80 roundID, int256 oldAnswer, , uint256 oldUpdatedAt, ) =
-            chainlinkAggregator.getRoundData(lastRoundID);
+            _getChainlinkRoundData(lastRoundID);
         uint256 sum = 0;
         uint256 sumTimestamp = timestamp - EPOCH;
         uint256 messageCount = 0;
         for (uint256 i = 0; i < MAX_ITERATION; i++) {
-            (, int256 newAnswer, , uint256 newUpdatedAt, ) =
-                chainlinkAggregator.getRoundData(++roundID);
+            (, int256 newAnswer, , uint256 newUpdatedAt, ) = _getChainlinkRoundData(++roundID);
             if (newUpdatedAt < oldUpdatedAt || newUpdatedAt > timestamp) {
                 // This round is either not available yet (newUpdatedAt < updatedAt)
                 // or beyond the current epoch (newUpdatedAt > timestamp).
@@ -219,6 +218,29 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         }
     }
 
+    /// @dev Call `chainlinkAggregator.getRoundData(roundID)`. Return zero if the call reverts.
+    function _getChainlinkRoundData(uint80 roundID)
+        private
+        view
+        returns (
+            uint80,
+            int256,
+            uint256,
+            uint256,
+            uint80
+        )
+    {
+        (bool success, bytes memory returnData) =
+            chainlinkAggregator.staticcall(
+                abi.encodePacked(AggregatorV3Interface.getRoundData.selector, abi.encode(roundID))
+            );
+        if (success) {
+            return abi.decode(returnData, (uint80, int256, uint256, uint256, uint80));
+        } else {
+            return (0, 0, 0, 0, 0);
+        }
+    }
+
     function _observeSwap() private view returns (uint256) {
         (uint256 price0Cumulative, uint256 price1Cumulative, ) =
             UniswapV2OracleLibrary.currentCumulativePrices(swapPair);
@@ -248,8 +270,8 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     function fastForwardRoundID(uint80 roundID) external onlyOwner {
         uint80 lastRoundID_ = lastRoundID;
         require(roundID > lastRoundID_, "Round ID too low");
-        (, , , uint256 lastUpdatedAt, ) = chainlinkAggregator.getRoundData(lastRoundID_);
-        (, , , uint256 updatedAt, ) = chainlinkAggregator.getRoundData(roundID);
+        (, , , uint256 lastUpdatedAt, ) = _getChainlinkRoundData(lastRoundID_);
+        (, , , uint256 updatedAt, ) = _getChainlinkRoundData(roundID);
         require(updatedAt > lastUpdatedAt, "Invalid round timestamp");
         require(updatedAt <= lastTimestamp, "Round too new");
         lastRoundID = roundID;
