@@ -136,7 +136,7 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         uint256 timestamp = lastTimestamp + EPOCH;
         require(block.timestamp > timestamp, "Too soon");
 
-        uint256 chainlinkTwap = _updateTwapFromChainlink(timestamp);
+        (uint256 chainlinkTwap, uint80 newRoundID) = _updateTwapFromChainlink(timestamp);
 
         // Only observe the Uniswap pair if it's not too late.
         uint256 swapTwap = 0;
@@ -161,12 +161,18 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
             emit SkipMissingData(timestamp);
         }
         lastTimestamp = timestamp;
+        lastRoundID = newRoundID;
     }
 
     /// @dev Sequentially read Chainlink oracle until end of the given epoch.
     /// @param timestamp End timestamp of the epoch to be updated
-    /// @return TWAP of the epoch calculated from Chainlink, or zero if there's no sufficient data
-    function _updateTwapFromChainlink(uint256 timestamp) private returns (uint256) {
+    /// @return twap TWAP of the epoch calculated from Chainlink, or zero if there's no sufficient data
+    /// @return newRoundID The last round ID that has been read until the end of this epoch
+    function _updateTwapFromChainlink(uint256 timestamp)
+        private
+        view
+        returns (uint256 twap, uint80 newRoundID)
+    {
         (uint80 roundID, int256 oldAnswer, , uint256 oldUpdatedAt, ) =
             _getChainlinkRoundData(lastRoundID);
         uint256 sum = 0;
@@ -188,13 +194,12 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
             oldAnswer = newAnswer;
             oldUpdatedAt = newUpdatedAt;
         }
-        lastRoundID = roundID;
 
         if (messageCount >= MIN_MESSAGE_COUNT) {
             sum = sum.add(uint256(oldAnswer).mul(timestamp - sumTimestamp));
-            return sum.mul(_chainlinkPriceMultiplier) / EPOCH;
+            return (sum.mul(_chainlinkPriceMultiplier) / EPOCH, roundID);
         } else {
-            return 0;
+            return (0, roundID);
         }
     }
 
