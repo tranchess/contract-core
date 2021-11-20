@@ -20,10 +20,23 @@ interface IWrappedERC20 is IERC20 {
     function withdraw(uint256 wad) external;
 }
 
+interface ITokenHub {
+    function transferOut(
+        address contractAddr,
+        address recipient,
+        uint256 amount,
+        uint64 expireTime
+    ) external payable returns (bool);
+}
+
 contract StakingStrategy is IStrategy, Ownable, ReentrancyGuard {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using SafeERC20 for IWrappedERC20;
+
+    address public constant BNB_ADDRESS = 0x0000000000000000000000000000000000000000;
+    ITokenHub public constant TOKEN_HUB = ITokenHub(0x0000000000000000000000000000000000001004);
+    uint256 public constant BRIDGE_EXPIRE_TIME = 1 hours;
 
     uint256 private immutable _dailyInterestRate;
     address private immutable _fund;
@@ -104,7 +117,15 @@ contract StakingStrategy is IStrategy, Ownable, ReentrancyGuard {
         if (requestAmount > unwrappedBalance) {
             _unwrap(requestAmount - unwrappedBalance);
         }
-        _staker.transfer(requestAmount);
+        require(
+            TOKEN_HUB.transferOut{value: requestAmount}(
+                BNB_ADDRESS,
+                _staker,
+                requestAmount,
+                uint64(block.timestamp + BRIDGE_EXPIRE_TIME)
+            ),
+            "BSC bridge failed"
+        );
     }
 
     function pullout(uint256 extraAmount) external payable onlyOwner nonReentrant {
@@ -119,7 +140,9 @@ contract StakingStrategy is IStrategy, Ownable, ReentrancyGuard {
         IWrappedERC20(_tokenUnderlying).safeTransfer(_fund, returnAmount);
     }
 
-    function harvest() external payable onlyKeeper nonReentrant {
+    receive() external payable {}
+
+    function harvest() public payable onlyKeeper nonReentrant {
         uint256 startTimestamp = lastHarvestTimestamp;
         uint256 endTimestamp = IManagedFund(_fund).endOfDay(block.timestamp);
         uint256 estimatedInterest = getEstimatedInterest(startTimestamp, endTimestamp);
@@ -171,7 +194,7 @@ contract StakingStrategy is IStrategy, Ownable, ReentrancyGuard {
 
     modifier onlyKeeper() {
         require(
-            owner() == msg.sender || _fund == msg.sender || _staker == msg.sender,
+            owner() == msg.sender || _fund == msg.sender || address(TOKEN_HUB) == msg.sender,
             "Caller is not a keeper"
         );
         _;
