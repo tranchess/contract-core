@@ -2,10 +2,6 @@
 pragma solidity >=0.6.10 <0.8.0;
 
 interface IPrimaryMarket {
-    function delayedTotalUnderlying() external returns (uint256);
-
-    function currentDelayedDay() external returns (uint256);
-
     function claim(address account)
         external
         returns (uint256 createdShares, uint256 redeemedUnderlying);

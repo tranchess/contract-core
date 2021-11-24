@@ -11,8 +11,10 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../utils/SafeDecimalMath.sol";
 
+import {DelayedRedemption, LibDelayedRedemption} from "./LibDelayedRedemption.sol";
+
 import "../interfaces/IPrimaryMarket.sol";
-import "../interfaces/IManagedFund.sol";
+import "../interfaces/IFund.sol";
 import "../interfaces/ITrancheIndex.sol";
 
 contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownable {
@@ -33,6 +35,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
+    using LibDelayedRedemption for DelayedRedemption;
 
     /// @dev Creation and redemption of a single account.
     /// @param day Day of the last creation or redemption request.
@@ -57,7 +60,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     uint256 public immutable guardedLaunchStart;
     uint256 public guardedLaunchTotalCap;
 
-    IManagedFund public fund;
+    IFund public immutable fund;
 
     uint256 public redemptionFeeRate;
     uint256 public splitFeeRate;
@@ -74,9 +77,19 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     mapping(uint256 => uint256) private _historicalCreationRate;
     mapping(uint256 => uint256) private _historicalRedemptionRate;
 
-    mapping(uint256 => mapping(address => uint256)) private _delayedUnderlyings;
-    uint256 public override delayedTotalUnderlying;
-    uint256 public override currentDelayedDay;
+    /// @notice The first trading day on which redemptions cannot be claimed now.
+    uint256 public delayedRedemptionDay;
+
+    /// @dev Mapping of trading day => total redeemed underlying if users cannot claim their
+    ///      redemptions on that day, or zero otherwise.
+    mapping(uint256 => uint256) private _delayedUnderlyings;
+
+    /// @dev The total amount of redeemed underlying that can be claimed by users.
+    uint256 private _claimableUnderlying;
+
+    /// @dev Mapping of account => a list of redemptions that have been settled
+    ///      but are not claimable yet.
+    mapping(address => DelayedRedemption) private _delayedRedemptions;
 
     constructor(
         address fund_,
@@ -89,52 +102,86 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         require(redemptionFeeRate_ <= MAX_REDEMPTION_FEE_RATE, "Exceed max redemption fee rate");
         require(splitFeeRate_ <= MAX_SPLIT_FEE_RATE, "Exceed max split fee rate");
         require(mergeFeeRate_ <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
-        fund = IManagedFund(fund_);
+        fund = IFund(fund_);
         guardedLaunchStart = guardedLaunchStart_;
         redemptionFeeRate = redemptionFeeRate_;
         splitFeeRate = splitFeeRate_;
         mergeFeeRate = mergeFeeRate_;
         minCreationUnderlying = minCreationUnderlying_;
-        currentDay = fund.currentDay();
-        currentDelayedDay = currentDay;
+        currentDay = IFund(fund_).currentDay();
+        delayedRedemptionDay = currentDay;
     }
 
+    /// @dev Unlike the previous version, this function simply returns the stored state without
+    ///      updating any pending creation or redemption. To get the latest state of an account,
+    ///      call `updateUser(account)` before this function.
     function creationRedemptionOf(address account)
         external
         view
         returns (CreationRedemption memory)
     {
-        return _currentCreationRedemption(account);
+        return _creationRedemptions[account];
+    }
+
+    /// @notice Return delayed redemption of an account on a trading day.
+    /// @param account Address of the account
+    /// @param day A trading day
+    /// @return underlying Redeemed underlying amount
+    /// @return nextDay Trading day of the next delayed redemption, or zero if there's no
+    ///                 delayed redemption on the given day or it is the last redemption
+    function getDelayedRedemption(address account, uint256 day)
+        external
+        view
+        returns (uint256 underlying, uint256 nextDay)
+    {
+        return _delayedRedemptions[account].get(day);
+    }
+
+    /// @notice Return trading day of the first delayed redemption of an account.
+    function getDelayedRedemptionHead(address account) external view returns (uint256) {
+        return _delayedRedemptions[account].headTail.head;
+    }
+
+    /// @notice Update creation/redemption state of an account. The state is automatically updated
+    ///         in `create()`, `redeem()` or `claim()`. Users do not need to manually call this.
+    function updateUser(address account) external nonReentrant {
+        _updateDelayedRedemptionDay();
+        _updateUser(account);
     }
 
     function create(uint256 underlying) external nonReentrant onlyActive {
         require(underlying >= minCreationUnderlying, "Min amount");
         IERC20(fund.tokenUnderlying()).safeTransferFrom(msg.sender, address(this), underlying);
 
-        CreationRedemption memory cr = _currentCreationRedemption(msg.sender);
+        // Do not call `_updateDelayedRedemptionDay()` because the latest `redeemedUnderlying`
+        // is not used in this function.
+        _updateUser(msg.sender);
+        CreationRedemption storage cr = _creationRedemptions[msg.sender];
         cr.creatingUnderlying = cr.creatingUnderlying.add(underlying);
-        _updateCreationRedemption(msg.sender, cr);
 
-        currentCreatingUnderlying = currentCreatingUnderlying.add(underlying);
+        uint256 creatingUnderlying = currentCreatingUnderlying.add(underlying);
+        currentCreatingUnderlying = creatingUnderlying;
 
-        (, , uint256 totalUnderlying) = fund.getTotalUnderlying();
         require(
-            totalUnderlying.add(currentCreatingUnderlying) <= guardedLaunchTotalCap,
+            fund.historicalUnderlying(cr.day - 1 days).add(creatingUnderlying) <=
+                guardedLaunchTotalCap,
             "Guarded launch: exceed total cap"
         );
 
         emit Created(msg.sender, underlying);
     }
 
-    function redeem(uint256 shares) external onlyActive {
+    function redeem(uint256 shares) external nonReentrant onlyActive {
         require(shares != 0, "Zero shares");
         // Use burn and mint to simulate a transfer, so that we don't need a special transferFrom()
         fund.burn(TRANCHE_M, msg.sender, shares);
         fund.mint(TRANCHE_M, address(this), shares);
 
-        CreationRedemption memory cr = _currentCreationRedemption(msg.sender);
+        // Do not call `_updateDelayedRedemptionDay()` because the latest `redeemedUnderlying`
+        // is not used in this function.
+        _updateUser(msg.sender);
+        CreationRedemption storage cr = _creationRedemptions[msg.sender];
         cr.redeemingShares = cr.redeemingShares.add(shares);
-        _updateCreationRedemption(msg.sender, cr);
 
         currentRedeemingShares = currentRedeemingShares.add(shares);
         emit Redeemed(msg.sender, shares);
@@ -146,7 +193,9 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         nonReentrant
         returns (uint256 createdShares, uint256 redeemedUnderlying)
     {
-        CreationRedemption memory cr = _currentCreationRedemption(account);
+        _updateDelayedRedemptionDay();
+        _updateUser(msg.sender);
+        CreationRedemption storage cr = _creationRedemptions[msg.sender];
         createdShares = cr.createdShares;
         redeemedUnderlying = cr.redeemedUnderlying;
 
@@ -155,10 +204,10 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
             cr.createdShares = 0;
         }
         if (redeemedUnderlying > 0) {
-            _delayedUnderlyings[cr.day][account] = redeemedUnderlying;
+            IERC20(fund.tokenUnderlying()).safeTransfer(account, redeemedUnderlying);
+            _claimableUnderlying = _claimableUnderlying.sub(redeemedUnderlying);
             cr.redeemedUnderlying = 0;
         }
-        _updateCreationRedemption(account, cr);
 
         emit Claimed(account, createdShares, redeemedUnderlying);
     }
@@ -297,24 +346,11 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         // Approve the fund to take underlying if creation is more than redemption.
         // Instead of directly transfering underlying to the fund, this implementation
         // makes testing much easier.
-        redemptionUnderlying = redemptionUnderlying.add(delayedTotalUnderlying);
-        uint256 hotFundUnderlying = IERC20(fund.tokenUnderlying()).balanceOf(address(fund));
         if (creationUnderlying > redemptionUnderlying) {
             IERC20(fund.tokenUnderlying()).safeApprove(
                 address(fund),
                 creationUnderlying - redemptionUnderlying
             );
-            _updateDelayedRedemption(day);
-        } else if (redemptionUnderlying > creationUnderlying) {
-            creationUnderlying = creationUnderlying + hotFundUnderlying;
-            if (redemptionUnderlying <= creationUnderlying) {
-                _updateDelayedRedemption(day);
-            } else {
-                delayedTotalUnderlying =
-                    delayedTotalUnderlying +
-                    redemptionUnderlying -
-                    creationUnderlying;
-            }
         }
 
         // This loop should never execute, because this function is called by Fund
@@ -324,6 +360,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
             _historicalRedemptionRate[t] = _historicalRedemptionRate[day];
         }
 
+        _delayedUnderlyings[day] = redemptionUnderlying;
         currentDay = day + 1 days;
         currentCreatingUnderlying = 0;
         currentRedeemingShares = 0;
@@ -361,75 +398,93 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         minCreationUnderlying = newMinCreationUnderlying;
     }
 
-    function _currentCreationRedemption(address account)
-        private
-        view
-        returns (CreationRedemption memory cr)
-    {
-        cr = _creationRedemptions[account];
+    /// @dev Update the status of an account.
+    ///      1. If there is a pending creation before the last settlement, calculate its result
+    ///         and add it to `createdShares`.
+    ///      2. If there is a pending redemption before the last settlement, calculate its result.
+    ///         Add the result to `redeemedUnderlying` if it can be claimed now. Otherwise, append
+    ///         the result to the account's delayed redemption list.
+    ///      3. Check the account's delayed redemption list. Remove the redemptions that can be
+    ///         claimed now from the list and add them to `redeemedUnderlying`. Note that
+    ///         if `_updateDelayedRedemptionDay()` is not called before this function, some
+    ///         claimable redemption may not be correctly recognized and `redeemedUnderlying` may
+    ///         be smaller than the actual amount that the user can claim.
+    function _updateUser(address account) private {
+        CreationRedemption storage cr = _creationRedemptions[account];
         uint256 oldDay = cr.day;
-        if (oldDay < currentDay) {
-            if (cr.creatingUnderlying > 0) {
-                cr.createdShares = cr.createdShares.add(
-                    cr.creatingUnderlying.multiplyDecimal(_historicalCreationRate[oldDay])
+        uint256 newDay = currentDay;
+        if (oldDay < newDay) {
+            cr.day = newDay;
+            uint256 oldCreatingUnderlying = cr.creatingUnderlying;
+            uint256 oldCreatedShares = cr.createdShares;
+            uint256 newCreatedShares = oldCreatedShares;
+            if (oldCreatingUnderlying > 0) {
+                newCreatedShares = newCreatedShares.add(
+                    oldCreatingUnderlying.multiplyDecimal(_historicalCreationRate[oldDay])
                 );
                 cr.creatingUnderlying = 0;
             }
             uint256 rebalanceSize = fund.getRebalanceSize();
-            if (cr.version < rebalanceSize) {
-                if (cr.createdShares > 0) {
-                    (cr.createdShares, , ) = fund.batchRebalance(
-                        cr.createdShares,
+            uint256 oldVersion = cr.version;
+            if (oldVersion < rebalanceSize) {
+                if (newCreatedShares > 0) {
+                    (newCreatedShares, , ) = fund.batchRebalance(
+                        newCreatedShares,
                         0,
                         0,
-                        cr.version,
+                        oldVersion,
                         rebalanceSize
                     );
                 }
                 cr.version = rebalanceSize;
             }
-            if (cr.redeemingShares > 0) {
-                cr.redeemedUnderlying = cr.redeemedUnderlying.add(
-                    cr.redeemingShares.multiplyDecimal(_historicalRedemptionRate[oldDay])
-                );
-                cr.redeemingShares = 0;
+            if (newCreatedShares != oldCreatedShares) {
+                cr.createdShares = newCreatedShares;
             }
-            cr.day = currentDay;
+
+            uint256 oldRedeemingShares = cr.redeemingShares;
+            if (oldRedeemingShares > 0) {
+                uint256 underlying =
+                    oldRedeemingShares.multiplyDecimal(_historicalRedemptionRate[oldDay]);
+                cr.redeemingShares = 0;
+                if (oldDay < delayedRedemptionDay) {
+                    cr.redeemedUnderlying = cr.redeemedUnderlying.add(underlying);
+                } else {
+                    _delayedRedemptions[account].pushBack(underlying, oldDay);
+                }
+            }
+        }
+
+        uint256 delayedUnderlying =
+            _delayedRedemptions[account].popFrontUntil(delayedRedemptionDay);
+        if (delayedUnderlying > 0) {
+            cr.redeemedUnderlying = cr.redeemedUnderlying.add(delayedUnderlying);
         }
     }
 
-    function _updateCreationRedemption(address account, CreationRedemption memory cr) private {
-        CreationRedemption storage old = _creationRedemptions[account];
-        if (old.day != cr.day) {
-            old.day = cr.day;
+    /// @dev Move `delayedRedemptionDay` forward when there are enough underlying tokens in
+    ///      this contract.
+    function _updateDelayedRedemptionDay() private returns (uint256) {
+        uint256 claimableUnderlying = _claimableUnderlying;
+        uint256 balance =
+            IERC20(fund.tokenUnderlying()).balanceOf(address(this)).sub(claimableUnderlying);
+        uint256 oldDelayedRedemptionDay = delayedRedemptionDay;
+        uint256 newDelayedRedemptionDay = oldDelayedRedemptionDay;
+        uint256 currentDay_ = currentDay;
+        for (uint256 i = 0; i < 100 && newDelayedRedemptionDay < currentDay_; i++) {
+            uint256 underlying = _delayedUnderlyings[newDelayedRedemptionDay];
+            if (underlying > balance) {
+                break;
+            }
+            balance -= underlying;
+            claimableUnderlying = claimableUnderlying.add(underlying);
+            newDelayedRedemptionDay += 1 days;
         }
-        if (old.creatingUnderlying != cr.creatingUnderlying) {
-            old.creatingUnderlying = cr.creatingUnderlying;
+        if (newDelayedRedemptionDay != oldDelayedRedemptionDay) {
+            delayedRedemptionDay = newDelayedRedemptionDay;
+            _claimableUnderlying = claimableUnderlying;
         }
-        if (old.redeemingShares != cr.redeemingShares) {
-            old.redeemingShares = cr.redeemingShares;
-        }
-        if (old.createdShares != cr.createdShares) {
-            old.createdShares = cr.createdShares;
-        }
-        if (old.redeemedUnderlying != cr.redeemedUnderlying) {
-            old.redeemedUnderlying = cr.redeemedUnderlying;
-        }
-        if (old.version != cr.version) {
-            old.version = cr.version;
-        }
-    }
-
-    function _updateDelayedRedemption(uint256 day) private {
-        delayedTotalUnderlying = 0;
-        currentDelayedDay = day;
-    }
-
-    function _claimDelayedUnderlying(uint256 day, address account) private {
-        if (day <= currentDelayedDay) {
-            IERC20(fund.tokenUnderlying()).safeTransfer(account, _delayedUnderlyings[day][account]);
-            _delayedUnderlyings[day][account] = 0;
-        }
+        return newDelayedRedemptionDay;
     }
 
     modifier onlyActive() {

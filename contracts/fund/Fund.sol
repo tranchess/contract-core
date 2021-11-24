@@ -138,6 +138,10 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
     address[] private obsoletePrimaryMarkets;
     address[] private newPrimaryMarkets;
 
+    /// @dev Mapping of primary market => Amount of redemption underlying that the fund owes
+    ///      the primary market
+    mapping(address => uint256) private _delayedUnderlyings;
+
     constructor(
         address tokenUnderlying_,
         uint256 underlyingDecimals_,
@@ -404,7 +408,8 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         uint256 primaryMarketCount = getPrimaryMarketCount();
         for (uint256 i = 0; i < primaryMarketCount; i++) {
             totalDelayedUnderlying = totalDelayedUnderlying.add(
-                IPrimaryMarket(getPrimaryMarketMember(i)).delayedTotalUnderlying()
+                _delayedUnderlyings[getPrimaryMarketMember(i)]
+                //IPrimaryMarket(getPrimaryMarketMember(i)).delayedTotalUnderlying()
             );
         }
     }
@@ -947,12 +952,11 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
                     address(this),
                     creationUnderlying - redemptionUnderlying
                 );
-            } else if (redemptionUnderlying > creationUnderlying) {
-                uint256 hotFundUnderlying = IERC20(tokenUnderlying).balanceOf(address(this));
-                IERC20(tokenUnderlying).safeTransfer(
-                    address(pm),
-                    hotFundUnderlying.min(redemptionUnderlying - creationUnderlying)
+            } else {
+                _delayedUnderlyings[address(pm)] = _delayedUnderlyings[address(pm)].add(
+                    redemptionUnderlying - creationUnderlying
                 );
+                // TODO transfer hot to primary
             }
             if (fee > 0) {
                 collectedFee = collectedFee.add(fee);
