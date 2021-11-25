@@ -37,7 +37,7 @@ Tranchess Fund Protocol is the set of contracts representing the primary market.
 
 ## Primary Market
 
-The [`PrimaryMarket`](../contracts/PrimaryMarket.sol) contract is the main entrance to all primary market functionalities. It communicates with `Fund` to process creation\redemption requests, while temporarily manages shares and the underlying asset before they have been claimed by users.
+The [`PrimaryMarket`](../contracts/fund/PrimaryMarket.sol) contract is the main entrance to all primary market functionalities. It communicates with `Fund` to process creation\redemption requests, while temporarily manages shares and the underlying asset before they have been claimed by users.
 
 1. Create Token M from the underlying asset: [Creation](#creation)
 1. Redeem Token M to the underlying asset: [Redemption](#redemption)
@@ -46,7 +46,7 @@ The [`PrimaryMarket`](../contracts/PrimaryMarket.sol) contract is the main entra
 
 ## Share
 
-The [`Share`](../contracts/Share.sol) contract is the main entrance to all standard ERC20 functionalities for Token M/A/B. For each `Fund`, there would be 3 instances of the `Share` token contract deployed. It communicates with `Fund` to modify balances and total supplies of one of the three tokens.
+The [`Share`](../contracts/fund/Share.sol) contract is the main entrance to all standard ERC20 functionalities for Token M/A/B. For each `Fund`, there would be 3 instances of the `Share` token contract deployed. It communicates with `Fund` to modify balances and total supplies of one of the three tokens.
 
 1. Query the account balances\total supply\allowances
 1. Transfer balances
@@ -54,7 +54,7 @@ The [`Share`](../contracts/Share.sol) contract is the main entrance to all stand
 
 ## Fund
 
-The [`Fund`](../contracts/Fund.sol) contract contains the bulk of the business logic within Tranchess protocol. The `Fund` implements its ingenious NAV calculation and share rebalance logic, which would be invoked daily with public access. The `Fund` is also responsible for storing most of the underlying asset and collects the protocol fee against the underlying asset daily. Although Token M, A, and B are exposed as three independent contracts with ERC20 interfaces, the `Fund` manages all three token balances and total supplies under the hood for smooth rebalances.
+The [`Fund`](../contracts/fund/Fund.sol) contract contains the bulk of the business logic within Tranchess protocol. The `Fund` implements its ingenious NAV calculation and share rebalance logic, which would be invoked daily with public access. The `Fund` is also responsible for storing most of the underlying asset and collects the protocol fee against the underlying asset daily. Although Token M, A, and B are exposed as three independent contracts with ERC20 interfaces, the `Fund` manages all three token balances and total supplies under the hood for smooth rebalances.
 
 1. Mint/Burn/Transfer Token M/A/B
 1. Calculate NAVs of Token M/A/B
@@ -64,13 +64,13 @@ The [`Fund`](../contracts/Fund.sol) contract contains the bulk of the business l
 
 ## APR Oracle
 
-The [`AprOracle`](../contracts/AprOracle.sol) contract provides the on-chain oracle for weekly performance brief of risk-averse DeFi programs such as `Venus` on BSC, or `Aave` and `Compound` on Ethereum. The `Fund` would adopt the average interest rate as the basis for Token A's interest rate.
+The [`AprOracle`](../contracts/oracle/AprOracle.sol) contract provides the on-chain oracle for weekly performance brief of risk-averse DeFi programs such as `Venus` on BSC, or `Aave` and `Compound` on Ethereum. The `Fund` would adopt the average interest rate as the basis for Token A's interest rate.
 
 1. Calculate the average daily interest rate from last week
 
 ## Interest Rate Ballot
 
-The [`InterestRateBallot`](../Governance/InterestRateBallot.sol) contract allows `Chess` stakeholders to vote for the floating interest rate of the following week. On top of the result of `AprOracle`, the `Fund` would plus or minus the ballot result for Token A's interest rate.
+The [`InterestRateBallot`](../contracts/governance/InterestRateBallot.sol) contract allows `Chess` stakeholders to vote for the floating interest rate of the following week. On top of the result of `AprOracle`, the `Fund` would plus or minus the ballot result for Token A's interest rate.
 
 1. Vote for the floating rate within a given range
 1. Calculate the voted interest rate from last week
