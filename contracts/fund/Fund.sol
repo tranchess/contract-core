@@ -909,6 +909,7 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
                 block.timestamp < _proposedStrategyTimestamp + STRATEGY_UPDATE_MAX_DELAY,
             "Not ready to update strategy"
         );
+        require(_totalDebt == 0, "Cannot update strategy with debt");
         emit StrategyUpdated(strategy, msg.sender);
         strategy = msg.sender;
         proposedStrategy = address(0);
