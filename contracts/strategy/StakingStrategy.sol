@@ -131,7 +131,7 @@ contract StakingStrategy is IStrategy, Ownable, ReentrancyGuard {
     function pullout(uint256 extraAmount) external payable onlyOwner nonReentrant {
         uint256 unwrappedBalance = address(this).balance;
         uint256 wrappedBalance = IWrappedERC20(_tokenUnderlying).balanceOf(address(this));
-        uint256 returnAmount = IManagedFund(_fund).getTotalDelayedUnderlying().add(extraAmount);
+        uint256 returnAmount = IManagedFund(_fund).getTotalDebt().add(extraAmount);
         require(returnAmount <= unwrappedBalance + wrappedBalance, "not enough cold underlying");
         if (returnAmount > wrappedBalance) {
             _wrap(returnAmount - wrappedBalance);

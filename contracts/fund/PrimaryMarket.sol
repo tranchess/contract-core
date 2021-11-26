@@ -31,6 +31,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         uint256 redemptionUnderlying,
         uint256 fee
     );
+    event RedemptionClaimable(uint256 indexed day);
 
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
@@ -147,6 +148,10 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     function updateUser(address account) external nonReentrant {
         _updateDelayedRedemptionDay();
         _updateUser(account);
+    }
+
+    function updateDelayedRedemptionDay() external nonReentrant {
+        _updateDelayedRedemptionDay();
     }
 
     function create(uint256 underlying) external nonReentrant onlyActive {
@@ -465,12 +470,15 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     /// @dev Move `delayedRedemptionDay` forward when there are enough underlying tokens in
     ///      this contract.
     function _updateDelayedRedemptionDay() private returns (uint256) {
+        uint256 oldDelayedRedemptionDay = delayedRedemptionDay;
+        uint256 currentDay_ = currentDay;
+        if (oldDelayedRedemptionDay >= currentDay_) {
+            return oldDelayedRedemptionDay; // Fast path to return
+        }
+        uint256 newDelayedRedemptionDay = oldDelayedRedemptionDay;
         uint256 claimableUnderlying = _claimableUnderlying;
         uint256 balance =
             IERC20(fund.tokenUnderlying()).balanceOf(address(this)).sub(claimableUnderlying);
-        uint256 oldDelayedRedemptionDay = delayedRedemptionDay;
-        uint256 newDelayedRedemptionDay = oldDelayedRedemptionDay;
-        uint256 currentDay_ = currentDay;
         for (uint256 i = 0; i < 100 && newDelayedRedemptionDay < currentDay_; i++) {
             uint256 underlying = _delayedUnderlyings[newDelayedRedemptionDay];
             if (underlying > balance) {
@@ -478,6 +486,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
             }
             balance -= underlying;
             claimableUnderlying = claimableUnderlying.add(underlying);
+            emit RedemptionClaimable(newDelayedRedemptionDay);
             newDelayedRedemptionDay += 1 days;
         }
         if (newDelayedRedemptionDay != oldDelayedRedemptionDay) {

@@ -28,6 +28,13 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
+    event StrategyUpdateProposed(
+        address indexed newStrategy,
+        uint256 minTimestamp,
+        uint256 maxTimestamp
+    );
+    event StrategyUpdated(address indexed previousStrategy, address indexed newStrategy);
+
     uint256 private constant UNIT = 1e18;
     uint256 private constant MAX_INTEREST_RATE = 0.2e18; // 20% daily
     uint256 private constant MAX_DAILY_PROTOCOL_FEE_RATE = 0.05e18; // 5% daily rate
@@ -35,6 +42,9 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
     uint256 private constant WEIGHT_A = 1;
     uint256 private constant WEIGHT_B = 1;
     uint256 private constant WEIGHT_M = WEIGHT_A + WEIGHT_B;
+
+    uint256 private constant STRATEGY_UPDATE_MIN_DELAY = 3 days;
+    uint256 private constant STRATEGY_UPDATE_MAX_DELAY = 7 days;
 
     /// @notice Upper bound of `NAV_B / NAV_A` to trigger a rebalance.
     uint256 public immutable upperRebalanceThreshold;
@@ -62,8 +72,6 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
 
     /// @notice Fee Collector address.
     address public override feeCollector;
-
-    uint256 public collectedFee;
 
     /// @notice Address of Token M.
     address public override tokenM;
@@ -138,9 +146,23 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
     address[] private obsoletePrimaryMarkets;
     address[] private newPrimaryMarkets;
 
+    /// @notice Amount of fee not transfered to the fee collector yet.
+    uint256 public feeDebt;
+
     /// @dev Mapping of primary market => Amount of redemption underlying that the fund owes
     ///      the primary market
-    mapping(address => uint256) private _delayedUnderlyings;
+    mapping(address => uint256) public redemptionDebts;
+
+    /// @dev Sum of the fee debt and redemption debts of all primary markets.
+    uint256 private _totalDebt;
+
+    address public strategy;
+
+    address public proposedStrategy;
+
+    uint256 private _proposedStrategyTimestamp;
+
+    uint256 public strategyUnderlying;
 
     constructor(
         address tokenUnderlying_,
@@ -192,7 +214,17 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         tokenM = tokenM_;
         tokenA = tokenA_;
         tokenB = tokenB_;
-        _initializeRoles(tokenM_, tokenA_, tokenB_, primaryMarket_, strategy_);
+        _initializeRoles(tokenM_, tokenA_, tokenB_, primaryMarket_);
+        if (strategy_ != address(0)) {
+            // Require the initial strategy to explicitly accept the role (without min delay).
+            proposedStrategy = strategy_;
+            _proposedStrategyTimestamp = block.timestamp - STRATEGY_UPDATE_MIN_DELAY;
+            emit StrategyUpdateProposed(
+                strategy_,
+                block.timestamp,
+                block.timestamp - STRATEGY_UPDATE_MIN_DELAY + STRATEGY_UPDATE_MAX_DELAY
+            );
+        }
     }
 
     /// @notice Return weights of Token A and B when splitting Token M.
@@ -256,6 +288,15 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
     /// @return True if the exchange contract is active
     function isExchangeActive(uint256 timestamp) public view override returns (bool) {
         return (timestamp >= exchangeActivityStartTime && timestamp < (currentDay - 60 minutes));
+    }
+
+    function getTotalUnderlying() public view override returns (uint256) {
+        uint256 hot = IERC20(tokenUnderlying).balanceOf(address(this));
+        return hot.add(strategyUnderlying).sub(_totalDebt);
+    }
+
+    function getTotalDebt() external view override returns (uint256) {
+        return _totalDebt;
     }
 
     /// @notice Total shares of the fund, as if all Token A and B are merged.
@@ -397,20 +438,6 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
             return (navM * WEIGHT_M - navA * WEIGHT_A) / WEIGHT_B;
         } else {
             return 0;
-        }
-    }
-
-    function getTotalDelayedUnderlying()
-        external
-        override
-        returns (uint256 totalDelayedUnderlying)
-    {
-        uint256 primaryMarketCount = getPrimaryMarketCount();
-        for (uint256 i = 0; i < primaryMarketCount; i++) {
-            totalDelayedUnderlying = totalDelayedUnderlying.add(
-                _delayedUnderlyings[getPrimaryMarketMember(i)]
-                //IPrimaryMarket(getPrimaryMarketMember(i)).delayedTotalUnderlying()
-            );
         }
     }
 
@@ -621,21 +648,6 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         return _totalSupplies[tranche];
     }
 
-    function getTotalUnderlying()
-        public
-        view
-        override
-        returns (
-            uint256 hotUnderlying,
-            uint256 coldUnderlying,
-            uint256 totalUnderlying
-        )
-    {
-        hotUnderlying = IERC20(tokenUnderlying).balanceOf(address(this));
-        coldUnderlying = IStrategy(getStrategy()).getColdUnderlying();
-        totalUnderlying = hotUnderlying.add(coldUnderlying).sub(collectedFee);
-    }
-
     function mint(
         uint256 tranche,
         address account,
@@ -779,7 +791,7 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
     /// @notice Settle the current trading day. Settlement includes the following changes
     ///         to the fund.
     ///
-    ///         1. Transfer protocol fee of the day to the fee collector.
+    ///         1. Charge protocol fee of the day.
     ///         2. Settle all pending creations and redemptions from all primary markets.
     ///         3. Calculate NAV of the day and trigger rebalance if necessary.
     ///         4. Capture new interest rate for Token A.
@@ -794,9 +806,11 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
 
         _settlePrimaryMarkets(day, price);
 
+        _payDebt();
+
         // Calculate NAV
         uint256 totalShares = getTotalShares();
-        (, , uint256 underlying) = getTotalUnderlying();
+        uint256 underlying = getTotalUnderlying();
         uint256 navA = _historicalNavs[day - 1 days][TRANCHE_A];
         uint256 navM;
         if (totalShares > 0) {
@@ -831,7 +845,7 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
             exchangeActivityStartTime = day + 30 minutes;
         }
 
-        if (currentDay == currentWeek) {
+        if (day == currentWeek) {
             historicalInterestRate[currentWeek + 1 weeks] = _updateInterestRate(currentWeek);
         }
 
@@ -859,17 +873,45 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         emit Settled(day, navM, navA, navB);
     }
 
-    function collectFee() external onlyStrategy {
-        IERC20(tokenUnderlying).safeTransfer(address(feeCollector), collectedFee);
-        collectedFee = 0;
+    modifier onlyStrategy() {
+        require(msg.sender == strategy, "Only strategy");
+        _;
     }
 
-    function invest(uint256 amount) external override onlyOwner {
-        uint256 newAmount = IStrategy(getStrategy()).getTransferAmount(amount);
-        if (newAmount > 0) {
-            IERC20(tokenUnderlying).safeApprove(address(getStrategy()), newAmount);
-        }
-        IStrategy(getStrategy()).execute(amount, newAmount);
+    function invest(uint256 amount) external override onlyStrategy {
+        strategyUnderlying = strategyUnderlying.add(amount);
+        IERC20(tokenUnderlying).safeTransfer(strategy, amount);
+    }
+
+    function payDebt() external override onlyStrategy {
+        _payDebt();
+    }
+
+    function updateStrategyUnderlying(uint256 amount) external override onlyStrategy {
+        strategyUnderlying = amount;
+    }
+
+    function updateStrategy(address newStrategy) external onlyOwner {
+        require(newStrategy != strategy);
+        proposedStrategy = newStrategy;
+        _proposedStrategyTimestamp = block.timestamp;
+        emit StrategyUpdateProposed(
+            newStrategy,
+            block.timestamp + STRATEGY_UPDATE_MIN_DELAY,
+            block.timestamp + STRATEGY_UPDATE_MAX_DELAY
+        );
+    }
+
+    function acceptStrategyUpdate() external {
+        require(msg.sender == proposedStrategy, "Only proposed strategy");
+        require(
+            block.timestamp >= _proposedStrategyTimestamp + STRATEGY_UPDATE_MIN_DELAY &&
+                block.timestamp < _proposedStrategyTimestamp + STRATEGY_UPDATE_MAX_DELAY,
+            "Not ready to update strategy"
+        );
+        emit StrategyUpdated(strategy, msg.sender);
+        strategy = msg.sender;
+        proposedStrategy = address(0);
     }
 
     function addObsoletePrimaryMarket(address obsoletePrimaryMarket) external onlyOwner {
@@ -918,19 +960,22 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
     ///      This function should be called before creation and redemption on the same day
     ///      are settled.
     function _collectFee() private {
-        (, , uint256 currentUnderlying) = getTotalUnderlying();
+        uint256 currentUnderlying = getTotalUnderlying();
         uint256 fee = currentUnderlying.multiplyDecimal(dailyProtocolFeeRate);
         if (fee > 0) {
-            collectedFee = collectedFee.add(fee);
+            feeDebt = feeDebt.add(fee);
+            _totalDebt = _totalDebt.add(fee);
         }
     }
 
     /// @dev Settle primary market operations in every PrimaryMarket contract.
     function _settlePrimaryMarkets(uint256 day, uint256 price) private {
+        uint256 day_ = day; // Fix the "stack too deep" error
         uint256 totalShares = getTotalShares();
-        (, , uint256 underlying) = getTotalUnderlying();
-        uint256 prevNavM = _historicalNavs[day - 1 days][TRANCHE_M];
+        uint256 underlying = getTotalUnderlying();
         uint256 primaryMarketCount = getPrimaryMarketCount();
+        uint256 prevNavM = _historicalNavs[day - 1 days][TRANCHE_M];
+        uint256 newTotalDebt = _totalDebt;
         for (uint256 i = 0; i < primaryMarketCount; i++) {
             uint256 price_ = price; // Fix the "stack too deep" error
             IPrimaryMarket pm = IPrimaryMarket(getPrimaryMarketMember(i));
@@ -940,28 +985,65 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
                 uint256 creationUnderlying,
                 uint256 redemptionUnderlying,
                 uint256 fee
-            ) = pm.settle(day, totalShares, underlying, price_, prevNavM);
+            ) = pm.settle(day_, totalShares, underlying, price_, prevNavM);
             if (sharesToMint > sharesToBurn) {
                 _mint(TRANCHE_M, address(pm), sharesToMint - sharesToBurn);
             } else if (sharesToBurn > sharesToMint) {
                 _burn(TRANCHE_M, address(pm), sharesToBurn - sharesToMint);
             }
-            if (creationUnderlying > redemptionUnderlying) {
+            uint256 debt = redemptionDebts[address(pm)];
+            uint256 redemptionAndDebt = redemptionUnderlying.add(debt);
+            if (creationUnderlying > redemptionAndDebt) {
                 IERC20(tokenUnderlying).safeTransferFrom(
                     address(pm),
                     address(this),
-                    creationUnderlying - redemptionUnderlying
+                    creationUnderlying - redemptionAndDebt
                 );
+                redemptionDebts[address(pm)] = 0;
+                newTotalDebt -= debt;
             } else {
-                _delayedUnderlyings[address(pm)] = _delayedUnderlyings[address(pm)].add(
-                    redemptionUnderlying - creationUnderlying
-                );
-                // TODO transfer hot to primary
+                uint256 newDebt = redemptionAndDebt - creationUnderlying;
+                redemptionDebts[address(pm)] = newDebt;
+                newTotalDebt = newTotalDebt.sub(debt).add(newDebt);
             }
             if (fee > 0) {
-                collectedFee = collectedFee.add(fee);
+                feeDebt = feeDebt.add(fee);
+                newTotalDebt = newTotalDebt.add(fee);
             }
         }
+        _totalDebt = newTotalDebt;
+    }
+
+    function _payDebt() private {
+        uint256 total = _totalDebt;
+        if (total == 0) {
+            return;
+        }
+        uint256 hot = IERC20(tokenUnderlying).balanceOf(address(this));
+        if (hot == 0) {
+            return;
+        }
+        uint256 fee = feeDebt;
+        if (fee > 0) {
+            uint256 amount = hot.min(fee);
+            IERC20(tokenUnderlying).safeTransfer(feeCollector, amount);
+            feeDebt = fee - amount;
+            total -= amount;
+            hot -= amount;
+        }
+        uint256 primaryMarketCount = getPrimaryMarketCount();
+        for (uint256 i = 0; i < primaryMarketCount && hot > 0 && total > 0; i++) {
+            address pm = getPrimaryMarketMember(i);
+            uint256 redemption = redemptionDebts[pm];
+            if (redemption > 0) {
+                uint256 amount = hot.min(redemption);
+                IERC20(tokenUnderlying).safeTransfer(pm, amount);
+                redemptionDebts[pm] = redemption - amount;
+                total -= amount;
+                hot -= amount;
+            }
+        }
+        _totalDebt = total;
     }
 
     /// @dev Check whether a new rebalance should be triggered. Rebalance is triggered if
