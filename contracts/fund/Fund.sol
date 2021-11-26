@@ -216,14 +216,8 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         tokenB = tokenB_;
         _initializeRoles(tokenM_, tokenA_, tokenB_, primaryMarket_);
         if (strategy_ != address(0)) {
-            // Require the initial strategy to explicitly accept the role (without min delay).
-            proposedStrategy = strategy_;
-            _proposedStrategyTimestamp = block.timestamp - STRATEGY_UPDATE_MIN_DELAY;
-            emit StrategyUpdateProposed(
-                strategy_,
-                block.timestamp,
-                block.timestamp - STRATEGY_UPDATE_MIN_DELAY + STRATEGY_UPDATE_MAX_DELAY
-            );
+            emit StrategyUpdated(strategy, strategy_);
+            strategy = strategy_;
         }
     }
 
@@ -891,7 +885,7 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         strategyUnderlying = amount;
     }
 
-    function updateStrategy(address newStrategy) external onlyOwner {
+    function proposeStrategyUpdate(address newStrategy) external onlyOwner {
         require(newStrategy != strategy);
         proposedStrategy = newStrategy;
         _proposedStrategyTimestamp = block.timestamp;
@@ -902,8 +896,7 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         );
     }
 
-    function acceptStrategyUpdate() external {
-        require(msg.sender == proposedStrategy, "Only proposed strategy");
+    function applyStrategyUpdate() external onlyOwner {
         require(
             block.timestamp >= _proposedStrategyTimestamp + STRATEGY_UPDATE_MIN_DELAY &&
                 block.timestamp < _proposedStrategyTimestamp + STRATEGY_UPDATE_MAX_DELAY,
