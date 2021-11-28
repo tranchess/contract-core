@@ -18,7 +18,6 @@ import "../interfaces/IAprOracle.sol";
 import "../interfaces/IBallot.sol";
 import "../interfaces/IVotingEscrow.sol";
 import "../interfaces/ITrancheIndex.sol";
-import "../interfaces/IStrategy.sol";
 
 import "./FundRoles.sol";
 
@@ -162,7 +161,7 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
 
     uint256 private _proposedStrategyTimestamp;
 
-    uint256 public strategyUnderlying;
+    uint256 private _strategyUnderlying;
 
     constructor(
         address tokenUnderlying_,
@@ -286,7 +285,11 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
 
     function getTotalUnderlying() public view override returns (uint256) {
         uint256 hot = IERC20(tokenUnderlying).balanceOf(address(this));
-        return hot.add(strategyUnderlying).sub(_totalDebt);
+        return hot.add(_strategyUnderlying).sub(_totalDebt);
+    }
+
+    function getStrategyUnderlying() external view override returns (uint256) {
+        return _strategyUnderlying;
     }
 
     function getTotalDebt() external view override returns (uint256) {
@@ -872,17 +875,25 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         _;
     }
 
-    function invest(uint256 amount) external override onlyStrategy {
-        strategyUnderlying = strategyUnderlying.add(amount);
+    function transferToStrategy(uint256 amount) external override onlyStrategy {
+        _strategyUnderlying = _strategyUnderlying.add(amount);
         IERC20(tokenUnderlying).safeTransfer(strategy, amount);
     }
 
-    function payDebt() external override onlyStrategy {
+    function transferFromStrategy(uint256 amount) external override onlyStrategy {
+        _strategyUnderlying = _strategyUnderlying.sub(amount);
+        IERC20(tokenUnderlying).safeTransferFrom(strategy, address(this), amount);
         _payDebt();
     }
 
-    function updateStrategyUnderlying(uint256 amount) external override onlyStrategy {
-        strategyUnderlying = amount;
+    function reportProfit(uint256 profit, uint256 performanceFee) external override onlyStrategy {
+        require(profit >= performanceFee, "Performance fee cannot exceed profit");
+        _strategyUnderlying = _strategyUnderlying.add(profit);
+        feeDebt = feeDebt.add(performanceFee);
+    }
+
+    function reportLoss(uint256 loss) external override onlyStrategy {
+        _strategyUnderlying = _strategyUnderlying.sub(loss);
     }
 
     function proposeStrategyUpdate(address newStrategy) external onlyOwner {
@@ -1032,6 +1043,7 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
             if (redemption > 0) {
                 uint256 amount = hot.min(redemption);
                 IERC20(tokenUnderlying).safeTransfer(pm, amount);
+                // TODO call updateDelayedRedemptionDay?
                 redemptionDebts[pm] = redemption - amount;
                 total -= amount;
                 hot -= amount;

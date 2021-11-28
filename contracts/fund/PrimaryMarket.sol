@@ -352,7 +352,9 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         // Instead of directly transfering underlying to the fund, this implementation
         // makes testing much easier.
         if (creationUnderlying > redemptionUnderlying) {
-            IERC20(fund.tokenUnderlying()).safeApprove(
+            // Do not use `SafeERC20.safeApprove()` because the previous allowance
+            // may be non-zero when there were some delayed redemptions.
+            IERC20(fund.tokenUnderlying()).approve(
                 address(fund),
                 creationUnderlying - redemptionUnderlying
             );

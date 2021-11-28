@@ -7,11 +7,15 @@ import "./IFund.sol";
 interface IManagedFund is IFund {
     function getTotalUnderlying() external view returns (uint256);
 
+    function getStrategyUnderlying() external view returns (uint256);
+
     function getTotalDebt() external view returns (uint256);
 
-    function invest(uint256 amount) external;
+    function transferToStrategy(uint256 amount) external;
 
-    function payDebt() external;
+    function transferFromStrategy(uint256 amount) external;
 
-    function updateStrategyUnderlying(uint256 amount) external;
+    function reportProfit(uint256 profit, uint256 performanceFee) external;
+
+    function reportLoss(uint256 loss) external;
 }
