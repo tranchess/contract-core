@@ -116,30 +116,34 @@ contract BscStakingStrategy is Ownable {
     /// @notice Report daily profit to the fund by a reporter.
     /// @param amount Absolute profit, which must be no greater than the estimation
     function accrueProfit(uint256 amount) external onlyReporter {
-        uint256 day = fund.currentDay();
-        require(reportedDay < day, "Already reported");
-        reportedDay = day;
         uint256 total = fund.getStrategyUnderlying();
         require(amount <= total.multiplyDecimal(estimatedDailyProfitRate), "Profit out of range");
-        _reportProfit(amount);
+        _accrueProfit(amount);
     }
 
     /// @notice Report daily profit according to the pre-configured rate by a reporter.
     function accrueEstimatedProfit() external onlyReporter {
-        uint256 day = fund.currentDay();
-        require(reportedDay < day, "Already reported");
-        reportedDay = day;
         uint256 total = fund.getStrategyUnderlying();
-        _reportProfit(total.multiplyDecimal(estimatedDailyProfitRate));
+        _accrueProfit(total.multiplyDecimal(estimatedDailyProfitRate));
+    }
+
+    function _accrueProfit(uint256 amount) private {
+        uint256 currentDay = fund.currentDay();
+        uint256 oldReportedDay = reportedDay;
+        require(oldReportedDay < currentDay, "Already reported");
+        reportedDay = oldReportedDay + 1 days;
+        _reportProfit(amount);
     }
 
     function updateEstimatedDailyProfitRate(uint256 rate) external onlyOwner {
         require(rate < 0.1e18);
         estimatedDailyProfitRate = rate;
+        reportedDay = fund.currentDay();
     }
 
     /// @notice Report profit to the fund by the owner.
     function reportProfit(uint256 amount) external onlyOwner {
+        reportedDay = fund.currentDay();
         _reportProfit(amount);
     }
 
@@ -162,6 +166,7 @@ contract BscStakingStrategy is Ownable {
     /// @notice Report loss to the fund. Performance fee will not be charged until
     ///         the current drawdown is covered.
     function reportLoss(uint256 amount) external onlyOwner {
+        reportedDay = fund.currentDay();
         currentDrawdown = currentDrawdown.add(amount);
         fund.reportLoss(amount);
     }
