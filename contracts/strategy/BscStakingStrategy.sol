@@ -114,10 +114,13 @@ contract BscStakingStrategy is Ownable {
     }
 
     /// @notice Report daily profit to the fund by a reporter.
-    /// @param amount Absolute profit, which must be no greater than the estimation
+    /// @param amount Absolute profit, which must be no greater than twice the estimation
     function accrueProfit(uint256 amount) external onlyReporter {
         uint256 total = fund.getStrategyUnderlying();
-        require(amount <= total.multiplyDecimal(estimatedDailyProfitRate), "Profit out of range");
+        require(
+            amount / 2 <= total.multiplyDecimal(estimatedDailyProfitRate),
+            "Profit out of range"
+        );
         _accrueProfit(amount);
     }
 
