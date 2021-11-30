@@ -33,6 +33,8 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         uint256 maxTimestamp
     );
     event StrategyUpdated(address indexed previousStrategy, address indexed newStrategy);
+    event ProfitReported(uint256 profit, uint256 performanceFee);
+    event LossReported(uint256 loss);
 
     uint256 private constant UNIT = 1e18;
     uint256 private constant MAX_INTEREST_RATE = 0.2e18; // 20% daily
@@ -890,10 +892,12 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         require(profit >= performanceFee, "Performance fee cannot exceed profit");
         _strategyUnderlying = _strategyUnderlying.add(profit);
         feeDebt = feeDebt.add(performanceFee);
+        emit ProfitReported(profit, performanceFee);
     }
 
     function reportLoss(uint256 loss) external override onlyStrategy {
         _strategyUnderlying = _strategyUnderlying.sub(loss);
+        emit LossReported(loss);
     }
 
     function proposeStrategyUpdate(address newStrategy) external onlyOwner {
