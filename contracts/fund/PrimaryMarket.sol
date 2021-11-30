@@ -16,6 +16,7 @@ import {DelayedRedemption, LibDelayedRedemption} from "./LibDelayedRedemption.so
 import "../interfaces/IPrimaryMarket.sol";
 import "../interfaces/IFund.sol";
 import "../interfaces/ITrancheIndex.sol";
+import "../interfaces/IWrappedERC20.sol";
 
 contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownable {
     event Created(address indexed account, uint256 underlying);
@@ -62,6 +63,11 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     uint256 public guardedLaunchTotalCap;
 
     IFund public immutable fund;
+    IERC20 private immutable _tokenUnderlying;
+
+    /// @dev Whether the underlying token is the wrapped ERC20 token of the native currency,
+    ///      e.g. WETH on Ethereum.
+    bool private immutable _isUnderlyingWrapped;
 
     uint256 public redemptionFeeRate;
     uint256 public splitFeeRate;
@@ -94,6 +100,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
 
     constructor(
         address fund_,
+        bool isUnderlyingWrapped_,
         uint256 guardedLaunchStart_,
         uint256 redemptionFeeRate_,
         uint256 splitFeeRate_,
@@ -104,6 +111,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         require(splitFeeRate_ <= MAX_SPLIT_FEE_RATE, "Exceed max split fee rate");
         require(mergeFeeRate_ <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
         fund = IFund(fund_);
+        _tokenUnderlying = IERC20(IFund(fund_).tokenUnderlying());
+        _isUnderlyingWrapped = isUnderlyingWrapped_;
         guardedLaunchStart = guardedLaunchStart_;
         redemptionFeeRate = redemptionFeeRate_;
         splitFeeRate = splitFeeRate_;
@@ -154,9 +163,18 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         _updateDelayedRedemptionDay();
     }
 
-    function create(uint256 underlying) external nonReentrant onlyActive {
+    function create(uint256 underlying) external nonReentrant {
+        _tokenUnderlying.safeTransferFrom(msg.sender, address(this), underlying);
+    }
+
+    function wrapAndCreate() external payable nonReentrant {
+        require(_isUnderlyingWrapped, "Underlying is not wrapped");
+        IWrappedERC20(address(_tokenUnderlying)).deposit{value: msg.value}();
+        _create(msg.value);
+    }
+
+    function _create(uint256 underlying) private onlyActive {
         require(underlying >= minCreationUnderlying, "Min amount");
-        IERC20(fund.tokenUnderlying()).safeTransferFrom(msg.sender, address(this), underlying);
 
         // Do not call `_updateDelayedRedemptionDay()` because the latest `redeemedUnderlying`
         // is not used in this function.
@@ -209,9 +227,15 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
             cr.createdShares = 0;
         }
         if (redeemedUnderlying > 0) {
-            IERC20(fund.tokenUnderlying()).safeTransfer(account, redeemedUnderlying);
             _claimableUnderlying = _claimableUnderlying.sub(redeemedUnderlying);
             cr.redeemedUnderlying = 0;
+            if (_isUnderlyingWrapped) {
+                IWrappedERC20(address(_tokenUnderlying)).withdraw(redeemedUnderlying);
+                (bool success, ) = account.call{value: redeemedUnderlying}("");
+                require(success, "Transfer failed");
+            } else {
+                _tokenUnderlying.safeTransfer(account, redeemedUnderlying);
+            }
         }
 
         emit Claimed(account, createdShares, redeemedUnderlying);
@@ -354,10 +378,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         if (creationUnderlying > redemptionUnderlying) {
             // Do not use `SafeERC20.safeApprove()` because the previous allowance
             // may be non-zero when there were some delayed redemptions.
-            IERC20(fund.tokenUnderlying()).approve(
-                address(fund),
-                creationUnderlying - redemptionUnderlying
-            );
+            _tokenUnderlying.approve(address(fund), creationUnderlying - redemptionUnderlying);
         }
 
         // This loop should never execute, because this function is called by Fund
@@ -479,8 +500,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         }
         uint256 newDelayedRedemptionDay = oldDelayedRedemptionDay;
         uint256 claimableUnderlying = _claimableUnderlying;
-        uint256 balance =
-            IERC20(fund.tokenUnderlying()).balanceOf(address(this)).sub(claimableUnderlying);
+        uint256 balance = _tokenUnderlying.balanceOf(address(this)).sub(claimableUnderlying);
         for (uint256 i = 0; i < 100 && newDelayedRedemptionDay < currentDay_; i++) {
             uint256 underlying = _delayedUnderlyings[newDelayedRedemptionDay];
             if (underlying > balance) {

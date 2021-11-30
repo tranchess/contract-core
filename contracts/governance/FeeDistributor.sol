@@ -11,6 +11,7 @@ import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
 
 import "../interfaces/IVotingEscrow.sol";
+import "../interfaces/IWrappedERC20.sol";
 
 contract FeeDistributor is CoreUtility, Ownable {
     using SafeMath for uint256;
@@ -22,6 +23,11 @@ contract FeeDistributor is CoreUtility, Ownable {
 
     uint256 private immutable _maxTime;
     IERC20 public immutable rewardToken;
+
+    /// @dev Whether the reward token is the wrapped ERC20 token of the native currency,
+    ///      e.g. WETH on Ethereum.
+    bool private immutable _isRewardTokenWrapped;
+
     IVotingEscrow public immutable votingEscrow;
 
     /// @notice Receiver for admin fee
@@ -82,12 +88,14 @@ contract FeeDistributor is CoreUtility, Ownable {
 
     constructor(
         address rewardToken_,
+        bool isRewardTokenWrapped_,
         address votingEscrow_,
         address admin_,
         uint256 adminFeeRate_
     ) public {
         require(adminFeeRate_ <= MAX_ADMIN_FEE_RATE, "Cannot exceed max admin fee rate");
         rewardToken = IERC20(rewardToken_);
+        _isRewardTokenWrapped = isRewardTokenWrapped_;
         votingEscrow = IVotingEscrow(votingEscrow_);
         _maxTime = IVotingEscrow(votingEscrow_).maxTime();
         admin = admin_;
@@ -198,7 +206,14 @@ contract FeeDistributor is CoreUtility, Ownable {
         rewards = claimableRewards[account].add(_rewardCheckpoint(account));
         claimableRewards[account] = 0;
         lastRewardBalance = lastRewardBalance.sub(rewards);
-        rewardToken.safeTransfer(account, rewards);
+        // Keep this transfer at the end of the function to avoid reentrancy issue.
+        if (_isRewardTokenWrapped) {
+            IWrappedERC20(address(rewardToken)).withdraw(rewards);
+            (bool success, ) = account.call{value: rewards}("");
+            require(success, "Transfer failed");
+        } else {
+            rewardToken.safeTransfer(account, rewards);
+        }
     }
 
     /// @notice Make a global checkpoint. If the period since the last checkpoint spans over

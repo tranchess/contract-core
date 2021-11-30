@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -9,12 +8,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../utils/SafeDecimalMath.sol";
 
 import "../interfaces/IManagedFund.sol";
-
-interface IWrappedERC20 is IERC20 {
-    function deposit() external payable;
-
-    function withdraw(uint256 wad) external;
-}
+import "../interfaces/IWrappedERC20.sol";
 
 interface ITokenHub {
     function getMiniRelayFee() external view returns (uint256);
