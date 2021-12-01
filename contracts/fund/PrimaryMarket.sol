@@ -65,10 +65,6 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     IFund public immutable fund;
     IERC20 private immutable _tokenUnderlying;
 
-    /// @dev Whether the underlying token is the wrapped ERC20 token of the native currency,
-    ///      e.g. WETH on Ethereum.
-    bool private immutable _isUnderlyingWrapped;
-
     uint256 public redemptionFeeRate;
     uint256 public splitFeeRate;
     uint256 public mergeFeeRate;
@@ -100,7 +96,6 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
 
     constructor(
         address fund_,
-        bool isUnderlyingWrapped_,
         uint256 guardedLaunchStart_,
         uint256 redemptionFeeRate_,
         uint256 splitFeeRate_,
@@ -112,7 +107,6 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         require(mergeFeeRate_ <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
         fund = IFund(fund_);
         _tokenUnderlying = IERC20(IFund(fund_).tokenUnderlying());
-        _isUnderlyingWrapped = isUnderlyingWrapped_;
         guardedLaunchStart = guardedLaunchStart_;
         redemptionFeeRate = redemptionFeeRate_;
         splitFeeRate = splitFeeRate_;
@@ -165,10 +159,10 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
 
     function create(uint256 underlying) external nonReentrant {
         _tokenUnderlying.safeTransferFrom(msg.sender, address(this), underlying);
+        _create(underlying);
     }
 
     function wrapAndCreate() external payable nonReentrant {
-        require(_isUnderlyingWrapped, "Underlying is not wrapped");
         IWrappedERC20(address(_tokenUnderlying)).deposit{value: msg.value}();
         _create(msg.value);
     }
@@ -216,6 +210,28 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         nonReentrant
         returns (uint256 createdShares, uint256 redeemedUnderlying)
     {
+        (createdShares, redeemedUnderlying) = _claim(account);
+        IERC20(fund.tokenM()).safeTransfer(account, createdShares);
+        _tokenUnderlying.safeTransfer(account, redeemedUnderlying);
+    }
+
+    function claimAndUnwrap(address account)
+        external
+        override
+        nonReentrant
+        returns (uint256 createdShares, uint256 redeemedUnderlying)
+    {
+        (createdShares, redeemedUnderlying) = _claim(account);
+        IERC20(fund.tokenM()).safeTransfer(account, createdShares);
+        IWrappedERC20(address(_tokenUnderlying)).withdraw(redeemedUnderlying);
+        (bool success, ) = account.call{value: redeemedUnderlying}("");
+        require(success, "Transfer failed");
+    }
+
+    function _claim(address account)
+        private
+        returns (uint256 createdShares, uint256 redeemedUnderlying)
+    {
         _updateDelayedRedemptionDay();
         _updateUser(msg.sender);
         CreationRedemption storage cr = _creationRedemptions[msg.sender];
@@ -223,22 +239,15 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         redeemedUnderlying = cr.redeemedUnderlying;
 
         if (createdShares > 0) {
-            IERC20(fund.tokenM()).safeTransfer(account, createdShares);
             cr.createdShares = 0;
         }
         if (redeemedUnderlying > 0) {
             _claimableUnderlying = _claimableUnderlying.sub(redeemedUnderlying);
             cr.redeemedUnderlying = 0;
-            if (_isUnderlyingWrapped) {
-                IWrappedERC20(address(_tokenUnderlying)).withdraw(redeemedUnderlying);
-                (bool success, ) = account.call{value: redeemedUnderlying}("");
-                require(success, "Transfer failed");
-            } else {
-                _tokenUnderlying.safeTransfer(account, redeemedUnderlying);
-            }
         }
 
         emit Claimed(account, createdShares, redeemedUnderlying);
+        return (createdShares, redeemedUnderlying);
     }
 
     function split(uint256 inM) external onlyActive {

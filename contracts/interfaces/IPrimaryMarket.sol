@@ -6,6 +6,10 @@ interface IPrimaryMarket {
         external
         returns (uint256 createdShares, uint256 redeemedUnderlying);
 
+    function claimAndUnwrap(address account)
+        external
+        returns (uint256 createdShares, uint256 redeemedUnderlying);
+
     function settle(
         uint256 day,
         uint256 fundTotalShares,
