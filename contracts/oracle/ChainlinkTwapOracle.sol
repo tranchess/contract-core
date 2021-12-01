@@ -242,7 +242,7 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         if (success) {
             return abi.decode(returnData, (uint80, int256, uint256, uint256, uint80));
         } else {
-            return (0, 0, 0, 0, 0);
+            return (roundID, 0, 0, 0, roundID);
         }
     }
 
@@ -286,7 +286,7 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     ///         This is allowed only when a epoch cannot be updated by either Chainlink or Uniswap.
     function updateTwapFromOwner(uint256 timestamp, uint256 price) external onlyOwner {
         require(timestamp % EPOCH == 0, "Unaligned timestamp");
-        require(timestamp < lastTimestamp, "Not ready for owner");
+        require(timestamp <= lastTimestamp, "Not ready for owner");
         require(_prices[timestamp] == 0, "Owner cannot update an existing epoch");
 
         uint256 lastPrice = _prices[timestamp - EPOCH];

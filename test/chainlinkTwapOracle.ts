@@ -1,70 +1,116 @@
 import { expect } from "chai";
-import { Contract, Wallet } from "ethers";
+import { BigNumber, BigNumberish, Contract, Wallet } from "ethers";
 import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
-import { FixtureWalletMap, advanceBlockAtTime } from "./utils";
+const { parseEther, parseUnits } = ethers.utils;
+const parseBtc = (value: string) => parseUnits(value, 8);
+const parseUsdc = (value: string) => parseUnits(value, 6);
 import { deployMockForName } from "./mock";
-import { parseEther, parseUnits } from "@ethersproject/units";
-import { BigNumber } from "@ethersproject/bignumber";
+import { FixtureWalletMap, advanceBlockAtTime, setNextBlockTime } from "./utils";
 
 const EPOCH = 1800; // 30 min
-const PUBLISHING_DELAY = 120; // 2 min
-const CHAINLINK_DECIMAL = 8;
+const MIN_MESSAGE_COUNT = 10;
+const MAX_SWAP_DELAY = 15 * 60;
+const UPDATE_TYPE_OWNER = 2;
+const UPDATE_TYPE_CHAINLINK = 3;
+const UPDATE_TYPE_UNISWAP_V2 = 4;
+
+const CHAINLINK_DECIMAL = 10;
+const parseChainlink = (value: string) => parseUnits(value, CHAINLINK_DECIMAL);
+const CHAINLINK_START_PRICE = parseChainlink("50000");
+const SWAP_RESERVE_BTC = parseBtc("1");
+const SWAP_RESERVE_USDC = parseUsdc("50000");
+const START_PRICE = parseEther("50000");
+const BIT_112 = BigNumber.from(1).shl(112);
 
 describe("ChainlinkTwapOracle", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
-        readonly startWeek: number;
+        readonly startEpoch: number;
         readonly aggregator: MockContract;
+        readonly btc: Contract;
+        readonly usdc: Contract;
         readonly swap: MockContract;
         readonly twapOracle: Contract;
+        readonly nextRoundID: number;
     }
 
     let currentFixture: Fixture<FixtureData>;
     let fixtureData: FixtureData;
 
-    let startWeek: number;
+    let user1: Wallet;
+    let owner: Wallet;
+    let startEpoch: number;
     let aggregator: MockContract;
+    let btc: Contract;
+    let usdc: Contract;
     let swap: MockContract;
     let twapOracle: Contract;
+    let nextRoundID: number;
 
-    const currentID = 42;
-    const currentPrice0CumulativeT0 = BigNumber.from("228153871716166680761678287507817896287");
-    const currentPrice1CumulativeT0 = BigNumber.from("100000000000000000000000000000000000000000");
-    const reserve0T0 = parseEther("600");
-    const reserve1T0 = parseEther("20");
-    const reserve0T30 = parseEther("700");
-    const reserve1T30 = parseEther("13");
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
         const [user1, owner] = provider.getWallets();
 
         const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
-        const startWeek = Math.floor(startTimestamp / EPOCH) * EPOCH;
+        const startEpoch = Math.ceil(startTimestamp / EPOCH) * EPOCH + EPOCH * 2;
+        await advanceBlockAtTime(startEpoch - EPOCH / 2);
 
-        const aggregator = await deployMockForName(owner, "IAggregatorProxy");
-        const swap = await deployMockForName(owner, "IUniswapV2Pair");
-
+        const nextRoundID = 123000;
+        const aggregator = await deployMockForName(owner, "AggregatorV3Interface");
         await aggregator.mock.decimals.returns(CHAINLINK_DECIMAL);
-        await aggregator.mock.phaseId.returns(2);
-        await aggregator.mock.latestRoundData.returns(currentID, 0, 0, startWeek - 1, 0);
-        await swap.mock.price0CumulativeLast.returns(currentPrice0CumulativeT0);
-        await swap.mock.price1CumulativeLast.returns(currentPrice1CumulativeT0);
-        await swap.mock.getReserves.returns(reserve0T0, reserve1T0, startWeek);
+        await aggregator.mock.latestRoundData.returns(
+            nextRoundID - 1,
+            CHAINLINK_START_PRICE,
+            startTimestamp,
+            startTimestamp,
+            nextRoundID - 1
+        );
+        await aggregator.mock.getRoundData
+            .withArgs(nextRoundID - 1)
+            .returns(
+                nextRoundID - 1,
+                CHAINLINK_START_PRICE,
+                startTimestamp,
+                startTimestamp,
+                nextRoundID - 1
+            );
+
+        const MockToken = await ethers.getContractFactory("MockToken");
+        const btc = await MockToken.connect(owner).deploy("Wrapped BTC", "BTC", 8);
+        const usdc = await MockToken.connect(owner).deploy("USD Coin", "USDC", 6);
+
+        const swap = await deployMockForName(owner, "IUniswapV2Pair");
+        await swap.mock.token0.returns(btc.address);
+        await swap.mock.token1.returns(usdc.address);
+        await swap.mock.price0CumulativeLast.returns(0);
+        await swap.mock.price1CumulativeLast.returns(0);
+        await swap.mock.getReserves.returns(SWAP_RESERVE_BTC, SWAP_RESERVE_USDC, startTimestamp);
+
         const ChainlinkTwapOracle = await ethers.getContractFactory("ChainlinkTwapOracle");
         const twapOracle = await ChainlinkTwapOracle.connect(owner).deploy(
             aggregator.address,
             swap.address,
-            "Mock BTC"
+            "BTC"
         );
 
         return {
             wallets: { user1, owner },
-            startWeek,
+            startEpoch,
             aggregator,
+            btc,
+            usdc,
             swap,
-            twapOracle,
+            twapOracle: twapOracle.connect(user1),
+            nextRoundID,
         };
+    }
+
+    async function addRound(price: BigNumberish, timestamp: number): Promise<void> {
+        await aggregator.mock.getRoundData
+            .withArgs(nextRoundID)
+            .returns(nextRoundID, price, timestamp, timestamp, nextRoundID);
+        nextRoundID++;
     }
 
     before(function () {
@@ -73,176 +119,483 @@ describe("ChainlinkTwapOracle", function () {
 
     beforeEach(async function () {
         fixtureData = await loadFixture(currentFixture);
-        startWeek = fixtureData.startWeek;
+        user1 = fixtureData.wallets.user1;
+        owner = fixtureData.wallets.owner;
+        startEpoch = fixtureData.startEpoch;
         aggregator = fixtureData.aggregator;
+        btc = fixtureData.btc;
+        usdc = fixtureData.usdc;
         swap = fixtureData.swap;
         twapOracle = fixtureData.twapOracle;
+        nextRoundID = fixtureData.nextRoundID;
     });
 
-    describe("getTwap()", function () {
-        beforeEach(async function () {
-            for (let index = 0; index < 70; index++) {
-                await aggregator.mock.getRoundData
-                    .withArgs(currentID + index)
-                    .returns(
-                        0,
-                        parseUnits("1", CHAINLINK_DECIMAL).mul(index),
-                        0,
-                        startWeek - EPOCH + index * 60,
-                        0
-                    );
+    describe("Initialization", function () {
+        it("Initialized states", async function () {
+            expect(await twapOracle.lastTimestamp()).to.equal(startEpoch);
+            expect(await twapOracle.lastRoundID()).to.equal(nextRoundID - 1);
+            expect(await twapOracle.lastSwapTimestamp()).to.equal(0);
+        });
+
+        it("Should check Uniswap token symbol", async function () {
+            const ChainlinkTwapOracle = await ethers.getContractFactory("ChainlinkTwapOracle");
+            await expect(
+                ChainlinkTwapOracle.deploy(aggregator.address, swap.address, "OTHERSYMBOL")
+            ).to.be.revertedWith("Symbol mismatch");
+        });
+    });
+
+    describe("update() from Chainlink", function () {
+        it("Should revert before the next epoch ends", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH - 10);
+            await expect(twapOracle.update()).to.be.revertedWith("Too soon");
+        });
+
+        it("Should calculate TWAP", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH + 1);
+            for (let i = 0; i < MIN_MESSAGE_COUNT; i++) {
+                await addRound(
+                    CHAINLINK_START_PRICE.add(parseChainlink("10").mul(i + 1)),
+                    startEpoch + (EPOCH / MIN_MESSAGE_COUNT) * (i + 1)
+                );
             }
-        });
-
-        it("Should get Chainlink oracle without update", async function () {
-            await advanceBlockAtTime(startWeek + EPOCH + PUBLISHING_DELAY);
-            await aggregator.mock.latestRoundData.returns(102, 0, 0, startWeek + EPOCH, 0);
-            expect(await twapOracle.currentRoundID()).to.equal(42);
-            expect(await twapOracle.currentTimestamp()).to.equal(startWeek);
-            expect(await twapOracle.getTwap(startWeek + EPOCH)).to.equal(
-                parseEther("30").add(parseEther("59")).div(2)
+            await addRound(0, 0);
+            // The last data point at (startEpoch + EPOCH) has zero weight in this twap calculation
+            const twap = START_PRICE.add(
+                parseEther("10")
+                    .mul(MIN_MESSAGE_COUNT - 1)
+                    .div(2)
             );
+            await expect(twapOracle.update())
+                .to.emit(twapOracle, "Update")
+                .withArgs(startEpoch + EPOCH, twap, UPDATE_TYPE_CHAINLINK);
+            expect(await twapOracle.getTwap(startEpoch + EPOCH)).to.equal(twap);
+            expect(await twapOracle.lastTimestamp()).to.equal(startEpoch + EPOCH);
         });
-    });
 
-    describe("updateTwapFromChainlink()", function () {
-        beforeEach(async function () {
-            await aggregator.mock.getRoundData
-                .withArgs(currentID - 1)
-                .returns(0, 0, 0, startWeek - EPOCH - 60, 0);
-            for (let index = 0; index < 70; index++) {
-                await aggregator.mock.getRoundData
-                    .withArgs(currentID + index)
-                    .returns(
-                        0,
-                        parseUnits("1", CHAINLINK_DECIMAL).mul(index),
-                        0,
-                        startWeek - EPOCH + index * 60,
-                        0
-                    );
+        it("Should skip old rounds", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH + 1);
+            // This round is completely ignored
+            await addRound(parseChainlink("50000"), startEpoch - 10);
+            // Price in this round is used as the price at the start of the updating epoch
+            await addRound(parseChainlink("60000"), startEpoch - 5);
+            // Set data points for the second half of the epoch
+            for (let i = 0; i < MIN_MESSAGE_COUNT; i++) {
+                await addRound(parseChainlink("70000"), startEpoch + EPOCH / 2 + i);
             }
+            await addRound(0, 0);
+            // The last data point at (startEpoch + EPOCH) has zero weight in this twap calculation
+            const twap = parseEther("65000");
+            await expect(twapOracle.update())
+                .to.emit(twapOracle, "Update")
+                .withArgs(startEpoch + EPOCH, twap, UPDATE_TYPE_CHAINLINK);
+            expect(await twapOracle.getTwap(startEpoch + EPOCH)).to.equal(twap);
         });
 
-        it("Should get Chainlink oracle with update", async function () {
-            await advanceBlockAtTime(startWeek + EPOCH + PUBLISHING_DELAY);
-            await aggregator.mock.latestRoundData.returns(102, 0, 0, startWeek + EPOCH, 0);
-            await twapOracle.updateTwapFromChainlink();
-            expect(await twapOracle.currentRoundID()).to.equal(72);
-            expect(await twapOracle.currentTimestamp()).to.equal(startWeek + EPOCH);
-            expect(await twapOracle.getTwap(startWeek)).to.equal(
-                parseEther("0").add(parseEther("29")).div(2)
-            );
+        it("Should skip if there's not enough data points", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH + 1);
+            for (let i = 1; i <= MIN_MESSAGE_COUNT - 1; i++) {
+                await addRound(CHAINLINK_START_PRICE, startEpoch + (EPOCH / MIN_MESSAGE_COUNT) * i);
+            }
+            await addRound(0, 0);
+            await expect(twapOracle.update())
+                .to.emit(twapOracle, "SkipMissingData")
+                .withArgs(startEpoch + EPOCH);
+            expect(await twapOracle.getTwap(startEpoch + EPOCH)).to.equal(0);
+            expect(await twapOracle.lastTimestamp()).to.equal(startEpoch + EPOCH);
+        });
 
-            expect(await twapOracle.getTwap(startWeek + EPOCH)).to.equal(
-                parseEther("30").add(parseEther("59")).div(2)
-            );
-            await twapOracle.updateTwapFromChainlink();
-            expect(await twapOracle.currentRoundID()).to.equal(102);
-            expect(await twapOracle.currentTimestamp()).to.equal(startWeek + EPOCH * 2);
-            expect(await twapOracle.getTwap(startWeek + EPOCH)).to.equal(
-                parseEther("30").add(parseEther("59")).div(2)
+        it("Should not read rounds after the epoch", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH * 10);
+            for (let i = 0; i < MIN_MESSAGE_COUNT; i++) {
+                await addRound(
+                    CHAINLINK_START_PRICE,
+                    startEpoch + (EPOCH / MIN_MESSAGE_COUNT) * (i + 1)
+                );
+            }
+            const lastRoundID = nextRoundID - 1;
+            await addRound(parseChainlink("70000"), startEpoch + EPOCH + 100);
+            await addRound(parseChainlink("80000"), startEpoch + EPOCH + 200);
+            await addRound(parseChainlink("90000"), startEpoch + EPOCH + 300);
+            await twapOracle.update();
+            expect(await twapOracle.getTwap(startEpoch + EPOCH)).to.equal(START_PRICE);
+            expect(await twapOracle.lastRoundID()).to.equal(lastRoundID);
+        });
+
+        it("Should handle reverts in case of insufficient data points", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH * 10);
+            await aggregator.mock.getRoundData.withArgs(nextRoundID).reverts();
+            await twapOracle.update();
+            expect(await twapOracle.getTwap(startEpoch + EPOCH)).to.equal(0);
+            expect(await twapOracle.lastTimestamp()).to.equal(startEpoch + EPOCH);
+            expect(await twapOracle.lastRoundID()).to.equal(nextRoundID - 1);
+        });
+
+        it("Should handle reverts in case of sufficient data points", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH * 10);
+            for (let i = 0; i < MIN_MESSAGE_COUNT; i++) {
+                await addRound(
+                    CHAINLINK_START_PRICE,
+                    startEpoch + (EPOCH / MIN_MESSAGE_COUNT) * (i + 1)
+                );
+            }
+            await aggregator.mock.getRoundData.withArgs(nextRoundID).reverts();
+            await twapOracle.update();
+            expect(await twapOracle.getTwap(startEpoch + EPOCH)).to.equal(START_PRICE);
+            expect(await twapOracle.lastRoundID()).to.equal(nextRoundID - 1);
+        });
+
+        it("Should skip if the difference from Uniswap is too large", async function () {
+            // Observe Uniswap for the first time
+            await setNextBlockTime(startEpoch + EPOCH + 1);
+            await twapOracle.update();
+
+            await advanceBlockAtTime(startEpoch + EPOCH * 2 + 1);
+            await addRound(CHAINLINK_START_PRICE.mul(100), startEpoch + EPOCH);
+            for (let i = 1; i <= MIN_MESSAGE_COUNT; i++) {
+                await addRound(
+                    CHAINLINK_START_PRICE.mul(100),
+                    startEpoch + EPOCH + (EPOCH / MIN_MESSAGE_COUNT) * i
+                );
+            }
+            await addRound(0, 0);
+            await expect(twapOracle.update())
+                .to.emit(twapOracle, "SkipDeviation")
+                .withArgs(startEpoch + EPOCH * 2, START_PRICE.mul(100), parseEther("50000"));
+        });
+
+        it("Should accept the twap if the difference from Uniswap is limited", async function () {
+            // Observe Uniswap for the first time
+            await setNextBlockTime(startEpoch + EPOCH + 1);
+            await twapOracle.update();
+
+            await advanceBlockAtTime(startEpoch + EPOCH * 2 + 1);
+            await addRound(CHAINLINK_START_PRICE.mul(3).div(2), startEpoch + EPOCH);
+            for (let i = 1; i <= MIN_MESSAGE_COUNT; i++) {
+                await addRound(
+                    CHAINLINK_START_PRICE.mul(3).div(2),
+                    startEpoch + EPOCH + (EPOCH / MIN_MESSAGE_COUNT) * i
+                );
+            }
+            await addRound(0, 0);
+            await expect(twapOracle.update())
+                .to.emit(twapOracle, "Update")
+                .withArgs(startEpoch + EPOCH * 2, START_PRICE.mul(3).div(2), UPDATE_TYPE_CHAINLINK);
+            expect(await twapOracle.getTwap(startEpoch + EPOCH * 2)).to.equal(
+                START_PRICE.mul(3).div(2)
             );
         });
     });
 
-    describe("updateTwapFromSwap()", function () {
-        beforeEach(async function () {
-            for (let index = 0; index < 70; index++) {
-                await aggregator.mock.getRoundData
-                    .withArgs(currentID + index)
-                    .returns(
-                        0,
-                        parseUnits("1", CHAINLINK_DECIMAL).mul(index),
-                        0,
-                        startWeek - EPOCH + index * 60,
-                        0
-                    );
+    describe("fastForwardRoundID()", function () {
+        it("Should only be called by owner", async function () {
+            await expect(twapOracle.fastForwardRoundID(nextRoundID + 100)).to.be.revertedWith(
+                "Ownable: caller is not the owner"
+            );
+        });
+
+        it("Should revert if the new ID is not greater than the old", async function () {
+            await expect(
+                twapOracle.connect(owner).fastForwardRoundID(nextRoundID - 100)
+            ).to.be.revertedWith("Round ID too low");
+            await expect(
+                twapOracle.connect(owner).fastForwardRoundID(nextRoundID - 1)
+            ).to.be.revertedWith("Round ID too low");
+        });
+
+        it("Should revert if the new round is older than the old", async function () {
+            await addRound(CHAINLINK_START_PRICE, startEpoch - EPOCH * 100);
+            await expect(
+                twapOracle.connect(owner).fastForwardRoundID(nextRoundID - 1)
+            ).to.be.revertedWith("Invalid round timestamp");
+            await expect(
+                twapOracle.connect(owner).fastForwardRoundID(nextRoundID + 100)
+            ).to.be.revertedWith("Invalid round timestamp");
+        });
+
+        it("Should revert if the new round is newer than the start of the next epoch", async function () {
+            await addRound(CHAINLINK_START_PRICE, startEpoch + 1);
+            await expect(
+                twapOracle.connect(owner).fastForwardRoundID(nextRoundID - 1)
+            ).to.be.revertedWith("Round too new");
+        });
+
+        it("Should update the last round ID", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH * 10);
+            await twapOracle.update(); // Skip the first epoch
+            await addRound(parseChainlink("10000"), startEpoch + EPOCH - 400);
+            await addRound(parseChainlink("20000"), startEpoch + EPOCH - 300);
+            await addRound(parseChainlink("30000"), startEpoch + EPOCH - 200);
+            await addRound(parseChainlink("40000"), startEpoch + EPOCH - 100);
+            await twapOracle.connect(owner).fastForwardRoundID(nextRoundID - 2);
+            expect(await twapOracle.lastRoundID()).to.equal(nextRoundID - 2);
+
+            // Fill the second half with data points at price 50000
+            for (let i = 0; i < MIN_MESSAGE_COUNT; i++) {
+                await addRound(parseChainlink("50000"), startEpoch + EPOCH + EPOCH / 2 + i);
             }
             await twapOracle.update();
-        });
-
-        it("Should revert if not yet ready for swap", async function () {
-            await advanceBlockAtTime(startWeek + EPOCH + PUBLISHING_DELAY);
-            await expect(twapOracle.updateTwapFromSwap()).to.be.revertedWith("Not yet for swap");
-        });
-
-        it("Should get Swap oracle if no update on the swap pair", async function () {
-            await advanceBlockAtTime(startWeek + EPOCH * 2 - 5);
-            await twapOracle.updateCumulativeFromSwap();
-            await advanceBlockAtTime(startWeek + EPOCH * 2 + PUBLISHING_DELAY);
-            console.log(
-                (await twapOracle.observations(startWeek + EPOCH)).toString(),
-                (await twapOracle.observations(startWeek + EPOCH * 2)).toString()
-            );
-            expect(await twapOracle.getTwap(startWeek + EPOCH * 2)).to.equal(
-                reserve0T0.mul(parseEther("1")).div(reserve1T0)
-            );
-        });
-
-        it("Should get Swap oracle if one update on the swap pair", async function () {
-            const swapUpdateTimestamp = EPOCH + EPOCH / 3;
-            await swap.mock.price1CumulativeLast.returns(
-                currentPrice1CumulativeT0.add(
-                    reserve0T0.shl(112).div(reserve1T0).mul(swapUpdateTimestamp)
-                )
-            );
-            await swap.mock.getReserves.returns(
-                reserve0T30,
-                reserve1T30,
-                startWeek + swapUpdateTimestamp
-            );
-            await advanceBlockAtTime(startWeek + EPOCH * 2 - 5);
-            await twapOracle.updateCumulativeFromSwap();
-            await advanceBlockAtTime(startWeek + EPOCH * 2 + PUBLISHING_DELAY);
-            const startObservation = await twapOracle.observations(startWeek + EPOCH);
-            const endObservation = await twapOracle.observations(startWeek + EPOCH * 2);
-            console.log(startObservation.toString(), endObservation.toString());
-            expect(await twapOracle.getTwap(startWeek + EPOCH * 2)).to.equal(
-                reserve0T0
-                    .mul(parseEther("1"))
-                    .mul(
-                        BigNumber.from(startWeek + swapUpdateTimestamp).sub(
-                            startObservation.timestamp
-                        )
-                    )
-                    .div(reserve1T0)
-                    .add(
-                        reserve0T30
-                            .mul(parseEther("1"))
-                            .mul(
-                                endObservation.timestamp.sub(
-                                    BigNumber.from(startWeek + swapUpdateTimestamp)
-                                )
-                            )
-                            .div(reserve1T30)
-                    )
-                    .div(endObservation.timestamp.sub(startObservation.timestamp))
-            );
+            expect(await twapOracle.getTwap(startEpoch + EPOCH * 2)).to.equal(parseEther("45000"));
+            expect(await twapOracle.lastTimestamp()).to.equal(startEpoch + EPOCH * 2);
+            expect(await twapOracle.lastRoundID()).to.equal(nextRoundID - 1);
         });
     });
 
-    describe("nearestRoundID()", function () {
-        it("Should search for the greatest updatedAt smaller than endTimestamp", async function () {
-            await aggregator.mock.getRoundData.withArgs(currentID).returns(0, 0, 0, 2, 0);
-            await aggregator.mock.getRoundData.withArgs(currentID + 1).returns(0, 0, 0, 3, 0);
-            await aggregator.mock.getRoundData.withArgs(currentID + 2).returns(0, 0, 0, 5, 0);
-            await aggregator.mock.getRoundData.withArgs(currentID + 3).returns(0, 0, 0, 7, 0);
-            await aggregator.mock.getRoundData.withArgs(currentID + 4).returns(0, 0, 0, 11, 0);
-            await aggregator.mock.getRoundData.withArgs(currentID + 5).returns(0, 0, 0, 13, 0);
-            expect(await twapOracle.nearestRoundID(currentID + 5, 1)).to.equal(currentID - 1);
-            expect(await twapOracle.nearestRoundID(currentID + 5, 2)).to.equal(currentID - 1);
-            expect(await twapOracle.nearestRoundID(currentID + 5, 3)).to.equal(currentID);
-            expect(await twapOracle.nearestRoundID(currentID + 5, 4)).to.equal(currentID + 1);
-            expect(await twapOracle.nearestRoundID(currentID + 5, 5)).to.equal(currentID + 1);
-            expect(await twapOracle.nearestRoundID(currentID + 5, 6)).to.equal(currentID + 2);
-            expect(await twapOracle.nearestRoundID(currentID + 5, 7)).to.equal(currentID + 2);
-            expect(await twapOracle.nearestRoundID(currentID + 5, 8)).to.equal(currentID + 3);
-            expect(await twapOracle.nearestRoundID(currentID + 5, 9)).to.equal(currentID + 3);
-            expect(await twapOracle.nearestRoundID(currentID + 5, 10)).to.equal(currentID + 3);
-            expect(await twapOracle.nearestRoundID(currentID + 5, 11)).to.equal(currentID + 3);
-            expect(await twapOracle.nearestRoundID(currentID + 5, 12)).to.equal(currentID + 4);
-            expect(await twapOracle.nearestRoundID(currentID + 5, 13)).to.equal(currentID + 4);
-            expect(await twapOracle.nearestRoundID(currentID + 5, 14)).to.equal(currentID + 5);
+    describe("update() from Uniswap", function () {
+        it("Should store the observation", async function () {
+            await swap.mock.getReserves.returns(
+                SWAP_RESERVE_BTC,
+                SWAP_RESERVE_USDC,
+                startEpoch + EPOCH
+            );
+            await setNextBlockTime(startEpoch + EPOCH + 123);
+            await twapOracle.update();
+            expect(await twapOracle.lastSwapTimestamp()).to.equal(startEpoch + EPOCH + 123);
+            expect(await twapOracle.lastSwapCumulativePrice()).to.equal(
+                SWAP_RESERVE_USDC.mul(BIT_112).div(SWAP_RESERVE_BTC).mul(123)
+            );
+        });
+
+        it("Should not store the observation if it's too late", async function () {
+            await swap.mock.getReserves.returns(
+                SWAP_RESERVE_BTC,
+                SWAP_RESERVE_USDC,
+                startEpoch + EPOCH
+            );
+            await setNextBlockTime(startEpoch + EPOCH + MAX_SWAP_DELAY + 1);
+            await twapOracle.update();
+            expect(await twapOracle.lastSwapTimestamp()).to.equal(0);
+            expect(await twapOracle.lastSwapCumulativePrice()).to.equal(0);
+        });
+
+        it("Should calculate TWAP using two observations", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH + 1);
+            await twapOracle.update(); // First observation
+            await advanceBlockAtTime(startEpoch + EPOCH * 2 + 1);
+            await expect(twapOracle.update())
+                .to.emit(twapOracle, "Update")
+                .withArgs(startEpoch + EPOCH * 2, START_PRICE, UPDATE_TYPE_UNISWAP_V2);
+            expect(await twapOracle.getTwap(startEpoch + EPOCH * 2)).to.equal(START_PRICE);
+            expect(await twapOracle.lastTimestamp()).to.equal(startEpoch + EPOCH * 2);
+        });
+
+        it("Should calculate TWAP when both observations are just in time", async function () {
+            await setNextBlockTime(startEpoch + EPOCH + MAX_SWAP_DELAY);
+            await twapOracle.update(); // First observation
+            await setNextBlockTime(startEpoch + EPOCH * 2 + MAX_SWAP_DELAY);
+            await expect(twapOracle.update())
+                .to.emit(twapOracle, "Update")
+                .withArgs(startEpoch + EPOCH * 2, START_PRICE, UPDATE_TYPE_UNISWAP_V2);
+            expect(await twapOracle.getTwap(startEpoch + EPOCH * 2)).to.equal(START_PRICE);
+            expect(await twapOracle.lastTimestamp()).to.equal(startEpoch + EPOCH * 2);
+        });
+
+        it("Should not use Uniswap data when the first observation is late", async function () {
+            await setNextBlockTime(startEpoch + EPOCH + MAX_SWAP_DELAY + 1);
+            await twapOracle.update(); // First observation
+            await setNextBlockTime(startEpoch + EPOCH * 2 + MAX_SWAP_DELAY);
+            await expect(twapOracle.update())
+                .to.emit(twapOracle, "SkipMissingData")
+                .withArgs(startEpoch + EPOCH * 2);
+            expect(await twapOracle.getTwap(startEpoch + EPOCH)).to.equal(0);
+        });
+
+        it("Should not use Uniswap data when the second observation is late", async function () {
+            await setNextBlockTime(startEpoch + EPOCH + MAX_SWAP_DELAY);
+            await twapOracle.update(); // First observation
+            await setNextBlockTime(startEpoch + EPOCH * 2 + MAX_SWAP_DELAY + 1);
+            await expect(twapOracle.update())
+                .to.emit(twapOracle, "SkipMissingData")
+                .withArgs(startEpoch + EPOCH * 2);
+            expect(await twapOracle.getTwap(startEpoch + EPOCH)).to.equal(0);
+        });
+
+        it("Should calculate TWAP when price changes in the epoch", async function () {
+            await swap.mock.getReserves.returns(
+                SWAP_RESERVE_BTC,
+                SWAP_RESERVE_USDC,
+                startEpoch + EPOCH
+            );
+            await setNextBlockTime(startEpoch + EPOCH + 60);
+            await twapOracle.update(); // First observation
+
+            // The price doubles.
+            await swap.mock.getReserves.returns(
+                SWAP_RESERVE_BTC,
+                SWAP_RESERVE_USDC.mul(2),
+                startEpoch + EPOCH + EPOCH / 2 + 60
+            );
+            await swap.mock.price0CumulativeLast.returns(
+                SWAP_RESERVE_USDC.mul(BIT_112)
+                    .div(SWAP_RESERVE_BTC)
+                    .mul(EPOCH / 2 + 60)
+            );
+            await swap.mock.price1CumulativeLast.returns(
+                SWAP_RESERVE_BTC.mul(BIT_112)
+                    .div(SWAP_RESERVE_USDC)
+                    .mul(EPOCH / 2 + 60)
+            );
+
+            await setNextBlockTime(startEpoch + EPOCH * 2 + 60);
+            await twapOracle.update();
+            expect(await twapOracle.getTwap(startEpoch + EPOCH * 2)).to.equal(
+                START_PRICE.mul(3).div(2)
+            );
+        });
+
+        it("Should interpret Uniswap data when the pair tokens are reversed", async function () {
+            const newSwap = await deployMockForName(owner, "IUniswapV2Pair");
+            await newSwap.mock.token0.returns(usdc.address);
+            await newSwap.mock.token1.returns(btc.address);
+            await newSwap.mock.price0CumulativeLast.returns(0);
+            await newSwap.mock.price1CumulativeLast.returns(0);
+            await newSwap.mock.getReserves.returns(
+                SWAP_RESERVE_USDC,
+                SWAP_RESERVE_BTC,
+                startEpoch - EPOCH
+            );
+            const ChainlinkTwapOracle = await ethers.getContractFactory("ChainlinkTwapOracle");
+            const newTwapOracle = await ChainlinkTwapOracle.connect(owner).deploy(
+                aggregator.address,
+                newSwap.address,
+                "BTC"
+            );
+
+            await advanceBlockAtTime(startEpoch + EPOCH + 1);
+            await newTwapOracle.update(); // First observation
+            await advanceBlockAtTime(startEpoch + EPOCH * 2 + 1);
+            await newTwapOracle.update();
+            expect(await newTwapOracle.getTwap(startEpoch + EPOCH * 2)).to.equal(START_PRICE);
+        });
+    });
+
+    describe("updateTwapFromOwner()", async function () {
+        beforeEach(async function () {
+            // Update an epoch
+            await advanceBlockAtTime(startEpoch + EPOCH + 1);
+            await twapOracle.update(); // First observation
+            await advanceBlockAtTime(startEpoch + EPOCH * 2 + 1);
+            await twapOracle.update(); // Update epoch (startEpoch + EPOCH * 2)
+
+            twapOracle = twapOracle.connect(owner);
+        });
+
+        it("Should reject data before the epoch is skipped", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH * 10);
+            await expect(
+                twapOracle.updateTwapFromOwner(startEpoch + EPOCH * 3, START_PRICE)
+            ).to.be.revertedWith("Not ready for owner");
+            await expect(
+                twapOracle.updateTwapFromOwner(startEpoch + EPOCH * 20, START_PRICE)
+            ).to.be.revertedWith("Not ready for owner");
+        });
+
+        it("Should reject data following an uninitialized epoch", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH * 10);
+            await twapOracle.update(); // Skip an epoch
+            await twapOracle.update(); // Skip an epoch
+            await twapOracle.update(); // Skip an epoch
+            await expect(
+                twapOracle.updateTwapFromOwner(startEpoch + EPOCH * 4, START_PRICE)
+            ).to.be.revertedWith("Owner can only update a epoch following an updated epoch");
+        });
+
+        it("Should reject data deviating too much", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH * 10);
+            await twapOracle.update(); // Skip an epoch
+            await expect(
+                twapOracle.updateTwapFromOwner(startEpoch + EPOCH * 3, START_PRICE.mul(20))
+            ).to.be.revertedWith("Owner price deviates too much from the last price");
+            await expect(
+                twapOracle.updateTwapFromOwner(startEpoch + EPOCH * 3, START_PRICE.div(20))
+            ).to.be.revertedWith("Owner price deviates too much from the last price");
+        });
+
+        it("Should reject data if not called by owner", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH * 10);
+            await twapOracle.update(); // Skip an epoch
+            await expect(
+                twapOracle.connect(user1).updateTwapFromOwner(startEpoch + EPOCH * 3, START_PRICE)
+            ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+
+        it("Should reject unaligned timestamp", async function () {
+            await expect(
+                twapOracle.updateTwapFromOwner(startEpoch + EPOCH - 1, START_PRICE)
+            ).to.be.revertedWith("Unaligned timestamp");
+        });
+
+        it("Should reject when updating an updated epoch", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH * 10);
+            await twapOracle.update(); // Skip an epoch
+            await expect(
+                twapOracle.updateTwapFromOwner(startEpoch + EPOCH * 2, START_PRICE)
+            ).to.be.revertedWith("Owner cannot update an existing epoch");
+        });
+
+        it("Should accept valid data", async function () {
+            await advanceBlockAtTime(startEpoch + EPOCH * 10);
+            await twapOracle.update(); // Skip an epoch
+            await twapOracle.update(); // Skip an epoch
+            await twapOracle.update(); // Skip an epoch
+            expect(await twapOracle.lastTimestamp()).to.equal(startEpoch + EPOCH * 5);
+
+            await expect(
+                twapOracle.updateTwapFromOwner(startEpoch + EPOCH * 3, START_PRICE.add(10))
+            )
+                .to.emit(twapOracle, "Update")
+                .withArgs(startEpoch + EPOCH * 3, START_PRICE.add(10), UPDATE_TYPE_OWNER);
+            expect(await twapOracle.getTwap(startEpoch + EPOCH * 3)).to.equal(START_PRICE.add(10));
+            expect(await twapOracle.lastTimestamp()).to.equal(startEpoch + EPOCH * 5);
+
+            await expect(
+                twapOracle.updateTwapFromOwner(startEpoch + EPOCH * 4, START_PRICE.add(20))
+            )
+                .to.emit(twapOracle, "Update")
+                .withArgs(startEpoch + EPOCH * 4, START_PRICE.add(20), UPDATE_TYPE_OWNER);
+            expect(await twapOracle.getTwap(startEpoch + EPOCH * 4)).to.equal(START_PRICE.add(20));
+            expect(await twapOracle.lastTimestamp()).to.equal(startEpoch + EPOCH * 5);
+        });
+    });
+
+    describe("peekSwapPrice()", function () {
+        it("Should return TWAP since the last observation", async function () {
+            await swap.mock.getReserves.returns(
+                SWAP_RESERVE_BTC,
+                SWAP_RESERVE_USDC,
+                startEpoch + EPOCH
+            );
+            await setNextBlockTime(startEpoch + EPOCH + 60);
+            await twapOracle.update(); // First observation
+
+            await advanceBlockAtTime(startEpoch + EPOCH + 100);
+            expect(await twapOracle.peekSwapPrice()).to.equal(START_PRICE);
+            await advanceBlockAtTime(startEpoch + EPOCH + EPOCH / 2);
+            expect(await twapOracle.peekSwapPrice()).to.equal(START_PRICE);
+
+            // The price doubles.
+            await swap.mock.getReserves.returns(
+                SWAP_RESERVE_BTC,
+                SWAP_RESERVE_USDC.mul(2),
+                startEpoch + EPOCH + EPOCH / 2 + 60
+            );
+            await swap.mock.price0CumulativeLast.returns(
+                SWAP_RESERVE_USDC.mul(BIT_112)
+                    .div(SWAP_RESERVE_BTC)
+                    .mul(EPOCH / 2 + 60)
+            );
+            await swap.mock.price1CumulativeLast.returns(
+                SWAP_RESERVE_BTC.mul(BIT_112)
+                    .div(SWAP_RESERVE_USDC)
+                    .mul(EPOCH / 2 + 60)
+            );
+
+            // original price for EPOCH / 2 and doubled price for EPOCH / 2
+            await advanceBlockAtTime(startEpoch + EPOCH * 2 + 60);
+            expect(await twapOracle.peekSwapPrice()).to.equal(START_PRICE.mul(3).div(2));
+            // original price for EPOCH / 2 and doubled price for EPOCH * 1.5
+            await advanceBlockAtTime(startEpoch + EPOCH * 3 + 60);
+            expect(await twapOracle.peekSwapPrice()).to.equal(START_PRICE.mul(7).div(4));
         });
     });
 });
