@@ -149,7 +149,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         return _delayedRedemptions[account].headTail.head;
     }
 
-    function updateDelayedRedemptionDay() external nonReentrant {
+    function updateDelayedRedemptionDay() external override nonReentrant {
         _updateDelayedRedemptionDay();
     }
 

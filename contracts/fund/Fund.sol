@@ -1035,10 +1035,10 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         uint256 fee = feeDebt;
         if (fee > 0) {
             uint256 amount = hot.min(fee);
-            IERC20(tokenUnderlying).safeTransfer(feeCollector, amount);
             feeDebt = fee - amount;
             total -= amount;
             hot -= amount;
+            IERC20(tokenUnderlying).safeTransfer(feeCollector, amount);
         }
         uint256 primaryMarketCount = getPrimaryMarketCount();
         for (uint256 i = 0; i < primaryMarketCount && hot > 0 && total > 0; i++) {
@@ -1046,11 +1046,11 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
             uint256 redemption = redemptionDebts[pm];
             if (redemption > 0) {
                 uint256 amount = hot.min(redemption);
-                IERC20(tokenUnderlying).safeTransfer(pm, amount);
-                // TODO call updateDelayedRedemptionDay?
                 redemptionDebts[pm] = redemption - amount;
                 total -= amount;
                 hot -= amount;
+                IERC20(tokenUnderlying).safeTransfer(pm, amount);
+                IPrimaryMarket(pm).updateDelayedRedemptionDay();
             }
         }
         _totalDebt = total;

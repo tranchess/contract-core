@@ -10,6 +10,8 @@ interface IPrimaryMarket {
         external
         returns (uint256 createdShares, uint256 redeemedUnderlying);
 
+    function updateDelayedRedemptionDay() external;
+
     function settle(
         uint256 day,
         uint256 fundTotalShares,
