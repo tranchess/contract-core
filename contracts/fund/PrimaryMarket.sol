@@ -180,7 +180,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         currentCreatingUnderlying = creatingUnderlying;
 
         require(
-            fund.historicalUnderlying(cr.day - 1 days).add(creatingUnderlying) <=
+            fund.historicalUnderlying(currentDay - 1 days).add(creatingUnderlying) <=
                 guardedLaunchTotalCap,
             "Guarded launch: exceed total cap"
         );
