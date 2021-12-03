@@ -59,9 +59,6 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     uint256 private constant MAX_SPLIT_FEE_RATE = 0.01e18;
     uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18;
 
-    uint256 public immutable guardedLaunchStart;
-    uint256 public guardedLaunchTotalCap;
-
     IFund public immutable fund;
     IERC20 private immutable _tokenUnderlying;
 
@@ -80,6 +77,13 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     mapping(uint256 => uint256) private _historicalCreationRate;
     mapping(uint256 => uint256) private _historicalRedemptionRate;
 
+    /// @notice The upper limit of underlying that the fund can hold. This contract rejects
+    ///         creations that may break this limit.
+    /// @dev This limit can be bypassed if the fund has multiple primary markets.
+    ///
+    ///      Set it to uint(-1) to skip the check and save gas.
+    uint256 public fundCap;
+
     /// @notice The first trading day on which redemptions cannot be claimed now.
     uint256 public delayedRedemptionDay;
 
@@ -96,23 +100,23 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
 
     constructor(
         address fund_,
-        uint256 guardedLaunchStart_,
         uint256 redemptionFeeRate_,
         uint256 splitFeeRate_,
         uint256 mergeFeeRate_,
-        uint256 minCreationUnderlying_
+        uint256 minCreationUnderlying_,
+        uint256 fundCap_
     ) public Ownable() {
         require(redemptionFeeRate_ <= MAX_REDEMPTION_FEE_RATE, "Exceed max redemption fee rate");
         require(splitFeeRate_ <= MAX_SPLIT_FEE_RATE, "Exceed max split fee rate");
         require(mergeFeeRate_ <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
         fund = IFund(fund_);
         _tokenUnderlying = IERC20(IFund(fund_).tokenUnderlying());
-        guardedLaunchStart = guardedLaunchStart_;
         redemptionFeeRate = redemptionFeeRate_;
         splitFeeRate = splitFeeRate_;
         mergeFeeRate = mergeFeeRate_;
         minCreationUnderlying = minCreationUnderlying_;
         currentDay = IFund(fund_).currentDay();
+        fundCap = fundCap_;
         delayedRedemptionDay = currentDay;
     }
 
@@ -178,11 +182,13 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         uint256 creatingUnderlying = currentCreatingUnderlying.add(underlying);
         currentCreatingUnderlying = creatingUnderlying;
 
-        require(
-            fund.historicalUnderlying(currentDay - 1 days).add(creatingUnderlying) <=
-                guardedLaunchTotalCap,
-            "Guarded launch: exceed total cap"
-        );
+        uint256 cap = fundCap;
+        if (cap != uint256(-1)) {
+            require(
+                fund.historicalUnderlying(currentDay - 1 days).add(creatingUnderlying) <= fundCap,
+                "Exceed fund cap"
+            );
+        }
 
         emit Created(msg.sender, underlying);
     }
@@ -258,10 +264,6 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     }
 
     function split(uint256 inM) external onlyActive {
-        require(
-            block.timestamp >= guardedLaunchStart + 2 weeks,
-            "Guarded launch: split not ready yet"
-        );
         (uint256 weightA, uint256 weightB) = fund.trancheWeights();
         // Charge splitting fee and round it to a multiple of (weightA + weightB)
         uint256 unit = inM.sub(inM.multiplyDecimal(splitFeeRate)) / (weightA + weightB);
@@ -419,8 +421,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         );
     }
 
-    function updateGuardedLaunchCap(uint256 newTotalCap) external onlyOwner {
-        guardedLaunchTotalCap = newTotalCap;
+    function updateFundCap(uint256 newCap) external onlyOwner {
+        fundCap = newCap;
     }
 
     function updateRedemptionFeeRate(uint256 newRedemptionFeeRate) external onlyOwner {
