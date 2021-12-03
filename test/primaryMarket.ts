@@ -93,11 +93,11 @@ describe("PrimaryMarket", function () {
         const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
         const primaryMarket = await PrimaryMarket.connect(owner).deploy(
             fund.address,
-            0,
             parseUnits(REDEMPTION_FEE_BPS.toString(), 18 - 4),
             parseUnits(SPLIT_FEE_BPS.toString(), 18 - 4),
             parseUnits(MERGE_FEE_BPS.toString(), 18 - 4),
-            MIN_CREATION_AMOUNT
+            MIN_CREATION_AMOUNT,
+            BigNumber.from(1).shl(256).sub(1)
         );
 
         // Set initial state
@@ -139,7 +139,6 @@ describe("PrimaryMarket", function () {
         });
 
         it("Should check minimum creation amount", async function () {
-            // TODO this value should be configurable on initialization
             await expect(primaryMarket.create(MIN_CREATION_AMOUNT - 1)).to.be.revertedWith(
                 "Min amount"
             );
@@ -150,7 +149,7 @@ describe("PrimaryMarket", function () {
             const amount = parseBtc("1");
             const tx = () => primaryMarket.create(amount);
             await expect(tx).to.changeTokenBalance(btc, primaryMarket, amount);
-            const cr = await primaryMarket.creationRedemptionOf(user1.address);
+            const cr = await primaryMarket.callStatic.creationRedemptionOf(user1.address);
             expect(cr.creatingUnderlying).to.equal(amount);
             expect(await primaryMarket.currentCreatingUnderlying()).to.equal(amount);
         });
@@ -159,7 +158,7 @@ describe("PrimaryMarket", function () {
             await primaryMarket.create(parseBtc("2"));
             await primaryMarket.create(parseBtc("3"));
             await primaryMarket.connect(user2).create(parseBtc("4"));
-            const cr = await primaryMarket.creationRedemptionOf(user1.address);
+            const cr = await primaryMarket.callStatic.creationRedemptionOf(user1.address);
             expect(cr.creatingUnderlying).to.equal(parseBtc("5"));
             expect(await primaryMarket.currentCreatingUnderlying()).to.equal(parseBtc("9"));
         });
@@ -195,7 +194,7 @@ describe("PrimaryMarket", function () {
             await fund.mock.burn.withArgs(TRANCHE_M, user1.address, amount).returns();
             await fund.mock.mint.withArgs(TRANCHE_M, primaryMarket.address, amount).returns();
             await primaryMarket.redeem(amount);
-            const cr = await primaryMarket.creationRedemptionOf(user1.address);
+            const cr = await primaryMarket.callStatic.creationRedemptionOf(user1.address);
             expect(cr.redeemingShares).to.equal(amount);
             expect(await primaryMarket.currentRedeemingShares()).to.equal(amount);
         });
@@ -206,7 +205,7 @@ describe("PrimaryMarket", function () {
             await primaryMarket.redeem(parseEther("2"));
             await primaryMarket.redeem(parseEther("3"));
             await primaryMarket.connect(user2).redeem(parseEther("4"));
-            const cr = await primaryMarket.creationRedemptionOf(user1.address);
+            const cr = await primaryMarket.callStatic.creationRedemptionOf(user1.address);
             expect(cr.redeemingShares).to.equal(parseEther("5"));
             expect(await primaryMarket.currentRedeemingShares()).to.equal(parseEther("9"));
         });
@@ -643,12 +642,12 @@ describe("PrimaryMarket", function () {
                 func: fund.mock.batchRebalance.withArgs(createdShares, 0, 0, 0, 3),
                 rets: [parseEther("300"), 0, 0],
             });
-            const cr = await primaryMarket.creationRedemptionOf(user1.address);
+            const cr = await primaryMarket.callStatic.creationRedemptionOf(user1.address);
             expect(cr.createdShares).to.equal(parseEther("300"));
             expect(cr.version).to.equal(3);
             // No rebalance function is called this time
             await primaryMarket.create(parseBtc("6"));
-            const cr2 = await primaryMarket.creationRedemptionOf(user1.address);
+            const cr2 = await primaryMarket.callStatic.creationRedemptionOf(user1.address);
             expect(cr2.createdShares).to.equal(parseEther("300"));
             expect(cr2.version).to.equal(3);
         });
@@ -659,12 +658,12 @@ describe("PrimaryMarket", function () {
                 func: fund.mock.batchRebalance.withArgs(createdShares, 0, 0, 0, 5),
                 rets: [parseEther("800"), 0, 0],
             });
-            const cr = await primaryMarket.creationRedemptionOf(user1.address);
+            const cr = await primaryMarket.callStatic.creationRedemptionOf(user1.address);
             expect(cr.createdShares).to.equal(parseEther("800"));
             expect(cr.version).to.equal(5);
             // No rebalance function is called this time
             await primaryMarket.redeem(parseEther("3000"));
-            const cr2 = await primaryMarket.creationRedemptionOf(user1.address);
+            const cr2 = await primaryMarket.callStatic.creationRedemptionOf(user1.address);
             expect(cr2.createdShares).to.equal(parseEther("800"));
             expect(cr2.version).to.equal(5);
         });
@@ -691,13 +690,16 @@ describe("PrimaryMarket", function () {
         });
 
         it("Should always return the latest version", async function () {
-            expect((await primaryMarket.creationRedemptionOf(user1.address)).version).to.equal(3);
+            expect(
+                (await primaryMarket.callStatic.creationRedemptionOf(user1.address)).version
+            ).to.equal(3);
         });
 
         it("Should update version on creation", async function () {
             await primaryMarket.create(parseBtc("1"));
             expect(
-                (await primaryMarket.creationRedemptionOf(user1.address)).creatingUnderlying
+                (await primaryMarket.callStatic.creationRedemptionOf(user1.address))
+                    .creatingUnderlying
             ).to.equal(parseBtc("1"));
 
             await settleWithShare(START_DAY, parseEther("10000"), parseBtc("10"));
@@ -709,7 +711,7 @@ describe("PrimaryMarket", function () {
                 parseBtc("1")
             );
             expect(
-                (await primaryMarket.creationRedemptionOf(user1.address)).createdShares
+                (await primaryMarket.callStatic.creationRedemptionOf(user1.address)).createdShares
             ).to.equal(parseEther("1000"));
             await expect(() => primaryMarket.claim(user1.address)).to.callMocks({
                 func: shareM.mock.transfer.withArgs(user1.address, parseEther("1000")),
@@ -722,7 +724,7 @@ describe("PrimaryMarket", function () {
             await fund.mock.mint.returns();
             await primaryMarket.redeem(parseEther("1000"));
             expect(
-                (await primaryMarket.creationRedemptionOf(user1.address)).redeemingShares
+                (await primaryMarket.callStatic.creationRedemptionOf(user1.address)).redeemingShares
             ).to.equal(parseEther("1000"));
 
             await settleWithShare(START_DAY, parseEther("10000"), parseBtc("10"));
@@ -731,7 +733,8 @@ describe("PrimaryMarket", function () {
                 .div(10000);
             await fund.call(btc, "transfer", primaryMarket.address, redeemedBtc);
             expect(
-                (await primaryMarket.creationRedemptionOf(user1.address)).redeemedUnderlying
+                (await primaryMarket.callStatic.creationRedemptionOf(user1.address))
+                    .redeemedUnderlying
             ).to.equal(redeemedBtc);
             await expect(() => primaryMarket.claim(user1.address)).to.changeTokenBalances(
                 btc,
@@ -741,20 +744,16 @@ describe("PrimaryMarket", function () {
         });
     });
 
-    describe("Guarded launch", function () {
-        let currentTimestamp: number;
-
+    describe("Fund cap", function () {
         beforeEach(async function () {
-            currentTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
-
             const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
             primaryMarket = await PrimaryMarket.connect(owner).deploy(
                 fund.address,
-                currentTimestamp, // guardedLaunchStart
                 parseUnits(REDEMPTION_FEE_BPS.toString(), 18 - 4),
                 parseUnits(SPLIT_FEE_BPS.toString(), 18 - 4),
                 parseUnits(MERGE_FEE_BPS.toString(), 18 - 4),
-                MIN_CREATION_AMOUNT
+                MIN_CREATION_AMOUNT,
+                0
             );
             primaryMarket = primaryMarket.connect(user1);
             await fund.mock.isPrimaryMarketActive.returns(true);
@@ -764,64 +763,21 @@ describe("PrimaryMarket", function () {
         });
 
         it("Should revert when cap is zero", async function () {
+            await fund.mock.historicalUnderlying.withArgs(START_DAY - DAY).returns(0);
             await expect(primaryMarket.connect(user1).create(parseBtc("1"))).to.be.revertedWith(
-                "Guarded launch: exceed total cap"
+                "Exceed fund cap"
             );
         });
 
         it("Should revert when creation amount exceeds total cap", async function () {
-            await primaryMarket
-                .connect(owner)
-                .updateGuardedLaunchCap(parseBtc("1"), parseBtc("100"));
-
-            await expect(primaryMarket.create(parseBtc("2"))).to.be.revertedWith(
-                "Guarded launch: exceed total cap"
-            );
-            await primaryMarket.create(parseBtc("0.6"));
-            await expect(primaryMarket.connect(user2).create(parseBtc("0.6"))).to.be.revertedWith(
-                "Guarded launch: exceed total cap"
-            );
-
-            await btc.mint(fund.address, parseBtc("0.3"));
-            await expect(primaryMarket.create(parseBtc("0.2"))).to.be.revertedWith(
-                "Guarded launch: exceed total cap"
-            );
-
-            await primaryMarket.create(parseBtc("0.1"));
-        });
-
-        it("Should revert when creation amount exceeds individual cap", async function () {
-            await primaryMarket
-                .connect(owner)
-                .updateGuardedLaunchCap(parseBtc("100"), parseBtc("1"));
-
-            await expect(primaryMarket.create(parseBtc("2"))).to.be.revertedWith(
-                "Guarded launch: exceed individual cap"
-            );
+            await primaryMarket.connect(owner).updateFundCap(parseBtc("1"));
+            await fund.mock.historicalUnderlying.withArgs(START_DAY - DAY).returns(parseBtc("0.2"));
 
             await primaryMarket.create(parseBtc("0.6"));
-            expect(await primaryMarket.guardedLaunchCreations(user1.address)).to.equal(
-                parseBtc("0.6")
+            await expect(primaryMarket.connect(user2).create(parseBtc("0.3"))).to.be.revertedWith(
+                "Exceed fund cap"
             );
-            await expect(primaryMarket.create(parseBtc("0.6"))).to.be.revertedWith(
-                "Guarded launch: exceed individual cap"
-            );
-
-            await primaryMarket.connect(user2).create(parseBtc("1"));
-            await primaryMarket.create(parseBtc("0.4"));
-        });
-
-        it("Should allow splitting after 2 weeks", async function () {
-            await fund.mock.burn.returns();
-            await fund.mock.mint.returns();
-
-            await advanceBlockAtTime(currentTimestamp + DAY * 14 - 100);
-            await expect(primaryMarket.split(parseEther("1"))).to.be.revertedWith(
-                "Guarded launch: split not ready yet"
-            );
-
-            await advanceBlockAtTime(currentTimestamp + DAY * 14);
-            await primaryMarket.split(parseEther("1"));
+            await primaryMarket.create(parseBtc("0.2"));
         });
     });
 });
