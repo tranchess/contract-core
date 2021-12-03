@@ -116,14 +116,13 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         delayedRedemptionDay = currentDay;
     }
 
-    /// @dev Unlike the previous version, this function simply returns the stored state without
-    ///      updating any pending creation or redemption. To get the latest state of an account,
-    ///      call `updateUser(account)` before this function.
-    function creationRedemptionOf(address account)
-        external
-        view
-        returns (CreationRedemption memory)
-    {
+    /// @dev Unlike the previous version, this function updates states of the account and is not
+    ///      "view" any more. To get the return value off-chain, please call this function
+    ///      using `contract.creationRedemptionOf.call(account)` in web3
+    ///      or `contract.callStatic.creationRedemptionOf(account)` in ethers.js.
+    function creationRedemptionOf(address account) external returns (CreationRedemption memory) {
+        _updateDelayedRedemptionDay();
+        _updateUser(account);
         return _creationRedemptions[account];
     }
 
