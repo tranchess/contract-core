@@ -149,13 +149,6 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         return _delayedRedemptions[account].headTail.head;
     }
 
-    /// @notice Update creation/redemption state of an account. The state is automatically updated
-    ///         in `create()`, `redeem()` or `claim()`. Users do not need to manually call this.
-    function updateUser(address account) external nonReentrant {
-        _updateDelayedRedemptionDay();
-        _updateUser(account);
-    }
-
     function updateDelayedRedemptionDay() external nonReentrant {
         _updateDelayedRedemptionDay();
     }
