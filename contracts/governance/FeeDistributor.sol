@@ -207,6 +207,9 @@ contract FeeDistributor is CoreUtility, Ownable {
         require(success, "Transfer failed");
     }
 
+    /// @notice Receive unwrapped transfer from the wrapped token.
+    receive() external payable {}
+
     function _claimRewards(address account) private returns (uint256 rewards) {
         checkpoint();
         rewards = claimableRewards[account].add(_rewardCheckpoint(account));

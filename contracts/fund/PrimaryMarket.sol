@@ -527,6 +527,9 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         return newDelayedRedemptionDay;
     }
 
+    /// @notice Receive unwrapped transfer from the wrapped token.
+    receive() external payable {}
+
     modifier onlyActive() {
         require(fund.isPrimaryMarketActive(address(this), block.timestamp), "Only when active");
         _;

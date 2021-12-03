@@ -190,7 +190,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
     ///      e.g. using `contract.getProtocolData.call()` in web3
     ///      or `contract.callStatic["getProtocolData"]()` in ethers.js.
     function getProtocolData(
-        address primaryMarketAddress,
+        address payable primaryMarketAddress,
         address exchangeAddress,
         address pancakePairAddress,
         address feeDistributorAddress,
