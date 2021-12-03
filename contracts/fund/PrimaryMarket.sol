@@ -211,8 +211,12 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         returns (uint256 createdShares, uint256 redeemedUnderlying)
     {
         (createdShares, redeemedUnderlying) = _claim(account);
-        IERC20(fund.tokenM()).safeTransfer(account, createdShares);
-        _tokenUnderlying.safeTransfer(account, redeemedUnderlying);
+        if (createdShares > 0) {
+            IERC20(fund.tokenM()).safeTransfer(account, createdShares);
+        }
+        if (redeemedUnderlying > 0) {
+            _tokenUnderlying.safeTransfer(account, redeemedUnderlying);
+        }
     }
 
     function claimAndUnwrap(address account)
@@ -222,10 +226,14 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         returns (uint256 createdShares, uint256 redeemedUnderlying)
     {
         (createdShares, redeemedUnderlying) = _claim(account);
-        IERC20(fund.tokenM()).safeTransfer(account, createdShares);
-        IWrappedERC20(address(_tokenUnderlying)).withdraw(redeemedUnderlying);
-        (bool success, ) = account.call{value: redeemedUnderlying}("");
-        require(success, "Transfer failed");
+        if (createdShares > 0) {
+            IERC20(fund.tokenM()).safeTransfer(account, createdShares);
+        }
+        if (redeemedUnderlying > 0) {
+            IWrappedERC20(address(_tokenUnderlying)).withdraw(redeemedUnderlying);
+            (bool success, ) = account.call{value: redeemedUnderlying}("");
+            require(success, "Transfer failed");
+        }
     }
 
     function _claim(address account)
