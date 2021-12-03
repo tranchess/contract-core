@@ -239,8 +239,8 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         returns (uint256 createdShares, uint256 redeemedUnderlying)
     {
         _updateDelayedRedemptionDay();
-        _updateUser(msg.sender);
-        CreationRedemption storage cr = _creationRedemptions[msg.sender];
+        _updateUser(account);
+        CreationRedemption storage cr = _creationRedemptions[account];
         createdShares = cr.createdShares;
         redeemedUnderlying = cr.redeemedUnderlying;
 
@@ -495,7 +495,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         }
 
         uint256 delayedUnderlying =
-            _delayedRedemptions[account].popFrontUntil(delayedRedemptionDay);
+            _delayedRedemptions[account].popFrontUntil(delayedRedemptionDay - 1 days);
         if (delayedUnderlying > 0) {
             cr.redeemedUnderlying = cr.redeemedUnderlying.add(delayedUnderlying);
         }
