@@ -6,14 +6,7 @@ const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
-import {
-    TRANCHE_M,
-    TRANCHE_A,
-    TRANCHE_B,
-    DAY,
-    FixtureWalletMap,
-    advanceBlockAtTime,
-} from "./utils";
+import { TRANCHE_M, TRANCHE_A, TRANCHE_B, DAY, FixtureWalletMap } from "./utils";
 
 const REDEMPTION_FEE_BPS = 35;
 const SPLIT_FEE_BPS = 40;
@@ -680,6 +673,148 @@ describe("PrimaryMarket", function () {
                     rets: [true],
                 }
             );
+        });
+    });
+
+    describe("Delayed redemption", function () {
+        const redeemedPerShare = parseBtc("0.001")
+            .mul(10000 - REDEMPTION_FEE_BPS)
+            .div(10000);
+        const btcU1D0 = redeemedPerShare.mul(1000);
+        const btcU1D1 = redeemedPerShare.mul(500);
+        const btcU2D1 = redeemedPerShare.mul(2000);
+        const btcU1D3 = redeemedPerShare.mul(1500);
+        const btcU2D3 = redeemedPerShare.mul(3000);
+        const btcU1D4 = redeemedPerShare.mul(200);
+        const btcU2D4 = redeemedPerShare.mul(300);
+
+        async function claim(user: Wallet): Promise<void> {
+            await primaryMarket.claim(user.address);
+        }
+
+        beforeEach(async function () {
+            await fund.mock.burn.returns();
+            await fund.mock.mint.returns();
+            await primaryMarket.connect(user1).redeem(parseEther("1000"));
+            await settleWithShare(START_DAY, parseEther("10000"), parseBtc("10"));
+            await primaryMarket.connect(user1).redeem(parseEther("500"));
+            await primaryMarket.connect(user2).redeem(parseEther("2000"));
+            await settleWithShare(START_DAY + DAY, parseEther("9000"), parseBtc("9"));
+            await settleWithShare(START_DAY + DAY * 2, parseEther("6500"), parseBtc("6.5"));
+            await primaryMarket.connect(user1).redeem(parseEther("1500"));
+            await primaryMarket.connect(user2).redeem(parseEther("3000"));
+            await settleWithShare(START_DAY + DAY * 3, parseEther("6500"), parseBtc("6.5"));
+            await primaryMarket.connect(user1).redeem(parseEther("200"));
+            await primaryMarket.connect(user2).redeem(parseEther("300"));
+            await settleWithShare(START_DAY + DAY * 4, parseEther("2000"), parseBtc("2"));
+        });
+
+        it("getDelayedRedemption()", async function () {
+            const getter = async (user: Wallet, day: number): Promise<[BigNumber, number]> => {
+                const ret = await primaryMarket.getDelayedRedemption(user.address, day);
+                return [ret.underlying, ret.nextDay.toNumber()];
+            };
+            expect(await getter(user1, START_DAY)).to.eql([btcU1D0, START_DAY + DAY]);
+            expect(await getter(user2, START_DAY)).to.eql([BigNumber.from(0), 0]);
+            expect(await getter(user1, START_DAY + DAY)).to.eql([btcU1D1, START_DAY + DAY * 3]);
+            expect(await getter(user2, START_DAY + DAY)).to.eql([btcU2D1, START_DAY + DAY * 3]);
+            expect(await getter(user1, START_DAY + DAY * 2)).to.eql([BigNumber.from(0), 0]);
+            expect(await getter(user2, START_DAY + DAY * 2)).to.eql([BigNumber.from(0), 0]);
+            expect(await getter(user1, START_DAY + DAY * 3)).to.eql([btcU1D3, 0]);
+            expect(await getter(user2, START_DAY + DAY * 3)).to.eql([btcU2D3, 0]);
+
+            // Redemption results are calculated only after user calls the contract
+            expect(await getter(user1, START_DAY + DAY * 4)).to.eql([BigNumber.from(0), 0]);
+            expect(await getter(user2, START_DAY + DAY * 4)).to.eql([BigNumber.from(0), 0]);
+            await primaryMarket.claim(user1.address);
+            await primaryMarket.connect(user2).redeem(parseEther("1"));
+            expect(await getter(user1, START_DAY + DAY * 3)).to.eql([btcU1D3, START_DAY + DAY * 4]);
+            expect(await getter(user2, START_DAY + DAY * 3)).to.eql([btcU2D3, START_DAY + DAY * 4]);
+            expect(await getter(user1, START_DAY + DAY * 4)).to.eql([btcU1D4, 0]);
+            expect(await getter(user2, START_DAY + DAY * 4)).to.eql([btcU2D4, 0]);
+        });
+
+        it("getDelayedRedemptionHead()", async function () {
+            expect(await primaryMarket.getDelayedRedemptionHead(user1.address)).to.equal(START_DAY);
+            expect(await primaryMarket.getDelayedRedemptionHead(user2.address)).to.equal(
+                START_DAY + DAY
+            );
+        });
+
+        it("updateDelayedRedemptionDay()", async function () {
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY);
+            await primaryMarket.updateDelayedRedemptionDay();
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY);
+
+            await primaryMarket.connect(user2).create(btcU1D0);
+            await primaryMarket.updateDelayedRedemptionDay();
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY);
+
+            await btc.mint(primaryMarket.address, btcU1D1.add(btcU2D1).sub(parseBtc("0.0001")));
+            await primaryMarket.updateDelayedRedemptionDay();
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY);
+
+            await btc.mint(primaryMarket.address, parseBtc("0.0001"));
+            await primaryMarket.updateDelayedRedemptionDay();
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY * 3);
+        });
+
+        it("Should be claimable after the contract has enough tokens", async function () {
+            await btc.mint(
+                primaryMarket.address,
+                btcU1D0.add(btcU1D1).add(btcU2D1).sub(parseBtc("0.001"))
+            );
+            await expect(() => primaryMarket.claim(user1.address)).to.changeTokenBalance(
+                btc,
+                user1,
+                btcU1D0
+            );
+            await expect(() => primaryMarket.claim(user2.address)).to.changeTokenBalance(
+                btc,
+                user2,
+                0
+            );
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY);
+            expect(await primaryMarket.getDelayedRedemptionHead(user1.address)).to.equal(
+                START_DAY + DAY
+            );
+            expect(await primaryMarket.getDelayedRedemptionHead(user2.address)).to.equal(
+                START_DAY + DAY
+            );
+
+            await primaryMarket.connect(user1).create(btcU1D3.add(btcU2D3).add(parseBtc("0.005")));
+            await expect(() => primaryMarket.claim(user1.address)).to.changeTokenBalance(
+                btc,
+                user1,
+                btcU1D1.add(btcU1D3)
+            );
+            await expect(() => primaryMarket.claim(user2.address)).to.changeTokenBalance(
+                btc,
+                user2,
+                btcU2D1.add(btcU2D3)
+            );
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY * 4);
+            expect(await primaryMarket.getDelayedRedemptionHead(user1.address)).to.equal(
+                START_DAY + DAY * 4
+            );
+            expect(await primaryMarket.getDelayedRedemptionHead(user2.address)).to.equal(
+                START_DAY + DAY * 4
+            );
+
+            await btc.mint(primaryMarket.address, btcU1D4.add(btcU2D4));
+            await expect(() => primaryMarket.claim(user1.address)).to.changeTokenBalance(
+                btc,
+                user1,
+                btcU1D4
+            );
+            await expect(() => primaryMarket.claim(user2.address)).to.changeTokenBalance(
+                btc,
+                user2,
+                btcU2D4
+            );
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY * 5);
+            expect(await primaryMarket.getDelayedRedemptionHead(user1.address)).to.equal(0);
+            expect(await primaryMarket.getDelayedRedemptionHead(user2.address)).to.equal(0);
         });
     });
 
