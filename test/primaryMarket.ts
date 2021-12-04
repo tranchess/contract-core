@@ -915,4 +915,81 @@ describe("PrimaryMarket", function () {
             await primaryMarket.create(parseBtc("0.2"));
         });
     });
+
+    describe("Wrapped native currency", function () {
+        let weth: Contract;
+
+        beforeEach(async function () {
+            const MockWrappedToken = await ethers.getContractFactory("MockWrappedToken");
+            weth = await MockWrappedToken.connect(owner).deploy("Wrapped ETH", "ETH");
+            weth = weth.connect(user1);
+            await fund.mock.tokenUnderlying.returns(weth.address);
+            const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
+            primaryMarket = await PrimaryMarket.connect(owner).deploy(
+                fund.address,
+                parseUnits(REDEMPTION_FEE_BPS.toString(), 18 - 4),
+                parseUnits(SPLIT_FEE_BPS.toString(), 18 - 4),
+                parseUnits(MERGE_FEE_BPS.toString(), 18 - 4),
+                MIN_CREATION_AMOUNT,
+                BigNumber.from(1).shl(256).sub(1)
+            );
+            primaryMarket = primaryMarket.connect(user1);
+        });
+
+        it("wrapAndCreate()", async function () {
+            const amount = parseEther("3");
+            await expect(() =>
+                primaryMarket.wrapAndCreate({ value: amount })
+            ).to.changeEtherBalance(user1, amount.mul(-1));
+            expect(await weth.balanceOf(primaryMarket.address)).to.equal(amount);
+            const cr = await primaryMarket.callStatic.creationRedemptionOf(user1.address);
+            expect(cr.creatingUnderlying).to.equal(amount);
+            expect(await primaryMarket.currentCreatingUnderlying()).to.equal(amount);
+        });
+
+        it("Mixed creation", async function () {
+            await primaryMarket.wrapAndCreate({ value: parseEther("3") });
+            await weth.deposit({ value: parseEther("4") });
+            await weth.approve(primaryMarket.address, parseEther("4"));
+            await primaryMarket.create(parseEther("4"));
+            expect(await weth.balanceOf(primaryMarket.address)).to.equal(parseEther("7"));
+            const cr = await primaryMarket.callStatic.creationRedemptionOf(user1.address);
+            expect(cr.creatingUnderlying).to.equal(parseEther("7"));
+            expect(await primaryMarket.currentCreatingUnderlying()).to.equal(parseEther("7"));
+        });
+
+        it("claimAndUnwrap() for redemption", async function () {
+            await weth.connect(owner).deposit({ value: parseEther("999") });
+            await weth.connect(owner).transfer(primaryMarket.address, parseEther("999"));
+            await fund.mock.burn.returns();
+            await fund.mock.mint.returns();
+            await primaryMarket.connect(user1).redeem(parseEther("1000"));
+            await settleWithShare(START_DAY, parseEther("10000"), parseEther("10"));
+
+            const redeemed = parseEther("1")
+                .mul(10000 - REDEMPTION_FEE_BPS)
+                .div(10000);
+            await expect(() => primaryMarket.claimAndUnwrap(user1.address)).to.changeEtherBalance(
+                user1,
+                redeemed
+            );
+            expect(await weth.balanceOf(primaryMarket.address)).to.equal(
+                parseEther("999").sub(redeemed)
+            );
+        });
+
+        it("claimAndUnwrap() for creation", async function () {
+            await primaryMarket.connect(user1).wrapAndCreate({ value: parseEther("1") });
+            await settleWithShare(START_DAY, parseEther("10000"), parseEther("10"));
+            const nativeBalance = await user1.getBalance();
+            // Pay gas fee from another address
+            await expect(() =>
+                primaryMarket.connect(user2).claimAndUnwrap(user1.address)
+            ).to.callMocks({
+                func: shareM.mock.transfer.withArgs(user1.address, parseEther("1000")),
+                rets: [true],
+            });
+            expect(await user1.getBalance()).to.equal(nativeBalance);
+        });
+    });
 });
