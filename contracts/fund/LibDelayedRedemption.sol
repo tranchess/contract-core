@@ -74,8 +74,9 @@ library LibDelayedRedemption {
         uint256 underlying = 0;
         while (p != 0 && p <= day64) {
             underlying = underlying.add(uint256(self.list[p].underlying));
-            p = self.list[p].next;
+            uint64 nextP = self.list[p].next;
             delete self.list[p];
+            p = nextP;
         }
         if (p == 0) {
             delete self.headTail; // Set both head and tail to zero
