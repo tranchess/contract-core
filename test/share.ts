@@ -103,7 +103,8 @@ describe("Share", function () {
             shareM.address,
             shareA.address,
             shareB.address,
-            primaryMarket.address
+            primaryMarket.address,
+            ethers.constants.AddressZero
         );
 
         await advanceBlockAtTime(startDay);

@@ -108,7 +108,8 @@ describe("Fund", function () {
             shareM.address,
             shareA.address,
             shareB.address,
-            primaryMarket.address
+            primaryMarket.address,
+            ethers.constants.AddressZero
         );
 
         return {
@@ -819,6 +820,7 @@ describe("Fund", function () {
                 0
             );
             const oldM = await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address);
+            await primaryMarket.mock.updateDelayedRedemptionDay.returns();
             await expect(() => fund.settle()).to.changeTokenBalances(
                 btc,
                 [fund, primaryMarket],
@@ -843,6 +845,7 @@ describe("Fund", function () {
                 parseBtc("3.6"),
                 totalFee
             );
+            await primaryMarket.mock.updateDelayedRedemptionDay.returns();
             await expect(() => fund.settle()).to.changeTokenBalances(
                 btc,
                 [fund, primaryMarket, feeCollector],
@@ -957,6 +960,7 @@ describe("Fund", function () {
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
             await btc.mint(primaryMarket.address, parseBtc("1"));
             await primaryMarket.mock.settle.returns(parseEther("1000"), 0, parseBtc("1"), 0, 0);
+            await primaryMarket.mock.updateDelayedRedemptionDay.returns();
             await advanceOneDayAndSettle();
 
             await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
@@ -1129,7 +1133,8 @@ describe("Fund", function () {
             f.wallets.shareM.address,
             f.wallets.shareA.address,
             f.wallets.shareB.address,
-            f.primaryMarket.address
+            f.primaryMarket.address,
+            ethers.constants.AddressZero
         );
         return f;
     }
