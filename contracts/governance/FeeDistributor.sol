@@ -23,7 +23,6 @@ contract FeeDistributor is CoreUtility, Ownable {
 
     uint256 private immutable _maxTime;
     IERC20 public immutable rewardToken;
-
     IVotingEscrow public immutable votingEscrow;
 
     /// @notice Receiver for admin fee
