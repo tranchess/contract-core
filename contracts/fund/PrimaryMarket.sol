@@ -11,14 +11,11 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../utils/SafeDecimalMath.sol";
 
-import {DelayedRedemption, LibDelayedRedemption} from "./LibDelayedRedemption.sol";
-
-import "../interfaces/IPrimaryMarketV2.sol";
-import "../interfaces/IFundV2.sol";
+import "../interfaces/IPrimaryMarket.sol";
+import "../interfaces/IFund.sol";
 import "../interfaces/ITrancheIndex.sol";
-import "../interfaces/IWrappedERC20.sol";
 
-contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ownable {
+contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownable {
     event Created(address indexed account, uint256 underlying);
     event Redeemed(address indexed account, uint256 shares);
     event Split(address indexed account, uint256 inM, uint256 outA, uint256 outB);
@@ -32,12 +29,10 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
         uint256 redemptionUnderlying,
         uint256 fee
     );
-    event RedemptionClaimable(uint256 indexed day);
 
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
-    using LibDelayedRedemption for DelayedRedemption;
 
     /// @dev Creation and redemption of a single account.
     /// @param day Day of the last creation or redemption request.
@@ -58,10 +53,13 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
     uint256 private constant MAX_REDEMPTION_FEE_RATE = 0.01e18;
     uint256 private constant MAX_SPLIT_FEE_RATE = 0.01e18;
     uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18;
-    uint256 private constant MAX_ITERATIONS = 500;
 
-    IFundV2 public immutable fund;
-    IERC20 private immutable _tokenUnderlying;
+    uint256 public immutable guardedLaunchStart;
+    uint256 public guardedLaunchTotalCap;
+    uint256 public guardedLaunchIndividualCap;
+    mapping(address => uint256) public guardedLaunchCreations;
+
+    IFund public fund;
 
     uint256 public redemptionFeeRate;
     uint256 public splitFeeRate;
@@ -78,126 +76,70 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
     mapping(uint256 => uint256) private _historicalCreationRate;
     mapping(uint256 => uint256) private _historicalRedemptionRate;
 
-    /// @notice The upper limit of underlying that the fund can hold. This contract rejects
-    ///         creations that may break this limit.
-    /// @dev This limit can be bypassed if the fund has multiple primary markets.
-    ///
-    ///      Set it to uint(-1) to skip the check and save gas.
-    uint256 public fundCap;
-
-    /// @notice The first trading day on which redemptions cannot be claimed now.
-    uint256 public delayedRedemptionDay;
-
-    /// @dev Mapping of trading day => total redeemed underlying if users cannot claim their
-    ///      redemptions on that day, or zero otherwise.
-    mapping(uint256 => uint256) private _delayedUnderlyings;
-
-    /// @dev The total amount of redeemed underlying that can be claimed by users.
-    uint256 private _claimableUnderlying;
-
-    /// @dev Mapping of account => a list of redemptions that have been settled
-    ///      but are not claimable yet.
-    mapping(address => DelayedRedemption) private _delayedRedemptions;
-
     constructor(
         address fund_,
+        uint256 guardedLaunchStart_,
         uint256 redemptionFeeRate_,
         uint256 splitFeeRate_,
         uint256 mergeFeeRate_,
-        uint256 minCreationUnderlying_,
-        uint256 fundCap_
+        uint256 minCreationUnderlying_
     ) public Ownable() {
         require(redemptionFeeRate_ <= MAX_REDEMPTION_FEE_RATE, "Exceed max redemption fee rate");
         require(splitFeeRate_ <= MAX_SPLIT_FEE_RATE, "Exceed max split fee rate");
         require(mergeFeeRate_ <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
-        fund = IFundV2(fund_);
-        _tokenUnderlying = IERC20(IFund(fund_).tokenUnderlying());
+        fund = IFund(fund_);
+        guardedLaunchStart = guardedLaunchStart_;
         redemptionFeeRate = redemptionFeeRate_;
         splitFeeRate = splitFeeRate_;
         mergeFeeRate = mergeFeeRate_;
         minCreationUnderlying = minCreationUnderlying_;
-        currentDay = IFund(fund_).currentDay();
-        fundCap = fundCap_;
-        delayedRedemptionDay = currentDay;
+        currentDay = fund.currentDay();
     }
 
-    /// @dev Unlike the previous version, this function updates states of the account and is not
-    ///      "view" any more. To get the return value off-chain, please call this function
-    ///      using `contract.creationRedemptionOf.call(account)` in web3
-    ///      or `contract.callStatic.creationRedemptionOf(account)` in ethers.js.
-    function creationRedemptionOf(address account) external returns (CreationRedemption memory) {
-        _updateDelayedRedemptionDay();
-        _updateUser(account);
-        return _creationRedemptions[account];
-    }
-
-    /// @notice Return delayed redemption of an account on a trading day.
-    /// @param account Address of the account
-    /// @param day A trading day
-    /// @return underlying Redeemed underlying amount
-    /// @return nextDay Trading day of the next delayed redemption, or zero if there's no
-    ///                 delayed redemption on the given day or it is the last redemption
-    function getDelayedRedemption(address account, uint256 day)
+    function creationRedemptionOf(address account)
         external
         view
-        returns (uint256 underlying, uint256 nextDay)
+        returns (CreationRedemption memory)
     {
-        return _delayedRedemptions[account].get(day);
+        return _currentCreationRedemption(account);
     }
 
-    /// @notice Return trading day of the first delayed redemption of an account.
-    function getDelayedRedemptionHead(address account) external view returns (uint256) {
-        return _delayedRedemptions[account].headTail.head;
-    }
-
-    function updateDelayedRedemptionDay() external override nonReentrant {
-        _updateDelayedRedemptionDay();
-    }
-
-    function create(uint256 underlying) external nonReentrant {
-        _tokenUnderlying.safeTransferFrom(msg.sender, address(this), underlying);
-        _create(underlying);
-    }
-
-    function wrapAndCreate() external payable nonReentrant {
-        IWrappedERC20(address(_tokenUnderlying)).deposit{value: msg.value}();
-        _create(msg.value);
-    }
-
-    function _create(uint256 underlying) private onlyActive {
+    function create(uint256 underlying) external nonReentrant onlyActive {
         require(underlying >= minCreationUnderlying, "Min amount");
+        IERC20(fund.tokenUnderlying()).safeTransferFrom(msg.sender, address(this), underlying);
 
-        // Do not call `_updateDelayedRedemptionDay()` because the latest `redeemedUnderlying`
-        // is not used in this function.
-        _updateUser(msg.sender);
-        CreationRedemption storage cr = _creationRedemptions[msg.sender];
+        CreationRedemption memory cr = _currentCreationRedemption(msg.sender);
         cr.creatingUnderlying = cr.creatingUnderlying.add(underlying);
+        _updateCreationRedemption(msg.sender, cr);
 
-        uint256 creatingUnderlying = currentCreatingUnderlying.add(underlying);
-        currentCreatingUnderlying = creatingUnderlying;
+        currentCreatingUnderlying = currentCreatingUnderlying.add(underlying);
 
-        uint256 cap = fundCap;
-        if (cap != uint256(-1)) {
+        if (block.timestamp < guardedLaunchStart + 4 weeks) {
+            guardedLaunchCreations[msg.sender] = guardedLaunchCreations[msg.sender].add(underlying);
             require(
-                fund.historicalUnderlying(currentDay - 1 days).add(creatingUnderlying) <= fundCap,
-                "Exceed fund cap"
+                IERC20(fund.tokenUnderlying()).balanceOf(address(fund)).add(
+                    currentCreatingUnderlying
+                ) <= guardedLaunchTotalCap,
+                "Guarded launch: exceed total cap"
+            );
+            require(
+                guardedLaunchCreations[msg.sender] <= guardedLaunchIndividualCap,
+                "Guarded launch: exceed individual cap"
             );
         }
 
         emit Created(msg.sender, underlying);
     }
 
-    function redeem(uint256 shares) external nonReentrant onlyActive {
+    function redeem(uint256 shares) external onlyActive {
         require(shares != 0, "Zero shares");
         // Use burn and mint to simulate a transfer, so that we don't need a special transferFrom()
         fund.burn(TRANCHE_M, msg.sender, shares);
         fund.mint(TRANCHE_M, address(this), shares);
 
-        // Do not call `_updateDelayedRedemptionDay()` because the latest `redeemedUnderlying`
-        // is not used in this function.
-        _updateUser(msg.sender);
-        CreationRedemption storage cr = _creationRedemptions[msg.sender];
+        CreationRedemption memory cr = _currentCreationRedemption(msg.sender);
         cr.redeemingShares = cr.redeemingShares.add(shares);
+        _updateCreationRedemption(msg.sender, cr);
 
         currentRedeemingShares = currentRedeemingShares.add(shares);
         emit Redeemed(msg.sender, shares);
@@ -209,55 +151,28 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
         nonReentrant
         returns (uint256 createdShares, uint256 redeemedUnderlying)
     {
-        (createdShares, redeemedUnderlying) = _claim(account);
-        if (createdShares > 0) {
-            IERC20(fund.tokenM()).safeTransfer(account, createdShares);
-        }
-        if (redeemedUnderlying > 0) {
-            _tokenUnderlying.safeTransfer(account, redeemedUnderlying);
-        }
-    }
-
-    function claimAndUnwrap(address account)
-        external
-        override
-        nonReentrant
-        returns (uint256 createdShares, uint256 redeemedUnderlying)
-    {
-        (createdShares, redeemedUnderlying) = _claim(account);
-        if (createdShares > 0) {
-            IERC20(fund.tokenM()).safeTransfer(account, createdShares);
-        }
-        if (redeemedUnderlying > 0) {
-            IWrappedERC20(address(_tokenUnderlying)).withdraw(redeemedUnderlying);
-            (bool success, ) = account.call{value: redeemedUnderlying}("");
-            require(success, "Transfer failed");
-        }
-    }
-
-    function _claim(address account)
-        private
-        returns (uint256 createdShares, uint256 redeemedUnderlying)
-    {
-        _updateDelayedRedemptionDay();
-        _updateUser(account);
-        CreationRedemption storage cr = _creationRedemptions[account];
+        CreationRedemption memory cr = _currentCreationRedemption(account);
         createdShares = cr.createdShares;
         redeemedUnderlying = cr.redeemedUnderlying;
 
         if (createdShares > 0) {
+            IERC20(fund.tokenM()).safeTransfer(account, createdShares);
             cr.createdShares = 0;
         }
         if (redeemedUnderlying > 0) {
-            _claimableUnderlying = _claimableUnderlying.sub(redeemedUnderlying);
+            IERC20(fund.tokenUnderlying()).safeTransfer(account, redeemedUnderlying);
             cr.redeemedUnderlying = 0;
         }
+        _updateCreationRedemption(account, cr);
 
         emit Claimed(account, createdShares, redeemedUnderlying);
-        return (createdShares, redeemedUnderlying);
     }
 
     function split(uint256 inM) external onlyActive {
+        require(
+            block.timestamp >= guardedLaunchStart + 2 weeks,
+            "Guarded launch: split not ready yet"
+        );
         (uint256 weightA, uint256 weightB) = fund.trancheWeights();
         // Charge splitting fee and round it to a multiple of (weightA + weightB)
         uint256 unit = inM.sub(inM.multiplyDecimal(splitFeeRate)) / (weightA + weightB);
@@ -388,9 +303,10 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
         // Instead of directly transfering underlying to the fund, this implementation
         // makes testing much easier.
         if (creationUnderlying > redemptionUnderlying) {
-            // Do not use `SafeERC20.safeApprove()` because the previous allowance
-            // may be non-zero when there were some delayed redemptions.
-            _tokenUnderlying.approve(address(fund), creationUnderlying - redemptionUnderlying);
+            IERC20(fund.tokenUnderlying()).safeApprove(
+                address(fund),
+                creationUnderlying - redemptionUnderlying
+            );
         }
 
         // This loop should never execute, because this function is called by Fund
@@ -400,7 +316,6 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
             _historicalRedemptionRate[t] = _historicalRedemptionRate[day];
         }
 
-        _delayedUnderlyings[day] = redemptionUnderlying;
         currentDay = day + 1 days;
         currentCreatingUnderlying = 0;
         currentRedeemingShares = 0;
@@ -415,8 +330,12 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
         );
     }
 
-    function updateFundCap(uint256 newCap) external onlyOwner {
-        fundCap = newCap;
+    function updateGuardedLaunchCap(uint256 newTotalCap, uint256 newIndividualCap)
+        external
+        onlyOwner
+    {
+        guardedLaunchTotalCap = newTotalCap;
+        guardedLaunchIndividualCap = newIndividualCap;
     }
 
     function updateRedemptionFeeRate(uint256 newRedemptionFeeRate) external onlyOwner {
@@ -438,100 +357,64 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
         minCreationUnderlying = newMinCreationUnderlying;
     }
 
-    /// @dev Update the status of an account.
-    ///      1. If there is a pending creation before the last settlement, calculate its result
-    ///         and add it to `createdShares`.
-    ///      2. If there is a pending redemption before the last settlement, calculate its result.
-    ///         Add the result to `redeemedUnderlying` if it can be claimed now. Otherwise, append
-    ///         the result to the account's delayed redemption list.
-    ///      3. Check the account's delayed redemption list. Remove the redemptions that can be
-    ///         claimed now from the list and add them to `redeemedUnderlying`. Note that
-    ///         if `_updateDelayedRedemptionDay()` is not called before this function, some
-    ///         claimable redemption may not be correctly recognized and `redeemedUnderlying` may
-    ///         be smaller than the actual amount that the user can claim.
-    function _updateUser(address account) private {
-        CreationRedemption storage cr = _creationRedemptions[account];
+    function _currentCreationRedemption(address account)
+        private
+        view
+        returns (CreationRedemption memory cr)
+    {
+        cr = _creationRedemptions[account];
         uint256 oldDay = cr.day;
-        uint256 newDay = currentDay;
-        if (oldDay < newDay) {
-            cr.day = newDay;
-            uint256 oldCreatingUnderlying = cr.creatingUnderlying;
-            uint256 oldCreatedShares = cr.createdShares;
-            uint256 newCreatedShares = oldCreatedShares;
-            if (oldCreatingUnderlying > 0) {
-                newCreatedShares = newCreatedShares.add(
-                    oldCreatingUnderlying.multiplyDecimal(_historicalCreationRate[oldDay])
+        if (oldDay < currentDay) {
+            if (cr.creatingUnderlying > 0) {
+                cr.createdShares = cr.createdShares.add(
+                    cr.creatingUnderlying.multiplyDecimal(_historicalCreationRate[oldDay])
                 );
                 cr.creatingUnderlying = 0;
             }
             uint256 rebalanceSize = fund.getRebalanceSize();
-            uint256 oldVersion = cr.version;
-            if (oldVersion < rebalanceSize) {
-                if (newCreatedShares > 0) {
-                    (newCreatedShares, , ) = fund.batchRebalance(
-                        newCreatedShares,
+            if (cr.version < rebalanceSize) {
+                if (cr.createdShares > 0) {
+                    (cr.createdShares, , ) = fund.batchRebalance(
+                        cr.createdShares,
                         0,
                         0,
-                        oldVersion,
+                        cr.version,
                         rebalanceSize
                     );
                 }
                 cr.version = rebalanceSize;
             }
-            if (newCreatedShares != oldCreatedShares) {
-                cr.createdShares = newCreatedShares;
-            }
-
-            uint256 oldRedeemingShares = cr.redeemingShares;
-            if (oldRedeemingShares > 0) {
-                uint256 underlying =
-                    oldRedeemingShares.multiplyDecimal(_historicalRedemptionRate[oldDay]);
+            if (cr.redeemingShares > 0) {
+                cr.redeemedUnderlying = cr.redeemedUnderlying.add(
+                    cr.redeemingShares.multiplyDecimal(_historicalRedemptionRate[oldDay])
+                );
                 cr.redeemingShares = 0;
-                if (oldDay < delayedRedemptionDay) {
-                    cr.redeemedUnderlying = cr.redeemedUnderlying.add(underlying);
-                } else {
-                    _delayedRedemptions[account].pushBack(underlying, oldDay);
-                }
             }
-        }
-
-        uint256 delayedUnderlying =
-            _delayedRedemptions[account].popFrontUntil(delayedRedemptionDay - 1 days);
-        if (delayedUnderlying > 0) {
-            cr.redeemedUnderlying = cr.redeemedUnderlying.add(delayedUnderlying);
+            cr.day = currentDay;
         }
     }
 
-    /// @dev Move `delayedRedemptionDay` forward when there are enough underlying tokens in
-    ///      this contract.
-    function _updateDelayedRedemptionDay() private returns (uint256) {
-        uint256 oldDelayedRedemptionDay = delayedRedemptionDay;
-        uint256 currentDay_ = currentDay;
-        if (oldDelayedRedemptionDay >= currentDay_) {
-            return oldDelayedRedemptionDay; // Fast path to return
+    function _updateCreationRedemption(address account, CreationRedemption memory cr) private {
+        CreationRedemption storage old = _creationRedemptions[account];
+        if (old.day != cr.day) {
+            old.day = cr.day;
         }
-        uint256 newDelayedRedemptionDay = oldDelayedRedemptionDay;
-        uint256 claimableUnderlying = _claimableUnderlying;
-        uint256 balance = _tokenUnderlying.balanceOf(address(this)).sub(claimableUnderlying);
-        for (uint256 i = 0; i < MAX_ITERATIONS && newDelayedRedemptionDay < currentDay_; i++) {
-            uint256 underlying = _delayedUnderlyings[newDelayedRedemptionDay];
-            if (underlying > balance) {
-                break;
-            }
-            balance -= underlying;
-            claimableUnderlying = claimableUnderlying.add(underlying);
-            emit RedemptionClaimable(newDelayedRedemptionDay);
-            newDelayedRedemptionDay += 1 days;
+        if (old.creatingUnderlying != cr.creatingUnderlying) {
+            old.creatingUnderlying = cr.creatingUnderlying;
         }
-        if (newDelayedRedemptionDay != oldDelayedRedemptionDay) {
-            delayedRedemptionDay = newDelayedRedemptionDay;
-            _claimableUnderlying = claimableUnderlying;
+        if (old.redeemingShares != cr.redeemingShares) {
+            old.redeemingShares = cr.redeemingShares;
         }
-        return newDelayedRedemptionDay;
+        if (old.createdShares != cr.createdShares) {
+            old.createdShares = cr.createdShares;
+        }
+        if (old.redeemedUnderlying != cr.redeemedUnderlying) {
+            old.redeemedUnderlying = cr.redeemedUnderlying;
+        }
+        if (old.version != cr.version) {
+            old.version = cr.version;
+        }
     }
-
-    /// @notice Receive unwrapped transfer from the wrapped token.
-    receive() external payable {}
 
     modifier onlyActive() {
         require(fund.isPrimaryMarketActive(address(this), block.timestamp), "Only when active");

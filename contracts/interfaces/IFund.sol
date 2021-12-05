@@ -101,8 +101,6 @@ interface IFund {
             uint256
         );
 
-    function historicalUnderlying(uint256 timestamp) external view returns (uint256);
-
     function extrapolateNav(uint256 timestamp, uint256 price)
         external
         view

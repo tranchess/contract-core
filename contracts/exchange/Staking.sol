@@ -12,7 +12,7 @@ import "../utils/CoreUtility.sol";
 import "../interfaces/IFund.sol";
 import "../interfaces/IChessSchedule.sol";
 import "../interfaces/ITrancheIndex.sol";
-import "../interfaces/IPrimaryMarketV2.sol";
+import "../interfaces/IPrimaryMarket.sol";
 
 interface IChessController {
     function getFundRelativeWeight(address account, uint256 timestamp)
@@ -257,7 +257,7 @@ abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @dev Claim settled Token M from the primary market and deposit to get rewards
     /// @param primaryMarket The primary market to claim shares from
     function claimAndDeposit(address primaryMarket) external {
-        (uint256 createdShares, ) = IPrimaryMarketV2(primaryMarket).claim(msg.sender);
+        (uint256 createdShares, ) = IPrimaryMarket(primaryMarket).claim(msg.sender);
         deposit(TRANCHE_M, createdShares);
     }
 
