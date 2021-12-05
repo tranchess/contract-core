@@ -890,6 +890,7 @@ contract FundV2 is IFundV2, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         require(profit >= performanceFee, "Performance fee cannot exceed profit");
         _strategyUnderlying = _strategyUnderlying.add(profit);
         feeDebt = feeDebt.add(performanceFee);
+        _totalDebt = _totalDebt.add(performanceFee);
         emit ProfitReported(profit, performanceFee);
     }
 
