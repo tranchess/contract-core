@@ -688,10 +688,6 @@ describe("PrimaryMarket", function () {
         const btcU1D4 = redeemedPerShare.mul(200);
         const btcU2D4 = redeemedPerShare.mul(300);
 
-        async function claim(user: Wallet): Promise<void> {
-            await primaryMarket.claim(user.address);
-        }
-
         beforeEach(async function () {
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
