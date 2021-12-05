@@ -910,16 +910,18 @@ contract FundV2 is IFundV2, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         );
     }
 
-    function applyStrategyUpdate() external onlyOwner {
+    function applyStrategyUpdate(address newStrategy) external onlyOwner {
+        require(proposedStrategy == newStrategy, "Proposed strategy mismatch");
         require(
             block.timestamp >= _proposedStrategyTimestamp + STRATEGY_UPDATE_MIN_DELAY &&
                 block.timestamp < _proposedStrategyTimestamp + STRATEGY_UPDATE_MAX_DELAY,
             "Not ready to update strategy"
         );
         require(_totalDebt == 0, "Cannot update strategy with debt");
-        emit StrategyUpdated(strategy, msg.sender);
-        strategy = msg.sender;
+        emit StrategyUpdated(strategy, newStrategy);
+        strategy = newStrategy;
         proposedStrategy = address(0);
+        _proposedStrategyTimestamp = 0;
     }
 
     function addObsoletePrimaryMarket(address obsoletePrimaryMarket) external onlyOwner {
