@@ -216,10 +216,8 @@ contract FundV2 is IFundV2, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         tokenA = tokenA_;
         tokenB = tokenB_;
         _initializeRoles(tokenM_, tokenA_, tokenB_, primaryMarket_);
-        if (strategy_ != address(0)) {
-            emit StrategyUpdated(strategy, strategy_);
-            strategy = strategy_;
-        }
+        emit StrategyUpdated(strategy, strategy_);
+        strategy = strategy_;
     }
 
     /// @notice Return weights of Token A and B when splitting Token M.
