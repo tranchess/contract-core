@@ -11,8 +11,8 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
 
-import "../interfaces/IPrimaryMarket.sol";
-import "../interfaces/IManagedFund.sol";
+import "../interfaces/IPrimaryMarketV2.sol";
+import "../interfaces/IFundV2.sol";
 import "../interfaces/ITwapOracle.sol";
 import "../interfaces/IAprOracle.sol";
 import "../interfaces/IBallot.sol";
@@ -21,7 +21,7 @@ import "../interfaces/ITrancheIndex.sol";
 
 import "./FundRoles.sol";
 
-contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITrancheIndex {
+contract FundV2 is IFundV2, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITrancheIndex {
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
@@ -987,7 +987,7 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
         uint256 newTotalDebt = _totalDebt;
         for (uint256 i = 0; i < primaryMarketCount; i++) {
             uint256 price_ = price; // Fix the "stack too deep" error
-            IPrimaryMarket pm = IPrimaryMarket(getPrimaryMarketMember(i));
+            IPrimaryMarketV2 pm = IPrimaryMarketV2(getPrimaryMarketMember(i));
             (
                 uint256 sharesToMint,
                 uint256 sharesToBurn,
@@ -1050,7 +1050,7 @@ contract Fund is IManagedFund, Ownable, ReentrancyGuard, FundRoles, CoreUtility,
                 total -= amount;
                 hot -= amount;
                 IERC20(tokenUnderlying).safeTransfer(pm, amount);
-                IPrimaryMarket(pm).updateDelayedRedemptionDay();
+                IPrimaryMarketV2(pm).updateDelayedRedemptionDay();
             }
         }
         _totalDebt = total;

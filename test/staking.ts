@@ -207,7 +207,7 @@ describe("Staking", function () {
 
     describe("claimAndDeposit()", function () {
         it("Should transfer shares and update balance", async function () {
-            const primaryMarket = await deployMockForName(owner, "IPrimaryMarket");
+            const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV2");
             await expect(() => staking.claimAndDeposit(primaryMarket.address)).to.callMocks(
                 {
                     func: primaryMarket.mock.claim.withArgs(addr1),
@@ -223,7 +223,7 @@ describe("Staking", function () {
         });
 
         it("Should emit an event", async function () {
-            const primaryMarket = await deployMockForName(owner, "IPrimaryMarket");
+            const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV2");
             await primaryMarket.mock.claim.withArgs(addr1).returns(10000, 0);
             await shareM.mock.transferFrom.withArgs(addr1, staking.address, 10000).returns(true);
             await expect(staking.claimAndDeposit(primaryMarket.address))

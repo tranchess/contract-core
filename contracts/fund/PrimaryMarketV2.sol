@@ -13,12 +13,12 @@ import "../utils/SafeDecimalMath.sol";
 
 import {DelayedRedemption, LibDelayedRedemption} from "./LibDelayedRedemption.sol";
 
-import "../interfaces/IPrimaryMarket.sol";
+import "../interfaces/IPrimaryMarketV2.sol";
 import "../interfaces/IFund.sol";
 import "../interfaces/ITrancheIndex.sol";
 import "../interfaces/IWrappedERC20.sol";
 
-contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownable {
+contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ownable {
     event Created(address indexed account, uint256 underlying);
     event Redeemed(address indexed account, uint256 shares);
     event Split(address indexed account, uint256 inM, uint256 outA, uint256 outB);

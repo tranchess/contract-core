@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../utils/SafeDecimalMath.sol";
 
-import "../interfaces/IManagedFund.sol";
+import "../interfaces/IFundV2.sol";
 import "../interfaces/IWrappedERC20.sol";
 
 interface ITokenHub {
@@ -47,7 +47,7 @@ contract BscStakingStrategy is Ownable {
     uint256 private constant MAX_ESTIMATED_DAILY_PROFIT_RATE = 0.1e18;
     uint256 private constant MAX_PERFORMANCE_FEE_RATE = 0.5e18;
 
-    IManagedFund public immutable fund;
+    IFundV2 public immutable fund;
     address private immutable _tokenUnderlying;
 
     /// @notice BEP2 address that does the actual staking on Binance Chain.
@@ -85,8 +85,8 @@ contract BscStakingStrategy is Ownable {
         address staker_,
         uint256 performanceFeeRate_
     ) public {
-        fund = IManagedFund(fund_);
-        _tokenUnderlying = IManagedFund(fund_).tokenUnderlying();
+        fund = IFundV2(fund_);
+        _tokenUnderlying = IFundV2(fund_).tokenUnderlying();
         staker = staker_;
         performanceFeeRate = performanceFeeRate_;
         emit StakerUpdated(staker_);

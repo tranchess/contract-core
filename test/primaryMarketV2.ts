@@ -70,7 +70,7 @@ describe("PrimaryMarket", function () {
 
         const MockToken = await ethers.getContractFactory("MockToken");
         const btc = await MockToken.connect(owner).deploy("Wrapped BTC", "BTC", 8);
-        const fund = await deployMockForName(owner, "Fund");
+        const fund = await deployMockForName(owner, "FundV2");
         const shareM = await deployMockForName(owner, "Share");
         const shareA = await deployMockForName(owner, "Share");
         const shareB = await deployMockForName(owner, "Share");
@@ -83,7 +83,7 @@ describe("PrimaryMarket", function () {
         await fund.mock.currentDay.returns(START_DAY);
         await fund.mock.getRebalanceSize.returns(0);
         await fund.mock.isPrimaryMarketActive.returns(true);
-        const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
+        const PrimaryMarket = await ethers.getContractFactory("PrimaryMarketV2");
         const primaryMarket = await PrimaryMarket.connect(owner).deploy(
             fund.address,
             parseUnits(REDEMPTION_FEE_BPS.toString(), 18 - 4),
@@ -881,7 +881,7 @@ describe("PrimaryMarket", function () {
 
     describe("Fund cap", function () {
         beforeEach(async function () {
-            const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
+            const PrimaryMarket = await ethers.getContractFactory("PrimaryMarketV2");
             primaryMarket = await PrimaryMarket.connect(owner).deploy(
                 fund.address,
                 parseUnits(REDEMPTION_FEE_BPS.toString(), 18 - 4),
@@ -924,7 +924,7 @@ describe("PrimaryMarket", function () {
             weth = await MockWrappedToken.connect(owner).deploy("Wrapped ETH", "ETH");
             weth = weth.connect(user1);
             await fund.mock.tokenUnderlying.returns(weth.address);
-            const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
+            const PrimaryMarket = await ethers.getContractFactory("PrimaryMarketV2");
             primaryMarket = await PrimaryMarket.connect(owner).deploy(
                 fund.address,
                 parseUnits(REDEMPTION_FEE_BPS.toString(), 18 - 4),

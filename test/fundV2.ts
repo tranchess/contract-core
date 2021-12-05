@@ -88,9 +88,9 @@ describe("Fund", function () {
         const interestRateBallot = await deployMockForName(owner, "IBallot");
         await interestRateBallot.mock.count.returns(0);
 
-        const primaryMarket = await deployMockForName(owner, "IPrimaryMarket");
+        const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV2");
 
-        const Fund = await ethers.getContractFactory("Fund");
+        const Fund = await ethers.getContractFactory("FundV2");
         const fund = await Fund.connect(owner).deploy(
             btc.address,
             8,
@@ -1117,7 +1117,7 @@ describe("Fund", function () {
         await f.primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
 
         // Overwrite the fund with a new one with zero protocol fee
-        const Fund = await ethers.getContractFactory("Fund");
+        const Fund = await ethers.getContractFactory("FundV2");
         f.fund = await Fund.connect(f.wallets.owner).deploy(
             f.btc.address,
             8,

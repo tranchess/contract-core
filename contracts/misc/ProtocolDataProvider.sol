@@ -11,8 +11,8 @@ import "../utils/CoreUtility.sol";
 import {UnsettledTrade} from "../exchange/LibUnsettledTrade.sol";
 import {VESnapshot} from "../exchange/StakingV2.sol";
 import "../exchange/ExchangeV2.sol";
-import "../fund/Fund.sol";
-import "../fund/PrimaryMarket.sol";
+import "../fund/FundV2.sol";
+import "../fund/PrimaryMarketV2.sol";
 import "../governance/InterestRateBallot.sol";
 import "../governance/VotingEscrow.sol";
 
@@ -110,14 +110,14 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         uint256 totalUnderlying;
         uint256 rebalanceSize;
         uint256 currentInterestRate;
-        Fund.Rebalance lastRebalance;
+        FundV2.Rebalance lastRebalance;
         uint256 relativeWeight;
     }
 
     struct PrimaryMarketData {
         uint256 currentCreatingUnderlying;
         uint256 currentRedeemingShares;
-        PrimaryMarket.CreationRedemption account;
+        PrimaryMarketV2.CreationRedemption account;
     }
 
     struct ExchangeData {
@@ -200,7 +200,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.blockTimestamp = block.timestamp;
 
         ExchangeV2 exchange = ExchangeV2(exchangeAddress);
-        Fund fund = Fund(address(exchange.fund()));
+        FundV2 fund = FundV2(address(exchange.fund()));
         VotingEscrow votingEscrow =
             VotingEscrow(address(InterestRateBallot(address(fund.ballot())).votingEscrow()));
         IERC20 underlyingToken = IERC20(fund.tokenUnderlying());
@@ -261,7 +261,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
             block.timestamp
         );
 
-        PrimaryMarket primaryMarket = PrimaryMarket(primaryMarketAddress);
+        PrimaryMarketV2 primaryMarket = PrimaryMarketV2(primaryMarketAddress);
         data.primaryMarket.currentCreatingUnderlying = primaryMarket.currentCreatingUnderlying();
         data.primaryMarket.currentRedeemingShares = primaryMarket.currentRedeemingShares();
         data.primaryMarket.account = primaryMarket.creationRedemptionOf(account);

@@ -4,7 +4,7 @@ pragma experimental ABIEncoderV2;
 
 import "./IFund.sol";
 
-interface IManagedFund is IFund {
+interface IFundV2 is IFund {
     function getTotalUnderlying() external view returns (uint256);
 
     function getStrategyUnderlying() external view returns (uint256);
