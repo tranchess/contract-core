@@ -58,6 +58,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
     uint256 private constant MAX_REDEMPTION_FEE_RATE = 0.01e18;
     uint256 private constant MAX_SPLIT_FEE_RATE = 0.01e18;
     uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18;
+    uint256 private constant MAX_ITERATIONS = 500;
 
     IFund public immutable fund;
     IERC20 private immutable _tokenUnderlying;
@@ -512,7 +513,7 @@ contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownabl
         uint256 newDelayedRedemptionDay = oldDelayedRedemptionDay;
         uint256 claimableUnderlying = _claimableUnderlying;
         uint256 balance = _tokenUnderlying.balanceOf(address(this)).sub(claimableUnderlying);
-        for (uint256 i = 0; i < 100 && newDelayedRedemptionDay < currentDay_; i++) {
+        for (uint256 i = 0; i < MAX_ITERATIONS && newDelayedRedemptionDay < currentDay_; i++) {
             uint256 underlying = _delayedUnderlyings[newDelayedRedemptionDay];
             if (underlying > balance) {
                 break;

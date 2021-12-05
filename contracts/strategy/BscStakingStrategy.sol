@@ -44,6 +44,8 @@ contract BscStakingStrategy is Ownable {
 
     ITokenHub public constant TOKEN_HUB = ITokenHub(0x0000000000000000000000000000000000001004);
     uint256 private constant BRIDGE_EXPIRE_TIME = 1 hours;
+    uint256 private constant MAX_ESTIMATED_DAILY_PROFIT_RATE = 0.1e18;
+    uint256 private constant MAX_PERFORMANCE_FEE_RATE = 0.5e18;
 
     IManagedFund public immutable fund;
     address private immutable _tokenUnderlying;
@@ -133,7 +135,7 @@ contract BscStakingStrategy is Ownable {
     }
 
     function updateEstimatedDailyProfitRate(uint256 rate) external onlyOwner {
-        require(rate < 0.1e18);
+        require(rate < MAX_ESTIMATED_DAILY_PROFIT_RATE);
         estimatedDailyProfitRate = rate;
         reportedDay = fund.currentDay();
     }
@@ -175,7 +177,7 @@ contract BscStakingStrategy is Ownable {
     }
 
     function updatePerformanceFeeRate(uint256 newRate) external onlyOwner {
-        require(newRate <= 0.5e18);
+        require(newRate <= MAX_PERFORMANCE_FEE_RATE);
         performanceFeeRate = newRate;
     }
 
