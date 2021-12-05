@@ -15,12 +15,15 @@ import {
     SETTLEMENT_TIME,
     FixtureWalletMap,
     advanceBlockAtTime,
+    setNextBlockTime,
 } from "./utils";
 
 const POST_REBALANCE_DELAY_TIME = HOUR * 12;
 const DAILY_PROTOCOL_FEE_BPS = 1; // 0.01% per day, 3.65% per year
 const UPPER_REBALANCE_THRESHOLD = parseEther("2");
 const LOWER_REBALANCE_THRESHOLD = parseEther("0.5");
+const STRATEGY_UPDATE_MIN_DELAY = DAY * 3;
+const STRATEGY_UPDATE_MAX_DELAY = DAY * 7;
 
 describe("Fund", function () {
     interface FixtureData {
@@ -47,6 +50,7 @@ describe("Fund", function () {
     let shareA: Wallet;
     let shareB: Wallet;
     let feeCollector: Wallet;
+    let strategy: Wallet;
     let addr1: string;
     let addr2: string;
     let twapOracle: MockContract;
@@ -60,7 +64,8 @@ describe("Fund", function () {
         // Initiating transactions from a Waffle mock contract doesn't work well in Hardhat
         // and may fail with gas estimating errors. We use EOAs for the shares to make
         // test development easier.
-        const [user1, user2, owner, shareM, shareA, shareB, feeCollector] = provider.getWallets();
+        const [user1, user2, owner, shareM, shareA, shareB, feeCollector, strategy] =
+            provider.getWallets();
 
         // Start at 12 hours after settlement time of the 6th day in a week, which makes sure that
         // the first settlement after the fund's deployment settles the last day in a week and
@@ -113,7 +118,7 @@ describe("Fund", function () {
         );
 
         return {
-            wallets: { user1, user2, owner, shareM, shareA, shareB, feeCollector },
+            wallets: { user1, user2, owner, shareM, shareA, shareB, feeCollector, strategy },
             startDay,
             startTimestamp,
             twapOracle,
@@ -143,6 +148,7 @@ describe("Fund", function () {
         shareA = fixtureData.wallets.shareA;
         shareB = fixtureData.wallets.shareB;
         feeCollector = fixtureData.wallets.feeCollector;
+        strategy = fixtureData.wallets.strategy;
         addr1 = user1.address;
         addr2 = user2.address;
         startDay = fixtureData.startDay;
@@ -1516,6 +1522,266 @@ describe("Fund", function () {
                 expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
                 expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(oldB);
             });
+        });
+    });
+
+    describe("Strategy update", function () {
+        it("Should revert if not proposed by owner", async function () {
+            await expect(fund.proposeStrategyUpdate(strategy.address)).to.be.revertedWith(
+                "Ownable: caller is not the owner"
+            );
+        });
+
+        it("Should revert if the original strategy is proposed", async function () {
+            await expect(fund.connect(owner).proposeStrategyUpdate(await fund.strategy())).to.be
+                .reverted;
+        });
+
+        it("Should update proposed change", async function () {
+            await fund.connect(owner).proposeStrategyUpdate(strategy.address);
+            expect(await fund.proposedStrategy()).to.equal(strategy.address);
+        });
+
+        it("Should emit event on proposal", async function () {
+            const t = startTimestamp + HOUR;
+            await setNextBlockTime(t);
+            await expect(fund.connect(owner).proposeStrategyUpdate(strategy.address))
+                .to.emit(fund, "StrategyUpdateProposed")
+                .withArgs(
+                    strategy.address,
+                    t + STRATEGY_UPDATE_MIN_DELAY,
+                    t + STRATEGY_UPDATE_MAX_DELAY
+                );
+        });
+
+        it("Should revert if not applied by owner", async function () {
+            await expect(fund.applyStrategyUpdate(strategy.address)).to.be.revertedWith(
+                "Ownable: caller is not the owner"
+            );
+        });
+
+        it("Should revert if apply a different strategy change", async function () {
+            await fund.connect(owner).proposeStrategyUpdate(strategy.address);
+            await expect(fund.connect(owner).applyStrategyUpdate(user1.address)).to.be.revertedWith(
+                "Proposed strategy mismatch"
+            );
+        });
+
+        it("Should revert if apply too early or too late", async function () {
+            const t = startTimestamp + HOUR;
+            await setNextBlockTime(t);
+            await fund.connect(owner).proposeStrategyUpdate(strategy.address);
+
+            await advanceBlockAtTime(t + STRATEGY_UPDATE_MIN_DELAY - 10);
+            await expect(
+                fund.connect(owner).applyStrategyUpdate(strategy.address)
+            ).to.be.revertedWith("Not ready to update strategy");
+            await advanceBlockAtTime(t + STRATEGY_UPDATE_MAX_DELAY + 10);
+            await expect(
+                fund.connect(owner).applyStrategyUpdate(strategy.address)
+            ).to.be.revertedWith("Not ready to update strategy");
+        });
+
+        it("Should update strategy", async function () {
+            const t = startTimestamp + HOUR;
+            await setNextBlockTime(t);
+            await fund.connect(owner).proposeStrategyUpdate(strategy.address);
+            await advanceBlockAtTime(t + STRATEGY_UPDATE_MIN_DELAY + 10);
+            await fund.connect(owner).applyStrategyUpdate(strategy.address);
+            expect(await fund.strategy()).to.equal(strategy.address);
+            expect(await fund.proposedStrategy()).to.equal(ethers.constants.AddressZero);
+            // Expect that the proposed timestamp is also reset.
+            await expect(
+                fund.connect(owner).applyStrategyUpdate(ethers.constants.AddressZero)
+            ).to.be.revertedWith("Not ready to update strategy");
+            await advanceBlockAtTime(t + STRATEGY_UPDATE_MIN_DELAY * 2 + 20);
+            await expect(
+                fund.connect(owner).applyStrategyUpdate(ethers.constants.AddressZero)
+            ).to.be.revertedWith("Not ready to update strategy");
+        });
+    });
+
+    describe("Settlement with strategy", function () {
+        const navA = parseEther("1.001")
+            .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
+            .div(10000);
+
+        beforeEach(async function () {
+            await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
+            await twapOracle.mock.getTwap.returns(parseEther("1000"));
+            await primaryMarket.mock.updateDelayedRedemptionDay.returns();
+            // Change strategy
+            await fund.connect(owner).proposeStrategyUpdate(strategy.address);
+            await advanceBlockAtTime(startTimestamp + HOUR + STRATEGY_UPDATE_MIN_DELAY + 10);
+            await fund.connect(owner).applyStrategyUpdate(strategy.address);
+            await btc.connect(strategy).approve(fund.address, BigNumber.from("2").pow(256).sub(1));
+            // Settle days before the strategy change
+            await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
+            for (let i = 0; i < STRATEGY_UPDATE_MIN_DELAY / DAY; i++) {
+                await fund.settle();
+            }
+            startDay += STRATEGY_UPDATE_MIN_DELAY;
+            // Create 10000 shares with 10 BTC on the first day.
+            await btc.mint(primaryMarket.address, parseBtc("10"));
+            await primaryMarket.mock.settle.returns(parseEther("10000"), 0, parseBtc("10"), 0, 0);
+            await advanceBlockAtTime(startDay);
+            await fund.settle();
+            await primaryMarket.mock.settle.revertsWithReason("Mock function is reset");
+            // Transfer 9 BTC to the strategy
+            await fund.connect(strategy).transferToStrategy(parseBtc("9"));
+        });
+
+        it("transferToStrategy()", async function () {
+            expect(await fund.getStrategyUnderlying()).to.equal(parseBtc("9"));
+            expect(await fund.getTotalUnderlying()).to.equal(parseBtc("10"));
+            await expect(fund.transferToStrategy(parseBtc("1"))).to.be.revertedWith(
+                "Only strategy"
+            );
+            await expect(() =>
+                fund.connect(strategy).transferToStrategy(parseBtc("1"))
+            ).to.changeTokenBalances(btc, [strategy, fund], [parseBtc("1"), parseBtc("-1")]);
+            expect(await fund.getStrategyUnderlying()).to.equal(parseBtc("10"));
+            expect(await fund.getTotalUnderlying()).to.equal(parseBtc("10"));
+        });
+
+        it("transferFromStrategy()", async function () {
+            await expect(fund.transferFromStrategy(parseBtc("1"))).to.be.revertedWith(
+                "Only strategy"
+            );
+            await expect(() =>
+                fund.connect(strategy).transferFromStrategy(parseBtc("1"))
+            ).to.changeTokenBalances(btc, [strategy, fund], [parseBtc("-1"), parseBtc("1")]);
+            expect(await fund.getStrategyUnderlying()).to.equal(parseBtc("8"));
+            expect(await fund.getTotalUnderlying()).to.equal(parseBtc("10"));
+        });
+
+        it("reportProfit", async function () {
+            await expect(fund.reportProfit(parseBtc("1"), parseBtc("0.1"))).to.be.revertedWith(
+                "Only strategy"
+            );
+            await expect(
+                fund.connect(strategy).reportProfit(parseBtc("1"), parseBtc("2"))
+            ).to.be.revertedWith("Performance fee cannot exceed profit");
+            await expect(fund.connect(strategy).reportProfit(parseBtc("1"), parseBtc("0.1")))
+                .to.emit(fund, "ProfitReported")
+                .withArgs(parseBtc("1"), parseBtc("0.1"));
+            expect(await fund.getStrategyUnderlying()).to.equal(parseBtc("10"));
+            expect(await fund.getTotalUnderlying()).to.equal(parseBtc("10.9"));
+            expect(await fund.feeDebt()).to.equal(parseBtc("0.1"));
+            expect(await fund.getTotalDebt()).to.equal(parseBtc("0.1"));
+        });
+
+        it("reportLoss", async function () {
+            await expect(fund.reportLoss(parseBtc("1"))).to.be.revertedWith("Only strategy");
+            await expect(fund.connect(strategy).reportLoss(parseBtc("1")))
+                .to.emit(fund, "LossReported")
+                .withArgs(parseBtc("1"));
+            expect(await fund.getStrategyUnderlying()).to.equal(parseBtc("8"));
+            expect(await fund.getTotalUnderlying()).to.equal(parseBtc("9"));
+            expect(await fund.getTotalDebt()).to.equal(0);
+        });
+
+        it("Should add fee into debt", async function () {
+            await fund.connect(strategy).transferToStrategy(parseBtc("1"));
+            await advanceBlockAtTime(startDay + DAY);
+            await primaryMarket.mock.settle.returns(0, parseEther("100"), 0, 0, parseBtc("0.1"));
+            await expect(() => fund.settle()).to.changeTokenBalance(btc, fund, 0);
+            const fee = parseBtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000).add(parseBtc("0.1"));
+            expect(await fund.feeDebt()).to.equal(fee);
+            expect(await fund.getTotalDebt()).to.equal(fee);
+        });
+
+        it("Should add net redemption into debt", async function () {
+            await advanceBlockAtTime(startDay + DAY);
+            await primaryMarket.mock.settle.returns(
+                parseEther("5000"),
+                parseEther("8000"),
+                parseBtc("5"),
+                parseBtc("8"),
+                0
+            );
+            const fee = parseBtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
+            await expect(() => fund.settle()).to.changeTokenBalances(
+                btc,
+                [fund, feeCollector, primaryMarket],
+                [parseBtc("-1"), fee, parseBtc("1").sub(fee)]
+            );
+            const debt = parseBtc("2").add(fee);
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(debt);
+            expect(await fund.getTotalDebt()).to.equal(debt);
+        });
+
+        it("Should cumulate redemption debt", async function () {
+            await advanceBlockAtTime(startDay + DAY * 2);
+            await primaryMarket.mock.settle.returns(0, parseEther("3000"), 0, parseBtc("3"), 0);
+            await fund.settle();
+            const feeDay1 = parseBtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
+            const debtDay1 = parseBtc("2").add(feeDay1);
+
+            await primaryMarket.mock.settle.returns(0, parseEther("4000"), 0, parseBtc("4"), 0);
+            await fund.settle();
+            const feeDay2 = parseBtc("7").sub(feeDay1).mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
+            const debt = debtDay1.add(parseBtc("4"));
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(debt);
+            expect(await fund.getTotalDebt()).to.equal(debt.add(feeDay2));
+        });
+
+        it("Should net creation, redemption and debt", async function () {
+            await advanceBlockAtTime(startDay + DAY * 2);
+            await primaryMarket.mock.settle.returns(0, parseEther("3000"), 0, parseBtc("3"), 0);
+            await fund.settle();
+            const feeDay1 = parseBtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
+            const debtDay1 = parseBtc("2").add(feeDay1);
+
+            await btc.mint(primaryMarket.address, parseBtc("4"));
+            await primaryMarket.mock.settle.returns(
+                parseEther("5000"),
+                parseEther("1000"),
+                parseBtc("5"),
+                parseBtc("1"),
+                0
+            );
+            const feeDay2 = parseBtc("7").sub(feeDay1).mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
+            const net = parseBtc("4").sub(debtDay1);
+            await expect(() => fund.settle()).to.changeTokenBalances(
+                btc,
+                [fund, feeCollector, primaryMarket],
+                [net.sub(feeDay2), feeDay2, net.mul(-1)]
+            );
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(0);
+            expect(await fund.getTotalDebt()).to.equal(0);
+        });
+
+        it("Should update NAV according to profit", async function () {
+            // Profit is 5% of the total underlying at the last settlement
+            await fund.connect(strategy).reportProfit(parseBtc("1"), parseBtc("0.5"));
+            await advanceBlockAtTime(startDay + DAY);
+            const navM = parseEther("1.05")
+                .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
+                .div(10000);
+            const navB = navM.mul(2).sub(navA);
+            await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
+            await fund.settle();
+            const navs = await fund.historicalNavs(startDay + DAY);
+            expect(navs[TRANCHE_M]).to.equal(navM);
+            expect(navs[TRANCHE_A]).to.equal(navA);
+            expect(navs[TRANCHE_B]).to.equal(navB);
+        });
+
+        it("Should update NAV according to loss", async function () {
+            // Loss is 10% of the total underlying at the last settlement
+            await fund.connect(strategy).reportLoss(parseBtc("1"));
+            await advanceBlockAtTime(startDay + DAY);
+            const navM = parseEther("0.9")
+                .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
+                .div(10000);
+            const navB = navM.mul(2).sub(navA);
+            await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
+            await fund.settle();
+            const navs = await fund.historicalNavs(startDay + DAY);
+            expect(navs[TRANCHE_M]).to.equal(navM);
+            expect(navs[TRANCHE_A]).to.equal(navA);
+            expect(navs[TRANCHE_B]).to.equal(navB);
         });
     });
 });
