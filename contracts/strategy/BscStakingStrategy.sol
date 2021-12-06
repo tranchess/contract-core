@@ -23,7 +23,7 @@ interface ITokenHub {
 
 /// @notice Strategy for delegating BNB to BSC validators and earn rewards.
 ///
-///         Delegation to BSC validators and reward distribution happens on the Binance Chain (BC).
+///         BSC validator delegation and reward distribution happens on the Binance Chain (BC).
 ///         A staker address, which is securely managed by multi-signature, executes
 ///         delegation-related transactions and periodically transfer rewards back to this contract
 ///         on BSC.
@@ -40,9 +40,9 @@ contract BscStakingStrategy is Ownable {
     event ReporterAdded(address reporter);
     event ReporterRemoved(address reporter);
     event StakerUpdated(address staker);
-    event Received(uint256 amount);
+    event Received(address from, uint256 amount);
 
-    ITokenHub public constant TOKEN_HUB = ITokenHub(0x0000000000000000000000000000000000001004);
+    ITokenHub private constant TOKEN_HUB = ITokenHub(0x0000000000000000000000000000000000001004);
     uint256 private constant BRIDGE_EXPIRE_TIME = 1 hours;
     uint256 private constant MAX_ESTIMATED_DAILY_PROFIT_RATE = 0.1e18;
     uint256 private constant MAX_PERFORMANCE_FEE_RATE = 0.5e18;
@@ -71,14 +71,6 @@ contract BscStakingStrategy is Ownable {
 
     /// @notice The last trading day when a reporter reports daily profit.
     uint256 public reportedDay;
-
-    event Reported(
-        uint256 startTimestamp,
-        uint256 endTimestamp,
-        uint256 estimated,
-        uint256 feeRebate,
-        uint256 fundIncome
-    );
 
     constructor(
         address fund_,
@@ -211,7 +203,7 @@ contract BscStakingStrategy is Ownable {
 
     /// @notice Receive cross-chain transfer from the staker.
     receive() external payable {
-        emit Received(msg.value);
+        emit Received(msg.sender, msg.value);
     }
 
     /// @dev Convert BNB into WBNB
