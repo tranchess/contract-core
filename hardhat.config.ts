@@ -21,7 +21,11 @@ import { ETH_RPC, ETH_CHAIN_ID, DEPLOYER_PK, DEPLOYER_HD_PATH, ETHERSCAN_API_KEY
 import "hardhat-gas-reporter";
 
 const networks: NetworksUserConfig = {
-    hardhat: {},
+    hardhat: {
+        // Waffle's `changeEtherBalance` does not support the London hard fork yet.
+        // See this issue for details: https://github.com/EthWorks/Waffle/issues/571
+        hardfork: "berlin",
+    },
     localhost: {},
 };
 if (ETH_RPC && ETH_CHAIN_ID) {
