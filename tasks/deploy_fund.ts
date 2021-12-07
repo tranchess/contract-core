@@ -34,11 +34,11 @@ task("deploy_fund", "Deploy fund contracts")
         await hre.run("compile");
 
         const underlyingSymbol: string = args.underlyingSymbol;
-        assert.ok(underlyingSymbol.match(/[a-zA-Z]+/), "Invalid symbol");
+        assert.match(underlyingSymbol, /^[a-zA-Z]+$/, "Invalid symbol");
         const quoteSymbol: string = args.quoteSymbol;
-        assert.ok(quoteSymbol.match(/[a-zA-Z]+/), "Invalid symbol");
+        assert.match(quoteSymbol, /^[a-zA-Z]+$/, "Invalid symbol");
         const shareSymbolPrefix: string = args.shareSymbolPrefix;
-        assert.ok(shareSymbolPrefix.match(/[a-zA-Z.]+/), "Invalid symbol prefix");
+        assert.match(shareSymbolPrefix, /^[a-zA-Z.]+$/, "Invalid symbol prefix");
         assert.ok(shareSymbolPrefix.length <= 5, "Symbol prefix too long");
         const adminFeeRate = parseEther(args.adminFeeRate);
 

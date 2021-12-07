@@ -66,8 +66,8 @@ task("deploy_misc", "Deploy misc contracts interactively")
         ) {
             const symbols: string[] = args.underlyingSymbols.split(",");
             assert.strictEqual(symbols.length, 2);
-            assert.ok(symbols[0].match(/[a-zA-Z]+/), "Invalid symbol");
-            assert.ok(symbols[1].match(/[a-zA-Z]+/), "Invalid symbol");
+            assert.match(symbols[0], /^[a-zA-Z]+$/, "Invalid symbol");
+            assert.match(symbols[1], /^[a-zA-Z]+$/, "Invalid symbol");
             const fund0Addresses = loadAddressFile<FundAddresses>(
                 hre,
                 `fund_${symbols[0].toLowerCase()}`

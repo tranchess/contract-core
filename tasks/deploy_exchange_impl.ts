@@ -22,7 +22,7 @@ task("deploy_exchange_impl", "Deploy Exchange implementation contract")
         await hre.run("compile");
 
         const underlyingSymbol: string = args.underlyingSymbol;
-        assert.ok(underlyingSymbol.match(/[a-zA-Z]+/), "Invalid symbol");
+        assert.match(underlyingSymbol, /^[a-zA-Z]+$/, "Invalid symbol");
 
         const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
         const fundAddresses = loadAddressFile<FundAddresses>(
