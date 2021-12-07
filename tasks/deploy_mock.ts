@@ -1,6 +1,6 @@
 import { strict as assert } from "assert";
 import { task } from "hardhat/config";
-import { keyInYNStrict } from "readline-sync";
+import { keyInYNStrict, questionFloat } from "readline-sync";
 import { Addresses, saveAddressFile, newAddresses } from "./address_file";
 import { updateHreSigner } from "./signers";
 
@@ -10,6 +10,7 @@ export interface MockAddresses extends Addresses {
     mockVToken: string;
     mockBtc: string;
     mockEth: string;
+    mockWbnb: string;
     mockUsdc: string;
     mockPancakePair: string;
 }
@@ -27,7 +28,11 @@ task("deploy_mock", "Deploy mock contracts")
 
         let mockTwapOracleAddress = "";
         if (args.silent || keyInYNStrict("Deploy MockTwapOracle?", { guide: true })) {
-            assert.ok(args.initialTwap, "Please specify --initialTwap");
+            if (args.silent) {
+                assert.ok(args.initialTwap, "Please specify --initialTwap");
+            } else if (args.initialTwap === "") {
+                args.initialTwap = questionFloat("Please enter the initial TWAP: ").toString();
+            }
             const initialTwap = parseEther(args.initialTwap);
             const MockTwapOracle = await ethers.getContractFactory("MockTwapOracle");
             const mockTwapOracle = await MockTwapOracle.deploy(
@@ -88,6 +93,14 @@ task("deploy_mock", "Deploy mock contracts")
             await mockEth.mint(deployer.address, parseEther("1000000"));
         }
 
+        let mockWbnbAddress = "";
+        if (args.silent || keyInYNStrict("Deploy MockWbnb?", { guide: true })) {
+            const MockWrappedToken = await ethers.getContractFactory("MockWrappedToken");
+            const mockWbnb = await MockWrappedToken.deploy("Wrapped BNB", "WBNB");
+            console.log(`MockWbnb: ${mockWbnb.address}`);
+            mockWbnbAddress = mockWbnb.address;
+        }
+
         let mockUsdcAddress = "";
         if (args.silent || keyInYNStrict("Deploy MockUsdc?", { guide: true })) {
             const MockToken = await ethers.getContractFactory("MockToken");
@@ -121,6 +134,7 @@ task("deploy_mock", "Deploy mock contracts")
             mockVToken: mockVTokenAddress,
             mockBtc: mockBtcAddress,
             mockEth: mockEthAddress,
+            mockWbnb: mockWbnbAddress,
             mockUsdc: mockUsdcAddress,
             mockPancakePair: mockPancakePairAddress,
         };
