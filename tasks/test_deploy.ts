@@ -57,11 +57,16 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         shareSymbolPrefix: "b",
         adminFeeRate: "0.5",
     });
-    await hre.run("deploy_fund", {
+    await hre.run("deploy_fund_v2", {
         underlyingSymbol: "ETH",
         quoteSymbol: "USDC",
         shareSymbolPrefix: "e",
         adminFeeRate: "0.5",
+        strategy: "bsc_staking_strategy",
+        strategyParams: JSON.stringify({
+            staker: deployer.address,
+            performanceFeeRate: "0.2",
+        }),
     });
 
     console.log();
