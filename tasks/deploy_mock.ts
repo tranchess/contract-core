@@ -1,3 +1,4 @@
+import { strict as assert } from "assert";
 import { task } from "hardhat/config";
 import { keyInYNStrict } from "readline-sync";
 import { Addresses, saveAddressFile, newAddresses } from "./address_file";
@@ -15,6 +16,7 @@ export interface MockAddresses extends Addresses {
 
 task("deploy_mock", "Deploy mock contracts")
     .addFlag("silent", 'Assume "yes" as answer to all prompts and run non-interactively')
+    .addOptionalParam("initialTwap", "Initial price of the MockTwapOracle", "")
     .setAction(async (args, hre) => {
         await updateHreSigner(hre);
         const { ethers, waffle } = hre;
@@ -25,17 +27,15 @@ task("deploy_mock", "Deploy mock contracts")
 
         let mockTwapOracleAddress = "";
         if (args.silent || keyInYNStrict("Deploy MockTwapOracle?", { guide: true })) {
-            const MockTwapOracle = await ethers.getContractAt(
-                "ITwapOracle",
+            assert.ok(args.initialTwap, "Please specify --initialTwap");
+            const initialTwap = parseEther(args.initialTwap);
+            const MockTwapOracle = await ethers.getContractFactory("MockTwapOracle");
+            const mockTwapOracle = await MockTwapOracle.deploy(
+                initialTwap,
                 ethers.constants.AddressZero
-            );
-            const mockTwapOracle = await deployMockContract(
-                deployer,
-                MockTwapOracle.interface.format() as string[]
             );
             console.log(`MockTwapOracle: ${mockTwapOracle.address}`);
             mockTwapOracleAddress = mockTwapOracle.address;
-            await mockTwapOracle.mock.getTwap.returns(parseEther("10000"));
         }
 
         let mockAprOracleAddress = "";
