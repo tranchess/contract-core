@@ -12,7 +12,7 @@ export interface MockAddresses extends Addresses {
     mockEth: string;
     mockWbnb: string;
     mockUsdc: string;
-    mockPancakePair: string;
+    mockUniswapV2Pair: string;
 }
 
 task("deploy_mock", "Deploy mock contracts")
@@ -110,20 +110,20 @@ task("deploy_mock", "Deploy mock contracts")
             await mockUsdc.mint(deployer.address, 1000000e6);
         }
 
-        let mockPancakePairAddress = "";
-        if (args.silent || keyInYNStrict("Deploy MockPancakePair?", { guide: true })) {
-            const MockPancakePair = await ethers.getContractAt(
-                "IPancakePair",
+        let mockUniswapV2PairAddress = "";
+        if (args.silent || keyInYNStrict("Deploy MockUniswapV2Pair?", { guide: true })) {
+            const MockUniswapV2Pair = await ethers.getContractAt(
+                "IUniswapV2Pair",
                 ethers.constants.AddressZero
             );
-            const mockPancakePair = await deployMockContract(
+            const mockUniswapV2Pair = await deployMockContract(
                 deployer,
-                MockPancakePair.interface.format() as string[]
+                MockUniswapV2Pair.interface.format() as string[]
             );
-            console.log(`MockPancakePair: ${mockPancakePair.address}`);
-            mockPancakePairAddress = mockPancakePair.address;
+            console.log(`MockUniswapV2Pair: ${mockUniswapV2Pair.address}`);
+            mockUniswapV2PairAddress = mockUniswapV2Pair.address;
             console.log(
-                "Please manually set return values of token0(), token1() and getReserves() for MockPancakePair"
+                "Please manually set return values of token0(), token1() and getReserves() for MockUniswapV2Pair"
             );
         }
 
@@ -136,7 +136,7 @@ task("deploy_mock", "Deploy mock contracts")
             mockEth: mockEthAddress,
             mockWbnb: mockWbnbAddress,
             mockUsdc: mockUsdcAddress,
-            mockPancakePair: mockPancakePairAddress,
+            mockUniswapV2Pair: mockUniswapV2PairAddress,
         };
         saveAddressFile(hre, "mock", addresses);
     });
