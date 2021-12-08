@@ -97,7 +97,11 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
 
     function getTwap(uint256 timestamp) external view override returns (uint256) {
         if (timestamp < startEpoch) {
-            return fallbackOracle.getTwap(timestamp);
+            if (address(fallbackOracle) == address(0)) {
+                return 0;
+            } else {
+                return fallbackOracle.getTwap(timestamp);
+            }
         }
         if (timestamp >= block.timestamp || timestamp % EPOCH != 0) {
             return 0;
