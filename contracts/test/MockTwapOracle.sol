@@ -46,6 +46,7 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
         startEpoch = _endOfDay(block.timestamp) - 1 days;
         storedEpochs[startEpoch].twap = initialTwap;
         lastStoredEpoch = startEpoch;
+        catchUp();
         reporters[msg.sender] = true;
         emit ReporterAdded(msg.sender);
     }
