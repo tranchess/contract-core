@@ -90,7 +90,15 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         uint256 currentCreatingUnderlying;
         uint256 currentRedeemingShares;
         uint256 fundCap;
-        PrimaryMarket.CreationRedemption account;
+        PrimaryMarketAccountData account;
+    }
+
+    struct PrimaryMarketAccountData {
+        uint256 creatingUnderlying;
+        uint256 redeemingShares;
+        uint256 createdShares;
+        uint256 redeemedUnderlying;
+        uint256[16] recentDelayedRedemptions;
     }
 
     struct ExchangeData {
@@ -249,10 +257,22 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         PrimaryMarket primaryMarket_ = PrimaryMarket(primaryMarket);
         data.currentCreatingUnderlying = primaryMarket_.currentCreatingUnderlying();
         data.currentRedeemingShares = primaryMarket_.currentRedeemingShares();
+        PrimaryMarket.CreationRedemption memory cr = primaryMarket_.creationRedemptionOf(account);
+        data.account.creatingUnderlying = cr.creatingUnderlying;
+        data.account.redeemingShares = cr.redeemingShares;
+        data.account.createdShares = cr.createdShares;
+        data.account.redeemedUnderlying = cr.redeemedUnderlying;
         if (fundVersion >= 2) {
-            data.fundCap = PrimaryMarketV2(payable(primaryMarket)).fundCap();
+            PrimaryMarketV2 primaryMarketV2 = PrimaryMarketV2(payable(primaryMarket));
+            data.fundCap = primaryMarketV2.fundCap();
+            uint256 currentDay = primaryMarketV2.currentDay();
+            for (uint256 i = 0; i < 16; i++) {
+                (data.account.recentDelayedRedemptions[i], ) = primaryMarketV2.getDelayedRedemption(
+                    account,
+                    currentDay - i * 1 days
+                );
+            }
         }
-        data.account = primaryMarket_.creationRedemptionOf(account);
     }
 
     function getExchangeData(address exchange, address account)
