@@ -13,6 +13,8 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
     }
 
     event Update(uint256 timestamp, uint256 price, UpdateType updateType);
+    event ReporterAdded(address reporter);
+    event ReporterRemoved(address reporter);
 
     uint256 private constant EPOCH = 30 minutes;
     uint256 private constant MAX_ITERATION = 500;
@@ -37,14 +39,35 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
     ///         - Otherwise, the epoch is a hole and the value is its TWAP.
     mapping(uint256 => uint256) public holes;
 
+    mapping(address => bool) public reporters;
+
     constructor(uint256 initialTwap, address fallbackOracle_) public {
         fallbackOracle = ITwapOracle(fallbackOracle_);
         startEpoch = _endOfDay(block.timestamp) - 1 days;
         storedEpochs[startEpoch].twap = initialTwap;
         lastStoredEpoch = startEpoch;
+        reporters[msg.sender] = true;
+        emit ReporterAdded(msg.sender);
     }
 
-    function updateNext(uint256 twap) external onlyOwner {
+    modifier onlyReporter() {
+        require(reporters[msg.sender], "Only reporter");
+        _;
+    }
+
+    function addReporter(address reporter) external onlyOwner {
+        require(!reporters[reporter]);
+        reporters[reporter] = true;
+        emit ReporterAdded(reporter);
+    }
+
+    function removeReporter(address reporter) external onlyOwner {
+        require(reporters[reporter]);
+        reporters[reporter] = false;
+        emit ReporterRemoved(reporter);
+    }
+
+    function updateNext(uint256 twap) external onlyReporter {
         uint256 nextEpoch = _nextEpoch();
         require(nextEpoch - lastStoredEpoch < EPOCH * MAX_ITERATION, "Call catchUp() first");
         catchUp();
@@ -81,13 +104,13 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
         lastStoredEpoch = nextEpoch;
     }
 
-    function digHole(uint256 timestamp) external onlyOwner {
+    function digHole(uint256 timestamp) external onlyReporter {
         require(timestamp % EPOCH == 0, "Unaligned timestamp");
         require(timestamp > block.timestamp, "Can only dig hole in the future");
         holes[timestamp] = uint256(-1);
     }
 
-    function fillHole(uint256 timestamp, uint256 twap) external onlyOwner {
+    function fillHole(uint256 timestamp, uint256 twap) external onlyReporter {
         require(timestamp % EPOCH == 0, "Unaligned timestamp");
         require(timestamp < block.timestamp, "Can only fill hole in the past");
         require(holes[timestamp] == uint256(-1), "Not a hole or already filled");
