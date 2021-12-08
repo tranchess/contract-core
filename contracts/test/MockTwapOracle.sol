@@ -103,7 +103,7 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
                 return fallbackOracle.getTwap(timestamp);
             }
         }
-        if (timestamp >= block.timestamp || timestamp % EPOCH != 0) {
+        if (timestamp >= lastStoredEpoch || timestamp % EPOCH != 0) {
             return 0;
         }
 
@@ -112,12 +112,9 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
             return holeTwap == uint256(-1) ? 0 : holeTwap;
         }
 
-        uint256 epoch = lastStoredEpoch;
-        if (epoch > timestamp) {
-            // Search for the nearest stored epoch. The search starts at the latest 00:00 UTC
-            // no later than the given timestamp, which is guaranteed to be a stored epoch.
-            epoch = _endOfDay(timestamp) - 1 days;
-        }
+        // Search for the nearest stored epoch. The search starts at the latest 00:00 UTC
+        // no later than the given timestamp, which is guaranteed to be a stored epoch.
+        uint256 epoch = _endOfDay(timestamp) - 1 days;
         uint256 next = storedEpochs[epoch].nextEpoch;
         while (next > 0 && next <= timestamp) {
             epoch = next;
