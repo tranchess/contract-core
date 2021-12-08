@@ -15,10 +15,7 @@ contract FundKeeperHelper is BatchKeeperHelperBase {
         IFundSettlement fund = IFundSettlement(contractAddress);
         uint256 currentDay = fund.currentDay();
         uint256 price = fund.twapOracle().getTwap(currentDay);
-        if (block.timestamp >= currentDay && price != 0) {
-            return true;
-        }
-        return false;
+        return (block.timestamp >= currentDay && price != 0);
     }
 
     function _performUpkeep(address contractAddress) internal override {

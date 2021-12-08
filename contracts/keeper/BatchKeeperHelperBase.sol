@@ -19,14 +19,14 @@ contract BatchKeeperHelperBase is KeeperCompatibleInterface, Ownable {
         }
     }
 
-    function addAllowlist(address contractAddress_) external onlyOwner {
-        allowlist[contractAddress_] = TRUE;
-        emit AllowlistAdded(contractAddress_);
+    function addAllowlist(address contractAddress) external onlyOwner {
+        allowlist[contractAddress] = TRUE;
+        emit AllowlistAdded(contractAddress);
     }
 
-    function removeAllowlist(address contractAddress_) external onlyOwner {
-        allowlist[contractAddress_] = FALSE;
-        emit AllowlistRemoved(contractAddress_);
+    function removeAllowlist(address contractAddress) external onlyOwner {
+        allowlist[contractAddress] = FALSE;
+        emit AllowlistRemoved(contractAddress);
     }
 
     function checkUpkeepView(bytes calldata checkData)
@@ -35,9 +35,9 @@ contract BatchKeeperHelperBase is KeeperCompatibleInterface, Ownable {
         returns (bool upkeepNeeded, bytes memory performData)
     {
         uint256 contractLength = checkData.length / 20;
-        for (uint256 index = 0; index < contractLength; index++) {
-            address contractAddress = _getContractAddr(index);
-            require(allowlist[contractAddress] == TRUE, "Not allowlisted");
+        for (uint256 i = 0; i < contractLength; i++) {
+            address contractAddress = _getContractAddr(i);
+            require(allowlist[contractAddress] != FALSE, "Not allowlisted");
             if (_checkUpkeep(contractAddress)) {
                 upkeepNeeded = true;
                 performData = abi.encodePacked(performData, contractAddress);
@@ -51,9 +51,9 @@ contract BatchKeeperHelperBase is KeeperCompatibleInterface, Ownable {
         returns (bool upkeepNeeded, bytes memory performData)
     {
         uint256 contractLength = checkData.length / 20;
-        for (uint256 index = 0; index < contractLength; index++) {
-            address contractAddress = _getContractAddr(index);
-            require(allowlist[contractAddress] == TRUE, "Not allowlisted");
+        for (uint256 i = 0; i < contractLength; i++) {
+            address contractAddress = _getContractAddr(i);
+            require(allowlist[contractAddress] != FALSE, "Not allowlisted");
             if (_checkUpkeep(contractAddress)) {
                 upkeepNeeded = true;
                 performData = abi.encodePacked(performData, contractAddress);
@@ -63,9 +63,9 @@ contract BatchKeeperHelperBase is KeeperCompatibleInterface, Ownable {
 
     function performUpkeep(bytes calldata performData) external override {
         uint256 contractLength = performData.length / 20;
-        for (uint256 index = 0; index < contractLength; index++) {
-            address contractAddress = _getContractAddr(index);
-            require(allowlist[contractAddress] == TRUE, "Not allowlisted");
+        for (uint256 i = 0; i < contractLength; i++) {
+            address contractAddress = _getContractAddr(i);
+            require(allowlist[contractAddress] != FALSE, "Not allowlisted");
             _performUpkeep(contractAddress);
         }
     }

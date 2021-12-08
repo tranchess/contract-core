@@ -12,15 +12,12 @@ interface IChainlinkTwapOracle {
 contract OracleKeeperHelper is BatchKeeperHelperBase {
     uint256 private constant EPOCH = 30 minutes;
 
-    constructor(address[] memory aggregators_) public BatchKeeperHelperBase(aggregators_) {}
+    constructor(address[] memory oracles_) public BatchKeeperHelperBase(oracles_) {}
 
     function _checkUpkeep(address contractAddress) internal view override returns (bool) {
         IChainlinkTwapOracle chainlinkTwap = IChainlinkTwapOracle(contractAddress);
         uint256 lastTimestamp = chainlinkTwap.lastTimestamp();
-        if (block.timestamp > lastTimestamp + EPOCH) {
-            return true;
-        }
-        return false;
+        return (block.timestamp > lastTimestamp + EPOCH);
     }
 
     function _performUpkeep(address contractAddress) internal override {
