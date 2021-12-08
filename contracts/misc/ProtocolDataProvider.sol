@@ -14,6 +14,7 @@ import {VESnapshot} from "../exchange/StakingV2.sol";
 import "../exchange/ExchangeV2.sol";
 import "../fund/Fund.sol";
 import "../fund/PrimaryMarket.sol";
+import "../fund/PrimaryMarketV2.sol";
 import "../governance/InterestRateBallot.sol";
 import "../governance/FeeDistributor.sol";
 import "../governance/VotingEscrow.sol";
@@ -88,6 +89,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
     struct PrimaryMarketData {
         uint256 currentCreatingUnderlying;
         uint256 currentRedeemingShares;
+        uint256 fundCap;
         PrimaryMarket.CreationRedemption account;
     }
 
@@ -166,7 +168,8 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         address exchange,
         address swapPair,
         address feeDistributor,
-        address account
+        address account,
+        uint256 fundVersion
     ) external returns (ProtocolData memory data) {
         data.blockNumber = block.number;
         data.blockTimestamp = block.timestamp;
@@ -175,7 +178,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
 
         data.fund = getFundData(primaryMarket, exchange);
 
-        data.primaryMarket = getPrimaryMarketData(primaryMarket, account);
+        data.primaryMarket = getPrimaryMarketData(primaryMarket, account, fundVersion);
 
         data.exchange = getExchangeData(exchange, account);
 
@@ -238,14 +241,17 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         );
     }
 
-    function getPrimaryMarketData(address primaryMarket, address account)
-        public
-        view
-        returns (PrimaryMarketData memory data)
-    {
+    function getPrimaryMarketData(
+        address primaryMarket,
+        address account,
+        uint256 fundVersion
+    ) public view returns (PrimaryMarketData memory data) {
         PrimaryMarket primaryMarket_ = PrimaryMarket(primaryMarket);
         data.currentCreatingUnderlying = primaryMarket_.currentCreatingUnderlying();
         data.currentRedeemingShares = primaryMarket_.currentRedeemingShares();
+        if (fundVersion >= 2) {
+            data.fundCap = PrimaryMarketV2(payable(primaryMarket)).fundCap();
+        }
         data.account = primaryMarket_.creationRedemptionOf(account);
     }
 
