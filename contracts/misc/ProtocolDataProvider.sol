@@ -15,6 +15,7 @@ import "../exchange/ExchangeV2.sol";
 import "../fund/Fund.sol";
 import "../fund/PrimaryMarket.sol";
 import "../governance/InterestRateBallot.sol";
+import "../governance/FeeDistributor.sol";
 import "../governance/VotingEscrow.sol";
 
 interface IExchange {
@@ -25,23 +26,6 @@ interface IExchange {
         uint256 tranche,
         uint256 epoch
     ) external view returns (UnsettledTrade memory);
-}
-
-interface IFeeDistributor {
-    function rewardsPerWeek(uint256 timestamp) external view returns (uint256);
-
-    function veSupplyPerWeek(uint256 timestamp) external view returns (uint256);
-
-    function totalSupplyAtTimestamp(uint256 timestamp) external view returns (uint256);
-
-    function userLastBalances(address account) external view returns (uint256);
-
-    function userLockedBalances(address account)
-        external
-        view
-        returns (IVotingEscrow.LockedBalance memory);
-
-    function userCheckpoint(address account) external returns (uint256 rewards);
 }
 
 contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
@@ -155,6 +139,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         uint256 currentRewards;
         uint256 currentSupply;
         uint256 tradingWeekTotalSupply;
+        uint256 adminFeeRate;
     }
 
     struct FeeDistributorAccountData {
@@ -322,13 +307,13 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         );
 
         if (feeDistributor != address(0)) {
-            IFeeDistributor feeDistributor_ = IFeeDistributor(feeDistributor);
+            FeeDistributor feeDistributor_ = FeeDistributor(payable(feeDistributor));
             data.feeDistributor.account.claimableRewards = feeDistributor_.userCheckpoint(account);
             data.feeDistributor.account.currentBalance = feeDistributor_.userLastBalances(account);
-            data.feeDistributor.account.amount = feeDistributor_.userLockedBalances(account).amount;
-            data.feeDistributor.account.unlockTime = feeDistributor_
-                .userLockedBalances(account)
-                .unlockTime;
+            (
+                data.feeDistributor.account.amount,
+                data.feeDistributor.account.unlockTime
+            ) = feeDistributor_.userLockedBalances(account);
             data.feeDistributor.currentRewards = feeDistributor_.rewardsPerWeek(
                 blockCurrentWeek - 1 weeks
             );
@@ -338,6 +323,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
             data.feeDistributor.tradingWeekTotalSupply = feeDistributor_.totalSupplyAtTimestamp(
                 blockCurrentWeek
             );
+            data.feeDistributor.adminFeeRate = feeDistributor_.adminFeeRate();
         }
     }
 
