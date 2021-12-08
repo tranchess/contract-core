@@ -3,6 +3,7 @@ pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
 import "../interfaces/ITrancheIndex.sol";
 import "../interfaces/IChessSchedule.sol";
@@ -41,21 +42,6 @@ interface IFeeDistributor {
         returns (IVotingEscrow.LockedBalance memory);
 
     function userCheckpoint(address account) external returns (uint256 rewards);
-}
-
-interface IPancakePair {
-    function token0() external view returns (address);
-
-    function token1() external view returns (address);
-
-    function getReserves()
-        external
-        view
-        returns (
-            uint112 reserve0,
-            uint112 reserve1,
-            uint32 blockTimestampLast
-        );
 }
 
 contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
@@ -184,157 +170,180 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         address token1;
     }
 
-    string public constant VERSION = "1.1.1";
+    string public constant VERSION = "1.2.0";
 
     /// @dev This function should be call as a "view" function off-chain to get the return value,
     ///      e.g. using `contract.getProtocolData.call()` in web3
-    ///      or `contract.callStatic["getProtocolData"]()` in ethers.js.
+    ///      or `contract.callStatic.getProtocolData()` in ethers.js.
     function getProtocolData(
-        address payable primaryMarketAddress,
-        address exchangeAddress,
-        address pancakePairAddress,
-        address feeDistributorAddress,
+        address primaryMarket,
+        address exchange,
+        address swapPair,
+        address feeDistributor,
         address account
     ) external returns (ProtocolData memory data) {
         data.blockNumber = block.number;
         data.blockTimestamp = block.timestamp;
 
-        ExchangeV2 exchange = ExchangeV2(exchangeAddress);
-        Fund fund = Fund(address(exchange.fund()));
+        data.wallet = getWalletData(primaryMarket, exchange, account);
+
+        data.fund = getFundData(primaryMarket, exchange);
+
+        data.primaryMarket = getPrimaryMarketData(primaryMarket, account);
+
+        data.exchange = getExchangeData(exchange, account);
+
+        data.governance = getGovernanceData(exchange, feeDistributor, account);
+
+        data.pair = getSwapPairData(swapPair);
+    }
+
+    function getWalletData(
+        address primaryMarket,
+        address exchange,
+        address account
+    ) public view returns (WalletData memory data) {
+        Fund fund = Fund(address(ExchangeV2(exchange).fund()));
         VotingEscrow votingEscrow =
             VotingEscrow(address(InterestRateBallot(address(fund.ballot())).votingEscrow()));
         IERC20 underlyingToken = IERC20(fund.tokenUnderlying());
-        IERC20 quoteToken = IERC20(exchange.quoteAssetAddress());
+        IERC20 quoteToken = IERC20(ExchangeV2(exchange).quoteAssetAddress());
         IERC20 chessToken = IERC20(votingEscrow.token());
-        IChessSchedule chessSchedule = exchange.chessSchedule();
 
-        data.wallet.balance.underlyingToken = underlyingToken.balanceOf(account);
-        data.wallet.balance.quoteToken = quoteToken.balanceOf(account);
-        (data.wallet.balance.tokenM, data.wallet.balance.tokenA, data.wallet.balance.tokenB) = fund
-            .allShareBalanceOf(account);
-        data.wallet.balance.chess = chessToken.balanceOf(account);
+        data.balance.underlyingToken = underlyingToken.balanceOf(account);
+        data.balance.quoteToken = quoteToken.balanceOf(account);
+        (data.balance.tokenM, data.balance.tokenA, data.balance.tokenB) = fund.allShareBalanceOf(
+            account
+        );
+        data.balance.chess = chessToken.balanceOf(account);
 
-        data.wallet.allowance.primaryMarketUnderlying = underlyingToken.allowance(
-            account,
-            primaryMarketAddress
-        );
-        data.wallet.allowance.exchange.quoteToken = quoteToken.allowance(account, exchangeAddress);
-        data.wallet.allowance.exchange.tokenM = fund.shareAllowance(
-            TRANCHE_M,
-            account,
-            exchangeAddress
-        );
-        data.wallet.allowance.exchange.tokenA = fund.shareAllowance(
-            TRANCHE_A,
-            account,
-            exchangeAddress
-        );
-        data.wallet.allowance.exchange.tokenB = fund.shareAllowance(
-            TRANCHE_B,
-            account,
-            exchangeAddress
-        );
-        data.wallet.allowance.votingEscrowChess = chessToken.allowance(
-            account,
-            address(votingEscrow)
-        );
+        data.allowance.primaryMarketUnderlying = underlyingToken.allowance(account, primaryMarket);
+        data.allowance.exchange.quoteToken = quoteToken.allowance(account, exchange);
+        data.allowance.exchange.tokenM = fund.shareAllowance(TRANCHE_M, account, exchange);
+        data.allowance.exchange.tokenA = fund.shareAllowance(TRANCHE_A, account, exchange);
+        data.allowance.exchange.tokenB = fund.shareAllowance(TRANCHE_B, account, exchange);
+        data.allowance.votingEscrowChess = chessToken.allowance(account, address(votingEscrow));
+    }
 
-        data.fund.isFundActive = fund.isFundActive(block.timestamp);
-        data.fund.isPrimaryMarketActive = fund.isPrimaryMarketActive(
-            primaryMarketAddress,
-            block.timestamp
-        );
-        data.fund.isExchangeActive = fund.isExchangeActive(block.timestamp);
-        data.fund.fundActivityStartTime = fund.fundActivityStartTime();
-        data.fund.exchangeActivityStartTime = fund.exchangeActivityStartTime();
-        data.fund.currentDay = fund.currentDay();
-        data.fund.currentWeek = _endOfWeek(data.fund.currentDay - 1 days);
-        data.fund.dailyProtocolFeeRate = fund.dailyProtocolFeeRate();
-        data.fund.totalShares = fund.getTotalShares();
-        data.fund.totalUnderlying = underlyingToken.balanceOf(address(fund));
-        data.fund.rebalanceSize = fund.getRebalanceSize();
-        data.fund.currentInterestRate = fund.historicalInterestRate(data.fund.currentWeek);
+    function getFundData(address primaryMarket, address exchange)
+        public
+        returns (FundData memory data)
+    {
+        Fund fund = Fund(address(ExchangeV2(exchange).fund()));
+        IERC20 underlyingToken = IERC20(fund.tokenUnderlying());
+        data.isFundActive = fund.isFundActive(block.timestamp);
+        data.isPrimaryMarketActive = fund.isPrimaryMarketActive(primaryMarket, block.timestamp);
+        data.isExchangeActive = fund.isExchangeActive(block.timestamp);
+        data.fundActivityStartTime = fund.fundActivityStartTime();
+        data.exchangeActivityStartTime = fund.exchangeActivityStartTime();
+        data.currentDay = fund.currentDay();
+        data.currentWeek = _endOfWeek(data.currentDay - 1 days);
+        data.dailyProtocolFeeRate = fund.dailyProtocolFeeRate();
+        data.totalShares = fund.getTotalShares();
+        data.totalUnderlying = underlyingToken.balanceOf(address(fund));
+        data.rebalanceSize = fund.getRebalanceSize();
+        data.currentInterestRate = fund.historicalInterestRate(data.currentWeek);
         uint256 rebalanceSize = fund.getRebalanceSize();
-        data.fund.lastRebalance = fund.getRebalance(rebalanceSize == 0 ? 0 : rebalanceSize - 1);
-        data.fund.relativeWeight = exchange.chessController().getFundRelativeWeight(
+        data.lastRebalance = fund.getRebalance(rebalanceSize == 0 ? 0 : rebalanceSize - 1);
+        data.relativeWeight = ExchangeV2(exchange).chessController().getFundRelativeWeight(
             address(fund),
             block.timestamp
         );
+    }
 
-        PrimaryMarket primaryMarket = PrimaryMarket(primaryMarketAddress);
-        data.primaryMarket.currentCreatingUnderlying = primaryMarket.currentCreatingUnderlying();
-        data.primaryMarket.currentRedeemingShares = primaryMarket.currentRedeemingShares();
-        data.primaryMarket.account = primaryMarket.creationRedemptionOf(account);
+    function getPrimaryMarketData(address primaryMarket, address account)
+        public
+        view
+        returns (PrimaryMarketData memory data)
+    {
+        PrimaryMarket primaryMarket_ = PrimaryMarket(primaryMarket);
+        data.currentCreatingUnderlying = primaryMarket_.currentCreatingUnderlying();
+        data.currentRedeemingShares = primaryMarket_.currentRedeemingShares();
+        data.account = primaryMarket_.creationRedemptionOf(account);
+    }
 
-        data.exchange.totalDeposited.tokenM = exchange.totalSupply(TRANCHE_M);
-        data.exchange.totalDeposited.tokenA = exchange.totalSupply(TRANCHE_A);
-        data.exchange.totalDeposited.tokenB = exchange.totalSupply(TRANCHE_B);
-        data.exchange.weightedSupply = exchange.weightedBalance(
-            data.exchange.totalDeposited.tokenM,
-            data.exchange.totalDeposited.tokenA,
-            data.exchange.totalDeposited.tokenB
+    function getExchangeData(address exchange, address account)
+        public
+        returns (ExchangeData memory data)
+    {
+        ExchangeV2 exchangeContract = ExchangeV2(exchange);
+        data.totalDeposited.tokenM = exchangeContract.totalSupply(TRANCHE_M);
+        data.totalDeposited.tokenA = exchangeContract.totalSupply(TRANCHE_A);
+        data.totalDeposited.tokenB = exchangeContract.totalSupply(TRANCHE_B);
+        data.weightedSupply = exchangeContract.weightedBalance(
+            data.totalDeposited.tokenM,
+            data.totalDeposited.tokenA,
+            data.totalDeposited.tokenB
         );
-        data.exchange.workingSupply = exchange.workingSupply();
-        data.exchange.account.available.tokenM = exchange.availableBalanceOf(TRANCHE_M, account);
-        data.exchange.account.available.tokenA = exchange.availableBalanceOf(TRANCHE_A, account);
-        data.exchange.account.available.tokenB = exchange.availableBalanceOf(TRANCHE_B, account);
-        data.exchange.account.locked.tokenM = exchange.lockedBalanceOf(TRANCHE_M, account);
-        data.exchange.account.locked.tokenA = exchange.lockedBalanceOf(TRANCHE_A, account);
-        data.exchange.account.locked.tokenB = exchange.lockedBalanceOf(TRANCHE_B, account);
-        data.exchange.account.weightedBalance = exchange.weightedBalance(
-            data.exchange.account.available.tokenM + data.exchange.account.locked.tokenM,
-            data.exchange.account.available.tokenA + data.exchange.account.locked.tokenA,
-            data.exchange.account.available.tokenB + data.exchange.account.locked.tokenB
+        data.workingSupply = exchangeContract.workingSupply();
+        data.account.available.tokenM = exchangeContract.availableBalanceOf(TRANCHE_M, account);
+        data.account.available.tokenA = exchangeContract.availableBalanceOf(TRANCHE_A, account);
+        data.account.available.tokenB = exchangeContract.availableBalanceOf(TRANCHE_B, account);
+        data.account.locked.tokenM = exchangeContract.lockedBalanceOf(TRANCHE_M, account);
+        data.account.locked.tokenA = exchangeContract.lockedBalanceOf(TRANCHE_A, account);
+        data.account.locked.tokenB = exchangeContract.lockedBalanceOf(TRANCHE_B, account);
+        data.account.weightedBalance = exchangeContract.weightedBalance(
+            data.account.available.tokenM + data.account.locked.tokenM,
+            data.account.available.tokenA + data.account.locked.tokenA,
+            data.account.available.tokenB + data.account.locked.tokenB
         );
-        data.exchange.account.workingBalance = exchange.workingBalanceOf(account);
-        data.exchange.account.veSnapshot = exchange.veSnapshotOf(account);
-        data.exchange.account.isMaker = exchange.isMaker(account);
-        data.exchange.account.chessRewards = exchange.claimableRewards(account);
+        data.account.workingBalance = exchangeContract.workingBalanceOf(account);
+        data.account.veSnapshot = exchangeContract.veSnapshotOf(account);
+        data.account.isMaker = exchangeContract.isMaker(account);
+        data.account.chessRewards = exchangeContract.claimableRewards(account);
+    }
+
+    function getGovernanceData(
+        address exchange,
+        address feeDistributor,
+        address account
+    ) public returns (GovernanceData memory data) {
+        Fund fund = Fund(address(ExchangeV2(exchange).fund()));
+        VotingEscrow votingEscrow =
+            VotingEscrow(address(InterestRateBallot(address(fund.ballot())).votingEscrow()));
+        IERC20 chessToken = IERC20(votingEscrow.token());
+        IChessSchedule chessSchedule = ExchangeV2(exchange).chessSchedule();
 
         uint256 blockCurrentWeek = _endOfWeek(block.timestamp);
-        data.governance.chessTotalSupply = chessToken.totalSupply();
-        data.governance.chessRate = chessSchedule.getRate(block.timestamp);
-        data.governance.votingEscrow.chessBalance = chessToken.balanceOf(address(votingEscrow));
-        data.governance.votingEscrow.totalSupply = votingEscrow.totalSupply();
-        data.governance.votingEscrow.tradingWeekTotalSupply = votingEscrow.totalSupplyAtTimestamp(
+        data.chessTotalSupply = chessToken.totalSupply();
+        data.chessRate = chessSchedule.getRate(block.timestamp);
+        data.votingEscrow.chessBalance = chessToken.balanceOf(address(votingEscrow));
+        data.votingEscrow.totalSupply = votingEscrow.totalSupply();
+        data.votingEscrow.tradingWeekTotalSupply = votingEscrow.totalSupplyAtTimestamp(
             blockCurrentWeek
         );
-        data.governance.votingEscrow.account = votingEscrow.getLockedBalance(account);
-        data.governance.interestRateBallot.tradingWeekTotalSupply = InterestRateBallot(
-            address(fund.ballot())
-        )
+        data.votingEscrow.account = votingEscrow.getLockedBalance(account);
+        data.interestRateBallot.tradingWeekTotalSupply = InterestRateBallot(address(fund.ballot()))
             .totalSupplyAtTimestamp(blockCurrentWeek);
-        data.governance.interestRateBallot.account = InterestRateBallot(address(fund.ballot()))
-            .getReceipt(account);
+        data.interestRateBallot.account = InterestRateBallot(address(fund.ballot())).getReceipt(
+            account
+        );
 
-        if (feeDistributorAddress != address(0)) {
-            IFeeDistributor feeDistributor = IFeeDistributor(feeDistributorAddress);
-            data.governance.feeDistributor.account.claimableRewards = feeDistributor.userCheckpoint(
-                account
-            );
-            data.governance.feeDistributor.account.currentBalance = feeDistributor.userLastBalances(
-                account
-            );
-            data.governance.feeDistributor.account.amount = feeDistributor
-                .userLockedBalances(account)
-                .amount;
-            data.governance.feeDistributor.account.unlockTime = feeDistributor
+        if (feeDistributor != address(0)) {
+            IFeeDistributor feeDistributor_ = IFeeDistributor(feeDistributor);
+            data.feeDistributor.account.claimableRewards = feeDistributor_.userCheckpoint(account);
+            data.feeDistributor.account.currentBalance = feeDistributor_.userLastBalances(account);
+            data.feeDistributor.account.amount = feeDistributor_.userLockedBalances(account).amount;
+            data.feeDistributor.account.unlockTime = feeDistributor_
                 .userLockedBalances(account)
                 .unlockTime;
-            data.governance.feeDistributor.currentRewards = feeDistributor.rewardsPerWeek(
+            data.feeDistributor.currentRewards = feeDistributor_.rewardsPerWeek(
                 blockCurrentWeek - 1 weeks
             );
-            data.governance.feeDistributor.currentSupply = feeDistributor.veSupplyPerWeek(
+            data.feeDistributor.currentSupply = feeDistributor_.veSupplyPerWeek(
                 blockCurrentWeek - 1 weeks
             );
-            data.governance.feeDistributor.tradingWeekTotalSupply = feeDistributor
-                .totalSupplyAtTimestamp(blockCurrentWeek);
+            data.feeDistributor.tradingWeekTotalSupply = feeDistributor_.totalSupplyAtTimestamp(
+                blockCurrentWeek
+            );
         }
+    }
 
-        IPancakePair pair = IPancakePair(pancakePairAddress);
-        data.pair.token0 = pair.token0();
-        data.pair.token1 = pair.token1();
-        (data.pair.reserve0, data.pair.reserve1, ) = pair.getReserves();
+    function getSwapPairData(address swapPair) public view returns (SwapPairData memory data) {
+        IUniswapV2Pair pair = IUniswapV2Pair(swapPair);
+        data.token0 = pair.token0();
+        data.token1 = pair.token1();
+        (data.reserve0, data.reserve1, ) = pair.getReserves();
     }
 
     function getUnsettledTrades(
