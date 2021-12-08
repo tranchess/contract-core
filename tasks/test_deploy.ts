@@ -83,6 +83,7 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         quoteSymbol: "USDC",
         shareSymbolPrefix: "n",
         adminFeeRate: "0.5",
+        fundCap: "1000000",
         strategy: "bsc_staking_strategy",
         strategyParams: JSON.stringify({
             staker: deployer.address,

@@ -28,6 +28,7 @@ task("deploy_fund_v2", "Deploy fund contracts")
     .addParam("quoteSymbol", "Quote token symbol")
     .addParam("shareSymbolPrefix", "Symbol prefix of share tokens")
     .addParam("adminFeeRate", "Admin fraction in the fee distributor")
+    .addParam("fundCap", "Fund cap (in underlying's precision), or -1 for no cap")
     .addParam("strategy", "Name of the strategy (snake_case), or 'NONE' for no strategy")
     .addOptionalParam(
         "strategyParams",
@@ -37,6 +38,7 @@ task("deploy_fund_v2", "Deploy fund contracts")
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
         const { ethers } = hre;
+        const { BigNumber } = ethers;
         const { parseEther, parseUnits } = ethers.utils;
         await hre.run("compile");
 
@@ -66,6 +68,11 @@ task("deploy_fund_v2", "Deploy fund contracts")
         assert.strictEqual(quoteSymbol, await quoteToken.symbol());
         console.log(`Underlying: ${underlyingToken.address}`);
         console.log(`Quote: ${quoteToken.address}`);
+
+        const fundCap =
+            args.fundCap === "-1"
+                ? BigNumber.from(1).shl(256).sub(1)
+                : parseUnits(args.fundCap, underlyingDecimals);
 
         const strategyName: string = args.strategy;
         assert.match(strategyName, /^[a-z_]+|NONE$/, "Strategy name should be in snake_case");
@@ -129,14 +136,14 @@ task("deploy_fund_v2", "Deploy fund contracts")
         );
         console.log(`ShareB: ${shareB.address}`);
 
-        const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
+        const PrimaryMarket = await ethers.getContractFactory("PrimaryMarketV2");
         const primaryMarket = await PrimaryMarket.deploy(
             fund.address,
-            FUND_CONFIG.GUARDED_LAUNCH ? GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP : 0,
             parseEther("0.002"),
             parseEther("0.0005"),
             parseEther("0.0005"),
             parseUnits(FUND_CONFIG.MIN_CREATION, underlyingDecimals),
+            fundCap,
             { gasLimit: 5e6 } // Gas estimation may fail
         );
         console.log(`PrimaryMarket: ${primaryMarket.address}`);
