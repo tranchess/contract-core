@@ -261,21 +261,20 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         address primaryMarket,
         address account,
         uint256 fundVersion
-    ) public view returns (PrimaryMarketData memory data) {
-        PrimaryMarket primaryMarket_ = PrimaryMarket(primaryMarket);
+    ) public returns (PrimaryMarketData memory data) {
+        PrimaryMarketV2 primaryMarket_ = PrimaryMarketV2(payable(primaryMarket));
         data.currentCreatingUnderlying = primaryMarket_.currentCreatingUnderlying();
         data.currentRedeemingShares = primaryMarket_.currentRedeemingShares();
-        PrimaryMarket.CreationRedemption memory cr = primaryMarket_.creationRedemptionOf(account);
+        PrimaryMarketV2.CreationRedemption memory cr = primaryMarket_.creationRedemptionOf(account);
         data.account.creatingUnderlying = cr.creatingUnderlying;
         data.account.redeemingShares = cr.redeemingShares;
         data.account.createdShares = cr.createdShares;
         data.account.redeemedUnderlying = cr.redeemedUnderlying;
         if (fundVersion >= 2) {
-            PrimaryMarketV2 primaryMarketV2 = PrimaryMarketV2(payable(primaryMarket));
-            data.fundCap = primaryMarketV2.fundCap();
-            uint256 currentDay = primaryMarketV2.currentDay();
+            data.fundCap = primaryMarket_.fundCap();
+            uint256 currentDay = primaryMarket_.currentDay();
             for (uint256 i = 0; i < 16; i++) {
-                (data.account.recentDelayedRedemptions[i], ) = primaryMarketV2.getDelayedRedemption(
+                (data.account.recentDelayedRedemptions[i], ) = primaryMarket_.getDelayedRedemption(
                     account,
                     currentDay - i * 1 days
                 );
