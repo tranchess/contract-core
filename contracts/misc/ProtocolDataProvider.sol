@@ -13,6 +13,7 @@ import {UnsettledTrade} from "../exchange/LibUnsettledTrade.sol";
 import {VESnapshot} from "../exchange/StakingV2.sol";
 import "../exchange/ExchangeV2.sol";
 import "../fund/Fund.sol";
+import "../fund/FundV2.sol";
 import "../fund/PrimaryMarket.sol";
 import "../fund/PrimaryMarketV2.sol";
 import "../governance/InterestRateBallot.sol";
@@ -84,6 +85,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         uint256 currentInterestRate;
         Fund.Rebalance lastRebalance;
         uint256 relativeWeight;
+        uint256 strategyUnderlying;
     }
 
     struct PrimaryMarketData {
@@ -184,7 +186,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
 
         data.wallet = getWalletData(primaryMarket, exchange, account);
 
-        data.fund = getFundData(primaryMarket, exchange);
+        data.fund = getFundData(primaryMarket, exchange, fundVersion);
 
         data.primaryMarket = getPrimaryMarketData(primaryMarket, account, fundVersion);
 
@@ -223,12 +225,12 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.allowance.votingEscrowChess = chessToken.allowance(account, address(votingEscrow));
     }
 
-    function getFundData(address primaryMarket, address exchange)
-        public
-        returns (FundData memory data)
-    {
+    function getFundData(
+        address primaryMarket,
+        address exchange,
+        uint256 fundVersion
+    ) public returns (FundData memory data) {
         Fund fund = Fund(address(ExchangeV2(exchange).fund()));
-        IERC20 underlyingToken = IERC20(fund.tokenUnderlying());
         data.isFundActive = fund.isFundActive(block.timestamp);
         data.isPrimaryMarketActive = fund.isPrimaryMarketActive(primaryMarket, block.timestamp);
         data.isExchangeActive = fund.isExchangeActive(block.timestamp);
@@ -238,7 +240,6 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.currentWeek = _endOfWeek(data.currentDay - 1 days);
         data.dailyProtocolFeeRate = fund.dailyProtocolFeeRate();
         data.totalShares = fund.getTotalShares();
-        data.totalUnderlying = underlyingToken.balanceOf(address(fund));
         data.rebalanceSize = fund.getRebalanceSize();
         data.currentInterestRate = fund.historicalInterestRate(data.currentWeek);
         uint256 rebalanceSize = fund.getRebalanceSize();
@@ -247,6 +248,13 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
             address(fund),
             block.timestamp
         );
+        if (fundVersion < 2) {
+            IERC20 underlyingToken = IERC20(fund.tokenUnderlying());
+            data.totalUnderlying = underlyingToken.balanceOf(address(fund));
+        } else {
+            data.totalUnderlying = FundV2(address(fund)).getTotalUnderlying();
+            data.strategyUnderlying = FundV2(address(fund)).getStrategyUnderlying();
+        }
     }
 
     function getPrimaryMarketData(
