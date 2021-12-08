@@ -62,6 +62,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
     }
 
     struct WalletBalanceData {
+        uint256 nativeCurrency;
         uint256 underlyingToken;
         uint256 quoteToken;
         uint256 tokenM;
@@ -210,6 +211,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         IERC20 quoteToken = IERC20(ExchangeV2(exchange).quoteAssetAddress());
         IERC20 chessToken = IERC20(votingEscrow.token());
 
+        data.balance.nativeCurrency = account.balance;
         data.balance.underlyingToken = underlyingToken.balanceOf(account);
         data.balance.quoteToken = quoteToken.balanceOf(account);
         (data.balance.tokenM, data.balance.tokenA, data.balance.tokenB) = fund.allShareBalanceOf(
