@@ -18,7 +18,7 @@ import "../fund/PrimaryMarket.sol";
 import "../fund/PrimaryMarketV2.sol";
 import "../governance/InterestRateBallot.sol";
 import "../governance/FeeDistributor.sol";
-import "../governance/VotingEscrow.sol";
+import "../governance/VotingEscrowV2.sol";
 
 interface IExchange {
     function chessSchedule() external view returns (IChessSchedule);
@@ -135,7 +135,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
     }
 
     struct VotingEscrowData {
-        uint256 chessBalance;
+        uint256 totalLocked;
         uint256 totalSupply;
         uint256 tradingWeekTotalSupply;
         IVotingEscrow.LockedBalance account;
@@ -203,8 +203,8 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         address account
     ) public view returns (WalletData memory data) {
         Fund fund = Fund(address(ExchangeV2(exchange).fund()));
-        VotingEscrow votingEscrow =
-            VotingEscrow(address(InterestRateBallot(address(fund.ballot())).votingEscrow()));
+        VotingEscrowV2 votingEscrow =
+            VotingEscrowV2(address(InterestRateBallot(address(fund.ballot())).votingEscrow()));
         IERC20 underlyingToken = IERC20(fund.tokenUnderlying());
         IERC20 quoteToken = IERC20(ExchangeV2(exchange).quoteAssetAddress());
         IERC20 chessToken = IERC20(votingEscrow.token());
@@ -320,15 +320,15 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         address account
     ) public returns (GovernanceData memory data) {
         Fund fund = Fund(address(ExchangeV2(exchange).fund()));
-        VotingEscrow votingEscrow =
-            VotingEscrow(address(InterestRateBallot(address(fund.ballot())).votingEscrow()));
+        VotingEscrowV2 votingEscrow =
+            VotingEscrowV2(address(InterestRateBallot(address(fund.ballot())).votingEscrow()));
         IERC20 chessToken = IERC20(votingEscrow.token());
         IChessSchedule chessSchedule = ExchangeV2(exchange).chessSchedule();
 
         uint256 blockCurrentWeek = _endOfWeek(block.timestamp);
         data.chessTotalSupply = chessToken.totalSupply();
         data.chessRate = chessSchedule.getRate(block.timestamp);
-        data.votingEscrow.chessBalance = chessToken.balanceOf(address(votingEscrow));
+        data.votingEscrow.totalLocked = votingEscrow.totalLocked();
         data.votingEscrow.totalSupply = votingEscrow.totalSupply();
         data.votingEscrow.tradingWeekTotalSupply = votingEscrow.totalSupplyAtTimestamp(
             blockCurrentWeek
