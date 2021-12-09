@@ -244,6 +244,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.currentInterestRate = fund.historicalInterestRate(data.currentWeek);
         uint256 rebalanceSize = fund.getRebalanceSize();
         data.lastRebalance = fund.getRebalance(rebalanceSize == 0 ? 0 : rebalanceSize - 1);
+        ExchangeV2(exchange).refreshBalance(address(0), 0); // Trigger checkpoint
         data.relativeWeight = ExchangeV2(exchange).chessController().getFundRelativeWeight(
             address(fund),
             block.timestamp
