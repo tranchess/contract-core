@@ -276,7 +276,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
             for (uint256 i = 0; i < 16; i++) {
                 (data.account.recentDelayedRedemptions[i], ) = primaryMarket_.getDelayedRedemption(
                     account,
-                    currentDay - i * 1 days
+                    currentDay - (i + 1) * 1 days
                 );
             }
         }
