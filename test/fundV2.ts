@@ -25,7 +25,7 @@ const LOWER_REBALANCE_THRESHOLD = parseEther("0.5");
 const STRATEGY_UPDATE_MIN_DELAY = DAY * 3;
 const STRATEGY_UPDATE_MAX_DELAY = DAY * 7;
 
-describe("Fund", function () {
+describe("FundV2", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly startDay: number;
