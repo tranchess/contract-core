@@ -29,22 +29,6 @@ contract BatchKeeperHelperBase is KeeperCompatibleInterface, Ownable {
         emit AllowlistRemoved(contractAddress);
     }
 
-    function checkUpkeepView(bytes calldata checkData)
-        external
-        view
-        returns (bool upkeepNeeded, bytes memory performData)
-    {
-        uint256 contractLength = checkData.length / 20;
-        for (uint256 i = 0; i < contractLength; i++) {
-            address contractAddress = _getContractAddr(i);
-            require(allowlist[contractAddress] != FALSE, "Not allowlisted");
-            if (_checkUpkeep(contractAddress)) {
-                upkeepNeeded = true;
-                performData = abi.encodePacked(performData, contractAddress);
-            }
-        }
-    }
-
     function checkUpkeep(bytes calldata checkData)
         external
         override
