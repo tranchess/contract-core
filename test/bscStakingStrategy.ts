@@ -1,22 +1,12 @@
 import { expect } from "chai";
-import { BigNumber, Contract, Wallet } from "ethers";
-import type { Fixture, MockContract, MockProvider, Stub } from "ethereum-waffle";
+import { Contract, Wallet } from "ethers";
+import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
 import hre = require("hardhat");
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther } = ethers.utils;
 import { deployMockForName } from "./mock";
-import {
-    TRANCHE_M,
-    TRANCHE_A,
-    TRANCHE_B,
-    DAY,
-    HOUR,
-    SETTLEMENT_TIME,
-    FixtureWalletMap,
-    advanceBlockAtTime,
-    setNextBlockTime,
-} from "./utils";
+import { DAY, SETTLEMENT_TIME, FixtureWalletMap, advanceBlockAtTime } from "./utils";
 
 const TOKEN_HUB_ADDR = "0x0000000000000000000000000000000000001004";
 const PERFORMANCE_FEE_BPS = 2000; // 20%
