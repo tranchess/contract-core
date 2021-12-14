@@ -1,5 +1,6 @@
+import { strict as assert } from "assert";
 import { task } from "hardhat/config";
-import { keyInYNStrict } from "readline-sync";
+import { keyInYNStrict, questionFloat } from "readline-sync";
 import { Addresses, saveAddressFile, newAddresses } from "./address_file";
 import { updateHreSigner } from "./signers";
 
@@ -9,12 +10,14 @@ export interface MockAddresses extends Addresses {
     mockVToken: string;
     mockBtc: string;
     mockEth: string;
+    mockWbnb: string;
     mockUsdc: string;
-    mockPancakePair: string;
+    mockUniswapV2Pair: string;
 }
 
 task("deploy_mock", "Deploy mock contracts")
     .addFlag("silent", 'Assume "yes" as answer to all prompts and run non-interactively')
+    .addOptionalParam("initialTwap", "Initial price of the MockTwapOracle", "")
     .setAction(async (args, hre) => {
         await updateHreSigner(hre);
         const { ethers, waffle } = hre;
@@ -25,17 +28,19 @@ task("deploy_mock", "Deploy mock contracts")
 
         let mockTwapOracleAddress = "";
         if (args.silent || keyInYNStrict("Deploy MockTwapOracle?", { guide: true })) {
-            const MockTwapOracle = await ethers.getContractAt(
-                "ITwapOracle",
+            if (args.silent) {
+                assert.ok(args.initialTwap, "Please specify --initialTwap");
+            } else if (args.initialTwap === "") {
+                args.initialTwap = questionFloat("Please enter the initial TWAP: ").toString();
+            }
+            const initialTwap = parseEther(args.initialTwap);
+            const MockTwapOracle = await ethers.getContractFactory("MockTwapOracle");
+            const mockTwapOracle = await MockTwapOracle.deploy(
+                initialTwap,
                 ethers.constants.AddressZero
-            );
-            const mockTwapOracle = await deployMockContract(
-                deployer,
-                MockTwapOracle.interface.format() as string[]
             );
             console.log(`MockTwapOracle: ${mockTwapOracle.address}`);
             mockTwapOracleAddress = mockTwapOracle.address;
-            await mockTwapOracle.mock.getTwap.returns(parseEther("10000"));
         }
 
         let mockAprOracleAddress = "";
@@ -88,6 +93,14 @@ task("deploy_mock", "Deploy mock contracts")
             await mockEth.mint(deployer.address, parseEther("1000000"));
         }
 
+        let mockWbnbAddress = "";
+        if (args.silent || keyInYNStrict("Deploy MockWbnb?", { guide: true })) {
+            const MockWrappedToken = await ethers.getContractFactory("MockWrappedToken");
+            const mockWbnb = await MockWrappedToken.deploy("Wrapped BNB", "WBNB");
+            console.log(`MockWbnb: ${mockWbnb.address}`);
+            mockWbnbAddress = mockWbnb.address;
+        }
+
         let mockUsdcAddress = "";
         if (args.silent || keyInYNStrict("Deploy MockUsdc?", { guide: true })) {
             const MockToken = await ethers.getContractFactory("MockToken");
@@ -97,20 +110,20 @@ task("deploy_mock", "Deploy mock contracts")
             await mockUsdc.mint(deployer.address, 1000000e6);
         }
 
-        let mockPancakePairAddress = "";
-        if (args.silent || keyInYNStrict("Deploy MockPancakePair?", { guide: true })) {
-            const MockPancakePair = await ethers.getContractAt(
-                "IPancakePair",
+        let mockUniswapV2PairAddress = "";
+        if (args.silent || keyInYNStrict("Deploy MockUniswapV2Pair?", { guide: true })) {
+            const MockUniswapV2Pair = await ethers.getContractAt(
+                "IUniswapV2Pair",
                 ethers.constants.AddressZero
             );
-            const mockPancakePair = await deployMockContract(
+            const mockUniswapV2Pair = await deployMockContract(
                 deployer,
-                MockPancakePair.interface.format() as string[]
+                MockUniswapV2Pair.interface.format() as string[]
             );
-            console.log(`MockPancakePair: ${mockPancakePair.address}`);
-            mockPancakePairAddress = mockPancakePair.address;
+            console.log(`MockUniswapV2Pair: ${mockUniswapV2Pair.address}`);
+            mockUniswapV2PairAddress = mockUniswapV2Pair.address;
             console.log(
-                "Please manually set return values of token0(), token1() and getReserves() for MockPancakePair"
+                "Please manually set return values of token0(), token1() and getReserves() for MockUniswapV2Pair"
             );
         }
 
@@ -121,8 +134,9 @@ task("deploy_mock", "Deploy mock contracts")
             mockVToken: mockVTokenAddress,
             mockBtc: mockBtcAddress,
             mockEth: mockEthAddress,
+            mockWbnb: mockWbnbAddress,
             mockUsdc: mockUsdcAddress,
-            mockPancakePair: mockPancakePairAddress,
+            mockUniswapV2Pair: mockUniswapV2PairAddress,
         };
         saveAddressFile(hre, "mock", addresses);
     });

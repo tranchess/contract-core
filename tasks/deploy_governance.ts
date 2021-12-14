@@ -130,7 +130,7 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
         votingEscrowImpl: votingEscrowImpl.address,
         votingEscrow: votingEscrow.address,
         interestRateBallot: interestRateBallot.address,
-        chessControllerImpl: chessController.address,
+        chessControllerImpl: chessControllerImpl.address,
         chessController: chessController.address,
     };
     saveAddressFile(hre, "governance", addresses);

@@ -1,7 +1,13 @@
 import fs = require("fs");
 import path = require("path");
 import { task } from "hardhat/config";
-import { getAddressDir, listAddressFile, loadAddressFile, saveAddressFile } from "./address_file";
+import {
+    getAddressDir,
+    listAddressFile,
+    loadAddressFile,
+    newAddresses,
+    saveAddressFile,
+} from "./address_file";
 import type { TwapOracleAddresses } from "./deploy_twap_oracle";
 import type { MockAddresses } from "./deploy_mock";
 import { endOfWeek, GOVERNANCE_CONFIG, FUND_CONFIG } from "../config";
@@ -13,7 +19,7 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
 
     console.log();
     console.log("[+] Deploying mock contracts");
-    await hre.run("deploy_mock", { silent: true });
+    await hre.run("deploy_mock", { silent: true, initialTwap: "10000" });
     const mockAddresses = loadAddressFile<MockAddresses>(hre, "mock");
 
     console.log();
@@ -37,14 +43,23 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     console.log("[+] Changing TwapOracle address files for test");
     const addressDir = getAddressDir(hre);
     for (const symbol of ["btc", "eth"]) {
-        const twapAddressFile = loadAddressFile<TwapOracleAddresses>(hre, `twap_oracle_${symbol}`);
+        const twapAddresses = loadAddressFile<TwapOracleAddresses>(hre, `twap_oracle_${symbol}`);
         const twapAddressFilename = path.join(
             addressDir,
             listAddressFile(addressDir, `twap_oracle_${symbol}`)[0]
         );
         fs.renameSync(twapAddressFilename, twapAddressFilename + ".orig");
-        twapAddressFile.twapOracle = mockAddresses.mockTwapOracle;
-        saveAddressFile(hre, `twap_oracle_${symbol}`, twapAddressFile);
+        twapAddresses.twapOracle = mockAddresses.mockTwapOracle;
+        saveAddressFile(hre, `twap_oracle_${symbol}`, twapAddresses);
+    }
+    {
+        const wbnbTwapAddresses: TwapOracleAddresses = {
+            ...newAddresses(hre),
+            token: mockAddresses.mockWbnb,
+            oracleSymbol: "BNB",
+            twapOracle: mockAddresses.mockTwapOracle,
+        };
+        saveAddressFile(hre, `twap_oracle_wbnb`, wbnbTwapAddresses);
     }
 
     console.log();
@@ -63,11 +78,24 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         shareSymbolPrefix: "e",
         adminFeeRate: "0.5",
     });
+    await hre.run("deploy_fund_v2", {
+        underlyingSymbol: "WBNB",
+        quoteSymbol: "USDC",
+        shareSymbolPrefix: "n",
+        adminFeeRate: "0.5",
+        fundCap: "1000000",
+        strategy: "bsc_staking_strategy",
+        strategyParams: JSON.stringify({
+            staker: deployer.address,
+            performanceFeeRate: "0.2",
+        }),
+    });
 
     console.log();
     console.log("[+] Deploying exchange contracts");
     await hre.run("deploy_exchange", { underlyingSymbol: "BTC" });
     await hre.run("deploy_exchange", { underlyingSymbol: "ETH" });
+    await hre.run("deploy_exchange", { underlyingSymbol: "WBNB" });
 
     console.log();
     console.log("[+] Deploying misc contracts");
