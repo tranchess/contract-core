@@ -68,7 +68,7 @@ library LibDelayedRedemption {
         require(day64 == day);
         DelayedRedemptionHeadTail memory headTail = self.headTail;
         uint64 p = headTail.head;
-        if (p > day64) {
+        if (p > day64 || p == 0) {
             return 0; // Fast path with no SSTORE
         }
         uint256 underlying = 0;

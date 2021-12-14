@@ -179,7 +179,7 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
         uint256 cap = fundCap;
         if (cap != uint256(-1)) {
             require(
-                fund.historicalUnderlying(currentDay - 1 days).add(creatingUnderlying) <= fundCap,
+                fund.historicalUnderlying(currentDay - 1 days).add(creatingUnderlying) <= cap,
                 "Exceed fund cap"
             );
         }
