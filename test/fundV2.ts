@@ -25,7 +25,7 @@ const LOWER_REBALANCE_THRESHOLD = parseEther("0.5");
 const STRATEGY_UPDATE_MIN_DELAY = DAY * 3;
 const STRATEGY_UPDATE_MAX_DELAY = DAY * 7;
 
-describe("Fund", function () {
+describe("FundV2", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly startDay: number;
@@ -1750,6 +1750,33 @@ describe("Fund", function () {
             );
             expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(0);
             expect(await fund.getTotalDebt()).to.equal(0);
+        });
+
+        it("Should pay debt on transfer from strategy", async function () {
+            await advanceBlockAtTime(startDay + DAY * 2);
+            await primaryMarket.mock.settle.returns(0, parseEther("3000"), 0, parseBtc("3"), 0);
+            await fund.settle();
+            const fee = parseBtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
+
+            await fund.connect(strategy).transferFromStrategy(fee.add(parseBtc("0.5")));
+            expect(await fund.feeDebt()).to.equal(0);
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(parseBtc("1.5"));
+            expect(await fund.getTotalDebt()).to.equal(parseBtc("1.5"));
+            await fund.connect(strategy).transferFromStrategy(parseBtc("2"));
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(0);
+            expect(await fund.getTotalDebt()).to.equal(0);
+        });
+
+        it("Should reject strategy change with debt", async function () {
+            await fund.connect(strategy).transferToStrategy(parseBtc("1"));
+            await advanceBlockAtTime(startDay + DAY);
+            await primaryMarket.mock.settle.returns(0, parseEther("100"), 0, 0, parseBtc("0.1"));
+            await fund.settle();
+            await fund.connect(owner).proposeStrategyUpdate(addr1);
+            await advanceBlockAtTime(startDay + DAY + STRATEGY_UPDATE_MIN_DELAY + DAY / 2);
+            await expect(fund.connect(owner).applyStrategyUpdate(addr1)).to.be.revertedWith(
+                "Cannot update strategy with debt"
+            );
         });
 
         it("Should update NAV according to profit", async function () {
