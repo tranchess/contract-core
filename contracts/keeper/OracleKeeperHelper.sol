@@ -14,7 +14,7 @@ contract OracleKeeperHelper is BatchKeeperHelperBase {
 
     constructor(address[] memory oracles_) public BatchKeeperHelperBase(oracles_) {}
 
-    function _checkUpkeep(address contractAddress) internal view override returns (bool) {
+    function _checkUpkeep(address contractAddress) internal override returns (bool) {
         IChainlinkTwapOracle chainlinkTwap = IChainlinkTwapOracle(contractAddress);
         uint256 lastTimestamp = chainlinkTwap.lastTimestamp();
         return (block.timestamp > lastTimestamp + EPOCH);

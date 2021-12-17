@@ -14,8 +14,9 @@ contract BatchKeeperHelperBase is KeeperCompatibleInterface, Ownable {
     mapping(address => uint256) public allowlist;
 
     constructor(address[] memory contracts_) public {
-        for (uint256 index = 0; index < contracts_.length; index++) {
-            allowlist[contracts_[index]] = TRUE;
+        for (uint256 i = 0; i < contracts_.length; i++) {
+            allowlist[contracts_[i]] = TRUE;
+            emit AllowlistAdded(contracts_[i]);
         }
     }
 
@@ -61,7 +62,7 @@ contract BatchKeeperHelperBase is KeeperCompatibleInterface, Ownable {
         }
     }
 
-    function _checkUpkeep(address contractAddress) internal view virtual returns (bool) {}
+    function _checkUpkeep(address contractAddress) internal virtual returns (bool) {}
 
     function _performUpkeep(address contractAddress) internal virtual {}
 }
