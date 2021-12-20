@@ -35,6 +35,14 @@ contract FundV2 is IFundV2, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
     event StrategyUpdated(address indexed previousStrategy, address indexed newStrategy);
     event ProfitReported(uint256 profit, uint256 performanceFee);
     event LossReported(uint256 loss);
+    event ObsoletePrimaryMarketAdded(address obsoletePrimaryMarket);
+    event NewPrimaryMarketAdded(address newPrimaryMarket);
+    event DailyProtocolFeeRateUpdated(uint256 newDailyProtocolFeeRate);
+    event TwapOracleUpdated(address newTwapOracle);
+    event AprOracleUpdated(address newAprOracle);
+    event BallotUpdated(address newBallot);
+    event FeeCollectorUpdated(address newFeeCollector);
+    event ActivityDelayTimeUpdated(uint256 delayTime);
 
     uint256 private constant UNIT = 1e18;
     uint256 private constant MAX_INTEREST_RATE = 0.2e18; // 20% daily
@@ -927,11 +935,13 @@ contract FundV2 is IFundV2, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
     function addObsoletePrimaryMarket(address obsoletePrimaryMarket) external onlyOwner {
         require(isPrimaryMarket(obsoletePrimaryMarket), "The address is not a primary market");
         obsoletePrimaryMarkets.push(obsoletePrimaryMarket);
+        emit ObsoletePrimaryMarketAdded(obsoletePrimaryMarket);
     }
 
     function addNewPrimaryMarket(address newPrimaryMarket) external onlyOwner {
         require(!isPrimaryMarket(newPrimaryMarket), "The address is already a primary market");
         newPrimaryMarkets.push(newPrimaryMarket);
+        emit NewPrimaryMarketAdded(newPrimaryMarket);
     }
 
     function updateDailyProtocolFeeRate(uint256 newDailyProtocolFeeRate) external onlyOwner {
@@ -940,22 +950,27 @@ contract FundV2 is IFundV2, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
             "Exceed max protocol fee rate"
         );
         dailyProtocolFeeRate = newDailyProtocolFeeRate;
+        emit DailyProtocolFeeRateUpdated(newDailyProtocolFeeRate);
     }
 
     function updateTwapOracle(address newTwapOracle) external onlyOwner {
         twapOracle = ITwapOracle(newTwapOracle);
+        emit TwapOracleUpdated(newTwapOracle);
     }
 
     function updateAprOracle(address newAprOracle) external onlyOwner {
         aprOracle = IAprOracle(newAprOracle);
+        emit AprOracleUpdated(newAprOracle);
     }
 
     function updateBallot(address newBallot) external onlyOwner {
         ballot = IBallot(newBallot);
+        emit BallotUpdated(newBallot);
     }
 
     function updateFeeCollector(address newFeeCollector) external onlyOwner {
         feeCollector = newFeeCollector;
+        emit FeeCollectorUpdated(newFeeCollector);
     }
 
     function updateActivityDelayTime(uint256 delayTime) external onlyOwner {
@@ -964,6 +979,7 @@ contract FundV2 is IFundV2, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
             "Exceed allowed delay time range"
         );
         activityDelayTimeAfterRebalance = delayTime;
+        emit ActivityDelayTimeUpdated(delayTime);
     }
 
     /// @dev Transfer protocol fee of the current trading day to the fee collector.
