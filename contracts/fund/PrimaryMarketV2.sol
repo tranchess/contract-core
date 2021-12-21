@@ -33,6 +33,11 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
         uint256 fee
     );
     event RedemptionClaimable(uint256 indexed day);
+    event FundCapUpdated(uint256 newCap);
+    event RedemptionFeeRateUpdated(uint256 newRedemptionFeeRate);
+    event SplitFeeRateUpdated(uint256 newSplitFeeRate);
+    event MergeFeeRateUpdated(uint256 newMergeFeeRate);
+    event MinCreationUnderlyingUpdated(uint256 newMinCreationUnderlying);
 
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
@@ -417,25 +422,30 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
 
     function updateFundCap(uint256 newCap) external onlyOwner {
         fundCap = newCap;
+        emit FundCapUpdated(newCap);
     }
 
     function updateRedemptionFeeRate(uint256 newRedemptionFeeRate) external onlyOwner {
         require(newRedemptionFeeRate <= MAX_REDEMPTION_FEE_RATE, "Exceed max redemption fee rate");
         redemptionFeeRate = newRedemptionFeeRate;
+        emit RedemptionFeeRateUpdated(newRedemptionFeeRate);
     }
 
     function updateSplitFeeRate(uint256 newSplitFeeRate) external onlyOwner {
         require(newSplitFeeRate <= MAX_SPLIT_FEE_RATE, "Exceed max split fee rate");
         splitFeeRate = newSplitFeeRate;
+        emit SplitFeeRateUpdated(newSplitFeeRate);
     }
 
     function updateMergeFeeRate(uint256 newMergeFeeRate) external onlyOwner {
         require(newMergeFeeRate <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
         mergeFeeRate = newMergeFeeRate;
+        emit MergeFeeRateUpdated(newMergeFeeRate);
     }
 
     function updateMinCreationUnderlying(uint256 newMinCreationUnderlying) external onlyOwner {
         minCreationUnderlying = newMinCreationUnderlying;
+        emit MinCreationUnderlyingUpdated(newMinCreationUnderlying);
     }
 
     /// @dev Update the status of an account.
