@@ -48,6 +48,7 @@ contract BatchKeeperHelperBase is KeeperCompatibleInterface, Ownable {
 
     function performUpkeep(bytes calldata performData) external override {
         uint256 contractLength = performData.length / 20;
+        require(contractLength > 0);
         for (uint256 i = 0; i < contractLength; i++) {
             address contractAddress = _getContractAddr(i);
             require(allowlist[contractAddress] != FALSE, "Not allowlisted");
