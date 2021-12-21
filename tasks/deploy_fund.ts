@@ -73,18 +73,18 @@ task("deploy_fund", "Deploy fund contracts")
         const fund = await Fund.deploy(
             underlyingToken.address,
             underlyingDecimals,
-            parseEther("0.000027534787632697"), // 1 - 0.99 ^ (1/365)
+            0,
             parseEther("2"),
             parseEther("0.5"),
             twapOracleAddresses.twapOracle,
             bscAprOracleAddresses.bscAprOracle,
             governanceAddresses.interestRateBallot,
-            GOVERNANCE_CONFIG.TREASURY || (await Fund.signer.getAddress()), // fee collector
+            feeDistributor.address,
             { gasLimit: 5e6 } // Gas estimation may fail
         );
         console.log(`Fund: ${fund.address}`);
         console.log(
-            "Please change fee collector address to FeeDistributor after people call syncWithVotingEscrow()"
+            "Before setting protocol fee rate, make sure people have synced in FeeDistributor"
         );
 
         const Share = await ethers.getContractFactory("Share");
