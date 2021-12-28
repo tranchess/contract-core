@@ -148,7 +148,10 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         }
 
         if (chainlinkTwap != 0) {
-            if (swapTwap != 0 && (chainlinkTwap < swapTwap / 2 || swapTwap < chainlinkTwap / 2)) {
+            if (
+                swapTwap != 0 &&
+                (chainlinkTwap < (swapTwap / 10) * 9 || swapTwap < (chainlinkTwap / 10) * 9)
+            ) {
                 emit SkipDeviation(timestamp, chainlinkTwap, swapTwap);
             } else {
                 _prices[timestamp] = chainlinkTwap;

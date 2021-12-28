@@ -245,23 +245,40 @@ describe("ChainlinkTwapOracle", function () {
             expect(await twapOracle.lastRoundID()).to.equal(nextRoundID - 1);
         });
 
-        it("Should skip if the difference from Uniswap is too large", async function () {
+        it("Should skip if result is too small comparing against Uniswap", async function () {
             // Observe Uniswap for the first time
             await setNextBlockTime(startEpoch + EPOCH + 1);
             await twapOracle.update();
 
             await advanceBlockAtTime(startEpoch + EPOCH * 2 + 1);
-            await addRound(CHAINLINK_START_PRICE.mul(100), startEpoch + EPOCH);
+            await addRound(CHAINLINK_START_PRICE.div(10).mul(8), startEpoch + EPOCH);
             for (let i = 1; i <= MIN_MESSAGE_COUNT; i++) {
                 await addRound(
-                    CHAINLINK_START_PRICE.mul(100),
+                    CHAINLINK_START_PRICE.div(10).mul(8),
                     startEpoch + EPOCH + (EPOCH / MIN_MESSAGE_COUNT) * i
                 );
             }
-            await addRound(0, 0);
             await expect(twapOracle.update())
                 .to.emit(twapOracle, "SkipDeviation")
-                .withArgs(startEpoch + EPOCH * 2, START_PRICE.mul(100), parseEther("50000"));
+                .withArgs(startEpoch + EPOCH * 2, START_PRICE.div(10).mul(8), START_PRICE);
+        });
+
+        it("Should skip if result is too large comparing against Uniswap", async function () {
+            // Observe Uniswap for the first time
+            await setNextBlockTime(startEpoch + EPOCH + 1);
+            await twapOracle.update();
+
+            await advanceBlockAtTime(startEpoch + EPOCH * 2 + 1);
+            await addRound(CHAINLINK_START_PRICE.div(10).mul(12), startEpoch + EPOCH);
+            for (let i = 1; i <= MIN_MESSAGE_COUNT; i++) {
+                await addRound(
+                    CHAINLINK_START_PRICE.div(10).mul(12),
+                    startEpoch + EPOCH + (EPOCH / MIN_MESSAGE_COUNT) * i
+                );
+            }
+            await expect(twapOracle.update())
+                .to.emit(twapOracle, "SkipDeviation")
+                .withArgs(startEpoch + EPOCH * 2, START_PRICE.div(10).mul(12), START_PRICE);
         });
 
         it("Should accept the twap if the difference from Uniswap is limited", async function () {
@@ -270,19 +287,23 @@ describe("ChainlinkTwapOracle", function () {
             await twapOracle.update();
 
             await advanceBlockAtTime(startEpoch + EPOCH * 2 + 1);
-            await addRound(CHAINLINK_START_PRICE.mul(3).div(2), startEpoch + EPOCH);
+            await addRound(CHAINLINK_START_PRICE.div(10).mul(9), startEpoch + EPOCH);
             for (let i = 1; i <= MIN_MESSAGE_COUNT; i++) {
                 await addRound(
-                    CHAINLINK_START_PRICE.mul(3).div(2),
+                    CHAINLINK_START_PRICE.div(10).mul(9),
                     startEpoch + EPOCH + (EPOCH / MIN_MESSAGE_COUNT) * i
                 );
             }
             await addRound(0, 0);
             await expect(twapOracle.update())
                 .to.emit(twapOracle, "Update")
-                .withArgs(startEpoch + EPOCH * 2, START_PRICE.mul(3).div(2), UPDATE_TYPE_CHAINLINK);
+                .withArgs(
+                    startEpoch + EPOCH * 2,
+                    START_PRICE.div(10).mul(9),
+                    UPDATE_TYPE_CHAINLINK
+                );
             expect(await twapOracle.getTwap(startEpoch + EPOCH * 2)).to.equal(
-                START_PRICE.mul(3).div(2)
+                START_PRICE.div(10).mul(9)
             );
         });
     });
