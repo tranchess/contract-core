@@ -51,7 +51,10 @@ contract ChessControllerV3 is IChessController, CoreUtility {
 
     function initializeV3(uint256[] calldata guardedWeights2_) external {
         require(guardedLaunchStartV3 > block.timestamp, "Too late to initialize");
-        require(weights[guardedLaunchStartV3][fund0] == 0); // Make sure guarded launch in V2 has ended.
+        // Make sure guarded launch in V2 has been initialized.
+        require(weights[guardedLaunchStart][fund0] != 0);
+        // Make sure guarded launch in V2 has ended.
+        require(weights[guardedLaunchStartV3][fund0] == 0);
         require(weights[guardedLaunchStartV3][fund2] == 0, "Already initialized");
         require(guardedWeights2_.length > 0);
         for (uint256 i = 0; i < guardedWeights2_.length; i++) {
