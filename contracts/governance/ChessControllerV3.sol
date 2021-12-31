@@ -108,25 +108,24 @@ contract ChessControllerV3 is IChessController, CoreUtility {
     {
         uint256 prevWeight0 = weights[weekTimestamp - 1 weeks][fund0];
         require(prevWeight0 != 0, "Previous week is empty");
+        uint256 prevWeight2 = weights[weekTimestamp - 1 weeks][fund2];
         weight2 = weights[weekTimestamp][fund2];
         if (weight2 == 0) {
             // After guarded launch V3, keep weight of fund 2 constant. This contract is planned to
             // be upgraded again after guarded launch V3 and the constant weight2 won't last long.
-            weight2 = weights[weekTimestamp - 1 weeks][fund2];
+            weight2 = prevWeight2;
         }
+        prevWeight0 = prevWeight0.mul(1e18 - weight2).div(1e18 - prevWeight2).max(minWeight).min(
+            1e18 - weight2 - minWeight
+        );
         uint256 fundValueLocked0 = getFundValueLocked(fund0, weekTimestamp);
         uint256 totalValueLocked = fundValueLocked0.add(getFundValueLocked(fund1, weekTimestamp));
-        if (weekTimestamp == guardedLaunchStartV3) {
-            prevWeight0 = prevWeight0.multiplyDecimal(1e18 - weight2).max(minWeight).min(
-                1e18 - weight2 - minWeight
-            );
-        }
 
         if (totalValueLocked == 0) {
             weight0 = prevWeight0;
         } else {
             weight0 = (prevWeight0.mul(WINDOW_SIZE - 1).add(
-                fundValueLocked0.divideDecimal(totalValueLocked).multiplyDecimal(1e18 - weight2)
+                fundValueLocked0.mul(1e18 - weight2).div(totalValueLocked)
             ) / WINDOW_SIZE)
                 .max(minWeight)
                 .min(1e18 - weight2 - minWeight);
