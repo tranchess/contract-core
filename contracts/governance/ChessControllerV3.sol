@@ -37,7 +37,7 @@ contract ChessControllerV3 is IChessController, CoreUtility {
         uint256 guardedLaunchStartV3_,
         uint256 minWeight_
     ) public {
-        require(minWeight_ > 0 && minWeight_ < 1e18);
+        require(minWeight_ > 0 && minWeight_ < 0.5e18);
         fund0 = fund0_;
         fund1 = fund1_;
         fund2 = fund2_;
