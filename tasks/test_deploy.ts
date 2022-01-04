@@ -117,8 +117,9 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     console.log();
     console.log("[+] Deploying implementation contracts (again)");
     await hre.run("deploy_chess_controller_impl", {
-        underlyingSymbols: "BTC,ETH",
-        launchDate: new Date().toJSON().split("T")[0],
+        underlyingSymbols: "BTC,ETH,WBNB",
+        launchDateV2: new Date().toJSON().split("T")[0],
+        launchDateV3: new Date(new Date().getTime() + 28 * 86400 * 1000).toJSON().split("T")[0],
     });
     await hre.run("deploy_chess_schedule_impl");
     await hre.run("deploy_voting_escrow_impl");
