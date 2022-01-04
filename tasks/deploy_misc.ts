@@ -65,9 +65,10 @@ task("deploy_misc", "Deploy misc contracts interactively")
                 keyInYNStrict("Deploy VotingEscrowHelper implementation?", { guide: true }))
         ) {
             const symbols: string[] = args.underlyingSymbols.split(",");
-            assert.strictEqual(symbols.length, 2);
+            assert.strictEqual(symbols.length, 3);
             assert.match(symbols[0], /^[a-zA-Z]+$/, "Invalid symbol");
             assert.match(symbols[1], /^[a-zA-Z]+$/, "Invalid symbol");
+            assert.match(symbols[2], /^[a-zA-Z]+$/, "Invalid symbol");
             const fund0Addresses = loadAddressFile<FundAddresses>(
                 hre,
                 `fund_${symbols[0].toLowerCase()}`
@@ -84,6 +85,14 @@ task("deploy_misc", "Deploy misc contracts interactively")
                 hre,
                 `exchange_${symbols[1].toLowerCase()}`
             );
+            const fund2Addresses = loadAddressFile<FundAddresses>(
+                hre,
+                `fund_${symbols[2].toLowerCase()}`
+            );
+            const exchange2Addresses = loadAddressFile<ExchangeAddresses>(
+                hre,
+                `exchange_${symbols[2].toLowerCase()}`
+            );
 
             const VotingEscrowHelper = await ethers.getContractFactory("VotingEscrowHelper");
             const votingEscrowHelper = await VotingEscrowHelper.deploy(
@@ -91,7 +100,9 @@ task("deploy_misc", "Deploy misc contracts interactively")
                 fund0Addresses.feeDistributor,
                 exchange0Addresses.exchange,
                 fund1Addresses.feeDistributor,
-                exchange1Addresses.exchange
+                exchange1Addresses.exchange,
+                fund2Addresses.feeDistributor,
+                exchange2Addresses.exchange
             );
             console.log(`VotingEscrowHelper: ${votingEscrowHelper.address}`);
             addresses.votingEscrowHelper = votingEscrowHelper.address;
