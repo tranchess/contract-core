@@ -271,6 +271,35 @@ describe("StakingV2", function () {
         });
     });
 
+    describe("claimAndUnwrapAndDeposit()", function () {
+        it("Should transfer shares and update balance", async function () {
+            const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV2");
+            await expect(() =>
+                staking.claimAndUnwrapAndDeposit(primaryMarket.address)
+            ).to.callMocks(
+                {
+                    func: primaryMarket.mock.claimAndUnwrap.withArgs(addr1),
+                    rets: [10000, 0],
+                },
+                {
+                    func: shareM.mock.transferFrom.withArgs(addr1, staking.address, 10000),
+                    rets: [true],
+                }
+            );
+            expect(await staking.availableBalanceOf(TRANCHE_M, addr1)).to.equal(USER1_M.add(10000));
+            expect(await staking.totalSupply(TRANCHE_M)).to.equal(TOTAL_M.add(10000));
+        });
+
+        it("Should emit an event", async function () {
+            const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV2");
+            await primaryMarket.mock.claimAndUnwrap.withArgs(addr1).returns(10000, 0);
+            await shareM.mock.transferFrom.withArgs(addr1, staking.address, 10000).returns(true);
+            await expect(staking.claimAndUnwrapAndDeposit(primaryMarket.address))
+                .to.emit(staking, "Deposited")
+                .withArgs(TRANCHE_M, addr1, 10000);
+        });
+    });
+
     describe("withdraw()", function () {
         it("Should transfer shares and update balance", async function () {
             await expect(() => staking.withdraw(TRANCHE_M, 1000)).to.callMocks({
