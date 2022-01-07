@@ -76,10 +76,10 @@ describe("Share", function () {
         const interestRateBallot = await deployMockForName(owner, "IBallot");
         await interestRateBallot.mock.count.returns(0);
 
-        const primaryMarket = await deployMockForName(owner, "IPrimaryMarket");
+        const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV2");
         await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
 
-        const Fund = await ethers.getContractFactory("Fund");
+        const Fund = await ethers.getContractFactory("FundV2");
         const fund = await Fund.connect(owner).deploy(
             btc.address,
             8,
@@ -103,7 +103,8 @@ describe("Share", function () {
             shareM.address,
             shareA.address,
             shareB.address,
-            primaryMarket.address
+            primaryMarket.address,
+            ethers.constants.AddressZero
         );
 
         await advanceBlockAtTime(startDay);

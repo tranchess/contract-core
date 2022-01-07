@@ -11,6 +11,7 @@ import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
 
 import "../interfaces/IVotingEscrow.sol";
+import "../interfaces/IWrappedERC20.sol";
 
 contract FeeDistributor is CoreUtility, Ownable {
     using SafeMath for uint256;
@@ -194,11 +195,25 @@ contract FeeDistributor is CoreUtility, Ownable {
     }
 
     function claimRewards(address account) external returns (uint256 rewards) {
+        rewards = _claimRewards(account);
+        rewardToken.safeTransfer(account, rewards);
+    }
+
+    function claimRewardsAndUnwrap(address account) external returns (uint256 rewards) {
+        rewards = _claimRewards(account);
+        IWrappedERC20(address(rewardToken)).withdraw(rewards);
+        (bool success, ) = account.call{value: rewards}("");
+        require(success, "Transfer failed");
+    }
+
+    /// @notice Receive unwrapped transfer from the wrapped token.
+    receive() external payable {}
+
+    function _claimRewards(address account) private returns (uint256 rewards) {
         checkpoint();
         rewards = claimableRewards[account].add(_rewardCheckpoint(account));
         claimableRewards[account] = 0;
         lastRewardBalance = lastRewardBalance.sub(rewards);
-        rewardToken.safeTransfer(account, rewards);
     }
 
     /// @notice Make a global checkpoint. If the period since the last checkpoint spans over

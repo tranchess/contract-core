@@ -22,8 +22,8 @@ task("deploy_twap_oracle", "Deploy TwapOracle")
         const tokenSymbol: string = await token.symbol();
         console.log("Token symbol:", tokenSymbol);
         const oracleSymbol: string = args.oracleSymbol;
-        assert.ok(oracleSymbol.match(/[A-Z]+/), "Invalid symbol");
-        assert.ok(tokenSymbol.indexOf(oracleSymbol) >= 0);
+        assert.match(oracleSymbol, /^[A-Z]+$/, "Invalid symbol");
+        assert.ok(tokenSymbol.includes(oracleSymbol));
 
         const TwapOracle = await ethers.getContractFactory("TwapOracle");
         const twapOracle = await TwapOracle.deploy(

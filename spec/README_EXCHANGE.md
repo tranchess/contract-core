@@ -49,7 +49,7 @@ In our approach, trade activities are divided into the same 30-minutes period as
 
 ## Staking
 
-The [`Staking`](../contracts/Staking.sol) contract stores tokenized shares and makes them available for exchange and rewards. Each `Staking` corresponds to 1 instance of `Reward`, 1 instance of `Fund`, and thus 3 instances of the `Share` token contract. It accepts deposit or withdraw requests from one of the `Share` token, and accumulates the rewards with the help from `Reward`.
+The [`Staking`](../contracts/exchange/Staking.sol) contract stores tokenized shares and makes them available for exchange and rewards. Each `Staking` corresponds to 1 instance of `Reward`, 1 instance of `Fund`, and thus 3 instances of the `Share` token contract. It accepts deposit or withdraw requests from one of the `Share` token, and accumulates the rewards with the help from `Reward`.
 
 In addition, it keeps the history of the global integral, ∫(rate \* balance / totalSupply dt) from the last rebalance till checkpoint, the most recent per-account integrals, and per-account claimable rewards. It is invoked whenever deposits are changed and accumulate the rewards for the accounts involved.
 
@@ -59,7 +59,7 @@ In addition, it keeps the history of the global integral, ∫(rate \* balance / 
 
 ## Exchange
 
-The [`Exchange`](../contracts/Exchange.sol) contract is the main entrance to all secondary market functionalities. Each `Exchange` maintains three pairs of ask and bid order books, facilitates trades, and temporarily holds the stablecoin and tokenized shares before they have been claimed by users.
+The [`Exchange`](../contracts/exchange/Exchange.sol) contract is the main entrance to all secondary market functionalities. Each `Exchange` maintains three pairs of ask and bid order books, facilitates trades, and temporarily holds the stablecoin and tokenized shares before they have been claimed by users.
 
 1. Place bid orders
 1. Place ask orders
@@ -71,7 +71,7 @@ The [`Exchange`](../contracts/Exchange.sol) contract is the main entrance to all
 
 ## Exchange Roles
 
-The [`ExchangeRoles`](../contracts/ExchangeRoles.sol) contract contains the entry rules for maker membership. Since with the correct strategy, makers could gain profits from providing liquidity in Tranchess Exchange, we enforce an exclusive maker membership that requires a substantial amount of vote-locked `Chess` token and expires naturally as the vote-locked `Chess` decreases linearly.
+The [`ExchangeRoles`](../contracts/exchange/ExchangeRoles.sol) contract contains the entry rules for maker membership. Since with the correct strategy, makers could gain profits from providing liquidity in Tranchess Exchange, we enforce an exclusive maker membership that requires a substantial amount of vote-locked `Chess` token and expires naturally as the vote-locked `Chess` decreases linearly.
 
 1. Query the status and expiration date of the current maker status
 1. Apply for maker

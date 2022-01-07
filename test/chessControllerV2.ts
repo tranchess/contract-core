@@ -15,8 +15,6 @@ describe("ChessControllerV2", function () {
         readonly startWeek: number;
         readonly fund1: MockContract;
         readonly fund2: MockContract;
-        readonly twapOracle1: MockContract;
-        readonly twapOracle2: MockContract;
         readonly chessController: Contract;
     }
 
@@ -37,13 +35,8 @@ describe("ChessControllerV2", function () {
         const startWeek =
             Math.floor((startTimestamp - SETTLEMENT_TIME) / WEEK) * WEEK + SETTLEMENT_TIME;
 
-        const twapOracle1 = await deployMockForName(owner, "ITwapOracle");
-        const twapOracle2 = await deployMockForName(owner, "ITwapOracle");
         const fund1 = await deployMockForName(owner, "IFund");
         const fund2 = await deployMockForName(owner, "IFund");
-
-        await fund1.mock.twapOracle.returns(twapOracle1.address);
-        await fund2.mock.twapOracle.returns(twapOracle2.address);
 
         const ChessControllerV2 = await ethers.getContractFactory("ChessControllerV2");
         const chessControllerImpl = await ChessControllerV2.connect(owner).deploy(
@@ -75,8 +68,6 @@ describe("ChessControllerV2", function () {
             startWeek,
             fund1,
             fund2,
-            twapOracle1,
-            twapOracle2,
             chessController: chessController.connect(user1),
         };
     }

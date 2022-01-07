@@ -29,7 +29,7 @@ Tranchess Oracle Protocol is the set of smart contracts that collect and calcula
 
 ## TWAP Oracle
 
-The [`TwapOracle`](../contracts/TwapOracle.sol) contract is the entrance to TWAP Oracle functionalities. It verifies and collects data from trusted reporters, while calculates the average price every epoch.
+The [`TwapOracle`](../contracts/oracle/TwapOracle.sol) contract is the entrance to TWAP Oracle functionalities. It verifies and collects data from trusted reporters, while calculates the average price every epoch.
 
 1. Update the latest TWAP from the primary reporter: [Primary Reporter](#updateTwapFromPrimary)
 1. Update the latest TWAP from the secondary reporter: [Secondary Reporter](#updateTwapFromSecondary)
