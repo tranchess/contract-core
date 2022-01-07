@@ -41,10 +41,15 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
 
     mapping(address => bool) public reporters;
 
-    constructor(uint256 initialTwap, address fallbackOracle_) public {
+    constructor(
+        uint256 startEpoch_,
+        uint256 initialTwap_,
+        address fallbackOracle_
+    ) public {
+        require(startEpoch_ % EPOCH == 0);
         fallbackOracle = ITwapOracle(fallbackOracle_);
-        startEpoch = _endOfDay(block.timestamp) - 1 days;
-        storedEpochs[startEpoch].twap = initialTwap;
+        startEpoch = startEpoch_ > 0 ? startEpoch_ : _endOfDay(block.timestamp) - 1 days;
+        storedEpochs[startEpoch].twap = initialTwap_;
         lastStoredEpoch = startEpoch;
         catchUp();
         reporters[msg.sender] = true;
@@ -69,9 +74,9 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
     }
 
     function updateNext(uint256 twap) external onlyReporter {
-        uint256 nextEpoch = _nextEpoch();
-        require(nextEpoch - lastStoredEpoch < EPOCH * MAX_ITERATION, "Call catchUp() first");
         catchUp();
+        uint256 nextEpoch = _nextEpoch();
+        require(nextEpoch == lastStoredEpoch, "Call catchUp() first");
         storedEpochs[nextEpoch].twap = twap;
     }
 
@@ -100,9 +105,9 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
             }
             epoch += EPOCH;
         }
-        storedEpochs[lastEpoch].nextEpoch = nextEpoch;
-        storedEpochs[nextEpoch].twap = twap;
-        lastStoredEpoch = nextEpoch;
+        storedEpochs[lastEpoch].nextEpoch = epoch;
+        storedEpochs[epoch].twap = twap;
+        lastStoredEpoch = epoch;
     }
 
     function digHole(uint256 timestamp) external onlyReporter {
