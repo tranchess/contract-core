@@ -52,6 +52,9 @@ task("deploy_exchange_impl", "Deploy Exchange implementation contract")
         );
         console.log(`Exchange implementation: ${exchangeImpl.address}`);
 
+        console.log("Making Exchange implementation unusable without proxy");
+        await exchangeImpl.initialize();
+
         const addresses: ExchangeImplAddresses = {
             ...newAddresses(hre),
             underlyingSymbol,
