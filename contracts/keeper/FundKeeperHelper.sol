@@ -8,8 +8,22 @@ interface IFundSettlement is IFund {
     function settle() external;
 }
 
+interface IDistributor {
+    function checkpoint() external;
+}
+
 contract FundKeeperHelper is BatchKeeperHelperBase {
-    constructor(address[] memory funds_) public BatchKeeperHelperBase(funds_) {}
+    address private immutable _bnbFundAddr;
+    IDistributor private immutable _feeDistributor;
+
+    constructor(
+        address[] memory funds_,
+        address bnbFundAddr_,
+        address feeDistributor_
+    ) public BatchKeeperHelperBase(funds_) {
+        _bnbFundAddr = bnbFundAddr_;
+        _feeDistributor = IDistributor(feeDistributor_);
+    }
 
     function _checkUpkeep(address contractAddress) internal override returns (bool) {
         IFundSettlement fund = IFundSettlement(contractAddress);
@@ -19,6 +33,9 @@ contract FundKeeperHelper is BatchKeeperHelperBase {
     }
 
     function _performUpkeep(address contractAddress) internal override {
+        if (contractAddress == _bnbFundAddr) {
+            _feeDistributor.checkpoint();
+        }
         IFundSettlement(contractAddress).settle();
     }
 }
