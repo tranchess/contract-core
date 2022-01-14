@@ -92,6 +92,10 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         uint256 currentCreatingUnderlying;
         uint256 currentRedeemingShares;
         uint256 fundCap;
+        uint256 redemptionFeeRate;
+        uint256 splitFeeRate;
+        uint256 mergeFeeRate;
+        uint256 minCreationUnderlying;
         PrimaryMarketAccountData account;
     }
 
@@ -107,6 +111,8 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         Shares totalDeposited;
         uint256 weightedSupply;
         uint256 workingSupply;
+        uint256 minBidAmount;
+        uint256 minAskAmount;
         ExchangeAccountData account;
     }
 
@@ -273,6 +279,10 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.account.redeemedUnderlying = cr.redeemedUnderlying;
         if (fundVersion >= 2) {
             data.fundCap = primaryMarket_.fundCap();
+            data.redemptionFeeRate = primaryMarket_.redemptionFeeRate();
+            data.splitFeeRate = primaryMarket_.splitFeeRate();
+            data.mergeFeeRate = primaryMarket_.mergeFeeRate();
+            data.minCreationUnderlying = primaryMarket_.minCreationUnderlying();
             uint256 currentDay = primaryMarket_.currentDay();
             for (uint256 i = 0; i < 16; i++) {
                 (data.account.recentDelayedRedemptions[i], ) = primaryMarket_.getDelayedRedemption(
@@ -297,6 +307,8 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
             data.totalDeposited.tokenB
         );
         data.workingSupply = exchangeContract.workingSupply();
+        data.minBidAmount = exchangeContract.minBidAmount();
+        data.minAskAmount = exchangeContract.minAskAmount();
         data.account.available.tokenM = exchangeContract.availableBalanceOf(TRANCHE_M, account);
         data.account.available.tokenA = exchangeContract.availableBalanceOf(TRANCHE_A, account);
         data.account.available.tokenB = exchangeContract.availableBalanceOf(TRANCHE_B, account);
