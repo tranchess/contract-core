@@ -8,6 +8,7 @@ import "../utils/CoreUtility.sol";
 import "../utils/SafeDecimalMath.sol";
 import "../interfaces/IChessController.sol";
 import "../interfaces/IFund.sol";
+import "../interfaces/IFundBallot.sol";
 
 contract ChessControllerV3 is IChessController, CoreUtility {
     /// @dev Reserved storage slots for future base contract upgrades
@@ -29,13 +30,16 @@ contract ChessControllerV3 is IChessController, CoreUtility {
 
     mapping(uint256 => mapping(address => uint256)) public weights;
 
+    address public immutable fundBallot;
+
     constructor(
         address fund0_,
         address fund1_,
         address fund2_,
         uint256 guardedLaunchStart_,
         uint256 guardedLaunchStartV3_,
-        uint256 minWeight_
+        uint256 minWeight_,
+        address fundBallot_
     ) public {
         require(minWeight_ > 0 && minWeight_ < 0.5e18);
         fund0 = fund0_;
@@ -47,6 +51,7 @@ contract ChessControllerV3 is IChessController, CoreUtility {
         require(_endOfWeek(guardedLaunchStartV3_) == guardedLaunchStartV3_ + 1 weeks);
         require(guardedLaunchStartV3_ > guardedLaunchStart_);
         minWeight = minWeight_;
+        fundBallot = fundBallot_;
     }
 
     function initializeV3(uint256[] calldata guardedWeights2_) external {
@@ -73,68 +78,41 @@ contract ChessControllerV3 is IChessController, CoreUtility {
         returns (uint256)
     {
         require(timestamp <= block.timestamp, "Too soon");
-        if (fundAddress != fund0 && fundAddress != fund1 && fundAddress != fund2) {
-            return 0;
-        }
-        if (timestamp < guardedLaunchStart) {
-            return fundAddress == fund0 ? 1e18 : 0;
-        } else if (timestamp < guardedLaunchStartV3 && fundAddress == fund2) {
-            return 0;
-        }
-
         uint256 weekTimestamp = _endOfWeek(timestamp).sub(1 weeks);
         uint256 weight = weights[weekTimestamp][fundAddress];
         if (weight != 0) {
             return weight;
         }
 
-        (uint256 weight0, uint256 weight1, uint256 weight2) = _updateFundWeight(weekTimestamp);
-        if (fundAddress == fund0) {
-            return weight0;
-        } else if (fundAddress == fund1) {
-            return weight1;
-        } else {
-            return weight2;
-        }
+        return _updateFundWeight(weekTimestamp, fundAddress);
     }
 
-    function _updateFundWeight(uint256 weekTimestamp)
+    function _updateFundWeight(uint256 weekTimestamp, address fundAddress)
         private
-        returns (
-            uint256 weight0,
-            uint256 weight1,
-            uint256 weight2
-        )
+        returns (uint256 weight)
     {
-        uint256 prevWeight0 = weights[weekTimestamp - 1 weeks][fund0];
-        require(prevWeight0 != 0, "Previous week is empty");
-        uint256 prevWeight2 = weights[weekTimestamp - 1 weeks][fund2];
-        weight2 = weights[weekTimestamp][fund2];
-        if (weight2 == 0) {
-            // After guarded launch V3, keep weight of fund 2 constant. This contract is planned to
-            // be upgraded again after guarded launch V3 and the constant weight2 won't last long.
-            weight2 = prevWeight2;
-        }
-        prevWeight0 = prevWeight0.mul(1e18 - weight2).div(1e18 - prevWeight2).max(minWeight).min(
-            1e18 - weight2 - minWeight
-        );
-        uint256 fundValueLocked0 = getFundValueLocked(fund0, weekTimestamp);
-        uint256 totalValueLocked = fundValueLocked0.add(getFundValueLocked(fund1, weekTimestamp));
+        (uint256[] memory ratios, address[] memory funds) =
+            IFundBallot(fundBallot).count(weekTimestamp);
 
-        if (totalValueLocked == 0) {
-            weight0 = prevWeight0;
-        } else {
-            weight0 = (prevWeight0.mul(WINDOW_SIZE - 1).add(
-                fundValueLocked0.mul(1e18 - weight2).div(totalValueLocked)
-            ) / WINDOW_SIZE)
-                .max(minWeight)
-                .min(1e18 - weight2 - minWeight);
+        uint256 totalValueLocked;
+        for (uint256 i = 0; i < ratios.length; i++) {
+            uint256 fundValueLocked = getFundValueLocked(funds[i], weekTimestamp);
+            totalValueLocked = totalValueLocked.add(fundValueLocked);
         }
-        weight1 = 1e18 - weight2 - weight0;
 
-        weights[weekTimestamp][fund0] = weight0;
-        weights[weekTimestamp][fund1] = weight1;
-        weights[weekTimestamp][fund2] = weight2;
+        for (uint256 i = 0; i < ratios.length; i++) {
+            uint256 fundValueLocked = getFundValueLocked(funds[i], weekTimestamp);
+
+            uint256 fundWeight = ratios[i];
+            if (totalValueLocked > 0) {
+                fundWeight = fundWeight.add(fundValueLocked.divideDecimal(totalValueLocked)) / 2;
+            }
+
+            weights[weekTimestamp][funds[i]] = fundWeight;
+            if (funds[i] == fundAddress) {
+                weight = fundWeight;
+            }
+        }
     }
 
     function getFundValueLocked(address fund, uint256 weekTimestamp)
