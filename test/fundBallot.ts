@@ -24,11 +24,13 @@ describe("FundBallot", function () {
     let owner: Wallet;
     let fund1: string;
     let fund2: string;
+    let fund3: string;
+    let fund4: string;
     let votingEscrow: MockContract;
     let ballot: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
-        const [user1, user2, fund1, fund2, fund3, owner] = provider.getWallets();
+        const [user1, user2, fund1, fund2, fund3, fund4, owner] = provider.getWallets();
 
         // Start at the settlement time in the next Thursday.
         const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
@@ -46,7 +48,7 @@ describe("FundBallot", function () {
         ]);
 
         return {
-            wallets: { user1, user2, fund1, fund2, fund3, owner },
+            wallets: { user1, user2, fund1, fund2, fund3, fund4, owner },
             startWeek,
             votingEscrow,
             ballot: ballot.connect(user1),
@@ -64,6 +66,8 @@ describe("FundBallot", function () {
         owner = fixtureData.wallets.owner;
         fund1 = fixtureData.wallets.fund1.address;
         fund2 = fixtureData.wallets.fund2.address;
+        fund3 = fixtureData.wallets.fund3.address;
+        fund4 = fixtureData.wallets.fund4.address;
         startWeek = fixtureData.startWeek;
         votingEscrow = fixtureData.votingEscrow;
         ballot = fixtureData.ballot;
@@ -87,15 +91,9 @@ describe("FundBallot", function () {
 
             expect((await ballot.getReceipt(user1.address)).amount).to.equal(amount);
             expect((await ballot.getReceipt(user1.address)).unlockTime).to.equal(unlockTime);
-            expect((await ballot.getReceipt(user1.address)).allocations[0]).to.equal(
-                parseEther("1")
-            );
-            expect((await ballot.getReceipt(user1.address)).allocations[1]).to.equal(
-                parseEther("0")
-            );
-            expect((await ballot.getReceipt(user1.address)).allocations[2]).to.equal(
-                parseEther("0")
-            );
+            expect(await ballot.fundWeights(user1.address, fund1)).to.equal(parseEther("1"));
+            expect(await ballot.fundWeights(user1.address, fund2)).to.equal(parseEther("0"));
+            expect(await ballot.fundWeights(user1.address, fund3)).to.equal(parseEther("0"));
 
             expect(await ballot.scheduledUnlock(unlockTime)).to.equal(amount);
             expect(await ballot.scheduledFundUnlock(fund1, unlockTime)).to.equal(amount);
@@ -131,15 +129,9 @@ describe("FundBallot", function () {
 
             expect((await ballot.getReceipt(user1.address)).amount).to.equal(amount);
             expect((await ballot.getReceipt(user1.address)).unlockTime).to.equal(unlockTime);
-            expect((await ballot.getReceipt(user1.address)).allocations[0]).to.equal(
-                parseEther("0.4")
-            );
-            expect((await ballot.getReceipt(user1.address)).allocations[1]).to.equal(
-                parseEther("0.6")
-            );
-            expect((await ballot.getReceipt(user1.address)).allocations[2]).to.equal(
-                parseEther("1")
-            );
+            expect(await ballot.fundWeights(user1.address, fund1)).to.equal(parseEther("0.2"));
+            expect(await ballot.fundWeights(user1.address, fund2)).to.equal(parseEther("0.3"));
+            expect(await ballot.fundWeights(user1.address, fund3)).to.equal(parseEther("0.5"));
 
             expect(await ballot.scheduledUnlock(unlockTime)).to.equal(amount);
             expect(await ballot.scheduledFundUnlock(fund2, unlockTime)).to.equal(parseEther("0.6"));
@@ -256,6 +248,53 @@ describe("FundBallot", function () {
             expect((await ballot.count(startWeek + WEEK * 50)).ratios[0]).to.equal(parseEther("0"));
             expect((await ballot.count(startWeek + WEEK * 50)).ratios[1]).to.equal(parseEther("0"));
             expect((await ballot.count(startWeek + WEEK * 50)).ratios[2]).to.equal(parseEther("1"));
+        });
+    });
+
+    describe("addFund()", function () {
+        it("Should cast votes after add fund", async function () {
+            let amount = parseEther("1");
+            const unlockTime = startWeek + WEEK * 100;
+            await votingEscrow.mock.getLockedBalance.returns([amount, unlockTime]);
+            await ballot.cast([parseEther("1"), parseEther("0"), parseEther("0")]);
+
+            await ballot.connect(owner).addFund(fund4);
+
+            await expect(
+                ballot.cast([parseEther("1"), parseEther("0"), parseEther("0")])
+            ).to.be.revertedWith("Invalid number of weights");
+
+            amount = parseEther("2");
+            await votingEscrow.mock.getLockedBalance.returns([amount, unlockTime]);
+            await expect(
+                ballot.cast([
+                    parseEther("0.1"),
+                    parseEther("0.2"),
+                    parseEther("0.3"),
+                    parseEther("0.4"),
+                ])
+            )
+                .to.emit(ballot, "Voted")
+                .withArgs(
+                    user1.address,
+                    [parseEther("1"), parseEther("0"), parseEther("0"), parseEther("0")],
+                    unlockTime,
+                    [parseEther("0.2"), parseEther("0.4"), parseEther("0.6"), parseEther("0.8")],
+                    unlockTime
+                );
+
+            expect((await ballot.getReceipt(user1.address)).amount).to.equal(amount);
+            expect((await ballot.getReceipt(user1.address)).unlockTime).to.equal(unlockTime);
+            expect(await ballot.fundWeights(user1.address, fund1)).to.equal(parseEther("0.1"));
+            expect(await ballot.fundWeights(user1.address, fund2)).to.equal(parseEther("0.2"));
+            expect(await ballot.fundWeights(user1.address, fund3)).to.equal(parseEther("0.3"));
+            expect(await ballot.fundWeights(user1.address, fund4)).to.equal(parseEther("0.4"));
+
+            expect(await ballot.scheduledUnlock(unlockTime)).to.equal(amount);
+            expect(await ballot.scheduledFundUnlock(fund4, unlockTime)).to.equal(parseEther("0.8"));
+            expect(await ballot.sumAtTimestamp(fund4, startWeek + WEEK * 50)).to.equal(
+                parseEther("0.8").div(4)
+            );
         });
     });
 });

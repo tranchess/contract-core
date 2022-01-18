@@ -6,25 +6,21 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../utils/CoreUtility.sol";
+import "../utils/SafeDecimalMath.sol";
 
 import "../interfaces/IFundBallot.sol";
 import "../interfaces/IVotingEscrow.sol";
 
-struct Voter {
-    uint256[] allocations;
-    uint256 amount;
-    uint256 unlockTime;
-}
-
 contract FundBallot is IFundBallot, Ownable, CoreUtility {
     using SafeMath for uint256;
+    using SafeDecimalMath for uint256;
 
     event FundAdded(address newFund);
     event Voted(
         address indexed account,
         uint256[] oldAmounts,
         uint256 oldUnlockTime,
-        uint256[] allocations,
+        uint256[] fundWeights,
         uint256 indexed unlockTime
     );
 
@@ -32,8 +28,10 @@ contract FundBallot is IFundBallot, Ownable, CoreUtility {
 
     IVotingEscrow public immutable votingEscrow;
 
-    address[] private fundSet;
-    mapping(address => Voter) public voters;
+    address[65535] private _fundSet;
+    uint256 public fundSetLength;
+    mapping(address => IVotingEscrow.LockedBalance) public voterLockedBalances;
+    mapping(address => mapping(address => uint256)) public fundWeights;
 
     // unlockTime => amount that will be unlocked at unlockTime
     mapping(uint256 => uint256) public scheduledUnlock;
@@ -49,12 +47,17 @@ contract FundBallot is IFundBallot, Ownable, CoreUtility {
     }
 
     function addFund(address newFund) public onlyOwner {
-        fundSet.push(newFund);
+        _fundSet[fundSetLength] = newFund;
+        fundSetLength += 1;
         emit FundAdded(newFund);
     }
 
-    function getReceipt(address account) external view returns (Voter memory) {
-        return voters[account];
+    function getReceipt(address account)
+        external
+        view
+        returns (IVotingEscrow.LockedBalance memory)
+    {
+        return voterLockedBalances[account];
     }
 
     function balanceOf(address account) external view returns (uint256) {
@@ -89,74 +92,56 @@ contract FundBallot is IFundBallot, Ownable, CoreUtility {
     {
         (uint256[] memory sums, uint256 total) = _countAtTimestamp(timestamp);
 
-        uint256 fundLength = fundSet.length;
+        uint256 fundLength = fundSetLength;
         ratios = new uint256[](fundLength);
-        funds = fundSet;
+        funds = new address[](fundLength);
         if (total == 0) {
             for (uint256 fundCursor = 0; fundCursor < fundLength; fundCursor++) {
                 ratios[fundCursor] = 1e18 / fundLength;
+                funds[fundCursor] = _fundSet[fundCursor];
             }
         } else {
             for (uint256 fundCursor = 0; fundCursor < fundLength; fundCursor++) {
                 ratios[fundCursor] = (sums[fundCursor] * 1e18) / total;
+                funds[fundCursor] = _fundSet[fundCursor];
             }
         }
     }
 
     function cast(uint256[] memory weights) external {
-        require(weights.length == fundSet.length, "Invalid number of weights");
-        uint256 totalOption = weights[0].add(weights[1]).add(weights[2]);
-        require(totalOption == 1e18, "Invalid weights");
+        uint256 fundLength = fundSetLength;
+        require(weights.length == fundLength, "Invalid number of weights");
+
+        uint256 totalWeight;
+        for (uint256 i = 0; i < weights.length; i++) {
+            totalWeight = totalWeight.add(weights[i]);
+        }
+        require(totalWeight == 1e18, "Invalid weights");
+
+        uint256[] memory oldWeights = new uint256[](fundLength);
+        for (uint256 i = 0; i < fundSetLength; i++) {
+            oldWeights[i] = fundWeights[msg.sender][_fundSet[i]];
+        }
 
         IVotingEscrow.LockedBalance memory lockedBalance =
             votingEscrow.getLockedBalance(msg.sender);
-        Voter memory voter = voters[msg.sender];
+        IVotingEscrow.LockedBalance memory oldLockedBalance = voterLockedBalances[msg.sender];
         require(lockedBalance.amount > 0, "Zero value");
 
         // update scheduled unlock
-        uint256 fundLength = fundSet.length;
-        uint256 allocationLength = voter.allocations.length;
-        uint256[] memory optionAllocations = new uint256[](fundLength);
-        for (uint256 iFund = 0; iFund < fundLength; iFund++) {
-            address fund = fundSet[iFund];
-            if (iFund < allocationLength) {
-                scheduledUnlock[voter.unlockTime] = scheduledUnlock[voter.unlockTime].sub(
-                    voter.allocations[iFund]
-                );
-                scheduledFundUnlock[fund][voter.unlockTime] = scheduledFundUnlock[fund][
-                    voter.unlockTime
-                ]
-                    .sub(voter.allocations[iFund]);
-            }
-
-            uint256 optionAllocation = lockedBalance.amount.mul(weights[iFund]).div(totalOption);
-            scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime]
-                .add(optionAllocation);
-            scheduledFundUnlock[fund][lockedBalance.unlockTime] = scheduledFundUnlock[fund][
-                lockedBalance.unlockTime
-            ]
-                .add(optionAllocation);
-
-            optionAllocations[iFund] = optionAllocation;
-        }
-
-        emit Voted(
+        _updateVoteStatus(
             msg.sender,
-            voter.allocations,
-            voter.unlockTime,
-            optionAllocations,
-            lockedBalance.unlockTime
+            fundLength,
+            oldWeights,
+            weights,
+            oldLockedBalance,
+            lockedBalance
         );
-
-        // update voter allocations per account
-        voters[msg.sender].allocations = optionAllocations;
-        voters[msg.sender].amount = lockedBalance.amount;
-        voters[msg.sender].unlockTime = lockedBalance.unlockTime;
     }
 
     function syncWithVotingEscrow(address account) external override {
-        Voter memory voter = voters[account];
-        if (voter.amount == 0) {
+        IVotingEscrow.LockedBalance memory oldLockedBalance = voterLockedBalances[account];
+        if (oldLockedBalance.amount == 0) {
             return; // The account did not voted before
         }
 
@@ -165,44 +150,67 @@ contract FundBallot is IFundBallot, Ownable, CoreUtility {
             return;
         }
 
-        // update scheduled unlock only for existing allocations
-        uint256 fundLength = fundSet.length;
-        uint256 allocationLength = voter.allocations.length;
-        uint256[] memory optionAllocations = new uint256[](fundLength);
-        for (uint256 iFund = 0; iFund < allocationLength; iFund++) {
-            uint256 optionAllocation =
-                lockedBalance.amount.mul(voter.allocations[iFund]).div(voter.amount);
-            scheduledUnlock[voter.unlockTime] = scheduledUnlock[voter.unlockTime].sub(
-                voter.allocations[iFund]
-            );
-            scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime]
-                .add(optionAllocation);
+        uint256 fundLength = fundSetLength;
+        uint256[] memory oldWeights = new uint256[](fundLength);
+        for (uint256 i = 0; i < fundSetLength; i++) {
+            oldWeights[i] = fundWeights[account][_fundSet[i]];
+        }
 
-            address fund = fundSet[iFund];
-            scheduledFundUnlock[fund][voter.unlockTime] = scheduledFundUnlock[fund][
-                voter.unlockTime
+        _updateVoteStatus(
+            account,
+            fundLength,
+            oldWeights,
+            oldWeights,
+            oldLockedBalance,
+            lockedBalance
+        );
+    }
+
+    /// @dev The sum of weighs should be equal to 1e18
+    function _updateVoteStatus(
+        address account,
+        uint256 fundLength,
+        uint256[] memory oldWeights,
+        uint256[] memory weights,
+        IVotingEscrow.LockedBalance memory oldLockedBalance,
+        IVotingEscrow.LockedBalance memory lockedBalance
+    ) private {
+        uint256[] memory oldAllocations = new uint256[](fundLength);
+        uint256[] memory newAllocations = new uint256[](fundLength);
+        for (uint256 iFund = 0; iFund < fundLength; iFund++) {
+            address fund = _fundSet[iFund];
+            uint256 oldAllocation = oldLockedBalance.amount.multiplyDecimal(oldWeights[iFund]);
+            scheduledUnlock[oldLockedBalance.unlockTime] = scheduledUnlock[
+                oldLockedBalance.unlockTime
             ]
-                .sub(voter.allocations[iFund]);
+                .sub(oldAllocation);
+            scheduledFundUnlock[fund][oldLockedBalance.unlockTime] = scheduledFundUnlock[fund][
+                oldLockedBalance.unlockTime
+            ]
+                .sub(oldAllocation);
+
+            uint256 newAllocation = lockedBalance.amount.multiplyDecimal(weights[iFund]);
+            scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime]
+                .add(newAllocation);
             scheduledFundUnlock[fund][lockedBalance.unlockTime] = scheduledFundUnlock[fund][
                 lockedBalance.unlockTime
             ]
-                .add(optionAllocation);
+                .add(newAllocation);
 
-            optionAllocations[iFund] = optionAllocation;
+            oldAllocations[iFund] = oldAllocation;
+            newAllocations[iFund] = newAllocation;
+            fundWeights[account][fund] = weights[iFund];
         }
 
         emit Voted(
-            msg.sender,
-            voter.allocations,
-            voter.unlockTime,
-            optionAllocations,
+            account,
+            oldAllocations,
+            oldLockedBalance.unlockTime,
+            newAllocations,
             lockedBalance.unlockTime
         );
 
-        // update voter allocations per account
-        voters[msg.sender].allocations = optionAllocations;
-        voters[msg.sender].amount = lockedBalance.amount;
-        voters[msg.sender].unlockTime = lockedBalance.unlockTime;
+        voterLockedBalances[account] = lockedBalance;
     }
 
     function _balanceOfAtTimestamp(address account, uint256 timestamp)
@@ -211,11 +219,11 @@ contract FundBallot is IFundBallot, Ownable, CoreUtility {
         returns (uint256)
     {
         require(timestamp >= block.timestamp, "Must be current or future time");
-        Voter memory voter = voters[account];
-        if (timestamp > voter.unlockTime) {
+        IVotingEscrow.LockedBalance memory oldLockedBalance = voterLockedBalances[account];
+        if (timestamp > oldLockedBalance.unlockTime) {
             return 0;
         }
-        return (voter.amount * (voter.unlockTime - timestamp)) / _maxTime;
+        return (oldLockedBalance.amount * (oldLockedBalance.unlockTime - timestamp)) / _maxTime;
     }
 
     function _totalSupplyAtTimestamp(uint256 timestamp) private view returns (uint256) {
@@ -249,7 +257,7 @@ contract FundBallot is IFundBallot, Ownable, CoreUtility {
         view
         returns (uint256[] memory sums, uint256 total)
     {
-        uint256 fundLength = fundSet.length;
+        uint256 fundLength = fundSetLength;
         sums = new uint256[](fundLength);
         for (
             uint256 weekCursor = _endOfWeek(timestamp);
@@ -258,7 +266,7 @@ contract FundBallot is IFundBallot, Ownable, CoreUtility {
         ) {
             for (uint256 fundCursor = 0; fundCursor < fundLength; fundCursor++) {
                 sums[fundCursor] +=
-                    (scheduledFundUnlock[fundSet[fundCursor]][weekCursor] *
+                    (scheduledFundUnlock[_fundSet[fundCursor]][weekCursor] *
                         (weekCursor - timestamp)) /
                     _maxTime;
             }
