@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
 
-interface IFundBallot {
+interface IControllerBallot {
     function count(uint256 timestamp)
         external
         view
