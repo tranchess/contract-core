@@ -37,6 +37,7 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
     ///         `syncWithVotingEscrow()` is called
     mapping(address => IVotingEscrow.LockedBalance) public userLockedBalances;
 
+    /// @notice Mapping of account => pool => fraction of the user's veCHESS voted to the pool
     mapping(address => mapping(address => uint256)) public userWeights;
 
     /// @notice Mapping of pool => unlockTime => CHESS amount voted to the pool that will be
