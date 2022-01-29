@@ -6,6 +6,4 @@ interface IControllerBallot {
         external
         view
         returns (uint256[] memory ratios, address[] memory funds);
-
-    function syncWithVotingEscrow(address account) external;
 }
