@@ -137,6 +137,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
     struct GovernanceData {
         uint256 chessTotalSupply;
         uint256 chessRate;
+        uint256 nextWeekChessRate;
         VotingEscrowData votingEscrow;
         BallotData interestRateBallot;
         ControllerBallotData controllerBallot;
@@ -355,6 +356,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         uint256 blockCurrentWeek = _endOfWeek(block.timestamp);
         data.chessTotalSupply = chessToken.totalSupply();
         data.chessRate = chessSchedule.getRate(block.timestamp);
+        data.nextWeekChessRate = chessSchedule.getRate(block.timestamp + 7 days);
         data.votingEscrow.totalLocked = votingEscrow.totalLocked();
         data.votingEscrow.totalSupply = votingEscrow.totalSupply();
         data.votingEscrow.tradingWeekTotalSupply = votingEscrow.totalSupplyAtTimestamp(
