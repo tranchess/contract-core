@@ -288,6 +288,10 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         PrimaryMarketV2 primaryMarket_ = PrimaryMarketV2(payable(primaryMarket));
         data.currentCreatingUnderlying = primaryMarket_.currentCreatingUnderlying();
         data.currentRedeemingShares = primaryMarket_.currentRedeemingShares();
+        data.redemptionFeeRate = primaryMarket_.redemptionFeeRate();
+        data.splitFeeRate = primaryMarket_.splitFeeRate();
+        data.mergeFeeRate = primaryMarket_.mergeFeeRate();
+        data.minCreationUnderlying = primaryMarket_.minCreationUnderlying();
         PrimaryMarketV2.CreationRedemption memory cr = primaryMarket_.creationRedemptionOf(account);
         data.account.creatingUnderlying = cr.creatingUnderlying;
         data.account.redeemingShares = cr.redeemingShares;
@@ -295,10 +299,6 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.account.redeemedUnderlying = cr.redeemedUnderlying;
         if (fundVersion >= 2) {
             data.fundCap = primaryMarket_.fundCap();
-            data.redemptionFeeRate = primaryMarket_.redemptionFeeRate();
-            data.splitFeeRate = primaryMarket_.splitFeeRate();
-            data.mergeFeeRate = primaryMarket_.mergeFeeRate();
-            data.minCreationUnderlying = primaryMarket_.minCreationUnderlying();
             uint256 currentDay = primaryMarket_.currentDay();
             for (uint256 i = 0; i < 16; i++) {
                 (data.account.recentDelayedRedemptions[i], ) = primaryMarket_.getDelayedRedemption(
