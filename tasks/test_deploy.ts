@@ -36,7 +36,7 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
 
     console.log();
     console.log("[+] Deploying governance contracts");
-    GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP = endOfWeek(new Date().getTime());
+    GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP = endOfWeek(new Date().getTime() / 1000);
     await hre.run("deploy_governance");
 
     console.log();

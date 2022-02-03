@@ -117,22 +117,25 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
 
     await hre.run("deploy_chess_controller_impl", {
         firstUnderlyingSymbol: "NONE",
-        launchDate: "1970-01-01",
+        launchDate: new Date(GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP * 1000).toISOString().split("T")[0],
     });
     const chessControllerImplAddresses = loadAddressFile<ChessControllerImplAddresses>(
         hre,
         "chess_controller_v4_impl"
     );
-    const ChessController = await ethers.getContractFactory("ChessController");
+    const ChessController = await ethers.getContractFactory("ChessControllerV4");
     const chessControllerImpl = ChessController.attach(
         chessControllerImplAddresses.chessControllerImpl
     );
     console.log(`ChessController implementation: ${chessControllerImpl.address}`);
 
+    const initChessController = await chessControllerImpl.populateTransaction.initializeV4(
+        GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP - 86400 * 7
+    );
     const chessControllerProxy = await TransparentUpgradeableProxy.deploy(
         chessControllerImpl.address,
         proxyAdmin.address,
-        "0x",
+        initChessController.data,
         { gasLimit: 1e6 } // Gas estimation may fail
     );
     const chessController = ChessController.attach(chessControllerProxy.address);
