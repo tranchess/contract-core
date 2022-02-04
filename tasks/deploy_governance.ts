@@ -2,6 +2,8 @@ import { task } from "hardhat/config";
 import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./address_file";
 import type { ChessScheduleImplAddresses } from "./deploy_chess_schedule_impl";
 import type { VotingEscrowImplAddresses } from "./deploy_voting_escrow_impl";
+import type { ControllerBallotAddresses } from "./deploy_controller_ballot";
+import type { ChessControllerImplAddresses } from "./deploy_chess_controller_impl";
 import { GOVERNANCE_CONFIG } from "../config";
 import { updateHreSigner } from "./signers";
 
@@ -14,6 +16,7 @@ export interface GovernanceAddresses extends Addresses {
     votingEscrowImpl: string;
     votingEscrow: string;
     interestRateBallot: string;
+    controllerBallot: string;
     chessControllerImpl: string;
     chessController: string;
 }
@@ -103,14 +106,36 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     );
     console.log(`InterestRateBallot: ${interestRateBallot.address}`);
 
-    const ChessController = await ethers.getContractFactory("ChessController");
-    const chessControllerImpl = await ChessController.deploy();
+    await hre.run("deploy_controller_ballot", { votingEscrow: votingEscrow.address });
+    const controllerBallotAddresses = loadAddressFile<ControllerBallotAddresses>(
+        hre,
+        "controller_ballot"
+    );
+    const ControllerBallot = await ethers.getContractFactory("ControllerBallot");
+    const controllerBallot = ControllerBallot.attach(controllerBallotAddresses.controllerBallot);
+    console.log(`ControllerBallot: ${controllerBallot.address}`);
+
+    await hre.run("deploy_chess_controller_impl", {
+        firstUnderlyingSymbol: "NONE",
+        launchDate: new Date(GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP * 1000).toISOString().split("T")[0],
+    });
+    const chessControllerImplAddresses = loadAddressFile<ChessControllerImplAddresses>(
+        hre,
+        "chess_controller_v4_impl"
+    );
+    const ChessController = await ethers.getContractFactory("ChessControllerV4");
+    const chessControllerImpl = ChessController.attach(
+        chessControllerImplAddresses.chessControllerImpl
+    );
     console.log(`ChessController implementation: ${chessControllerImpl.address}`);
 
+    const initChessController = await chessControllerImpl.populateTransaction.initializeV4(
+        GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP - 86400 * 7
+    );
     const chessControllerProxy = await TransparentUpgradeableProxy.deploy(
         chessControllerImpl.address,
         proxyAdmin.address,
-        "0x",
+        initChessController.data,
         { gasLimit: 1e6 } // Gas estimation may fail
     );
     const chessController = ChessController.attach(chessControllerProxy.address);
@@ -130,6 +155,7 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
         votingEscrowImpl: votingEscrowImpl.address,
         votingEscrow: votingEscrow.address,
         interestRateBallot: interestRateBallot.address,
+        controllerBallot: controllerBallot.address,
         chessControllerImpl: chessControllerImpl.address,
         chessController: chessController.address,
     };

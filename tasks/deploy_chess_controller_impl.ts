@@ -2,6 +2,7 @@ import { strict as assert } from "assert";
 import { task } from "hardhat/config";
 import { endOfWeek } from "../config";
 import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./address_file";
+import type { ControllerBallotAddresses } from "./deploy_controller_ballot";
 import type { FundAddresses } from "./deploy_fund";
 import { updateHreSigner } from "./signers";
 
@@ -9,45 +10,32 @@ export interface ChessControllerImplAddresses extends Addresses {
     chessControllerImpl: string;
 }
 
-task("deploy_chess_controller_impl", "Deploy ChessControllerV3 implementation")
-    .addParam("underlyingSymbols", "Comma-separated fund underlying symbols")
-    .addParam("launchDateV2", "Launch date (YYYY-MM-DD)")
-    .addParam("launchDateV3", "Launch date (YYYY-MM-DD)")
+task("deploy_chess_controller_impl", "Deploy ChessControllerV4 implementation")
+    .addParam("firstUnderlyingSymbol", "Fund0 underlying symbols, or 'NONE'")
+    .addParam("launchDate", "Launch date (YYYY-MM-DD)")
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
         const { ethers } = hre;
-        const { parseEther } = ethers.utils;
         await hre.run("compile");
 
-        const symbols: string[] = args.underlyingSymbols.split(",");
-        assert.strictEqual(symbols.length, 3);
-        assert.match(symbols[0], /^[a-zA-Z]+$/, "Invalid symbol");
-        assert.match(symbols[1], /^[a-zA-Z]+$/, "Invalid symbol");
-        assert.match(symbols[2], /^[a-zA-Z]+$/, "Invalid symbol");
-        const launchStartV2 = endOfWeek(new Date(args.launchDateV2).getTime() / 1000);
-        const launchStartV3 = endOfWeek(new Date(args.launchDateV3).getTime() / 1000);
+        const fund0Symbol: string = args.firstUnderlyingSymbol;
+        assert.match(fund0Symbol, /^[a-zA-Z]+|NONE$/, "Invalid symbol");
+        const launchStart = endOfWeek(new Date(args.launchDate).getTime() / 1000);
 
-        const fund0Addresses = loadAddressFile<FundAddresses>(
+        const controllerBallotAddress = loadAddressFile<ControllerBallotAddresses>(
             hre,
-            `fund_${symbols[0].toLowerCase()}`
-        );
-        const fund1Addresses = loadAddressFile<FundAddresses>(
-            hre,
-            `fund_${symbols[1].toLowerCase()}`
-        );
-        const fund2Addresses = loadAddressFile<FundAddresses>(
-            hre,
-            `fund_${symbols[2].toLowerCase()}`
-        );
+            "controller_ballot"
+        ).controllerBallot;
+        const fund0Address =
+            fund0Symbol === "NONE"
+                ? ethers.constants.AddressZero
+                : loadAddressFile<FundAddresses>(hre, `fund_${fund0Symbol.toLowerCase()}`).fund;
 
-        const ChessController = await ethers.getContractFactory("ChessControllerV3");
+        const ChessController = await ethers.getContractFactory("ChessControllerV4");
         const chessControllerImpl = await ChessController.deploy(
-            fund0Addresses.fund,
-            fund1Addresses.fund,
-            fund2Addresses.fund,
-            launchStartV2,
-            launchStartV3,
-            parseEther("0.01") // minWeight
+            fund0Address,
+            launchStart,
+            controllerBallotAddress
         );
         console.log(`ChessController implementation: ${chessControllerImpl.address}`);
 
@@ -55,5 +43,5 @@ task("deploy_chess_controller_impl", "Deploy ChessControllerV3 implementation")
             ...newAddresses(hre),
             chessControllerImpl: chessControllerImpl.address,
         };
-        saveAddressFile(hre, "chess_controller_v3_impl", addresses);
+        saveAddressFile(hre, "chess_controller_v4_impl", addresses);
     });
