@@ -158,7 +158,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
 
     struct ControllerBallotData {
         address[] pools;
-        uint256[] sums;
+        uint256[] currentSums;
         ControllerBallotAccountData account;
     }
 
@@ -397,20 +397,19 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         view
         returns (ControllerBallotData memory data)
     {
-        uint256 blockCurrentWeek = _endOfWeek(block.timestamp);
         ChessControllerV4 chessController =
             ChessControllerV4(address(ExchangeV2(exchange).chessController()));
         ControllerBallot controllerBallot =
             ControllerBallot(address(chessController.controllerBallot()));
         data.pools = controllerBallot.getPools();
-        data.sums = new uint256[](data.pools.length);
+        data.currentSums = new uint256[](data.pools.length);
         (data.account.amount, data.account.unlockTime) = controllerBallot.userLockedBalances(
             account
         );
         data.account.weights = new uint256[](data.pools.length);
         for (uint256 i = 0; i < data.pools.length; i++) {
             address pool = data.pools[i];
-            data.sums[i] = controllerBallot.sumAtTimestamp(pool, blockCurrentWeek);
+            data.currentSums[i] = controllerBallot.sumAtTimestamp(pool, block.timestamp);
             data.account.weights[i] = controllerBallot.userWeights(account, pool);
         }
     }
