@@ -92,10 +92,13 @@ describe("ControllerBallot", function () {
             await expect(ballot.cast([1, 2, 3, 4])).to.be.revertedWith("Invalid number of weights");
         });
 
-        it("Should reject too large weights", async function () {
+        it("Should require total weights to be 100%", async function () {
+            await expect(
+                ballot.cast([parseEther("0.2"), parseEther("0.3"), parseEther("0.4")])
+            ).to.be.revertedWith("Invalid weights");
             await expect(
                 ballot.cast([parseEther("0.3"), parseEther("0.4"), parseEther("0.5")])
-            ).to.be.revertedWith("Weights too large");
+            ).to.be.revertedWith("Invalid weights");
         });
 
         it("Should reject vote with no veCHESS", async function () {
@@ -136,13 +139,13 @@ describe("ControllerBallot", function () {
             await votingEscrow.mock.getLockedBalance.withArgs(addr1).returns([amount, unlockTime]);
 
             await setNextBlockTime(startWeek);
-            await ballot.cast([parseEther("0.4"), parseEther("0.2"), parseEther("0.1")]);
+            await ballot.cast([parseEther("0.7"), parseEther("0.2"), parseEther("0.1")]);
             const lockedBalance = await ballot.userLockedBalances(addr1);
             expect(lockedBalance.amount).to.equal(amount);
             expect(lockedBalance.unlockTime).to.equal(unlockTime);
             expect(await ballot.balanceOf(addr1)).to.equal(parseEther("40"));
             expect(await ballot.balanceOfAtTimestamp(addr1, startWeek)).to.equal(parseEther("40"));
-            expect(await ballot.userWeights(addr1, pool0)).to.equal(parseEther("0.4"));
+            expect(await ballot.userWeights(addr1, pool0)).to.equal(parseEther("0.7"));
             expect(await ballot.userWeights(addr1, pool1)).to.equal(parseEther("0.2"));
             expect(await ballot.userWeights(addr1, pool2)).to.equal(parseEther("0.1"));
         });
@@ -169,12 +172,12 @@ describe("ControllerBallot", function () {
                 .returns([parseEther("80"), w100]);
             await ballot
                 .connect(user2)
-                .cast([parseEther("0.4"), parseEther("0.2"), parseEther("0.1")]);
-            expect(await ballot.poolScheduledUnlock(pool0, w100)).to.equal(parseEther("32"));
+                .cast([parseEther("0.7"), parseEther("0.2"), parseEther("0.1")]);
+            expect(await ballot.poolScheduledUnlock(pool0, w100)).to.equal(parseEther("56"));
             expect(await ballot.poolScheduledUnlock(pool1, w100)).to.equal(parseEther("16"));
             expect(await ballot.poolScheduledUnlock(pool2, w100)).to.equal(parseEther("8"));
-            expect(await ballot.totalSupplyAtTimestamp(startWeek)).to.equal(parseEther("38"));
-            expect(await ballot.sumAtTimestamp(pool0, startWeek)).to.equal(parseEther("18"));
+            expect(await ballot.totalSupplyAtTimestamp(startWeek)).to.equal(parseEther("50"));
+            expect(await ballot.sumAtTimestamp(pool0, startWeek)).to.equal(parseEther("30"));
             expect(await ballot.sumAtTimestamp(pool1, startWeek)).to.equal(parseEther("11"));
             expect(await ballot.sumAtTimestamp(pool2, startWeek)).to.equal(parseEther("9"));
         });
@@ -290,37 +293,37 @@ describe("ControllerBallot", function () {
 
             await ballot.cast([parseEther("0.6"), parseEther("0.3"), parseEther("0.1")]);
             await ballot.connect(user2).cast([0, parseEther("1"), 0]);
-            await ballot.connect(user3).cast([parseEther("0.2"), parseEther("0.4"), 0]);
+            await ballot.connect(user3).cast([parseEther("0.2"), parseEther("0.8"), 0]);
 
-            const totalW0 = 40 + 3 * 50 + 60 * 0.6;
+            const totalW0 = 40 + 3 * 50 + 60;
             const sum0W0 = parseEther((40 * 0.6 + 60 * 0.2).toString()).div(totalW0);
-            const sum1W0 = parseEther((40 * 0.3 + 3 * 50 + 60 * 0.4).toString()).div(totalW0);
+            const sum1W0 = parseEther((40 * 0.3 + 3 * 50 + 60 * 0.8).toString()).div(totalW0);
             const sum2W0 = parseEther((40 * 0.1).toString()).div(totalW0);
             const weightsW0 = (await ballot.count(startWeek)).weights;
             expect(weightsW0[0]).to.equal(sum0W0);
             expect(weightsW0[1]).to.equal(sum1W0);
             expect(weightsW0[2]).to.equal(sum2W0);
 
-            const totalW10 = 30 + 3 * 40 + 50 * 0.6;
+            const totalW10 = 30 + 3 * 40 + 50;
             const sum0W10 = parseEther((30 * 0.6 + 50 * 0.2).toString()).div(totalW10);
-            const sum1W10 = parseEther((30 * 0.3 + 3 * 40 + 50 * 0.4).toString()).div(totalW10);
+            const sum1W10 = parseEther((30 * 0.3 + 3 * 40 + 50 * 0.8).toString()).div(totalW10);
             const sum2W10 = parseEther((30 * 0.1).toString()).div(totalW10);
             const weightsW10 = (await ballot.count(startWeek + WEEK * 10)).weights;
             expect(weightsW10[0]).to.equal(sum0W10);
             expect(weightsW10[1]).to.equal(sum1W10);
             expect(weightsW10[2]).to.equal(sum2W10);
 
-            const totalW45 = 3 * 5 + 15 * 0.6;
+            const totalW45 = 3 * 5 + 15;
             const sum0W45 = parseEther((15 * 0.2).toString()).div(totalW45);
-            const sum1W45 = parseEther((3 * 5 + 15 * 0.4).toString()).div(totalW45);
+            const sum1W45 = parseEther((3 * 5 + 15 * 0.8).toString()).div(totalW45);
             const weightsW45 = (await ballot.count(startWeek + WEEK * 45)).weights;
             expect(weightsW45[0]).to.equal(sum0W45);
             expect(weightsW45[1]).to.equal(sum1W45);
             expect(weightsW45[2]).to.equal(0);
 
-            const totalW50 = 10 * 0.6;
+            const totalW50 = 10;
             const sum0W50 = parseEther((10 * 0.2).toString()).div(totalW50);
-            const sum1W50 = parseEther((10 * 0.4).toString()).div(totalW50);
+            const sum1W50 = parseEther((10 * 0.8).toString()).div(totalW50);
             const weightsW50 = (await ballot.count(startWeek + WEEK * 50)).weights;
             expect(weightsW50[0]).to.equal(sum0W50);
             expect(weightsW50[1]).to.equal(sum1W50);

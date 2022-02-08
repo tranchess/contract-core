@@ -148,7 +148,7 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
         for (uint256 i = 0; i < size; i++) {
             totalWeight = totalWeight.add(weights[i]);
         }
-        require(totalWeight <= 1e18, "Weights too large");
+        require(totalWeight == 1e18, "Invalid weights");
 
         uint256[] memory oldWeights = new uint256[](size);
         for (uint256 i = 0; i < size; i++) {
