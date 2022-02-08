@@ -137,6 +137,18 @@ task("deploy_fund", "Deploy fund contracts")
         await primaryMarket.transferOwnership(governanceAddresses.timelockController);
         await fund.transferOwnership(governanceAddresses.timelockController);
 
+        const controllerBallot = await ethers.getContractAt(
+            "ControllerBallot",
+            governanceAddresses.controllerBallot
+        );
+        if ((await controllerBallot.owner()) === (await controllerBallot.signer.getAddress())) {
+            console.log("Adding Fund to ControllerBallot");
+            await controllerBallot.addPool(fund.address);
+            console.log("NOTE: Please transfer ownership of ControllerBallot to Timelock later");
+        } else {
+            console.log("NOTE: Please add Fund to ControllerBallot");
+        }
+
         const addresses: FundAddresses = {
             ...newAddresses(hre),
             underlyingSymbol,

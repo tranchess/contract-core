@@ -19,6 +19,8 @@ import "../fund/PrimaryMarketV2.sol";
 import "../governance/InterestRateBallot.sol";
 import "../governance/FeeDistributor.sol";
 import "../governance/VotingEscrowV2.sol";
+import "../governance/ChessControllerV4.sol";
+import "../governance/ControllerBallot.sol";
 
 interface IExchange {
     function chessSchedule() external view returns (IChessSchedule);
@@ -92,6 +94,10 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         uint256 currentCreatingUnderlying;
         uint256 currentRedeemingShares;
         uint256 fundCap;
+        uint256 redemptionFeeRate;
+        uint256 splitFeeRate;
+        uint256 mergeFeeRate;
+        uint256 minCreationUnderlying;
         PrimaryMarketAccountData account;
     }
 
@@ -107,6 +113,8 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         Shares totalDeposited;
         uint256 weightedSupply;
         uint256 workingSupply;
+        uint256 minBidAmount;
+        uint256 minAskAmount;
         ExchangeAccountData account;
     }
 
@@ -129,8 +137,10 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
     struct GovernanceData {
         uint256 chessTotalSupply;
         uint256 chessRate;
+        uint256 nextWeekChessRate;
         VotingEscrowData votingEscrow;
         BallotData interestRateBallot;
+        ControllerBallotData controllerBallot;
         FeeDistributorData feeDistributor;
     }
 
@@ -144,6 +154,18 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
     struct BallotData {
         uint256 tradingWeekTotalSupply;
         IBallot.Voter account;
+    }
+
+    struct ControllerBallotData {
+        address[] pools;
+        uint256[] currentSums;
+        ControllerBallotAccountData account;
+    }
+
+    struct ControllerBallotAccountData {
+        uint256 amount;
+        uint256 unlockTime;
+        uint256[] weights;
     }
 
     struct FeeDistributorData {
@@ -168,7 +190,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         address token1;
     }
 
-    string public constant VERSION = "1.2.0";
+    string public constant VERSION = "1.2.1";
 
     /// @dev This function should be call as a "view" function off-chain to get the return value,
     ///      e.g. using `contract.getProtocolData.call()` in web3
@@ -266,6 +288,10 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         PrimaryMarketV2 primaryMarket_ = PrimaryMarketV2(payable(primaryMarket));
         data.currentCreatingUnderlying = primaryMarket_.currentCreatingUnderlying();
         data.currentRedeemingShares = primaryMarket_.currentRedeemingShares();
+        data.redemptionFeeRate = primaryMarket_.redemptionFeeRate();
+        data.splitFeeRate = primaryMarket_.splitFeeRate();
+        data.mergeFeeRate = primaryMarket_.mergeFeeRate();
+        data.minCreationUnderlying = primaryMarket_.minCreationUnderlying();
         PrimaryMarketV2.CreationRedemption memory cr = primaryMarket_.creationRedemptionOf(account);
         data.account.creatingUnderlying = cr.creatingUnderlying;
         data.account.redeemingShares = cr.redeemingShares;
@@ -297,6 +323,8 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
             data.totalDeposited.tokenB
         );
         data.workingSupply = exchangeContract.workingSupply();
+        data.minBidAmount = exchangeContract.minBidAmount();
+        data.minAskAmount = exchangeContract.minAskAmount();
         data.account.available.tokenM = exchangeContract.availableBalanceOf(TRANCHE_M, account);
         data.account.available.tokenA = exchangeContract.availableBalanceOf(TRANCHE_A, account);
         data.account.available.tokenB = exchangeContract.availableBalanceOf(TRANCHE_B, account);
@@ -328,6 +356,7 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         uint256 blockCurrentWeek = _endOfWeek(block.timestamp);
         data.chessTotalSupply = chessToken.totalSupply();
         data.chessRate = chessSchedule.getRate(block.timestamp);
+        data.nextWeekChessRate = chessSchedule.getRate(block.timestamp + 7 days);
         data.votingEscrow.totalLocked = votingEscrow.totalLocked();
         data.votingEscrow.totalSupply = votingEscrow.totalSupply();
         data.votingEscrow.tradingWeekTotalSupply = votingEscrow.totalSupplyAtTimestamp(
@@ -339,6 +368,8 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         data.interestRateBallot.account = InterestRateBallot(address(fund.ballot())).getReceipt(
             account
         );
+
+        data.controllerBallot = getControllerBallotData(exchange, account);
 
         if (feeDistributor != address(0)) {
             FeeDistributor feeDistributor_ = FeeDistributor(payable(feeDistributor));
@@ -358,6 +389,28 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
                 blockCurrentWeek
             );
             data.feeDistributor.adminFeeRate = feeDistributor_.adminFeeRate();
+        }
+    }
+
+    function getControllerBallotData(address exchange, address account)
+        public
+        view
+        returns (ControllerBallotData memory data)
+    {
+        ChessControllerV4 chessController =
+            ChessControllerV4(address(ExchangeV2(exchange).chessController()));
+        ControllerBallot controllerBallot =
+            ControllerBallot(address(chessController.controllerBallot()));
+        data.pools = controllerBallot.getPools();
+        data.currentSums = new uint256[](data.pools.length);
+        (data.account.amount, data.account.unlockTime) = controllerBallot.userLockedBalances(
+            account
+        );
+        data.account.weights = new uint256[](data.pools.length);
+        for (uint256 i = 0; i < data.pools.length; i++) {
+            address pool = data.pools[i];
+            data.currentSums[i] = controllerBallot.sumAtTimestamp(pool, block.timestamp);
+            data.account.weights[i] = controllerBallot.userWeights(account, pool);
         }
     }
 

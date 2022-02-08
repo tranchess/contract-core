@@ -4,6 +4,7 @@ import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./add
 import type { GovernanceAddresses } from "./deploy_governance";
 import type { FundAddresses } from "./deploy_fund";
 import type { ExchangeImplAddresses } from "./deploy_exchange_impl";
+import { GOVERNANCE_CONFIG } from "../config";
 import { updateHreSigner } from "./signers";
 
 export interface ExchangeAddresses extends Addresses {
@@ -53,6 +54,11 @@ task("deploy_exchange", "Deploy exchange contracts")
         );
         const exchange = Exchange.attach(exchangeProxy.address);
         console.log(`Exchange: ${exchange.address}`);
+
+        if (GOVERNANCE_CONFIG.TREASURY) {
+            console.log("Transfering pauser role to treasury");
+            await exchange.transferPauserRole(GOVERNANCE_CONFIG.TREASURY);
+        }
 
         const chessSchedule = await ethers.getContractAt(
             "ChessSchedule",

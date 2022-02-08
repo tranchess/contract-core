@@ -1,5 +1,6 @@
 import { task } from "hardhat/config";
 import { Addresses, saveAddressFile, newAddresses } from "./address_file";
+import { GOVERNANCE_CONFIG } from "../config";
 import { updateHreSigner } from "./signers";
 
 export interface StrategyAddresses extends Addresses {
@@ -25,6 +26,11 @@ task("deploy_bsc_staking_strategy", "Deploy BscStakingStrategy")
             performanceFeeRate
         );
         console.log(`BscStakingStrategy: ${bscStakingStrategy.address}`);
+
+        if (GOVERNANCE_CONFIG.TREASURY) {
+            console.log("Transfering ownership to treasury");
+            await bscStakingStrategy.transferOwnership(GOVERNANCE_CONFIG.TREASURY);
+        }
 
         const addresses: StrategyAddresses = {
             ...newAddresses(hre),
