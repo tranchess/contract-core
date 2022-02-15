@@ -29,7 +29,6 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     using SafeMath for uint256;
 
     uint256 private constant EPOCH = 30 minutes;
-    uint256 private constant MIN_MESSAGE_COUNT = 10;
     uint256 private constant MAX_SWAP_DELAY = 15 minutes;
     uint256 private constant MAX_ITERATION = 500;
 
@@ -47,6 +46,9 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     /// @notice Chainlink aggregator used as the primary data source.
     address public immutable chainlinkAggregator;
 
+    /// @notice Minimum number of Chainlink rounds required in an epoch.
+    uint256 public immutable chainlinkMinMessageCount;
+
     /// @dev A multipler that normalizes price from the Chainlink aggregator to 18 decimal places.
     uint256 private immutable _chainlinkPriceMultiplier;
 
@@ -58,6 +60,12 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
 
     /// @dev A multipler that normalizes price from the Uniswap V2 pair to 18 decimal places.
     uint256 private immutable _swapPriceMultiplier;
+
+    /// @notice The previous oracle that was used before this contract is deployed.
+    ITwapOracle public immutable fallbackOracle;
+
+    /// @notice Epochs until this timestamp should be read from the fallback oracle.
+    uint256 public immutable fallbackTimestamp;
 
     string public symbol;
 
@@ -82,10 +90,13 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     /// @param symbol_ Asset symbol
     constructor(
         address chainlinkAggregator_,
+        uint256 chainlinkMinMessageCount_,
         address swapPair_,
+        address fallbackOracle_,
         string memory symbol_
     ) public {
         chainlinkAggregator = chainlinkAggregator_;
+        chainlinkMinMessageCount = chainlinkMinMessageCount_;
         uint256 decimal = AggregatorV3Interface(chainlinkAggregator_).decimals();
         _chainlinkPriceMultiplier = 10**(uint256(18).sub(decimal));
 
@@ -106,8 +117,10 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
             ? 10**(uint256(18).add(swapToken0.decimals()).sub(swapToken1.decimals()))
             : 10**(uint256(18).add(swapToken1.decimals()).sub(swapToken0.decimals()));
 
+        fallbackOracle = ITwapOracle(fallbackOracle_);
         symbol = symbol_;
         lastTimestamp = (block.timestamp / EPOCH) * EPOCH + EPOCH;
+        fallbackTimestamp = lastTimestamp;
         (lastRoundID, , , , ) = AggregatorV3Interface(chainlinkAggregator_).latestRoundData();
     }
 
@@ -116,7 +129,11 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     /// @param timestamp End Timestamp in seconds of the epoch
     /// @return TWAP (18 decimal places) in the epoch, or zero if the epoch is not initialized yet.
     function getTwap(uint256 timestamp) external view override returns (uint256) {
-        return _prices[timestamp];
+        if (timestamp <= fallbackTimestamp) {
+            return address(fallbackOracle) == address(0) ? 0 : fallbackOracle.getTwap(timestamp);
+        } else {
+            return _prices[timestamp];
+        }
     }
 
     /// @notice Attempt to update the next epoch after `lastTimestamp` using data from Chainlink
@@ -198,7 +215,7 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
             oldUpdatedAt = newUpdatedAt;
         }
 
-        if (messageCount >= MIN_MESSAGE_COUNT) {
+        if (messageCount >= chainlinkMinMessageCount) {
             sum = sum.add(uint256(oldAnswer).mul(timestamp - sumTimestamp));
             return (sum.mul(_chainlinkPriceMultiplier) / EPOCH, roundID);
         } else {
