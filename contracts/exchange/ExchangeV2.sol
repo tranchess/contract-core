@@ -240,7 +240,8 @@ contract ExchangeV2 is ExchangeRoles, StakingV2, ProxyUtility {
         uint256 minAskAmount_,
         uint256 makerRequirement_,
         uint256 guardedLaunchStart_,
-        uint256 guardedLaunchMinOrderAmount_
+        uint256 guardedLaunchMinOrderAmount_,
+        address upgradeTool_
     )
         public
         ExchangeRoles(votingEscrow_, makerRequirement_)
@@ -250,7 +251,8 @@ contract ExchangeV2 is ExchangeRoles, StakingV2, ProxyUtility {
             chessController_,
             quoteAssetAddress_,
             guardedLaunchStart_,
-            votingEscrow_
+            votingEscrow_,
+            upgradeTool_
         )
     {
         minBidAmount = minBidAmount_;
@@ -365,7 +367,7 @@ contract ExchangeV2 is ExchangeRoles, StakingV2, ProxyUtility {
         uint256 pdLevel,
         uint256 quoteAmount,
         uint256 version
-    ) external onlyMaker whenNotPaused {
+    ) external onlyMaker whenNotPaused beforeProtocolUpgrade {
         require(block.timestamp >= guardedLaunchStart + 8 days, "Guarded launch: market closed");
         if (block.timestamp < guardedLaunchStart + 4 weeks) {
             require(quoteAmount >= guardedLaunchMinOrderAmount, "Guarded launch: amount too low");
@@ -399,7 +401,7 @@ contract ExchangeV2 is ExchangeRoles, StakingV2, ProxyUtility {
         uint256 pdLevel,
         uint256 baseAmount,
         uint256 version
-    ) external onlyMaker whenNotPaused {
+    ) external onlyMaker whenNotPaused beforeProtocolUpgrade {
         require(block.timestamp >= guardedLaunchStart + 8 days, "Guarded launch: market closed");
         if (block.timestamp < guardedLaunchStart + 4 weeks) {
             require(baseAmount >= guardedLaunchMinOrderAmount, "Guarded launch: amount too low");
@@ -432,7 +434,7 @@ contract ExchangeV2 is ExchangeRoles, StakingV2, ProxyUtility {
         uint256 tranche,
         uint256 pdLevel,
         uint256 index
-    ) external whenNotPaused {
+    ) external whenNotPaused beforeProtocolUpgrade {
         OrderQueue storage orderQueue = bids[version][tranche][pdLevel];
         Order storage order = orderQueue.list[index];
         require(order.maker == msg.sender, "Maker address mismatched");
@@ -463,7 +465,7 @@ contract ExchangeV2 is ExchangeRoles, StakingV2, ProxyUtility {
         uint256 tranche,
         uint256 pdLevel,
         uint256 index
-    ) external whenNotPaused {
+    ) external whenNotPaused beforeProtocolUpgrade {
         OrderQueue storage orderQueue = asks[version][tranche][pdLevel];
         Order storage order = orderQueue.list[index];
         require(order.maker == msg.sender, "Maker address mismatched");
@@ -664,7 +666,7 @@ contract ExchangeV2 is ExchangeRoles, StakingV2, ProxyUtility {
         uint256 maxPDLevel,
         uint256 estimatedNav,
         uint256 quoteAmount
-    ) internal onlyActive whenNotPaused {
+    ) internal onlyActive whenNotPaused beforeProtocolUpgrade {
         require(maxPDLevel > 0 && maxPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
         require(version == _fundRebalanceSize(), "Invalid version");
         require(estimatedNav > 0, "Zero estimated NAV");
@@ -796,7 +798,7 @@ contract ExchangeV2 is ExchangeRoles, StakingV2, ProxyUtility {
         uint256 minPDLevel,
         uint256 estimatedNav,
         uint256 baseAmount
-    ) internal onlyActive whenNotPaused {
+    ) internal onlyActive whenNotPaused beforeProtocolUpgrade {
         require(minPDLevel > 0 && minPDLevel <= PD_LEVEL_COUNT, "Invalid premium-discount level");
         require(version == _fundRebalanceSize(), "Invalid version");
         require(estimatedNav > 0, "Zero estimated NAV");
