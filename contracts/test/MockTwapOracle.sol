@@ -84,7 +84,7 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
     function catchUp() public {
         uint256 nextEpoch = _nextEpoch();
         uint256 lastEpoch = lastStoredEpoch;
-        if (nextEpoch == lastEpoch) {
+        if (nextEpoch <= lastEpoch) {
             return;
         }
         uint256 nextStoredEpoch = _endOfDay(lastEpoch);
