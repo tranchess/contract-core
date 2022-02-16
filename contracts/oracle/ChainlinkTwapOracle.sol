@@ -93,6 +93,7 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         uint256 chainlinkMinMessageCount_,
         address swapPair_,
         address fallbackOracle_,
+        uint256 fallbackTimestamp_,
         string memory symbol_
     ) public {
         chainlinkAggregator = chainlinkAggregator_;
@@ -120,7 +121,11 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         fallbackOracle = ITwapOracle(fallbackOracle_);
         symbol = symbol_;
         lastTimestamp = (block.timestamp / EPOCH) * EPOCH + EPOCH;
-        fallbackTimestamp = lastTimestamp;
+        require(
+            fallbackOracle_ == address(0) || fallbackTimestamp_ >= lastTimestamp,
+            "Fallback timestamp too early"
+        );
+        fallbackTimestamp = fallbackTimestamp_;
         (lastRoundID, , , , ) = AggregatorV3Interface(chainlinkAggregator_).latestRoundData();
     }
 
