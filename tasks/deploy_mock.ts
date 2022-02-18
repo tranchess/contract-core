@@ -36,9 +36,9 @@ task("deploy_mock", "Deploy mock contracts")
             const initialTwap = parseEther(args.initialTwap);
             const MockTwapOracle = await ethers.getContractFactory("MockTwapOracle");
             const mockTwapOracle = await MockTwapOracle.deploy(
-                0,
                 initialTwap,
-                ethers.constants.AddressZero
+                ethers.constants.AddressZero,
+                0
             );
             console.log(`MockTwapOracle: ${mockTwapOracle.address}`);
             mockTwapOracleAddress = mockTwapOracle.address;
