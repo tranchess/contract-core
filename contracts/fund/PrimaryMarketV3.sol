@@ -13,12 +13,12 @@ import "../utils/SafeDecimalMath.sol";
 
 import {DelayedRedemption, LibDelayedRedemption} from "./LibDelayedRedemption.sol";
 
-import "../interfaces/IPrimaryMarketV2.sol";
+import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/IFundV2.sol";
 import "../interfaces/ITrancheIndex.sol";
 import "../interfaces/IWrappedERC20.sol";
 
-contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ownable {
+contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ownable {
     event Created(address indexed account, uint256 underlying);
     event Redeemed(address indexed account, uint256 shares);
     event Split(address indexed account, uint256 inM, uint256 outA, uint256 outB);
@@ -159,23 +159,23 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
         _updateDelayedRedemptionDay();
     }
 
-    function create(uint256 underlying) external nonReentrant {
+    function create(address recipient, uint256 underlying) external override nonReentrant {
         _tokenUnderlying.safeTransferFrom(msg.sender, address(this), underlying);
-        _create(underlying);
+        _create(recipient, underlying);
     }
 
-    function wrapAndCreate() external payable nonReentrant {
+    function wrapAndCreate(address recipient) external payable override nonReentrant {
         IWrappedERC20(address(_tokenUnderlying)).deposit{value: msg.value}();
-        _create(msg.value);
+        _create(recipient, msg.value);
     }
 
-    function _create(uint256 underlying) private onlyActive {
+    function _create(address recipient, uint256 underlying) private onlyActive {
         require(underlying >= minCreationUnderlying, "Min amount");
 
         // Do not call `_updateDelayedRedemptionDay()` because the latest `redeemedUnderlying`
         // is not used in this function.
-        _updateUser(msg.sender);
-        CreationRedemption storage cr = _creationRedemptions[msg.sender];
+        _updateUser(recipient);
+        CreationRedemption storage cr = _creationRedemptions[recipient];
         cr.creatingUnderlying = cr.creatingUnderlying.add(underlying);
 
         uint256 creatingUnderlying = currentCreatingUnderlying.add(underlying);
@@ -189,10 +189,10 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
             );
         }
 
-        emit Created(msg.sender, underlying);
+        emit Created(recipient, underlying);
     }
 
-    function redeem(uint256 shares) external nonReentrant onlyActive {
+    function redeem(address recipient, uint256 shares) external override nonReentrant onlyActive {
         require(shares != 0, "Zero shares");
         // Use burn and mint to simulate a transfer, so that we don't need a special transferFrom()
         fund.burn(TRANCHE_M, msg.sender, shares);
@@ -200,12 +200,12 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
 
         // Do not call `_updateDelayedRedemptionDay()` because the latest `redeemedUnderlying`
         // is not used in this function.
-        _updateUser(msg.sender);
-        CreationRedemption storage cr = _creationRedemptions[msg.sender];
+        _updateUser(recipient);
+        CreationRedemption storage cr = _creationRedemptions[recipient];
         cr.redeemingShares = cr.redeemingShares.add(shares);
 
         currentRedeemingShares = currentRedeemingShares.add(shares);
-        emit Redeemed(msg.sender, shares);
+        emit Redeemed(recipient, shares);
     }
 
     function claim(address account)
@@ -262,40 +262,50 @@ contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ow
         return (createdShares, redeemedUnderlying);
     }
 
-    function split(uint256 inM) external onlyActive {
+    function split(address recipient, uint256 inM)
+        external
+        override
+        onlyActive
+        returns (uint256 outA, uint256 outB)
+    {
         (uint256 weightA, uint256 weightB) = fund.trancheWeights();
         // Charge splitting fee and round it to a multiple of (weightA + weightB)
         uint256 unit = inM.sub(inM.multiplyDecimal(splitFeeRate)) / (weightA + weightB);
         require(unit > 0, "Too little to split");
         uint256 inMAfterFee = unit * (weightA + weightB);
-        uint256 outA = unit * weightA;
-        uint256 outB = inMAfterFee - outA;
+        outA = unit * weightA;
+        outB = inMAfterFee - outA;
         uint256 feeM = inM - inMAfterFee;
 
         fund.burn(TRANCHE_M, msg.sender, inM);
-        fund.mint(TRANCHE_A, msg.sender, outA);
-        fund.mint(TRANCHE_B, msg.sender, outB);
+        fund.mint(TRANCHE_A, recipient, outA);
+        fund.mint(TRANCHE_B, recipient, outB);
         fund.mint(TRANCHE_M, address(this), feeM);
 
         currentFeeInShares = currentFeeInShares.add(feeM);
         emit Split(msg.sender, inM, outA, outB);
     }
 
-    function merge(uint256 inA) external onlyActive {
+    function merge(address recipient, uint256 inA)
+        external
+        override
+        onlyActive
+        returns (uint256 inB, uint256 outM)
+    {
         (uint256 weightA, uint256 weightB) = fund.trancheWeights();
         // Round to tranche weights
         uint256 unit = inA / weightA;
         require(unit > 0, "Too little to merge");
         // Keep unmergable Token A unchanged.
         inA = unit * weightA;
-        uint256 inB = unit.mul(weightB);
+        inB = unit.mul(weightB);
         uint256 outMBeforeFee = inA.add(inB);
         uint256 feeM = outMBeforeFee.multiplyDecimal(mergeFeeRate);
-        uint256 outM = outMBeforeFee.sub(feeM);
+        outM = outMBeforeFee.sub(feeM);
 
         fund.burn(TRANCHE_A, msg.sender, inA);
         fund.burn(TRANCHE_B, msg.sender, inB);
-        fund.mint(TRANCHE_M, msg.sender, outM);
+        fund.mint(TRANCHE_M, recipient, outM);
         fund.mint(TRANCHE_M, address(this), feeM);
 
         currentFeeInShares = currentFeeInShares.add(feeM);
