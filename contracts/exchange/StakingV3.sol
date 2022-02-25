@@ -26,7 +26,11 @@ struct VESnapshot {
     IVotingEscrow.LockedBalance veLocked;
 }
 
-abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
+interface IUpgradeTool {
+    function upgradeTimestamp() external view returns (uint256);
+}
+
+abstract contract StakingV3 is ITrancheIndex, CoreUtility, ManagedPausable {
     /// @dev Reserved storage slots for future sibling contract upgrades
     uint256[29] private _reservedSlots;
 
@@ -58,6 +62,10 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
     IChessSchedule public immutable chessSchedule;
 
     uint256 public immutable guardedLaunchStart;
+
+    address public immutable upgradeTool;
+
+    uint256 public immutable upgradeTimestamp;
 
     uint256 private _rate;
 
@@ -119,7 +127,8 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
         address chessController_,
         address quoteAssetAddress_,
         uint256 guardedLaunchStart_,
-        address votingEscrow_
+        address votingEscrow_,
+        address upgradeTool_
     ) public {
         fund = IFund(fund_);
         tokenM = IERC20(IFund(fund_).tokenM());
@@ -130,6 +139,8 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
         quoteAssetAddress = quoteAssetAddress_;
         guardedLaunchStart = guardedLaunchStart_;
         _votingEscrow = IVotingEscrow(votingEscrow_);
+        upgradeTool = upgradeTool_;
+        upgradeTimestamp = IUpgradeTool(upgradeTool_).upgradeTimestamp();
     }
 
     function _initializeStaking() internal {
@@ -351,7 +362,7 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
     /// @dev Deposit to get rewards
     /// @param tranche Tranche of the share
     /// @param amount The amount to deposit
-    function deposit(uint256 tranche, uint256 amount) public whenNotPaused {
+    function deposit(uint256 tranche, uint256 amount) public whenNotPaused beforeProtocolUpgrade {
         uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(msg.sender, rebalanceSize);
@@ -474,6 +485,59 @@ abstract contract StakingV2 is ITrancheIndex, CoreUtility, ManagedPausable {
         }
 
         _updateWorkingBalance(account);
+    }
+
+    modifier beforeProtocolUpgrade() {
+        require(block.timestamp < upgradeTimestamp, "Closed after upgrade");
+        _;
+    }
+
+    /// @notice Upgrade to Tranchess V2. This can only be called from the upgrade tool.
+    function protocolUpgrade(address account)
+        external
+        returns (
+            uint256 amountM,
+            uint256 amountA,
+            uint256 amountB,
+            uint256 claimedRewards
+        )
+    {
+        require(msg.sender == upgradeTool, "Only upgrade tool");
+        require(block.timestamp >= upgradeTimestamp, "Not ready for upgrade");
+        uint256 rebalanceSize = _fundRebalanceSize();
+        _checkpoint(rebalanceSize);
+        _userCheckpoint(account, rebalanceSize);
+
+        uint256[TRANCHE_COUNT] storage available = _availableBalances[account];
+        uint256[TRANCHE_COUNT] storage locked = _lockedBalances[account];
+        amountM = available[TRANCHE_M].add(locked[TRANCHE_M]);
+        amountA = available[TRANCHE_A].add(locked[TRANCHE_A]);
+        amountB = available[TRANCHE_B].add(locked[TRANCHE_B]);
+        if (amountM > 0) {
+            available[TRANCHE_M] = 0;
+            locked[TRANCHE_M] = 0;
+            _totalSupplies[TRANCHE_M] = _totalSupplies[TRANCHE_M].sub(amountM);
+            tokenM.safeTransfer(msg.sender, amountM);
+        }
+        if (amountA > 0) {
+            available[TRANCHE_A] = 0;
+            locked[TRANCHE_A] = 0;
+            _totalSupplies[TRANCHE_A] = _totalSupplies[TRANCHE_A].sub(amountA);
+            tokenA.safeTransfer(msg.sender, amountA);
+        }
+        if (amountB > 0) {
+            available[TRANCHE_B] = 0;
+            locked[TRANCHE_B] = 0;
+            _totalSupplies[TRANCHE_B] = _totalSupplies[TRANCHE_B].sub(amountB);
+            tokenB.safeTransfer(msg.sender, amountB);
+        }
+        _updateWorkingBalance(account);
+
+        claimedRewards = _claimableRewards[account];
+        if (claimedRewards > 0) {
+            _claimableRewards[account] = 0;
+            chessSchedule.mint(account, claimedRewards);
+        }
     }
 
     /// @dev Transfer shares from the sender to the contract internally
