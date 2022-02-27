@@ -213,7 +213,6 @@ describe("Exchange upgrade V2 to V3", function () {
             MIN_ASK_AMOUNT,
             0,
             0,
-            0,
             upgradeTool.address
         );
 

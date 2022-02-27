@@ -229,6 +229,7 @@ contract ExchangeV3 is ExchangeRoles, StakingV3, ProxyUtility {
     /// @dev Mapping of epoch => rebalance version
     mapping(uint256 => uint256) private _epochVersions;
 
+    /// @dev The `makerRequirement_` param is removed to workaround a stack-too-deep error.
     constructor(
         address fund_,
         address chessSchedule_,
@@ -238,13 +239,12 @@ contract ExchangeV3 is ExchangeRoles, StakingV3, ProxyUtility {
         address votingEscrow_,
         uint256 minBidAmount_,
         uint256 minAskAmount_,
-        uint256 makerRequirement_,
         uint256 guardedLaunchStart_,
         uint256 guardedLaunchMinOrderAmount_,
         address upgradeTool_
     )
         public
-        ExchangeRoles(votingEscrow_, makerRequirement_)
+        ExchangeRoles(votingEscrow_, 0)
         StakingV3(
             fund_,
             chessSchedule_,
