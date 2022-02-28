@@ -533,11 +533,7 @@ abstract contract StakingV3 is ITrancheIndex, CoreUtility, ManagedPausable {
         }
         _updateWorkingBalance(account);
 
-        claimedRewards = _claimableRewards[account];
-        if (claimedRewards > 0) {
-            _claimableRewards[account] = 0;
-            chessSchedule.mint(account, claimedRewards);
-        }
+        claimedRewards = _claim(account);
     }
 
     /// @dev Transfer shares from the sender to the contract internally
@@ -668,8 +664,8 @@ abstract contract StakingV3 is ITrancheIndex, CoreUtility, ManagedPausable {
     ///      is not included. This function should always be called after `_userCheckpoint()`,
     ///      in order for the user to get all rewards till now.
     /// @param account Address of the account
-    function _claim(address account) internal {
-        uint256 claimableReward = _claimableRewards[account];
+    function _claim(address account) internal returns (uint256 claimableReward) {
+        claimableReward = _claimableRewards[account];
         _claimableRewards[account] = 0;
         chessSchedule.mint(account, claimableReward);
     }
