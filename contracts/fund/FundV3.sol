@@ -894,6 +894,20 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         _payDebt();
     }
 
+    function transferToPrimaryMarket(
+        address recipient,
+        uint256 amount,
+        uint256 fee
+    ) external override onlyPrimaryMarket {
+        if (amount > 0) {
+            IERC20(tokenUnderlying).safeTransfer(recipient, amount);
+        }
+        if (fee > 0) {
+            feeDebt = feeDebt.add(fee);
+            _totalDebt = _totalDebt.add(fee);
+        }
+    }
+
     function reportProfit(uint256 profit, uint256 performanceFee) external override onlyStrategy {
         require(profit >= performanceFee, "Performance fee cannot exceed profit");
         _strategyUnderlying = _strategyUnderlying.add(profit);

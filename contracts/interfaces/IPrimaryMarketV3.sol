@@ -2,11 +2,42 @@
 pragma solidity >=0.6.10 <0.8.0;
 
 interface IPrimaryMarketV3 {
-    function create(address recipient, uint256 underlying) external;
+    function getCreation(uint256 underlying) external view returns (uint256 shares);
 
-    function wrapAndCreate(address recipient) external payable;
+    function getRedemption(uint256 shares) external view returns (uint256 underlying);
 
-    function redeem(address recipient, uint256 shares) external;
+    function getSplit(uint256 inM)
+        external
+        view
+        returns (
+            uint256 outA,
+            uint256 outB,
+            uint256 feeM
+        );
+
+    function getTokenAMForSplitB(uint256 outB) external view returns (uint256 outA, uint256 inM);
+
+    function getMerge(uint256 expectA)
+        external
+        view
+        returns (
+            uint256 inA,
+            uint256 inB,
+            uint256 outM,
+            uint256 feeM
+        );
+
+    function getTokenAMForMergeB(uint256 inB) external view returns (uint256 inA, uint256 outM);
+
+    function create(address recipient, uint256 underlying) external returns (uint256 shares);
+
+    function wrapAndCreate(address recipient) external payable returns (uint256 shares);
+
+    function redeem(address recipient, uint256 shares) external returns (uint256 underlying);
+
+    function redeemAndUnwrap(address recipient, uint256 shares)
+        external
+        returns (uint256 underlying);
 
     function claim(address account)
         external

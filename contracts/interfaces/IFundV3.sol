@@ -4,4 +4,10 @@ pragma experimental ABIEncoderV2;
 
 import "./IFundV2.sol";
 
-interface IFundV3 is IFundV2 {}
+interface IFundV3 is IFundV2 {
+    function transferToPrimaryMarket(
+        address recipient,
+        uint256 amount,
+        uint256 fee
+    ) external;
+}

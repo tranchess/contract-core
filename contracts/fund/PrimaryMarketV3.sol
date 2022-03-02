@@ -14,13 +14,18 @@ import "../utils/SafeDecimalMath.sol";
 import {DelayedRedemption, LibDelayedRedemption} from "./LibDelayedRedemption.sol";
 
 import "../interfaces/IPrimaryMarketV3.sol";
-import "../interfaces/IFundV2.sol";
+import "../interfaces/IFundV3.sol";
 import "../interfaces/ITrancheIndex.sol";
 import "../interfaces/IWrappedERC20.sol";
 
 contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ownable {
-    event Created(address indexed account, uint256 underlying);
-    event Redeemed(address indexed account, uint256 shares);
+    event Created(address indexed account, uint256 underlying, uint256 shares);
+    event Redeemed(
+        address indexed account,
+        uint256 shares,
+        uint256 underlying,
+        uint256 redemptionFee
+    );
     event Split(address indexed account, uint256 inM, uint256 outA, uint256 outB);
     event Merged(address indexed account, uint256 outM, uint256 inA, uint256 inB);
     event Claimed(address indexed account, uint256 createdShares, uint256 redeemedUnderlying);
@@ -65,7 +70,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18;
     uint256 private constant MAX_ITERATIONS = 500;
 
-    IFundV2 public immutable fund;
+    IFundV3 public immutable fund;
     IERC20 private immutable _tokenUnderlying;
 
     uint256 public redemptionFeeRate;
@@ -80,7 +85,6 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     uint256 public currentRedeemingShares;
     uint256 public currentFeeInShares;
 
-    mapping(uint256 => uint256) private _historicalCreationRate;
     mapping(uint256 => uint256) private _historicalRedemptionRate;
 
     /// @notice The upper limit of underlying that the fund can hold. This contract rejects
@@ -115,7 +119,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         require(redemptionFeeRate_ <= MAX_REDEMPTION_FEE_RATE, "Exceed max redemption fee rate");
         require(splitFeeRate_ <= MAX_SPLIT_FEE_RATE, "Exceed max split fee rate");
         require(mergeFeeRate_ <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
-        fund = IFundV2(fund_);
+        fund = IFundV3(fund_);
         _tokenUnderlying = IERC20(IFund(fund_).tokenUnderlying());
         redemptionFeeRate = redemptionFeeRate_;
         splitFeeRate = splitFeeRate_;
@@ -159,53 +163,186 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         _updateDelayedRedemptionDay();
     }
 
-    function create(address recipient, uint256 underlying) external override nonReentrant {
-        _tokenUnderlying.safeTransferFrom(msg.sender, address(this), underlying);
-        _create(recipient, underlying);
+    function getRedemption(uint256 shares) public view override returns (uint256 underlying) {
+        uint256 fundUnderlying = fund.getTotalUnderlying();
+        uint256 fundTotalShares = fund.getTotalShares();
+        underlying = shares.mul(fundUnderlying).div(fundTotalShares);
     }
 
-    function wrapAndCreate(address recipient) external payable override nonReentrant {
+    function getCreation(uint256 underlying) public view override returns (uint256 shares) {
+        uint256 fundUnderlying = fund.getTotalUnderlying();
+        uint256 fundTotalShares = fund.getTotalShares();
+        shares = underlying.mul(fundTotalShares).div(fundUnderlying);
+    }
+
+    function getSplit(uint256 inM)
+        public
+        view
+        override
+        returns (
+            uint256 outA,
+            uint256 outB,
+            uint256 feeM
+        )
+    {
+        (uint256 weightA, uint256 weightB) = fund.trancheWeights();
+        // Charge splitting fee and round it to a multiple of (weightA + weightB)
+        uint256 unit = inM.sub(inM.multiplyDecimal(splitFeeRate)) / (weightA + weightB);
+        require(unit > 0, "Too little to split");
+        uint256 inMAfterFee = unit * (weightA + weightB);
+        outA = unit * weightA;
+        outB = inMAfterFee - outA;
+        feeM = inM - inMAfterFee;
+    }
+
+    function getTokenAMForSplitB(uint256 outB)
+        external
+        view
+        override
+        returns (uint256 outA, uint256 inM)
+    {
+        (uint256 weightA, uint256 weightB) = fund.trancheWeights();
+        outA = outB.mul(weightA) / weightB;
+        uint256 inMAfterFee = outA.add(outB);
+        inM = inMAfterFee.divideDecimal(uint256(1e18).sub(splitFeeRate)).add(1);
+    }
+
+    function getMerge(uint256 expectA)
+        public
+        view
+        override
+        returns (
+            uint256 inA,
+            uint256 inB,
+            uint256 outM,
+            uint256 feeM
+        )
+    {
+        (uint256 weightA, uint256 weightB) = fund.trancheWeights();
+        // Round to tranche weights
+        uint256 unit = expectA / weightA;
+        require(unit > 0, "Too little to merge");
+        // Keep unmergable Token A unchanged.
+        inA = unit * weightA;
+        inB = unit.mul(weightB);
+        uint256 outMBeforeFee = inA.add(inB);
+        feeM = outMBeforeFee.multiplyDecimal(mergeFeeRate);
+        outM = outMBeforeFee.sub(feeM);
+    }
+
+    function getTokenAMForMergeB(uint256 inB)
+        external
+        view
+        override
+        returns (uint256 inA, uint256 outM)
+    {
+        (uint256 weightA, uint256 weightB) = fund.trancheWeights();
+        // Round to tranche weights
+        uint256 unit = inB / weightB;
+        require(unit > 0, "Too little to merge");
+        // Keep unmergable Token A unchanged.
+        inA = unit * weightA;
+        inB = unit * weightB;
+        uint256 outMBeforeFee = inA.add(inB);
+        uint256 feeM = outMBeforeFee.multiplyDecimal(mergeFeeRate);
+        outM = outMBeforeFee.sub(feeM);
+    }
+
+    function create(address recipient, uint256 underlying)
+        external
+        override
+        nonReentrant
+        returns (uint256 shares)
+    {
+        shares = _create(recipient, underlying);
+        _tokenUnderlying.safeTransferFrom(msg.sender, address(fund), underlying);
+    }
+
+    function wrapAndCreate(address recipient)
+        external
+        payable
+        override
+        nonReentrant
+        returns (uint256 shares)
+    {
+        shares = _create(recipient, msg.value);
         IWrappedERC20(address(_tokenUnderlying)).deposit{value: msg.value}();
-        _create(recipient, msg.value);
+        _tokenUnderlying.safeTransfer(address(fund), msg.value);
     }
 
-    function _create(address recipient, uint256 underlying) private onlyActive {
-        require(underlying >= minCreationUnderlying, "Min amount");
+    function redeem(address recipient, uint256 shares)
+        external
+        override
+        nonReentrant
+        returns (uint256 underlying)
+    {
+        underlying = _redeem(recipient, shares);
+    }
 
-        // Do not call `_updateDelayedRedemptionDay()` because the latest `redeemedUnderlying`
-        // is not used in this function.
+    function redeemAndUnwrap(address recipient, uint256 shares)
+        external
+        override
+        nonReentrant
+        returns (uint256 underlying)
+    {
+        underlying = _redeem(address(this), shares);
+        IWrappedERC20(address(_tokenUnderlying)).withdraw(underlying);
+        (bool success, ) = recipient.call{value: underlying}("");
+        require(success, "Transfer failed");
+    }
+
+    function _create(address recipient, uint256 underlying)
+        private
+        onlyActive
+        returns (uint256 shares)
+    {
         _updateUser(recipient);
-        CreationRedemption storage cr = _creationRedemptions[recipient];
-        cr.creatingUnderlying = cr.creatingUnderlying.add(underlying);
-
-        uint256 creatingUnderlying = currentCreatingUnderlying.add(underlying);
-        currentCreatingUnderlying = creatingUnderlying;
-
+        require(underlying >= minCreationUnderlying, "Min amount");
+        uint256 fundUnderlying = fund.getTotalUnderlying();
+        uint256 fundTotalShares = fund.getTotalShares();
         uint256 cap = fundCap;
         if (cap != uint256(-1)) {
-            require(
-                fund.historicalUnderlying(currentDay - 1 days).add(creatingUnderlying) <= cap,
-                "Exceed fund cap"
-            );
+            require(fundUnderlying.add(underlying) <= cap, "Exceed fund cap");
         }
 
-        emit Created(recipient, underlying);
+        shares = getCreation(underlying);
+        fund.mint(TRANCHE_M, recipient, shares);
+
+        emit Created(recipient, underlying, shares);
     }
 
-    function redeem(address recipient, uint256 shares) external override nonReentrant onlyActive {
+    function _redeem(address recipient, uint256 shares)
+        private
+        onlyActive
+        returns (uint256 redeemedUnderlying)
+    {
         require(shares != 0, "Zero shares");
-        // Use burn and mint to simulate a transfer, so that we don't need a special transferFrom()
         fund.burn(TRANCHE_M, msg.sender, shares);
-        fund.mint(TRANCHE_M, address(this), shares);
+        uint256 redemptionFee;
+        if (delayedRedemptionDay == currentDay) {
+            // If zero delayed redemption, allow instant redemption
+            uint256 fundUnderlying = fund.getTotalUnderlying();
+            uint256 fundTotalShares = fund.getTotalShares();
+            uint256 underlying = getRedemption(shares);
+            uint256 balance = _tokenUnderlying.balanceOf(address(fund));
+            require(underlying <= balance, "Not enough available hot balance");
+            redemptionFee = underlying.multiplyDecimal(redemptionFeeRate);
+            redeemedUnderlying = underlying.sub(redemptionFee);
+            fund.transferToPrimaryMarket(recipient, redeemedUnderlying, redemptionFee);
+        } else {
+            // Use burn and mint to simulate a transfer, so that we don't need a special transferFrom()
+            fund.mint(TRANCHE_M, address(this), shares);
 
-        // Do not call `_updateDelayedRedemptionDay()` because the latest `redeemedUnderlying`
-        // is not used in this function.
-        _updateUser(recipient);
-        CreationRedemption storage cr = _creationRedemptions[recipient];
-        cr.redeemingShares = cr.redeemingShares.add(shares);
+            // Do not call `_updateDelayedRedemptionDay()` because the latest `redeemedUnderlying`
+            // is not used in this function.
+            _updateUser(recipient);
+            CreationRedemption storage cr = _creationRedemptions[recipient];
+            cr.redeemingShares = cr.redeemingShares.add(shares);
 
-        currentRedeemingShares = currentRedeemingShares.add(shares);
-        emit Redeemed(recipient, shares);
+            currentRedeemingShares = currentRedeemingShares.add(shares);
+        }
+
+        emit Redeemed(recipient, shares, redeemedUnderlying, redemptionFee);
     }
 
     function claim(address account)
@@ -268,14 +405,8 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         onlyActive
         returns (uint256 outA, uint256 outB)
     {
-        (uint256 weightA, uint256 weightB) = fund.trancheWeights();
-        // Charge splitting fee and round it to a multiple of (weightA + weightB)
-        uint256 unit = inM.sub(inM.multiplyDecimal(splitFeeRate)) / (weightA + weightB);
-        require(unit > 0, "Too little to split");
-        uint256 inMAfterFee = unit * (weightA + weightB);
-        outA = unit * weightA;
-        outB = inMAfterFee - outA;
-        uint256 feeM = inM - inMAfterFee;
+        uint256 feeM;
+        (outA, outB, feeM) = getSplit(inM);
 
         fund.burn(TRANCHE_M, msg.sender, inM);
         fund.mint(TRANCHE_A, recipient, outA);
@@ -292,17 +423,8 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         onlyActive
         returns (uint256 inB, uint256 outM)
     {
-        (uint256 weightA, uint256 weightB) = fund.trancheWeights();
-        // Round to tranche weights
-        uint256 unit = inA / weightA;
-        require(unit > 0, "Too little to merge");
-        // Keep unmergable Token A unchanged.
-        inA = unit * weightA;
-        inB = unit.mul(weightB);
-        uint256 outMBeforeFee = inA.add(inB);
-        uint256 feeM = outMBeforeFee.multiplyDecimal(mergeFeeRate);
-        outM = outMBeforeFee.sub(feeM);
-
+        uint256 feeM;
+        (inA, inB, outM, feeM) = getMerge(inA);
         fund.burn(TRANCHE_A, msg.sender, inA);
         fund.burn(TRANCHE_B, msg.sender, inB);
         fund.mint(TRANCHE_M, recipient, outM);
@@ -331,8 +453,6 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     /// @param day The trading day to settle
     /// @param fundTotalShares Total shares of the fund (as if all Token A and B are merged)
     /// @param fundUnderlying Underlying assets in the fund
-    /// @param underlyingPrice Price of the underlying assets at the end of the trading day
-    /// @param previousNav NAV of Token M of the previous trading day
     /// @return sharesToMint Amount of Token M to mint for creations
     /// @return sharesToBurn Amount of Token M to burn for redemptions and split/merge fee
     /// @return creationUnderlying Underlying assets received for creations (including creation fee)
@@ -343,8 +463,8 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         uint256 day,
         uint256 fundTotalShares,
         uint256 fundUnderlying,
-        uint256 underlyingPrice,
-        uint256 previousNav
+        uint256, /*underlyingPrice*/
+        uint256 /*previousNav*/
     )
         external
         override
@@ -359,28 +479,6 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         )
     {
         require(day >= currentDay, "Already settled");
-
-        // Creation
-        creationUnderlying = currentCreatingUnderlying;
-        if (creationUnderlying > 0) {
-            if (fundUnderlying > 0) {
-                sharesToMint = creationUnderlying.mul(fundTotalShares).div(fundUnderlying);
-            } else {
-                // NAV is rounded down. Computing creations using NAV results in rounded up shares,
-                // which is unfair to existing share holders. We only do that when there are
-                // no shares before.
-                require(
-                    fundTotalShares == 0,
-                    "Cannot create shares for fund with shares but no underlying"
-                );
-                require(previousNav > 0, "Cannot create shares at zero NAV");
-                sharesToMint = creationUnderlying
-                    .mul(underlyingPrice)
-                    .mul(fund.underlyingDecimalMultiplier())
-                    .div(previousNav);
-            }
-            _historicalCreationRate[day] = sharesToMint.divideDecimal(creationUnderlying);
-        }
 
         // Redemption
         sharesToBurn = currentRedeemingShares;
@@ -399,25 +497,14 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
             fee = fee.add(feeInShares.mul(fundUnderlying).div(fundTotalShares));
         }
 
-        // Approve the fund to take underlying if creation is more than redemption.
-        // Instead of directly transfering underlying to the fund, this implementation
-        // makes testing much easier.
-        if (creationUnderlying > redemptionUnderlying) {
-            // Do not use `SafeERC20.safeApprove()` because the previous allowance
-            // may be non-zero when there were some delayed redemptions.
-            _tokenUnderlying.approve(address(fund), creationUnderlying - redemptionUnderlying);
-        }
-
         // This loop should never execute, because this function is called by Fund
         // for every day. We fill the gap just in case that something goes wrong in Fund.
         for (uint256 t = currentDay; t < day; t += 1 days) {
-            _historicalCreationRate[t] = _historicalCreationRate[day];
             _historicalRedemptionRate[t] = _historicalRedemptionRate[day];
         }
 
         _delayedUnderlyings[day] = redemptionUnderlying;
         currentDay = day + 1 days;
-        currentCreatingUnderlying = 0;
         currentRedeemingShares = 0;
         currentFeeInShares = 0;
         emit Settled(
@@ -475,33 +562,6 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         uint256 newDay = currentDay;
         if (oldDay < newDay) {
             cr.day = newDay;
-            uint256 oldCreatingUnderlying = cr.creatingUnderlying;
-            uint256 oldCreatedShares = cr.createdShares;
-            uint256 newCreatedShares = oldCreatedShares;
-            if (oldCreatingUnderlying > 0) {
-                newCreatedShares = newCreatedShares.add(
-                    oldCreatingUnderlying.multiplyDecimal(_historicalCreationRate[oldDay])
-                );
-                cr.creatingUnderlying = 0;
-            }
-            uint256 rebalanceSize = fund.getRebalanceSize();
-            uint256 oldVersion = cr.version;
-            if (oldVersion < rebalanceSize) {
-                if (newCreatedShares > 0) {
-                    (newCreatedShares, , ) = fund.batchRebalance(
-                        newCreatedShares,
-                        0,
-                        0,
-                        oldVersion,
-                        rebalanceSize
-                    );
-                }
-                cr.version = rebalanceSize;
-            }
-            if (newCreatedShares != oldCreatedShares) {
-                cr.createdShares = newCreatedShares;
-            }
-
             uint256 oldRedeemingShares = cr.redeemingShares;
             if (oldRedeemingShares > 0) {
                 uint256 underlying =
