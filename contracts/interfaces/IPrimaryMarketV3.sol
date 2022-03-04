@@ -39,6 +39,8 @@ interface IPrimaryMarketV3 {
         external
         returns (uint256 underlying);
 
+    function delayRedeem(address recipient, uint256 shares) external;
+
     function claim(address account)
         external
         returns (uint256 createdShares, uint256 redeemedUnderlying);

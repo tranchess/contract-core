@@ -172,7 +172,28 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     function getCreation(uint256 underlying) public view override returns (uint256 shares) {
         uint256 fundUnderlying = fund.getTotalUnderlying();
         uint256 fundTotalShares = fund.getTotalShares();
-        shares = underlying.mul(fundTotalShares).div(fundUnderlying);
+        require(underlying >= minCreationUnderlying, "Min amount");
+        uint256 cap = fundCap;
+        if (cap != uint256(-1)) {
+            require(fundUnderlying.add(underlying) <= cap, "Exceed fund cap");
+        }
+        if (fundUnderlying == 0) {
+            uint256 day = fund.currentDay();
+            uint256 underlyingPrice = fund.twapOracle().getTwap(day);
+            (uint256 prevNavM, , ) = fund.historicalNavs(day - 1 days);
+            require(underlyingPrice != 0, "Underlying price for settlement is not ready yet");
+            require(
+                fundTotalShares == 0,
+                "Cannot create shares for fund with shares but no underlying"
+            );
+            require(prevNavM > 0, "Cannot create shares at zero NAV");
+
+            shares = underlying.mul(underlyingPrice).mul(fund.underlyingDecimalMultiplier()).div(
+                prevNavM
+            );
+        } else {
+            shares = underlying.mul(fundTotalShares).div(fundUnderlying);
+        }
     }
 
     function getSplit(uint256 inM)
@@ -270,6 +291,27 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         _tokenUnderlying.safeTransfer(address(fund), msg.value);
     }
 
+    function delayRedeem(address recipient, uint256 shares)
+        external
+        override
+        onlyActive
+        nonReentrant
+    {
+        require(shares != 0, "Zero shares");
+        // Use burn and mint to simulate a transfer, so that we don't need a special transferFrom()
+        fund.burn(TRANCHE_M, msg.sender, shares);
+        fund.mint(TRANCHE_M, address(this), shares);
+
+        // Do not call `_updateDelayedRedemptionDay()` because the latest `redeemedUnderlying`
+        // is not used in this function.
+        _updateUser(recipient);
+        CreationRedemption storage cr = _creationRedemptions[recipient];
+        cr.redeemingShares = cr.redeemingShares.add(shares);
+        currentRedeemingShares = currentRedeemingShares.add(shares);
+
+        emit Redeemed(recipient, shares, 0, 0);
+    }
+
     function redeem(address recipient, uint256 shares)
         external
         override
@@ -297,14 +339,6 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         returns (uint256 shares)
     {
         _updateUser(recipient);
-        require(underlying >= minCreationUnderlying, "Min amount");
-        uint256 fundUnderlying = fund.getTotalUnderlying();
-        uint256 fundTotalShares = fund.getTotalShares();
-        uint256 cap = fundCap;
-        if (cap != uint256(-1)) {
-            require(fundUnderlying.add(underlying) <= cap, "Exceed fund cap");
-        }
-
         shares = getCreation(underlying);
         fund.mint(TRANCHE_M, recipient, shares);
 
@@ -317,30 +351,15 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         returns (uint256 redeemedUnderlying)
     {
         require(shares != 0, "Zero shares");
+        require(delayedRedemptionDay == currentDay);
+        _updateUser(recipient);
         fund.burn(TRANCHE_M, msg.sender, shares);
-        uint256 redemptionFee;
-        if (delayedRedemptionDay == currentDay) {
-            // If zero delayed redemption, allow instant redemption
-            uint256 fundUnderlying = fund.getTotalUnderlying();
-            uint256 fundTotalShares = fund.getTotalShares();
-            uint256 underlying = getRedemption(shares);
-            uint256 balance = _tokenUnderlying.balanceOf(address(fund));
-            require(underlying <= balance, "Not enough available hot balance");
-            redemptionFee = underlying.multiplyDecimal(redemptionFeeRate);
-            redeemedUnderlying = underlying.sub(redemptionFee);
-            fund.transferToPrimaryMarket(recipient, redeemedUnderlying, redemptionFee);
-        } else {
-            // Use burn and mint to simulate a transfer, so that we don't need a special transferFrom()
-            fund.mint(TRANCHE_M, address(this), shares);
-
-            // Do not call `_updateDelayedRedemptionDay()` because the latest `redeemedUnderlying`
-            // is not used in this function.
-            _updateUser(recipient);
-            CreationRedemption storage cr = _creationRedemptions[recipient];
-            cr.redeemingShares = cr.redeemingShares.add(shares);
-
-            currentRedeemingShares = currentRedeemingShares.add(shares);
-        }
+        uint256 underlying = getRedemption(shares);
+        uint256 balance = _tokenUnderlying.balanceOf(address(fund));
+        require(underlying <= balance, "Not enough available hot balance");
+        uint256 redemptionFee = underlying.multiplyDecimal(redemptionFeeRate);
+        redeemedUnderlying = underlying.sub(redemptionFee);
+        fund.transferToPrimaryMarket(recipient, redeemedUnderlying, redemptionFee);
 
         emit Redeemed(recipient, shares, redeemedUnderlying, redemptionFee);
     }

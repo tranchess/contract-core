@@ -1,6 +1,6 @@
 import { AssertionError, expect } from "chai";
 import { BigNumber, Contract, Transaction, Wallet } from "ethers";
-import type { Fixture, MockProvider } from "ethereum-waffle";
+import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
@@ -33,6 +33,7 @@ describe("PrimaryMarket", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly btc: Contract;
+        readonly twapOracle: MockContract;
         readonly fund: Contract;
         readonly shareM: Contract;
         readonly primaryMarket: Contract;
@@ -47,17 +48,10 @@ describe("PrimaryMarket", function () {
     let addr2: string;
     let owner: Wallet;
     let btc: Contract;
+    let twapOracle: MockContract;
     let fund: Contract;
     let shareM: Contract;
     let primaryMarket: Contract;
-
-    function settleWithNav(
-        day: number,
-        price: number | BigNumber,
-        nav: number | BigNumber
-    ): Promise<Transaction> {
-        return fund.call(primaryMarket, "settle", day, 0, 0, price, nav);
-    }
 
     function settleWithShare(
         day: number,
@@ -80,9 +74,9 @@ describe("PrimaryMarket", function () {
         fundUnderlying: number | BigNumber = parseBtc("1"),
         fundTotalShares: number | BigNumber = parseEther("1")
     ): [BigNumber, BigNumber] {
-        var underlying = shares.mul(fundUnderlying).div(fundTotalShares);
-        var redemptionFee = underlying.mul(REDEMPTION_FEE_BPS).div(10000);
-        var redeemedUnderlying = underlying.sub(redemptionFee);
+        const underlying = shares.mul(fundUnderlying).div(fundTotalShares);
+        const redemptionFee = underlying.mul(REDEMPTION_FEE_BPS).div(10000);
+        const redeemedUnderlying = underlying.sub(redemptionFee);
         return [redeemedUnderlying, redemptionFee];
     }
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
@@ -90,6 +84,7 @@ describe("PrimaryMarket", function () {
 
         const MockToken = await ethers.getContractFactory("MockToken");
         const btc = await MockToken.connect(owner).deploy("Wrapped BTC", "BTC", 8);
+        const twapOracle = await deployMockForName(owner, "ITwapOracle");
         const fund = await deployMockForName(owner, "FundV3");
         const shareM = await deployMockForName(owner, "Share");
         const shareA = await deployMockForName(owner, "Share");
@@ -124,6 +119,7 @@ describe("PrimaryMarket", function () {
         return {
             wallets: { user1, user2, owner },
             btc,
+            twapOracle,
             fund,
             shareM,
             primaryMarket: primaryMarket.connect(user1),
@@ -142,6 +138,7 @@ describe("PrimaryMarket", function () {
         addr2 = user2.address;
         owner = fixtureData.wallets.owner;
         btc = fixtureData.btc;
+        twapOracle = fixtureData.twapOracle;
         fund = fixtureData.fund;
         shareM = fixtureData.shareM;
         primaryMarket = fixtureData.primaryMarket;
@@ -163,6 +160,21 @@ describe("PrimaryMarket", function () {
                 "Min amount"
             );
             await primaryMarket.create(addr1, MIN_CREATION_AMOUNT);
+        });
+
+        it("Should create using price and NAV when fund was empty", async function () {
+            // Create with 1 BTC at price 30000 and NAV 0.5
+            const inBtc = parseBtc("1");
+            const outM = parseEther("60000");
+            await fund.mock.getTotalShares.returns(0);
+            await fund.mock.getTotalUnderlying.returns(0);
+            await fund.mock.twapOracle.returns(twapOracle.address);
+            await twapOracle.mock.getTwap.returns(parseEther("30000"));
+            await fund.mock.historicalNavs.returns(parseEther("0.5"), 0, 0);
+            await fund.mock.mint.withArgs(TRANCHE_M, addr1, outM).returns();
+            await expect(primaryMarket.create(addr1, inBtc))
+                .to.emit(primaryMarket, "Created")
+                .withArgs(addr1, inBtc, outM);
         });
 
         it("Should transfer underlying and save the creation", async function () {
@@ -209,10 +221,14 @@ describe("PrimaryMarket", function () {
             await expect(primaryMarket.redeem(addr1, parseEther("1"))).to.be.revertedWith(
                 "Only when active"
             );
+            await expect(primaryMarket.delayRedeem(addr1, parseEther("1"))).to.be.revertedWith(
+                "Only when active"
+            );
         });
 
         it("Should revert on zero shares", async function () {
             await expect(primaryMarket.redeem(addr1, 0)).to.be.revertedWith("Zero shares");
+            await expect(primaryMarket.delayRedeem(addr1, 0)).to.be.revertedWith("Zero shares");
         });
 
         it("Should revert on not enough available hot balance", async function () {
@@ -236,33 +252,30 @@ describe("PrimaryMarket", function () {
         });
 
         it("Should transfer shares and save the redemption if not enough hot balance", async function () {
-            await fund.call(primaryMarket, "settle", START_DAY, 0, 0, 1, 1);
             const amount = parseEther("1");
             await fund.mock.burn.withArgs(TRANCHE_M, addr1, amount).returns();
             await fund.mock.mint.withArgs(TRANCHE_M, primaryMarket.address, amount).returns();
-            await primaryMarket.redeem(addr1, amount);
+            await primaryMarket.delayRedeem(addr1, amount);
             const cr = await primaryMarket.callStatic.creationRedemptionOf(addr1);
             expect(cr.redeemingShares).to.equal(amount);
             expect(await primaryMarket.currentRedeemingShares()).to.equal(amount);
         });
 
         it("Should combine multiple redemptions in the same day", async function () {
-            await fund.call(primaryMarket, "settle", START_DAY, 0, 0, 1, 1);
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.redeem(addr1, parseEther("2"));
-            await primaryMarket.redeem(addr1, parseEther("3"));
-            await primaryMarket.connect(user2).redeem(addr2, parseEther("4"));
+            await primaryMarket.delayRedeem(addr1, parseEther("2"));
+            await primaryMarket.delayRedeem(addr1, parseEther("3"));
+            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("4"));
             const cr = await primaryMarket.callStatic.creationRedemptionOf(addr1);
             expect(cr.redeemingShares).to.equal(parseEther("5"));
             expect(await primaryMarket.currentRedeemingShares()).to.equal(parseEther("9"));
         });
 
         it("Should not be claimable in the same day", async function () {
-            await fund.call(primaryMarket, "settle", START_DAY, 0, 0, 1, 1);
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.redeem(addr1, parseEther("1"));
+            await primaryMarket.delayRedeem(addr1, parseEther("1"));
             await fund.mock.burn.revertsWithReason("Mock function reset");
             await fund.mock.mint.revertsWithReason("Mock function reset");
             // No shares or underlying is transfered
@@ -424,17 +437,16 @@ describe("PrimaryMarket", function () {
         it("Should settle redemption using last shares and underlying", async function () {
             // Fund had 10 BTC and 10000 shares
             // Redeem 1000 shares for 1 BTC
-            await fund.call(primaryMarket, "settle", START_DAY, 0, 0, 1, 1);
             const fee = parseBtc("1").mul(REDEMPTION_FEE_BPS).div(10000);
             const redeemed = parseBtc("1").sub(fee);
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.redeem(addr1, parseEther("1000"));
+            await primaryMarket.delayRedeem(addr1, parseEther("1000"));
             await fund.mock.burn.revertsWithReason("Mock function reset");
             await fund.mock.mint.revertsWithReason("Mock function reset");
-            await expect(settleWithShare(START_DAY + DAY, parseEther("10000"), parseBtc("10")))
+            await expect(settleWithShare(START_DAY, parseEther("10000"), parseBtc("10")))
                 .to.emit(primaryMarket, "Settled")
-                .withArgs(START_DAY + DAY, 0, parseEther("1000"), 0, redeemed, fee);
+                .withArgs(START_DAY, 0, parseEther("1000"), 0, redeemed, fee);
             // No BTC to be transfered
             expect(await btc.allowance(primaryMarket.address, fund.address)).to.equal(0);
         });
@@ -442,31 +454,29 @@ describe("PrimaryMarket", function () {
         it("Should round down redemption shares and fee", async function () {
             // Fund had 2500 underlying units and 900 share units
             // Redeem 600 share units
-            await fund.call(primaryMarket, "settle", START_DAY, 0, 0, 1, 1);
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.redeem(addr1, 600);
+            await primaryMarket.delayRedeem(addr1, 600);
             // Redeemed before fee: 600 * 2500 / 900 = 1666
             // Fee: 1666 * 0.0035 = 5
             // Redeemed after fee: 1666 - 5 = 1661
-            await expect(settleWithShare(START_DAY + DAY, 900, 2500))
+            await expect(settleWithShare(START_DAY, 900, 2500))
                 .to.emit(primaryMarket, "Settled")
-                .withArgs(START_DAY + DAY, 0, 600, 0, 1661, 5);
+                .withArgs(START_DAY, 0, 600, 0, 1661, 5);
         });
 
         it("Should net underlying (creation < redemption)", async function () {
             // Fund had 10 BTC and 10000 shares
             // Create with 1 BTC and redeem all the 10000 shares
-            await fund.call(primaryMarket, "settle", START_DAY, 0, 0, 1, 1);
             await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(parseBtc("1"))).returns();
             await primaryMarket.create(addr1, parseBtc("1"));
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.redeem(addr1, parseEther("10000"));
+            await primaryMarket.delayRedeem(addr1, parseEther("10000"));
             const redemptionUnderlying = parseBtc("10")
                 .mul(10000 - REDEMPTION_FEE_BPS)
                 .div(10000);
-            const tx = await settleWithShare(START_DAY + DAY, parseEther("10000"), parseBtc("10"));
+            const tx = await settleWithShare(START_DAY, parseEther("10000"), parseBtc("10"));
             const event = await parseEvent(tx, primaryMarket, "Settled");
             expect(event.creationUnderlying).to.equal(0);
             expect(event.redemptionUnderlying).to.equal(redemptionUnderlying);
@@ -494,15 +504,13 @@ describe("PrimaryMarket", function () {
 
         it("Should settle everything together", async function () {
             // Fund had 10 BTC and 10000 shares
-            await fund.call(primaryMarket, "settle", START_DAY, 0, 0, 1, 1);
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
             await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(parseBtc("1"))).returns();
             // Create with 1 BTC
             await primaryMarket.connect(user2).create(addr1, parseBtc("1"));
-            const createdShares = parseEther("1000");
             // Redeem 1000 shares
-            await primaryMarket.redeem(addr1, parseEther("1000"));
+            await primaryMarket.delayRedeem(addr1, parseEther("1000"));
             const redemptionFee = parseBtc("1").mul(REDEMPTION_FEE_BPS).div(10000);
             const redeemedBtc = parseBtc("1").sub(redemptionFee);
             // Split 1000 M and merge 100 A and 100 B
@@ -519,33 +527,28 @@ describe("PrimaryMarket", function () {
             expect(event.creationUnderlying).to.equal(0);
             expect(event.redemptionUnderlying).to.equal(redeemedBtc);
             expect(event.fee).to.equal(redemptionFee.add(feeInBtc));
-            // Net underlying (creation - redemption) to be transfered to fund
-            expect(await btc.allowance(primaryMarket.address, fund.address)).to.equal(0);
         });
     });
 
     describe("claim()", function () {
         let outerFixture: Fixture<FixtureData>;
-        let createdShares: BigNumber;
         let redeemedBtc: BigNumber;
 
         interface SettleFixtureData extends FixtureData {
-            createdShares: BigNumber;
             redeemedBtc: BigNumber;
         }
 
         async function settleFixture(): Promise<SettleFixtureData> {
             const f = await loadFixture(deployFixture);
-            await f.fund.call(primaryMarket, "settle", START_DAY, 0, 0, 1, 1);
             await f.fund.mock.getRebalanceSize.returns(0);
             await f.fund.mock.burn.returns();
             await f.fund.mock.mint.returns();
             await f.primaryMarket.create(addr1, parseBtc("1"));
-            await f.primaryMarket.redeem(addr1, parseEther("1000"));
+            await f.primaryMarket.delayRedeem(addr1, parseEther("1000"));
             await f.fund.call(
                 f.primaryMarket,
                 "settle",
-                START_DAY + DAY,
+                START_DAY,
                 parseEther("10000"),
                 parseBtc("10"),
                 0,
@@ -559,11 +562,10 @@ describe("PrimaryMarket", function () {
                     .mul(10000 - REDEMPTION_FEE_BPS)
                     .div(10000)
             );
-            const createdShares = parseEther("0");
             const redeemedBtc = parseBtc("1")
                 .mul(10000 - REDEMPTION_FEE_BPS)
                 .div(10000);
-            return { createdShares, redeemedBtc, ...f };
+            return { redeemedBtc, ...f };
         }
 
         before(function () {
@@ -579,7 +581,6 @@ describe("PrimaryMarket", function () {
 
         beforeEach(function () {
             const f = fixtureData as SettleFixtureData;
-            createdShares = f.createdShares;
             redeemedBtc = f.redeemedBtc;
         });
 
@@ -593,7 +594,7 @@ describe("PrimaryMarket", function () {
         });
 
         it("Should combine claimable redemptions in different days", async function () {
-            await primaryMarket.redeem(addr1, parseEther("2000"));
+            await primaryMarket.delayRedeem(addr1, parseEther("2000"));
             // Day (START_DAY + DAY) is not settled
             await settleWithShare(START_DAY + DAY * 2, parseEther("20000"), parseBtc("40"));
             const redeemedAgain = parseBtc("4")
@@ -624,21 +625,20 @@ describe("PrimaryMarket", function () {
         const btcU2D4 = redeemedPerShare.mul(300);
 
         beforeEach(async function () {
-            await fund.call(primaryMarket, "settle", START_DAY, 0, 0, 1, 1);
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.connect(user1).redeem(addr1, parseEther("1000"));
-            await settleWithShare(START_DAY + DAY, parseEther("10000"), parseBtc("10"));
-            await primaryMarket.connect(user1).redeem(addr1, parseEther("500"));
-            await primaryMarket.connect(user2).redeem(addr2, parseEther("2000"));
-            await settleWithShare(START_DAY + DAY * 2, parseEther("9000"), parseBtc("9"));
+            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("1000"));
+            await settleWithShare(START_DAY, parseEther("10000"), parseBtc("10"));
+            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("500"));
+            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("2000"));
+            await settleWithShare(START_DAY + DAY, parseEther("9000"), parseBtc("9"));
+            await settleWithShare(START_DAY + DAY * 2, parseEther("6500"), parseBtc("6.5"));
+            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("1500"));
+            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("3000"));
             await settleWithShare(START_DAY + DAY * 3, parseEther("6500"), parseBtc("6.5"));
-            await primaryMarket.connect(user1).redeem(addr1, parseEther("1500"));
-            await primaryMarket.connect(user2).redeem(addr2, parseEther("3000"));
-            await settleWithShare(START_DAY + DAY * 4, parseEther("6500"), parseBtc("6.5"));
-            await primaryMarket.connect(user1).redeem(addr1, parseEther("200"));
-            await primaryMarket.connect(user2).redeem(addr2, parseEther("300"));
-            await settleWithShare(START_DAY + DAY * 5, parseEther("2000"), parseBtc("2"));
+            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("200"));
+            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("300"));
+            await settleWithShare(START_DAY + DAY * 4, parseEther("2000"), parseBtc("2"));
         });
 
         it("getDelayedRedemption()", async function () {
@@ -646,50 +646,48 @@ describe("PrimaryMarket", function () {
                 const ret = await primaryMarket.getDelayedRedemption(user.address, day);
                 return [ret.underlying, ret.nextDay.toNumber()];
             };
-            expect(await getter(user1, START_DAY + DAY)).to.eql([btcU1D0, START_DAY + DAY * 2]);
-            expect(await getter(user2, START_DAY + DAY)).to.eql([BigNumber.from(0), 0]);
-            expect(await getter(user1, START_DAY + DAY * 2)).to.eql([btcU1D1, START_DAY + DAY * 4]);
-            expect(await getter(user2, START_DAY + DAY * 2)).to.eql([btcU2D1, START_DAY + DAY * 4]);
-            expect(await getter(user1, START_DAY + DAY * 3)).to.eql([BigNumber.from(0), 0]);
-            expect(await getter(user2, START_DAY + DAY * 3)).to.eql([BigNumber.from(0), 0]);
-            expect(await getter(user1, START_DAY + DAY * 4)).to.eql([btcU1D3, 0]);
-            expect(await getter(user2, START_DAY + DAY * 4)).to.eql([btcU2D3, 0]);
+            expect(await getter(user1, START_DAY)).to.eql([btcU1D0, START_DAY + DAY]);
+            expect(await getter(user2, START_DAY)).to.eql([BigNumber.from(0), 0]);
+            expect(await getter(user1, START_DAY + DAY)).to.eql([btcU1D1, START_DAY + DAY * 3]);
+            expect(await getter(user2, START_DAY + DAY)).to.eql([btcU2D1, START_DAY + DAY * 3]);
+            expect(await getter(user1, START_DAY + DAY * 2)).to.eql([BigNumber.from(0), 0]);
+            expect(await getter(user2, START_DAY + DAY * 2)).to.eql([BigNumber.from(0), 0]);
+            expect(await getter(user1, START_DAY + DAY * 3)).to.eql([btcU1D3, 0]);
+            expect(await getter(user2, START_DAY + DAY * 3)).to.eql([btcU2D3, 0]);
 
             // Redemption results are calculated only after user calls the contract
-            expect(await getter(user1, START_DAY + DAY * 5)).to.eql([BigNumber.from(0), 0]);
-            expect(await getter(user2, START_DAY + DAY * 5)).to.eql([BigNumber.from(0), 0]);
+            expect(await getter(user1, START_DAY + DAY * 4)).to.eql([BigNumber.from(0), 0]);
+            expect(await getter(user2, START_DAY + DAY * 4)).to.eql([BigNumber.from(0), 0]);
             await primaryMarket.claim(addr1);
-            await primaryMarket.connect(user2).redeem(addr2, parseEther("1"));
-            expect(await getter(user1, START_DAY + DAY * 4)).to.eql([btcU1D3, START_DAY + DAY * 5]);
-            expect(await getter(user2, START_DAY + DAY * 4)).to.eql([btcU2D3, START_DAY + DAY * 5]);
-            expect(await getter(user1, START_DAY + DAY * 5)).to.eql([btcU1D4, 0]);
-            expect(await getter(user2, START_DAY + DAY * 5)).to.eql([btcU2D4, 0]);
+            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("1"));
+            expect(await getter(user1, START_DAY + DAY * 3)).to.eql([btcU1D3, START_DAY + DAY * 4]);
+            expect(await getter(user2, START_DAY + DAY * 3)).to.eql([btcU2D3, START_DAY + DAY * 4]);
+            expect(await getter(user1, START_DAY + DAY * 4)).to.eql([btcU1D4, 0]);
+            expect(await getter(user2, START_DAY + DAY * 4)).to.eql([btcU2D4, 0]);
         });
 
         it("getDelayedRedemptionHead()", async function () {
-            expect(await primaryMarket.getDelayedRedemptionHead(addr1)).to.equal(START_DAY + DAY);
-            expect(await primaryMarket.getDelayedRedemptionHead(addr2)).to.equal(
-                START_DAY + DAY * 2
-            );
+            expect(await primaryMarket.getDelayedRedemptionHead(addr1)).to.equal(START_DAY);
+            expect(await primaryMarket.getDelayedRedemptionHead(addr2)).to.equal(START_DAY + DAY);
         });
 
         it("updateDelayedRedemptionDay()", async function () {
             expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY);
             await primaryMarket.updateDelayedRedemptionDay();
-            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY);
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY);
 
             await fund.mock.mint.withArgs(TRANCHE_M, addr2, getCreation(btcU1D0)).returns();
             await primaryMarket.connect(user2).create(addr2, btcU1D0);
             await primaryMarket.updateDelayedRedemptionDay();
-            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY);
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY);
 
             await btc.mint(primaryMarket.address, btcU1D1.add(btcU2D1).sub(parseBtc("0.0001")));
             await primaryMarket.updateDelayedRedemptionDay();
-            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY * 2);
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY);
 
             await btc.mint(primaryMarket.address, parseBtc("0.0001"));
             await primaryMarket.updateDelayedRedemptionDay();
-            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY * 2);
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY);
         });
 
         it("Should be claimable after the contract has enough tokens", async function () {
@@ -703,13 +701,9 @@ describe("PrimaryMarket", function () {
                 btcU1D0
             );
             await expect(() => primaryMarket.claim(addr2)).to.changeTokenBalance(btc, user2, 0);
-            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY * 2);
-            expect(await primaryMarket.getDelayedRedemptionHead(addr1)).to.equal(
-                START_DAY + DAY * 2
-            );
-            expect(await primaryMarket.getDelayedRedemptionHead(addr2)).to.equal(
-                START_DAY + DAY * 2
-            );
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY);
+            expect(await primaryMarket.getDelayedRedemptionHead(addr1)).to.equal(START_DAY + DAY);
+            expect(await primaryMarket.getDelayedRedemptionHead(addr2)).to.equal(START_DAY + DAY);
 
             await btc.mint(primaryMarket.address, btcU1D3.add(btcU2D3).add(parseBtc("0.005")));
             await expect(() => primaryMarket.claim(addr1)).to.changeTokenBalance(
@@ -722,12 +716,12 @@ describe("PrimaryMarket", function () {
                 user2,
                 btcU2D1.add(btcU2D3)
             );
-            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY * 5);
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY * 4);
             expect(await primaryMarket.getDelayedRedemptionHead(addr1)).to.equal(
-                START_DAY + DAY * 5
+                START_DAY + DAY * 4
             );
             expect(await primaryMarket.getDelayedRedemptionHead(addr2)).to.equal(
-                START_DAY + DAY * 5
+                START_DAY + DAY * 4
             );
 
             await btc.mint(primaryMarket.address, btcU1D4.add(btcU2D4));
@@ -741,7 +735,7 @@ describe("PrimaryMarket", function () {
                 user2,
                 btcU2D4
             );
-            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY * 6);
+            expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY + DAY * 5);
             expect(await primaryMarket.getDelayedRedemptionHead(addr1)).to.equal(0);
             expect(await primaryMarket.getDelayedRedemptionHead(addr2)).to.equal(0);
         });
@@ -850,13 +844,12 @@ describe("PrimaryMarket", function () {
         });
 
         it("claimAndUnwrap() for redemption", async function () {
-            await fund.call(primaryMarket, "settle", START_DAY, 0, 0, 1, 1);
             await weth.connect(owner).deposit({ value: parseEther("999") });
             await weth.connect(owner).transfer(primaryMarket.address, parseEther("999"));
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.connect(user1).redeem(addr1, parseEther("1000"));
-            await settleWithShare(START_DAY + DAY, parseEther("10000"), parseEther("10"));
+            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("1000"));
+            await settleWithShare(START_DAY, parseEther("10000"), parseEther("10"));
 
             const redeemed = parseEther("1")
                 .mul(10000 - REDEMPTION_FEE_BPS)
