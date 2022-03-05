@@ -434,13 +434,17 @@ contract ExchangeV3 is ExchangeRoles, StakingV3, ProxyUtility {
         uint256 tranche,
         uint256 pdLevel,
         uint256 index
-    ) external whenNotPaused beforeProtocolUpgrade {
+    ) external whenNotPaused {
         OrderQueue storage orderQueue = bids[version][tranche][pdLevel];
         Order storage order = orderQueue.list[index];
-        require(order.maker == msg.sender, "Maker address mismatched");
+        address maker = order.maker;
+        // Bid orders can be canceled by anyone after the upgrade
+        if (block.timestamp < upgradeTimestamp) {
+            require(maker == msg.sender, "Maker address mismatched");
+        }
 
         uint256 fillable = order.fillable;
-        emit BidOrderCanceled(msg.sender, tranche, pdLevel, order.amount, version, index, fillable);
+        emit BidOrderCanceled(maker, tranche, pdLevel, order.amount, version, index, fillable);
         orderQueue.cancel(index);
 
         // Update bestBid
@@ -452,7 +456,7 @@ contract ExchangeV3 is ExchangeRoles, StakingV3, ProxyUtility {
             bestBids[version][tranche] = newBestBid;
         }
 
-        _transferQuote(msg.sender, fillable);
+        _transferQuote(maker, fillable);
     }
 
     /// @notice Cancel an ask order

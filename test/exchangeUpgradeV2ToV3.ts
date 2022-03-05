@@ -515,9 +515,6 @@ describe("Exchange upgrade V2 to V3", function () {
             await expect(exchange.placeAsk(TRANCHE_B, 51, parseEther("1"), 0)).to.be.revertedWith(
                 "Closed after upgrade"
             );
-            await expect(exchange.cancelBid(0, TRANCHE_A, 41, 1)).to.be.revertedWith(
-                "Closed after upgrade"
-            );
             await expect(exchange.cancelAsk(0, TRANCHE_B, 45, 2)).to.be.revertedWith(
                 "Closed after upgrade"
             );
@@ -526,6 +523,25 @@ describe("Exchange upgrade V2 to V3", function () {
             );
             await expect(exchange.sellB(0, 20, parseEther("1"))).to.be.revertedWith(
                 "Closed after upgrade"
+            );
+        });
+
+        it("Should allow bid orders to be canceled by others", async function () {
+            await upgradeToV3();
+            await advanceBlockAtTime(upgradeEpoch);
+            // Canceled by self
+            await expect(() => exchange.cancelBid(0, TRANCHE_A, 41, 1)).to.changeTokenBalances(
+                usdc,
+                [user1, exchange],
+                [BID_1_PD_0.div(USDC_TO_ETHER), BID_1_PD_0.div(USDC_TO_ETHER).mul(-1)]
+            );
+            // Canceled by other
+            await expect(() =>
+                exchange.connect(user2).cancelBid(0, TRANCHE_B, 41, 1)
+            ).to.changeTokenBalances(
+                usdc,
+                [user1, exchange],
+                [BID_1_PD_0.div(USDC_TO_ETHER), BID_1_PD_0.div(USDC_TO_ETHER).mul(-1)]
             );
         });
 
