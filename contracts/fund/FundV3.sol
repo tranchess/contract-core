@@ -656,8 +656,9 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
     function mint(
         uint256 tranche,
         address account,
-        uint256 amount
-    ) external override onlyPrimaryMarket {
+        uint256 amount,
+        uint256 version
+    ) external override onlyPrimaryMarket onlyCurrentVersion(version) {
         _refreshBalance(account, _rebalanceSize);
         _mint(tranche, account, amount);
     }
@@ -665,8 +666,9 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
     function burn(
         uint256 tranche,
         address account,
-        uint256 amount
-    ) external override onlyPrimaryMarket {
+        uint256 amount,
+        uint256 version
+    ) external override onlyPrimaryMarket onlyCurrentVersion(version) {
         _refreshBalance(account, _rebalanceSize);
         _burn(tranche, account, amount);
     }
@@ -1289,5 +1291,10 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         newAllowanceM = allowanceM.saturatingMultiplyDecimal(rebalance.ratioM);
         newAllowanceA = allowanceA.saturatingMultiplyDecimal(rebalance.ratioAB);
         newAllowanceB = allowanceB.saturatingMultiplyDecimal(rebalance.ratioAB);
+    }
+
+    modifier onlyCurrentVersion(uint256 version) {
+        require(_rebalanceSize == version, "Only current version");
+        _;
     }
 }

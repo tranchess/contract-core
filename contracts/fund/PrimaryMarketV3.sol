@@ -14,7 +14,6 @@ import "../utils/SafeDecimalMath.sol";
 import {DelayedRedemption, LibDelayedRedemption} from "./LibDelayedRedemption.sol";
 
 import "../interfaces/IPrimaryMarketV3.sol";
-import "../interfaces/IFundV3.sol";
 import "../interfaces/ITrancheIndex.sol";
 import "../interfaces/IWrappedERC20.sol";
 
@@ -70,7 +69,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18;
     uint256 private constant MAX_ITERATIONS = 500;
 
-    IFundV3 public immutable fund;
+    IFundV3 public immutable override fund;
     IERC20 private immutable _tokenUnderlying;
 
     uint256 public redemptionFeeRate;
@@ -120,12 +119,12 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         require(splitFeeRate_ <= MAX_SPLIT_FEE_RATE, "Exceed max split fee rate");
         require(mergeFeeRate_ <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
         fund = IFundV3(fund_);
-        _tokenUnderlying = IERC20(IFund(fund_).tokenUnderlying());
+        _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
         redemptionFeeRate = redemptionFeeRate_;
         splitFeeRate = splitFeeRate_;
         mergeFeeRate = mergeFeeRate_;
         minCreationUnderlying = minCreationUnderlying_;
-        currentDay = IFund(fund_).currentDay();
+        currentDay = IFundV3(fund_).currentDay();
         fundCap = fundCap_;
         delayedRedemptionDay = currentDay;
     }
@@ -269,38 +268,36 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         outM = outMBeforeFee.sub(feeM);
     }
 
-    function create(address recipient, uint256 underlying)
-        external
-        override
-        nonReentrant
-        returns (uint256 shares)
-    {
-        shares = _create(recipient, underlying);
+    function create(
+        address recipient,
+        uint256 underlying,
+        uint256 version
+    ) external override nonReentrant returns (uint256 shares) {
+        shares = _create(recipient, underlying, version);
         _tokenUnderlying.safeTransferFrom(msg.sender, address(fund), underlying);
     }
 
-    function wrapAndCreate(address recipient)
+    function wrapAndCreate(address recipient, uint256 version)
         external
         payable
         override
         nonReentrant
         returns (uint256 shares)
     {
-        shares = _create(recipient, msg.value);
+        shares = _create(recipient, msg.value, version);
         IWrappedERC20(address(_tokenUnderlying)).deposit{value: msg.value}();
         _tokenUnderlying.safeTransfer(address(fund), msg.value);
     }
 
-    function delayRedeem(address recipient, uint256 shares)
-        external
-        override
-        onlyActive
-        nonReentrant
-    {
+    function delayRedeem(
+        address recipient,
+        uint256 shares,
+        uint256 version
+    ) external override onlyActive nonReentrant {
         require(shares != 0, "Zero shares");
         // Use burn and mint to simulate a transfer, so that we don't need a special transferFrom()
-        fund.burn(TRANCHE_M, msg.sender, shares);
-        fund.mint(TRANCHE_M, address(this), shares);
+        fund.burn(TRANCHE_M, msg.sender, shares, version);
+        fund.mint(TRANCHE_M, address(this), shares, version);
 
         // Do not call `_updateDelayedRedemptionDay()` because the latest `redeemedUnderlying`
         // is not used in this function.
@@ -312,48 +309,46 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         emit Redeemed(recipient, shares, 0, 0);
     }
 
-    function redeem(address recipient, uint256 shares)
-        external
-        override
-        nonReentrant
-        returns (uint256 underlying)
-    {
-        underlying = _redeem(recipient, shares);
+    function redeem(
+        address recipient,
+        uint256 shares,
+        uint256 version
+    ) external override nonReentrant returns (uint256 underlying) {
+        underlying = _redeem(recipient, shares, version);
     }
 
-    function redeemAndUnwrap(address recipient, uint256 shares)
-        external
-        override
-        nonReentrant
-        returns (uint256 underlying)
-    {
-        underlying = _redeem(address(this), shares);
+    function redeemAndUnwrap(
+        address recipient,
+        uint256 shares,
+        uint256 version
+    ) external override nonReentrant returns (uint256 underlying) {
+        underlying = _redeem(address(this), shares, version);
         IWrappedERC20(address(_tokenUnderlying)).withdraw(underlying);
         (bool success, ) = recipient.call{value: underlying}("");
         require(success, "Transfer failed");
     }
 
-    function _create(address recipient, uint256 underlying)
-        private
-        onlyActive
-        returns (uint256 shares)
-    {
+    function _create(
+        address recipient,
+        uint256 underlying,
+        uint256 version
+    ) private onlyActive returns (uint256 shares) {
         _updateUser(recipient);
         shares = getCreation(underlying);
-        fund.mint(TRANCHE_M, recipient, shares);
+        fund.mint(TRANCHE_M, recipient, shares, version);
 
         emit Created(recipient, underlying, shares);
     }
 
-    function _redeem(address recipient, uint256 shares)
-        private
-        onlyActive
-        returns (uint256 redeemedUnderlying)
-    {
+    function _redeem(
+        address recipient,
+        uint256 shares,
+        uint256 version
+    ) private onlyActive returns (uint256 redeemedUnderlying) {
         require(shares != 0, "Zero shares");
         require(delayedRedemptionDay == currentDay);
         _updateUser(recipient);
-        fund.burn(TRANCHE_M, msg.sender, shares);
+        fund.burn(TRANCHE_M, msg.sender, shares, version);
         uint256 underlying = getRedemption(shares);
         uint256 balance = _tokenUnderlying.balanceOf(address(fund));
         require(underlying <= balance, "Not enough available hot balance");
@@ -418,36 +413,34 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         return (createdShares, redeemedUnderlying);
     }
 
-    function split(address recipient, uint256 inM)
-        external
-        override
-        onlyActive
-        returns (uint256 outA, uint256 outB)
-    {
+    function split(
+        address recipient,
+        uint256 inM,
+        uint256 version
+    ) external override onlyActive returns (uint256 outA, uint256 outB) {
         uint256 feeM;
         (outA, outB, feeM) = getSplit(inM);
 
-        fund.burn(TRANCHE_M, msg.sender, inM);
-        fund.mint(TRANCHE_A, recipient, outA);
-        fund.mint(TRANCHE_B, recipient, outB);
-        fund.mint(TRANCHE_M, address(this), feeM);
+        fund.burn(TRANCHE_M, msg.sender, inM, version);
+        fund.mint(TRANCHE_A, recipient, outA, version);
+        fund.mint(TRANCHE_B, recipient, outB, version);
+        fund.mint(TRANCHE_M, address(this), feeM, version);
 
         currentFeeInShares = currentFeeInShares.add(feeM);
         emit Split(msg.sender, inM, outA, outB);
     }
 
-    function merge(address recipient, uint256 inA)
-        external
-        override
-        onlyActive
-        returns (uint256 inB, uint256 outM)
-    {
+    function merge(
+        address recipient,
+        uint256 inA,
+        uint256 version
+    ) external override onlyActive returns (uint256 inB, uint256 outM) {
         uint256 feeM;
         (inA, inB, outM, feeM) = getMerge(inA);
-        fund.burn(TRANCHE_A, msg.sender, inA);
-        fund.burn(TRANCHE_B, msg.sender, inB);
-        fund.mint(TRANCHE_M, recipient, outM);
-        fund.mint(TRANCHE_M, address(this), feeM);
+        fund.burn(TRANCHE_A, msg.sender, inA, version);
+        fund.burn(TRANCHE_B, msg.sender, inB, version);
+        fund.mint(TRANCHE_M, recipient, outM, version);
+        fund.mint(TRANCHE_M, address(this), feeM, version);
 
         currentFeeInShares = currentFeeInShares.add(feeM);
         emit Merged(msg.sender, outM, inA, inB);

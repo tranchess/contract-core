@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
 
+import "./IFundV3.sol";
+
 interface IPrimaryMarketV3 {
+    function fund() external view returns (IFundV3);
+
     function getCreation(uint256 underlying) external view returns (uint256 shares);
 
     function getRedemption(uint256 shares) external view returns (uint256 underlying);
@@ -29,17 +33,34 @@ interface IPrimaryMarketV3 {
 
     function getTokenAMForMergeB(uint256 inB) external view returns (uint256 inA, uint256 outM);
 
-    function create(address recipient, uint256 underlying) external returns (uint256 shares);
+    function create(
+        address recipient,
+        uint256 underlying,
+        uint256 version
+    ) external returns (uint256 shares);
 
-    function wrapAndCreate(address recipient) external payable returns (uint256 shares);
-
-    function redeem(address recipient, uint256 shares) external returns (uint256 underlying);
-
-    function redeemAndUnwrap(address recipient, uint256 shares)
+    function wrapAndCreate(address recipient, uint256 version)
         external
-        returns (uint256 underlying);
+        payable
+        returns (uint256 shares);
 
-    function delayRedeem(address recipient, uint256 shares) external;
+    function redeem(
+        address recipient,
+        uint256 shares,
+        uint256 version
+    ) external returns (uint256 underlying);
+
+    function redeemAndUnwrap(
+        address recipient,
+        uint256 shares,
+        uint256 version
+    ) external returns (uint256 underlying);
+
+    function delayRedeem(
+        address recipient,
+        uint256 shares,
+        uint256 version
+    ) external;
 
     function claim(address account)
         external
@@ -49,9 +70,17 @@ interface IPrimaryMarketV3 {
         external
         returns (uint256 createdShares, uint256 redeemedUnderlying);
 
-    function split(address recipient, uint256 inM) external returns (uint256 outA, uint256 outB);
+    function split(
+        address recipient,
+        uint256 inM,
+        uint256 version
+    ) external returns (uint256 outA, uint256 outB);
 
-    function merge(address recipient, uint256 inA) external returns (uint256 inB, uint256 outM);
+    function merge(
+        address recipient,
+        uint256 inA,
+        uint256 version
+    ) external returns (uint256 inB, uint256 outM);
 
     function settle(
         uint256 day,

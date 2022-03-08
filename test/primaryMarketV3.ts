@@ -147,19 +147,19 @@ describe("PrimaryMarket", function () {
     describe("create()", function () {
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
-            await expect(primaryMarket.create(addr1, parseBtc("1"))).to.be.revertedWith(
+            await expect(primaryMarket.create(addr1, parseBtc("1"), 0)).to.be.revertedWith(
                 "Only when active"
             );
         });
 
         it("Should check minimum creation amount", async function () {
             await fund.mock.mint
-                .withArgs(TRANCHE_M, addr1, getCreation(BigNumber.from(MIN_CREATION_AMOUNT)))
+                .withArgs(TRANCHE_M, addr1, getCreation(BigNumber.from(MIN_CREATION_AMOUNT)), 0)
                 .returns();
-            await expect(primaryMarket.create(addr1, MIN_CREATION_AMOUNT - 1)).to.be.revertedWith(
-                "Min amount"
-            );
-            await primaryMarket.create(addr1, MIN_CREATION_AMOUNT);
+            await expect(
+                primaryMarket.create(addr1, MIN_CREATION_AMOUNT - 1, 0)
+            ).to.be.revertedWith("Min amount");
+            await primaryMarket.create(addr1, MIN_CREATION_AMOUNT, 0);
         });
 
         it("Should create using price and NAV when fund was empty", async function () {
@@ -171,16 +171,16 @@ describe("PrimaryMarket", function () {
             await fund.mock.twapOracle.returns(twapOracle.address);
             await twapOracle.mock.getTwap.returns(parseEther("30000"));
             await fund.mock.historicalNavs.returns(parseEther("0.5"), 0, 0);
-            await fund.mock.mint.withArgs(TRANCHE_M, addr1, outM).returns();
-            await expect(primaryMarket.create(addr1, inBtc))
+            await fund.mock.mint.withArgs(TRANCHE_M, addr1, outM, 0).returns();
+            await expect(primaryMarket.create(addr1, inBtc, 0))
                 .to.emit(primaryMarket, "Created")
                 .withArgs(addr1, inBtc, outM);
         });
 
         it("Should transfer underlying and save the creation", async function () {
             const amount = parseBtc("1");
-            await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(amount)).returns();
-            const tx = () => primaryMarket.create(addr1, amount);
+            await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(amount), 0).returns();
+            const tx = () => primaryMarket.create(addr1, amount, 0);
             await expect(tx).to.changeTokenBalance(btc, fund, amount);
             const cr = await primaryMarket.callStatic.creationRedemptionOf(addr1);
             expect(cr.creatingUnderlying).to.equal(0);
@@ -188,28 +188,38 @@ describe("PrimaryMarket", function () {
         });
 
         it("Should handle multiple creations in the same day", async function () {
-            await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(parseBtc("2"))).returns();
-            await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(parseBtc("3"))).returns();
-            await fund.mock.mint.withArgs(TRANCHE_M, addr2, getCreation(parseBtc("4"))).returns();
-            await primaryMarket.create(addr1, parseBtc("2"));
-            await primaryMarket.create(addr1, parseBtc("3"));
-            await primaryMarket.connect(user2).create(addr2, parseBtc("4"));
+            await fund.mock.mint
+                .withArgs(TRANCHE_M, addr1, getCreation(parseBtc("2")), 0)
+                .returns();
+            await fund.mock.mint
+                .withArgs(TRANCHE_M, addr1, getCreation(parseBtc("3")), 0)
+                .returns();
+            await fund.mock.mint
+                .withArgs(TRANCHE_M, addr2, getCreation(parseBtc("4")), 0)
+                .returns();
+            await primaryMarket.create(addr1, parseBtc("2"), 0);
+            await primaryMarket.create(addr1, parseBtc("3"), 0);
+            await primaryMarket.connect(user2).create(addr2, parseBtc("4"), 0);
             const cr = await primaryMarket.callStatic.creationRedemptionOf(addr1);
             expect(cr.creatingUnderlying).to.equal(0);
             expect(await primaryMarket.currentCreatingUnderlying()).to.equal(0);
         });
 
         it("Should not be claimable in the same day", async function () {
-            await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(parseBtc("1"))).returns();
-            await primaryMarket.create(addr1, parseBtc("1"));
+            await fund.mock.mint
+                .withArgs(TRANCHE_M, addr1, getCreation(parseBtc("1")), 0)
+                .returns();
+            await primaryMarket.create(addr1, parseBtc("1"), 0);
             // No shares or underlying is transfered
             const tx = () => primaryMarket.claim(addr1);
             await expect(tx).to.changeTokenBalances(btc, [user1, fund], [0, 0]);
         });
 
         it("Should emit an event", async function () {
-            await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(parseBtc("1"))).returns();
-            await expect(primaryMarket.create(addr1, parseBtc("1")))
+            await fund.mock.mint
+                .withArgs(TRANCHE_M, addr1, getCreation(parseBtc("1")), 0)
+                .returns();
+            await expect(primaryMarket.create(addr1, parseBtc("1"), 0))
                 .to.emit(primaryMarket, "Created")
                 .withArgs(addr1, parseBtc("1"), parseEther("1"));
         });
@@ -218,23 +228,23 @@ describe("PrimaryMarket", function () {
     describe("redeem()", function () {
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
-            await expect(primaryMarket.redeem(addr1, parseEther("1"))).to.be.revertedWith(
+            await expect(primaryMarket.redeem(addr1, parseEther("1"), 0)).to.be.revertedWith(
                 "Only when active"
             );
-            await expect(primaryMarket.delayRedeem(addr1, parseEther("1"))).to.be.revertedWith(
+            await expect(primaryMarket.delayRedeem(addr1, parseEther("1"), 0)).to.be.revertedWith(
                 "Only when active"
             );
         });
 
         it("Should revert on zero shares", async function () {
-            await expect(primaryMarket.redeem(addr1, 0)).to.be.revertedWith("Zero shares");
-            await expect(primaryMarket.delayRedeem(addr1, 0)).to.be.revertedWith("Zero shares");
+            await expect(primaryMarket.redeem(addr1, 0, 0)).to.be.revertedWith("Zero shares");
+            await expect(primaryMarket.delayRedeem(addr1, 0, 0)).to.be.revertedWith("Zero shares");
         });
 
         it("Should revert on not enough available hot balance", async function () {
             const amount = parseEther("1");
-            await fund.mock.burn.withArgs(TRANCHE_M, addr1, amount).returns();
-            await expect(primaryMarket.redeem(addr1, amount)).to.be.revertedWith(
+            await fund.mock.burn.withArgs(TRANCHE_M, addr1, amount, 0).returns();
+            await expect(primaryMarket.redeem(addr1, amount, 0)).to.be.revertedWith(
                 "Not enough available hot balance"
             );
         });
@@ -242,10 +252,10 @@ describe("PrimaryMarket", function () {
         it("Should instantly redeem if enough hot balance", async function () {
             await btc.mint(fund.address, parseBtc("10"));
             const amount = parseEther("1");
-            await fund.mock.burn.withArgs(TRANCHE_M, addr1, amount).returns();
+            await fund.mock.burn.withArgs(TRANCHE_M, addr1, amount, 0).returns();
             const [underlying, fee] = getRedemption(amount);
             await fund.mock.transferToPrimaryMarket.withArgs(addr1, underlying, fee).returns();
-            await primaryMarket.redeem(addr1, amount);
+            await primaryMarket.redeem(addr1, amount, 0);
             const cr = await primaryMarket.callStatic.creationRedemptionOf(addr1);
             expect(cr.redeemingShares).to.equal(0);
             expect(await primaryMarket.currentRedeemingShares()).to.equal(0);
@@ -253,9 +263,9 @@ describe("PrimaryMarket", function () {
 
         it("Should transfer shares and save the redemption if not enough hot balance", async function () {
             const amount = parseEther("1");
-            await fund.mock.burn.withArgs(TRANCHE_M, addr1, amount).returns();
-            await fund.mock.mint.withArgs(TRANCHE_M, primaryMarket.address, amount).returns();
-            await primaryMarket.delayRedeem(addr1, amount);
+            await fund.mock.burn.withArgs(TRANCHE_M, addr1, amount, 0).returns();
+            await fund.mock.mint.withArgs(TRANCHE_M, primaryMarket.address, amount, 0).returns();
+            await primaryMarket.delayRedeem(addr1, amount, 0);
             const cr = await primaryMarket.callStatic.creationRedemptionOf(addr1);
             expect(cr.redeemingShares).to.equal(amount);
             expect(await primaryMarket.currentRedeemingShares()).to.equal(amount);
@@ -264,9 +274,9 @@ describe("PrimaryMarket", function () {
         it("Should combine multiple redemptions in the same day", async function () {
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.delayRedeem(addr1, parseEther("2"));
-            await primaryMarket.delayRedeem(addr1, parseEther("3"));
-            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("4"));
+            await primaryMarket.delayRedeem(addr1, parseEther("2"), 0);
+            await primaryMarket.delayRedeem(addr1, parseEther("3"), 0);
+            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("4"), 0);
             const cr = await primaryMarket.callStatic.creationRedemptionOf(addr1);
             expect(cr.redeemingShares).to.equal(parseEther("5"));
             expect(await primaryMarket.currentRedeemingShares()).to.equal(parseEther("9"));
@@ -275,7 +285,7 @@ describe("PrimaryMarket", function () {
         it("Should not be claimable in the same day", async function () {
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.delayRedeem(addr1, parseEther("1"));
+            await primaryMarket.delayRedeem(addr1, parseEther("1"), 0);
             await fund.mock.burn.revertsWithReason("Mock function reset");
             await fund.mock.mint.revertsWithReason("Mock function reset");
             // No shares or underlying is transfered
@@ -290,7 +300,7 @@ describe("PrimaryMarket", function () {
             await fund.mock.mint.returns();
             const [underlying, fee] = getRedemption(amount);
             await fund.mock.transferToPrimaryMarket.withArgs(addr1, underlying, fee).returns();
-            await expect(primaryMarket.redeem(addr1, parseEther("1")))
+            await expect(primaryMarket.redeem(addr1, parseEther("1"), 0))
                 .to.emit(primaryMarket, "Redeemed")
                 .withArgs(addr1, parseEther("1"), underlying, fee);
         });
@@ -299,13 +309,15 @@ describe("PrimaryMarket", function () {
     describe("split()", function () {
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
-            await expect(primaryMarket.split(addr1, parseEther("1"))).to.be.revertedWith(
+            await expect(primaryMarket.split(addr1, parseEther("1"), 0)).to.be.revertedWith(
                 "Only when active"
             );
         });
 
         it("Should revert if too little to split", async function () {
-            await expect(primaryMarket.split(addr1, 1)).to.be.revertedWith("Too little to split");
+            await expect(primaryMarket.split(addr1, 1, 0)).to.be.revertedWith(
+                "Too little to split"
+            );
         });
 
         it("Should burn and mint shares", async function () {
@@ -314,18 +326,18 @@ describe("PrimaryMarket", function () {
             const feeM = SPLIT_FEE_BPS * 20;
             const outA = (10000 - SPLIT_FEE_BPS) * 10;
             const outB = (10000 - SPLIT_FEE_BPS) * 10;
-            await expect(() => primaryMarket.split(addr1, inM)).to.callMocks(
+            await expect(() => primaryMarket.split(addr1, inM, 0)).to.callMocks(
                 {
-                    func: fund.mock.burn.withArgs(TRANCHE_M, addr1, inM),
+                    func: fund.mock.burn.withArgs(TRANCHE_M, addr1, inM, 0),
                 },
                 {
-                    func: fund.mock.mint.withArgs(TRANCHE_A, addr1, outA),
+                    func: fund.mock.mint.withArgs(TRANCHE_A, addr1, outA, 0),
                 },
                 {
-                    func: fund.mock.mint.withArgs(TRANCHE_B, addr1, outB),
+                    func: fund.mock.mint.withArgs(TRANCHE_B, addr1, outB, 0),
                 },
                 {
-                    func: fund.mock.mint.withArgs(TRANCHE_M, primaryMarket.address, feeM),
+                    func: fund.mock.mint.withArgs(TRANCHE_M, primaryMarket.address, feeM, 0),
                 }
             );
         });
@@ -333,7 +345,7 @@ describe("PrimaryMarket", function () {
         it("Should update fee in shares", async function () {
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.split(addr1, 10000 * 10);
+            await primaryMarket.split(addr1, 10000 * 10, 0);
             expect(await primaryMarket.currentFeeInShares()).to.equal(SPLIT_FEE_BPS * 10);
         });
 
@@ -343,14 +355,14 @@ describe("PrimaryMarket", function () {
             // The last 1 Token M cannot be split and goes to fee
             const inM = 10000 * 20 + 1;
             const feeM = SPLIT_FEE_BPS * 20 + 1;
-            await primaryMarket.split(addr1, inM);
+            await primaryMarket.split(addr1, inM, 0);
             expect(await primaryMarket.currentFeeInShares()).to.equal(feeM);
         });
 
         it("Should emit an event", async function () {
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await expect(primaryMarket.split(addr1, 20000))
+            await expect(primaryMarket.split(addr1, 20000, 0))
                 .to.emit(primaryMarket, "Split")
                 .withArgs(addr1, 20000, 10000 - SPLIT_FEE_BPS, 10000 - SPLIT_FEE_BPS);
         });
@@ -359,14 +371,16 @@ describe("PrimaryMarket", function () {
     describe("merge()", function () {
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
-            await expect(primaryMarket.merge(addr1, parseEther("1"))).to.be.revertedWith(
+            await expect(primaryMarket.merge(addr1, parseEther("1"), 0)).to.be.revertedWith(
                 "Only when active"
             );
         });
 
         it("Should revert if too little to merge", async function () {
             await fund.mock.trancheWeights.returns(100, 1);
-            await expect(primaryMarket.merge(addr1, 99)).to.be.revertedWith("Too little to merge");
+            await expect(primaryMarket.merge(addr1, 99, 0)).to.be.revertedWith(
+                "Too little to merge"
+            );
         });
 
         it("Should burn and mint shares", async function () {
@@ -375,18 +389,18 @@ describe("PrimaryMarket", function () {
             const inB = 10000 * 10;
             const feeM = MERGE_FEE_BPS * 20;
             const outM = (10000 - MERGE_FEE_BPS) * 20;
-            await expect(() => primaryMarket.merge(addr1, inA)).to.callMocks(
+            await expect(() => primaryMarket.merge(addr1, inA, 0)).to.callMocks(
                 {
-                    func: fund.mock.burn.withArgs(TRANCHE_A, addr1, inA),
+                    func: fund.mock.burn.withArgs(TRANCHE_A, addr1, inA, 0),
                 },
                 {
-                    func: fund.mock.burn.withArgs(TRANCHE_B, addr1, inB),
+                    func: fund.mock.burn.withArgs(TRANCHE_B, addr1, inB, 0),
                 },
                 {
-                    func: fund.mock.mint.withArgs(TRANCHE_M, addr1, outM),
+                    func: fund.mock.mint.withArgs(TRANCHE_M, addr1, outM, 0),
                 },
                 {
-                    func: fund.mock.mint.withArgs(TRANCHE_M, primaryMarket.address, feeM),
+                    func: fund.mock.mint.withArgs(TRANCHE_M, primaryMarket.address, feeM, 0),
                 }
             );
         });
@@ -394,7 +408,7 @@ describe("PrimaryMarket", function () {
         it("Should update fee in shares", async function () {
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.merge(addr1, 50000);
+            await primaryMarket.merge(addr1, 50000, 0);
             expect(await primaryMarket.currentFeeInShares()).to.equal(MERGE_FEE_BPS * 10);
         });
 
@@ -402,15 +416,15 @@ describe("PrimaryMarket", function () {
             await fund.mock.trancheWeights.returns(100, 200);
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await expect(() => primaryMarket.merge(addr1, 199)).to.callMocks({
-                func: fund.mock.burn.withArgs(TRANCHE_A, addr1, 100),
+            await expect(() => primaryMarket.merge(addr1, 199, 0)).to.callMocks({
+                func: fund.mock.burn.withArgs(TRANCHE_A, addr1, 100, 0),
             });
         });
 
         it("Should emit an event", async function () {
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await expect(primaryMarket.merge(addr1, 10000))
+            await expect(primaryMarket.merge(addr1, 10000, 0))
                 .to.emit(primaryMarket, "Merged")
                 .withArgs(addr1, (10000 - MERGE_FEE_BPS) * 2, 10000, 10000);
         });
@@ -441,7 +455,7 @@ describe("PrimaryMarket", function () {
             const redeemed = parseBtc("1").sub(fee);
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.delayRedeem(addr1, parseEther("1000"));
+            await primaryMarket.delayRedeem(addr1, parseEther("1000"), 0);
             await fund.mock.burn.revertsWithReason("Mock function reset");
             await fund.mock.mint.revertsWithReason("Mock function reset");
             await expect(settleWithShare(START_DAY, parseEther("10000"), parseBtc("10")))
@@ -456,7 +470,7 @@ describe("PrimaryMarket", function () {
             // Redeem 600 share units
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.delayRedeem(addr1, 600);
+            await primaryMarket.delayRedeem(addr1, 600, 0);
             // Redeemed before fee: 600 * 2500 / 900 = 1666
             // Fee: 1666 * 0.0035 = 5
             // Redeemed after fee: 1666 - 5 = 1661
@@ -468,11 +482,13 @@ describe("PrimaryMarket", function () {
         it("Should net underlying (creation < redemption)", async function () {
             // Fund had 10 BTC and 10000 shares
             // Create with 1 BTC and redeem all the 10000 shares
-            await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(parseBtc("1"))).returns();
-            await primaryMarket.create(addr1, parseBtc("1"));
+            await fund.mock.mint
+                .withArgs(TRANCHE_M, addr1, getCreation(parseBtc("1")), 0)
+                .returns();
+            await primaryMarket.create(addr1, parseBtc("1"), 0);
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.delayRedeem(addr1, parseEther("10000"));
+            await primaryMarket.delayRedeem(addr1, parseEther("10000"), 0);
             const redemptionUnderlying = parseBtc("10")
                 .mul(10000 - REDEMPTION_FEE_BPS)
                 .div(10000);
@@ -489,8 +505,8 @@ describe("PrimaryMarket", function () {
             // Split 1000 M and merge 100 A and 100 B
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.split(addr1, parseEther("1000"));
-            await primaryMarket.connect(user2).merge(addr2, parseEther("100"));
+            await primaryMarket.split(addr1, parseEther("1000"), 0);
+            await primaryMarket.connect(user2).merge(addr2, parseEther("100"), 0);
             const splitFee = parseEther("1000").mul(SPLIT_FEE_BPS).div(10000);
             const mergeFee = parseEther("200").mul(MERGE_FEE_BPS).div(10000);
             const feeInShares = splitFee.add(mergeFee);
@@ -506,16 +522,18 @@ describe("PrimaryMarket", function () {
             // Fund had 10 BTC and 10000 shares
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(parseBtc("1"))).returns();
+            await fund.mock.mint
+                .withArgs(TRANCHE_M, addr1, getCreation(parseBtc("1")), 0)
+                .returns();
             // Create with 1 BTC
-            await primaryMarket.connect(user2).create(addr1, parseBtc("1"));
+            await primaryMarket.connect(user2).create(addr1, parseBtc("1"), 0);
             // Redeem 1000 shares
-            await primaryMarket.delayRedeem(addr1, parseEther("1000"));
+            await primaryMarket.delayRedeem(addr1, parseEther("1000"), 0);
             const redemptionFee = parseBtc("1").mul(REDEMPTION_FEE_BPS).div(10000);
             const redeemedBtc = parseBtc("1").sub(redemptionFee);
             // Split 1000 M and merge 100 A and 100 B
-            await primaryMarket.split(addr1, parseEther("1000"));
-            await primaryMarket.connect(user2).merge(addr2, parseEther("100"));
+            await primaryMarket.split(addr1, parseEther("1000"), 0);
+            await primaryMarket.connect(user2).merge(addr2, parseEther("100"), 0);
             const splitFee = parseEther("1000").mul(SPLIT_FEE_BPS).div(10000);
             const mergeFee = parseEther("200").mul(MERGE_FEE_BPS).div(10000);
             const feeInShares = splitFee.add(mergeFee);
@@ -543,8 +561,8 @@ describe("PrimaryMarket", function () {
             await f.fund.mock.getRebalanceSize.returns(0);
             await f.fund.mock.burn.returns();
             await f.fund.mock.mint.returns();
-            await f.primaryMarket.create(addr1, parseBtc("1"));
-            await f.primaryMarket.delayRedeem(addr1, parseEther("1000"));
+            await f.primaryMarket.create(addr1, parseBtc("1"), 0);
+            await f.primaryMarket.delayRedeem(addr1, parseEther("1000"), 0);
             await f.fund.call(
                 f.primaryMarket,
                 "settle",
@@ -594,7 +612,7 @@ describe("PrimaryMarket", function () {
         });
 
         it("Should combine claimable redemptions in different days", async function () {
-            await primaryMarket.delayRedeem(addr1, parseEther("2000"));
+            await primaryMarket.delayRedeem(addr1, parseEther("2000"), 0);
             // Day (START_DAY + DAY) is not settled
             await settleWithShare(START_DAY + DAY * 2, parseEther("20000"), parseBtc("40"));
             const redeemedAgain = parseBtc("4")
@@ -627,17 +645,17 @@ describe("PrimaryMarket", function () {
         beforeEach(async function () {
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("1000"));
+            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("1000"), 0);
             await settleWithShare(START_DAY, parseEther("10000"), parseBtc("10"));
-            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("500"));
-            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("2000"));
+            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("500"), 0);
+            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("2000"), 0);
             await settleWithShare(START_DAY + DAY, parseEther("9000"), parseBtc("9"));
             await settleWithShare(START_DAY + DAY * 2, parseEther("6500"), parseBtc("6.5"));
-            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("1500"));
-            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("3000"));
+            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("1500"), 0);
+            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("3000"), 0);
             await settleWithShare(START_DAY + DAY * 3, parseEther("6500"), parseBtc("6.5"));
-            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("200"));
-            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("300"));
+            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("200"), 0);
+            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("300"), 0);
             await settleWithShare(START_DAY + DAY * 4, parseEther("2000"), parseBtc("2"));
         });
 
@@ -659,7 +677,7 @@ describe("PrimaryMarket", function () {
             expect(await getter(user1, START_DAY + DAY * 4)).to.eql([BigNumber.from(0), 0]);
             expect(await getter(user2, START_DAY + DAY * 4)).to.eql([BigNumber.from(0), 0]);
             await primaryMarket.claim(addr1);
-            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("1"));
+            await primaryMarket.connect(user2).delayRedeem(addr2, parseEther("1"), 0);
             expect(await getter(user1, START_DAY + DAY * 3)).to.eql([btcU1D3, START_DAY + DAY * 4]);
             expect(await getter(user2, START_DAY + DAY * 3)).to.eql([btcU2D3, START_DAY + DAY * 4]);
             expect(await getter(user1, START_DAY + DAY * 4)).to.eql([btcU1D4, 0]);
@@ -676,8 +694,8 @@ describe("PrimaryMarket", function () {
             await primaryMarket.updateDelayedRedemptionDay();
             expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY);
 
-            await fund.mock.mint.withArgs(TRANCHE_M, addr2, getCreation(btcU1D0)).returns();
-            await primaryMarket.connect(user2).create(addr2, btcU1D0);
+            await fund.mock.mint.withArgs(TRANCHE_M, addr2, getCreation(btcU1D0), 0).returns();
+            await primaryMarket.connect(user2).create(addr2, btcU1D0, 0);
             await primaryMarket.updateDelayedRedemptionDay();
             expect(await primaryMarket.delayedRedemptionDay()).to.equal(START_DAY);
 
@@ -761,38 +779,44 @@ describe("PrimaryMarket", function () {
 
         it("Should revert when cap is zero", async function () {
             await fund.mock.historicalUnderlying.withArgs(START_DAY - DAY).returns(0);
-            await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(parseBtc("1"))).returns();
+            await fund.mock.mint
+                .withArgs(TRANCHE_M, addr1, getCreation(parseBtc("1")), 0)
+                .returns();
             await expect(
-                primaryMarket.connect(user1).create(addr1, parseBtc("1"))
+                primaryMarket.connect(user1).create(addr1, parseBtc("1"), 0)
             ).to.be.revertedWith("Exceed fund cap");
         });
 
         it("Should revert when creation amount exceeds total cap", async function () {
             await primaryMarket.connect(owner).updateFundCap(parseBtc("1.8"));
 
-            await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(parseBtc("0.6"))).returns();
-            await primaryMarket.create(addr1, parseBtc("0.6"));
+            await fund.mock.mint
+                .withArgs(TRANCHE_M, addr1, getCreation(parseBtc("0.6")), 0)
+                .returns();
+            await primaryMarket.create(addr1, parseBtc("0.6"), 0);
 
             await fund.mock.getTotalUnderlying.returns(parseBtc("1.6"));
             await fund.mock.mint
                 .withArgs(
                     TRANCHE_M,
                     addr2,
-                    getCreation(parseBtc("0.3"), parseBtc("1.6"), parseEther("1"))
+                    getCreation(parseBtc("0.3"), parseBtc("1.6"), parseEther("1")),
+                    0
                 )
                 .returns();
             await expect(
-                primaryMarket.connect(user2).create(addr2, parseBtc("0.3"))
+                primaryMarket.connect(user2).create(addr2, parseBtc("0.3"), 0)
             ).to.be.revertedWith("Exceed fund cap");
 
             await fund.mock.mint
                 .withArgs(
                     TRANCHE_M,
                     addr1,
-                    getCreation(parseBtc("0.2"), parseBtc("1.6"), parseEther("1"))
+                    getCreation(parseBtc("0.2"), parseBtc("1.6"), parseEther("1")),
+                    0
                 )
                 .returns();
-            await primaryMarket.create(addr1, parseBtc("0.2"));
+            await primaryMarket.create(addr1, parseBtc("0.2"), 0);
         });
     });
 
@@ -818,9 +842,9 @@ describe("PrimaryMarket", function () {
 
         it("wrapAndCreate()", async function () {
             const amount = parseEther("3");
-            await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(amount)).returns();
+            await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(amount), 0).returns();
             await expect(() =>
-                primaryMarket.wrapAndCreate(addr1, { value: amount })
+                primaryMarket.wrapAndCreate(addr1, 0, { value: amount })
             ).to.changeEtherBalance(user1, amount.mul(-1));
             expect(await weth.balanceOf(primaryMarket.address)).to.equal(0);
             expect(await weth.balanceOf(fund.address)).to.equal(amount);
@@ -830,12 +854,16 @@ describe("PrimaryMarket", function () {
         });
 
         it("Mixed creation", async function () {
-            await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(parseEther("3"))).returns();
-            await primaryMarket.wrapAndCreate(addr1, { value: parseEther("3") });
+            await fund.mock.mint
+                .withArgs(TRANCHE_M, addr1, getCreation(parseEther("3")), 0)
+                .returns();
+            await primaryMarket.wrapAndCreate(addr1, 0, { value: parseEther("3") });
             await weth.deposit({ value: parseEther("4") });
             await weth.approve(primaryMarket.address, parseEther("4"));
-            await fund.mock.mint.withArgs(TRANCHE_M, addr1, getCreation(parseEther("4"))).returns();
-            await primaryMarket.create(addr1, parseEther("4"));
+            await fund.mock.mint
+                .withArgs(TRANCHE_M, addr1, getCreation(parseEther("4")), 0)
+                .returns();
+            await primaryMarket.create(addr1, parseEther("4"), 0);
             expect(await weth.balanceOf(primaryMarket.address)).to.equal(0);
             expect(await weth.balanceOf(fund.address)).to.equal(parseEther("7"));
             const cr = await primaryMarket.callStatic.creationRedemptionOf(addr1);
@@ -848,7 +876,7 @@ describe("PrimaryMarket", function () {
             await weth.connect(owner).transfer(primaryMarket.address, parseEther("999"));
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("1000"));
+            await primaryMarket.connect(user1).delayRedeem(addr1, parseEther("1000"), 0);
             await settleWithShare(START_DAY, parseEther("10000"), parseEther("10"));
 
             const redeemed = parseEther("1")
