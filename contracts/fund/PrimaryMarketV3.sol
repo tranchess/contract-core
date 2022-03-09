@@ -50,16 +50,12 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
 
     /// @dev Creation and redemption of a single account.
     /// @param day Day of the last creation or redemption request.
-    /// @param creatingUnderlying Underlying that will be used for creation at the end of this day.
     /// @param redeemingShares Shares that will be redeemed at the end of this day.
-    /// @param createdShares Shares already created in previous days.
     /// @param redeemedUnderlying Underlying already redeemed in previous days.
     /// @param version Rebalance version before the end of this trading day.
-    struct CreationRedemption {
+    struct DelayRedemption {
         uint256 day;
-        uint256 creatingUnderlying;
         uint256 redeemingShares;
-        uint256 createdShares;
         uint256 redeemedUnderlying;
         uint256 version;
     }
@@ -77,10 +73,9 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     uint256 public mergeFeeRate;
     uint256 public minCreationUnderlying;
 
-    mapping(address => CreationRedemption) private _creationRedemptions;
+    mapping(address => DelayRedemption) private _delayRedemptions;
 
     uint256 public currentDay;
-    uint256 public currentCreatingUnderlying;
     uint256 public currentRedeemingShares;
     uint256 public currentFeeInShares;
 
@@ -129,14 +124,13 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         delayedRedemptionDay = currentDay;
     }
 
-    /// @dev Unlike the previous version, this function updates states of the account and is not
-    ///      "view" any more. To get the return value off-chain, please call this function
-    ///      using `contract.creationRedemptionOf.call(account)` in web3
-    ///      or `contract.callStatic.creationRedemptionOf(account)` in ethers.js.
-    function creationRedemptionOf(address account) external returns (CreationRedemption memory) {
+    /// @dev To get the return value off-chain, please call this function
+    ///      using `contract.delayedRedemptionOf.call(account)` in web3
+    ///      or `contract.callStatic.delayedRedemptionOf(account)` in ethers.js.
+    function delayedRedemptionOf(address account) external returns (DelayRedemption memory) {
         _updateDelayedRedemptionDay();
         _updateUser(account);
-        return _creationRedemptions[account];
+        return _delayRedemptions[account];
     }
 
     /// @notice Return delayed redemption of an account on a trading day.
@@ -271,20 +265,21 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     function create(
         address recipient,
         uint256 underlying,
+        uint256 minShares,
         uint256 version
     ) external override nonReentrant returns (uint256 shares) {
         shares = _create(recipient, underlying, version);
+        require(shares >= minShares, "Min shares created");
         _tokenUnderlying.safeTransferFrom(msg.sender, address(fund), underlying);
     }
 
-    function wrapAndCreate(address recipient, uint256 version)
-        external
-        payable
-        override
-        nonReentrant
-        returns (uint256 shares)
-    {
+    function wrapAndCreate(
+        address recipient,
+        uint256 minShares,
+        uint256 version
+    ) external payable override nonReentrant returns (uint256 shares) {
         shares = _create(recipient, msg.value, version);
+        require(shares >= minShares, "Min shares created");
         IWrappedERC20(address(_tokenUnderlying)).deposit{value: msg.value}();
         _tokenUnderlying.safeTransfer(address(fund), msg.value);
     }
@@ -302,7 +297,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         // Do not call `_updateDelayedRedemptionDay()` because the latest `redeemedUnderlying`
         // is not used in this function.
         _updateUser(recipient);
-        CreationRedemption storage cr = _creationRedemptions[recipient];
+        DelayRedemption storage cr = _delayRedemptions[recipient];
         cr.redeemingShares = cr.redeemingShares.add(shares);
         currentRedeemingShares = currentRedeemingShares.add(shares);
 
@@ -312,17 +307,21 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     function redeem(
         address recipient,
         uint256 shares,
+        uint256 minUnderlying,
         uint256 version
     ) external override nonReentrant returns (uint256 underlying) {
         underlying = _redeem(recipient, shares, version);
+        require(underlying >= minUnderlying, "Min underlying redeemed");
     }
 
     function redeemAndUnwrap(
         address recipient,
         uint256 shares,
+        uint256 minUnderlying,
         uint256 version
     ) external override nonReentrant returns (uint256 underlying) {
         underlying = _redeem(address(this), shares, version);
+        require(underlying >= minUnderlying, "Min underlying redeemed");
         IWrappedERC20(address(_tokenUnderlying)).withdraw(underlying);
         (bool success, ) = recipient.call{value: underlying}("");
         require(success, "Transfer failed");
@@ -363,12 +362,9 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         external
         override
         nonReentrant
-        returns (uint256 createdShares, uint256 redeemedUnderlying)
+        returns (uint256 redeemedUnderlying)
     {
-        (createdShares, redeemedUnderlying) = _claim(account);
-        if (createdShares > 0) {
-            IERC20(fund.tokenM()).safeTransfer(account, createdShares);
-        }
+        redeemedUnderlying = _claim(account);
         if (redeemedUnderlying > 0) {
             _tokenUnderlying.safeTransfer(account, redeemedUnderlying);
         }
@@ -378,12 +374,9 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         external
         override
         nonReentrant
-        returns (uint256 createdShares, uint256 redeemedUnderlying)
+        returns (uint256 redeemedUnderlying)
     {
-        (createdShares, redeemedUnderlying) = _claim(account);
-        if (createdShares > 0) {
-            IERC20(fund.tokenM()).safeTransfer(account, createdShares);
-        }
+        redeemedUnderlying = _claim(account);
         if (redeemedUnderlying > 0) {
             IWrappedERC20(address(_tokenUnderlying)).withdraw(redeemedUnderlying);
             (bool success, ) = account.call{value: redeemedUnderlying}("");
@@ -391,26 +384,18 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         }
     }
 
-    function _claim(address account)
-        private
-        returns (uint256 createdShares, uint256 redeemedUnderlying)
-    {
+    function _claim(address account) private returns (uint256 redeemedUnderlying) {
         _updateDelayedRedemptionDay();
         _updateUser(account);
-        CreationRedemption storage cr = _creationRedemptions[account];
-        createdShares = cr.createdShares;
+        DelayRedemption storage cr = _delayRedemptions[account];
         redeemedUnderlying = cr.redeemedUnderlying;
 
-        if (createdShares > 0) {
-            cr.createdShares = 0;
-        }
         if (redeemedUnderlying > 0) {
             _claimableUnderlying = _claimableUnderlying.sub(redeemedUnderlying);
             cr.redeemedUnderlying = 0;
         }
 
-        emit Claimed(account, createdShares, redeemedUnderlying);
-        return (createdShares, redeemedUnderlying);
+        emit Claimed(account, 0, redeemedUnderlying);
     }
 
     function split(
@@ -558,18 +543,16 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     }
 
     /// @dev Update the status of an account.
-    ///      1. If there is a pending creation before the last settlement, calculate its result
-    ///         and add it to `createdShares`.
-    ///      2. If there is a pending redemption before the last settlement, calculate its result.
+    ///      1. If there is a pending redemption before the last settlement, calculate its result.
     ///         Add the result to `redeemedUnderlying` if it can be claimed now. Otherwise, append
     ///         the result to the account's delayed redemption list.
-    ///      3. Check the account's delayed redemption list. Remove the redemptions that can be
+    ///      2. Check the account's delayed redemption list. Remove the redemptions that can be
     ///         claimed now from the list and add them to `redeemedUnderlying`. Note that
     ///         if `_updateDelayedRedemptionDay()` is not called before this function, some
     ///         claimable redemption may not be correctly recognized and `redeemedUnderlying` may
     ///         be smaller than the actual amount that the user can claim.
     function _updateUser(address account) private {
-        CreationRedemption storage cr = _creationRedemptions[account];
+        DelayRedemption storage cr = _delayRedemptions[account];
         uint256 oldDay = cr.day;
         uint256 newDay = currentDay;
         if (oldDay < newDay) {

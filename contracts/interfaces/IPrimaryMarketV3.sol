@@ -36,23 +36,27 @@ interface IPrimaryMarketV3 {
     function create(
         address recipient,
         uint256 underlying,
+        uint256 minShares,
         uint256 version
     ) external returns (uint256 shares);
 
-    function wrapAndCreate(address recipient, uint256 version)
-        external
-        payable
-        returns (uint256 shares);
+    function wrapAndCreate(
+        address recipient,
+        uint256 minShares,
+        uint256 version
+    ) external payable returns (uint256 shares);
 
     function redeem(
         address recipient,
         uint256 shares,
+        uint256 minUnderlying,
         uint256 version
     ) external returns (uint256 underlying);
 
     function redeemAndUnwrap(
         address recipient,
         uint256 shares,
+        uint256 minUnderlying,
         uint256 version
     ) external returns (uint256 underlying);
 
@@ -62,13 +66,9 @@ interface IPrimaryMarketV3 {
         uint256 version
     ) external;
 
-    function claim(address account)
-        external
-        returns (uint256 createdShares, uint256 redeemedUnderlying);
+    function claim(address account) external returns (uint256 redeemedUnderlying);
 
-    function claimAndUnwrap(address account)
-        external
-        returns (uint256 createdShares, uint256 redeemedUnderlying);
+    function claimAndUnwrap(address account) external returns (uint256 redeemedUnderlying);
 
     function split(
         address recipient,

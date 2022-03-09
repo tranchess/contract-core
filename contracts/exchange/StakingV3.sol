@@ -383,18 +383,6 @@ abstract contract StakingV3 is ITrancheIndex, CoreUtility, ManagedPausable {
         emit Deposited(tranche, msg.sender, amount);
     }
 
-    /// @dev Claim settled Token M from the primary market and deposit to get rewards
-    /// @param primaryMarket The primary market to claim shares from
-    function claimAndDeposit(address primaryMarket) external {
-        (uint256 createdShares, ) = IPrimaryMarketV3(primaryMarket).claim(msg.sender);
-        deposit(TRANCHE_M, createdShares);
-    }
-
-    function claimAndUnwrapAndDeposit(address primaryMarket) external {
-        (uint256 createdShares, ) = IPrimaryMarketV3(primaryMarket).claimAndUnwrap(msg.sender);
-        deposit(TRANCHE_M, createdShares);
-    }
-
     /// @dev Withdraw
     /// @param tranche Tranche of the share
     /// @param amount The amount to deposit
