@@ -87,37 +87,32 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         fundCap = fundCap_;
     }
 
-    function getRedemption(uint256 shares) public view override returns (uint256 underlying) {
-        uint256 fundUnderlying = fund.getTotalUnderlying();
-        uint256 fundTotalShares = fund.getTotalShares();
-        underlying = shares.mul(fundUnderlying).div(fundTotalShares);
-    }
-
     function getCreation(uint256 underlying) public view override returns (uint256 shares) {
+        require(underlying >= minCreationUnderlying, "Min amount");
         uint256 fundUnderlying = fund.getTotalUnderlying();
         uint256 fundTotalShares = fund.getTotalShares();
-        require(underlying >= minCreationUnderlying, "Min amount");
-        uint256 cap = fundCap;
-        if (cap != uint256(-1)) {
-            require(fundUnderlying.add(underlying) <= cap, "Exceed fund cap");
-        }
-        if (fundUnderlying == 0) {
+        require(fundUnderlying.add(underlying) <= fundCap, "Exceed fund cap");
+        if (fundTotalShares == 0) {
             uint256 day = fund.currentDay();
-            uint256 underlyingPrice = fund.twapOracle().getTwap(day);
+            uint256 underlyingPrice = fund.twapOracle().getTwap(day - 1 days);
             (uint256 prevNavM, , ) = fund.historicalNavs(day - 1 days);
-            require(underlyingPrice != 0, "Underlying price for settlement is not ready yet");
-            require(
-                fundTotalShares == 0,
-                "Cannot create shares for fund with shares but no underlying"
-            );
-            require(prevNavM > 0, "Cannot create shares at zero NAV");
-
+            require(underlyingPrice != 0 && prevNavM != 0, "Zero NAV or underlying price");
             shares = underlying.mul(underlyingPrice).mul(fund.underlyingDecimalMultiplier()).div(
                 prevNavM
             );
         } else {
+            require(
+                fundUnderlying != 0,
+                "Cannot create shares for fund with shares but no underlying"
+            );
             shares = underlying.mul(fundTotalShares).div(fundUnderlying);
         }
+    }
+
+    function getRedemption(uint256 shares) public view override returns (uint256 underlying) {
+        uint256 fundUnderlying = fund.getTotalUnderlying();
+        uint256 fundTotalShares = fund.getTotalShares();
+        underlying = shares.mul(fundUnderlying).div(fundTotalShares);
     }
 
     function getSplit(uint256 inM)
@@ -255,7 +250,6 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     ) private onlyActive returns (uint256 shares) {
         shares = getCreation(underlying);
         fund.mint(TRANCHE_M, recipient, shares, version);
-
         emit Created(recipient, underlying, shares);
     }
 
