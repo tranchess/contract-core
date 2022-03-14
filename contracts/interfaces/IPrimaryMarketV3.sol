@@ -8,7 +8,7 @@ interface IPrimaryMarketV3 {
 
     function getCreation(uint256 underlying) external view returns (uint256 shares);
 
-    function getRedemption(uint256 shares) external view returns (uint256 underlying);
+    function getRedemption(uint256 shares) external view returns (uint256 underlying, uint256 fee);
 
     function getSplit(uint256 inM)
         external

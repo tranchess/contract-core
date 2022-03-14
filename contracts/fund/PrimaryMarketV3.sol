@@ -109,10 +109,17 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         }
     }
 
-    function getRedemption(uint256 shares) public view override returns (uint256 underlying) {
+    function getRedemption(uint256 shares)
+        public
+        view
+        override
+        returns (uint256 underlying, uint256 fee)
+    {
         uint256 fundUnderlying = fund.getTotalUnderlying();
         uint256 fundTotalShares = fund.getTotalShares();
         underlying = shares.mul(fundUnderlying).div(fundTotalShares);
+        fee = underlying.multiplyDecimal(redemptionFeeRate);
+        underlying = underlying.sub(fee);
     }
 
     function getSplit(uint256 inM)
@@ -257,17 +264,15 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         address recipient,
         uint256 shares,
         uint256 version
-    ) private onlyActive returns (uint256 redeemedUnderlying) {
+    ) private onlyActive returns (uint256 underlying) {
         require(shares != 0, "Zero shares");
         fund.burn(TRANCHE_M, msg.sender, shares, version);
-        uint256 underlying = getRedemption(shares);
+        uint256 fee;
+        (underlying, fee) = getRedemption(shares);
         uint256 balance = _tokenUnderlying.balanceOf(address(fund));
         require(underlying <= balance, "Not enough available hot balance");
-        uint256 redemptionFee = underlying.multiplyDecimal(redemptionFeeRate);
-        redeemedUnderlying = underlying.sub(redemptionFee);
-        fund.transferToPrimaryMarket(recipient, redeemedUnderlying, redemptionFee);
-
-        emit Redeemed(recipient, shares, redeemedUnderlying, redemptionFee);
+        fund.transferToPrimaryMarket(recipient, underlying, fee);
+        emit Redeemed(recipient, shares, underlying, fee);
     }
 
     function split(
