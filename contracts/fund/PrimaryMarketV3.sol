@@ -56,15 +56,14 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     uint256 public mergeFeeRate;
     uint256 public minCreationUnderlying;
 
-    uint256 public currentDay;
-    uint256 public currentFeeInShares;
-
     /// @notice The upper limit of underlying that the fund can hold. This contract rejects
     ///         creations that may break this limit.
     /// @dev This limit can be bypassed if the fund has multiple primary markets.
     ///
     ///      Set it to uint(-1) to skip the check and save gas.
     uint256 public fundCap;
+
+    uint256 public currentFeeInShares;
 
     constructor(
         address fund_,
@@ -83,7 +82,6 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         splitFeeRate = splitFeeRate_;
         mergeFeeRate = mergeFeeRate_;
         minCreationUnderlying = minCreationUnderlying_;
-        currentDay = IFundV3(fund_).currentDay();
         fundCap = fundCap_;
     }
 
@@ -282,13 +280,11 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     ) external override onlyActive returns (uint256 outA, uint256 outB) {
         uint256 feeM;
         (outA, outB, feeM) = getSplit(inM);
-
+        currentFeeInShares = currentFeeInShares.add(feeM);
         fund.burn(TRANCHE_M, msg.sender, inM, version);
         fund.mint(TRANCHE_A, recipient, outA, version);
         fund.mint(TRANCHE_B, recipient, outB, version);
         fund.mint(TRANCHE_M, address(this), feeM, version);
-
-        currentFeeInShares = currentFeeInShares.add(feeM);
         emit Split(msg.sender, inM, outA, outB);
     }
 
@@ -299,31 +295,26 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     ) external override onlyActive returns (uint256 inB, uint256 outM) {
         uint256 feeM;
         (inA, inB, outM, feeM) = getMerge(inA);
+        currentFeeInShares = currentFeeInShares.add(feeM);
         fund.burn(TRANCHE_A, msg.sender, inA, version);
         fund.burn(TRANCHE_B, msg.sender, inB, version);
         fund.mint(TRANCHE_M, recipient, outM, version);
         fund.mint(TRANCHE_M, address(this), feeM, version);
-
-        currentFeeInShares = currentFeeInShares.add(feeM);
         emit Merged(msg.sender, outM, inA, inB);
     }
 
-    /// @notice Settle ongoing creations and redemptions and also split and merge fees.
-    ///
-    ///         Creations and redemptions are settled according to the current shares and
-    ///         underlying assets in the fund. Split and merge fee charged as Token M are also
-    ///         redeemed at the same rate (without redemption fee).
+    /// @notice Settle split and merge fee that is charged as Token M in this trading day.
+    ///         This function can only be called from the Fund contract. It should be called
+    ///         after protocol fee is collected and before rebalance is triggered for the same
+    ///         trading day.
     ///
     ///         This function does not mint or burn shares, nor transfer underlying assets.
     ///         It returns the following changes that should be done by the fund:
     ///
-    ///         1. Mint or burn net shares (creations v.s. redemptions + split/merge fee).
-    ///         2. Transfer underlying to or from this contract (creations v.s. redemptions).
+    ///         1. Mint or burn net shares, which is only split/merge fee in this implementation.
+    ///         2. Transfer underlying to or from this contract, which is always zero in this implementation.
     ///         3. Transfer fee in underlying assets to the governance address.
     ///
-    ///         This function can only be called from the Fund contract. It should be called
-    ///         after protocol fee is collected and before rebalance is triggered for the same
-    ///         trading day.
     /// @param day The trading day to settle
     /// @param fundTotalShares Total shares of the fund (as if all Token A and B are merged)
     /// @param fundUnderlying Underlying assets in the fund
@@ -332,13 +323,13 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     /// @return creationUnderlying Underlying assets received for creations (including creation fee)
     /// @return redemptionUnderlying Underlying assets to be redeemed (excluding redemption fee)
     /// @return fee Total fee in underlying assets for the fund to transfer to the governance address,
-    ///         inlucding creation fee, redemption fee and split/merge fee
+    ///         which is the split/merge fee in this implementation
     function settle(
         uint256 day,
         uint256 fundTotalShares,
         uint256 fundUnderlying,
-        uint256, /*underlyingPrice*/
-        uint256 /*previousNav*/
+        uint256, /* underlyingPrice */
+        uint256 /* previousNav */
     )
         external
         override
@@ -352,25 +343,14 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
             uint256 fee
         )
     {
-        require(day >= currentDay, "Already settled");
-
         // Redeem split and merge fee
         uint256 feeInShares = currentFeeInShares;
         if (feeInShares > 0) {
-            sharesToBurn = sharesToBurn.add(feeInShares);
-            fee = fee.add(feeInShares.mul(fundUnderlying).div(fundTotalShares));
+            sharesToBurn = feeInShares;
+            fee = feeInShares.mul(fundUnderlying).div(fundTotalShares);
+            currentFeeInShares = 0;
         }
-
-        currentDay = day + 1 days;
-        currentFeeInShares = 0;
-        emit Settled(
-            day,
-            sharesToMint,
-            sharesToBurn,
-            creationUnderlying,
-            redemptionUnderlying,
-            fee
-        );
+        emit Settled(day, 0, sharesToBurn, 0, 0, fee);
     }
 
     function updateFundCap(uint256 newCap) external onlyOwner {
