@@ -66,8 +66,17 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     ///      Set it to uint(-1) to skip the check and save gas.
     uint256 public fundCap;
 
+    /// @notice Queue of redemptions that cannot be claimed yet. Key is a sequential index
+    ///         starting from zero. Value is a tuple of user address, redeemed underlying and
+    ///         prefix sum before this entry.
     mapping(uint256 => QueuedRedemption) public queuedRedemptions;
+
+    /// @notice Index of the redemption queue head. All redemptions with index smaller than
+    ///         this value can be claimed now.
     uint256 public redemptionQueueHead;
+
+    /// @notice Index of the redemption following the last entry of the queue. The next queued
+    ///         redemption will be written at this index.
     uint256 public redemptionQueueTail;
 
     constructor(
@@ -90,6 +99,9 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         fundCap = fundCap_;
     }
 
+    /// @notice Calculate the result of a creation.
+    /// @param underlying Underlying amount spent for the creation
+    /// @return shares Created Token M amount
     function getCreation(uint256 underlying) public view override returns (uint256 shares) {
         uint256 fundUnderlying = fund.getTotalUnderlying();
         uint256 fundTotalShares = fund.getTotalShares();
@@ -117,6 +129,10 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         underlying = shares.mul(fundUnderlying).div(fundTotalShares);
     }
 
+    /// @notice Calculate the result of a redemption.
+    /// @param shares Token M amount spent for the redemption
+    /// @return underlying Redeemed underlying amount
+    /// @return fee Underlying amount charged as redemption fee
     function getRedemption(uint256 shares)
         public
         view
@@ -128,6 +144,11 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         underlying = underlying.sub(fee);
     }
 
+    /// @notice Calculate the result of a split.
+    /// @param inM Token M amount to be split
+    /// @return outA Received Token A amount
+    /// @return outB Received Token B amount
+    /// @return feeM Token M amount charged as split fee
     function getSplit(uint256 inM)
         public
         view
@@ -160,6 +181,12 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         inM = inMAfterFee.divideDecimal(uint256(1e18).sub(splitFeeRate)).add(1);
     }
 
+    /// @notice Calculate the result of a merge.
+    /// @param expectA Minimum amount of Token M to be received
+    /// @return inA Spent Token A amount
+    /// @return inB Spent Token B amount
+    /// @return outM Received Token M amount
+    /// @return feeM Token M amount charged as merge fee
     function getMerge(uint256 expectA)
         public
         view
@@ -201,6 +228,12 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         outM = outMBeforeFee.sub(feeM);
     }
 
+    /// @notice Create Token M using underlying tokens.
+    /// @param recipient Address that will receive created Token M
+    /// @param underlying Spent underlying amount
+    /// @param minShares Minimum amount of Token M to be received
+    /// @param version The latest rebalance version
+    /// @return shares Received Token M amount
     function create(
         address recipient,
         uint256 underlying,
@@ -211,6 +244,12 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         _tokenUnderlying.safeTransferFrom(msg.sender, address(fund), underlying);
     }
 
+    /// @notice Create Token M using native currency. The underlying must be wrapped token
+    ///         of the native currency.
+    /// @param recipient Address that will receive created Token M
+    /// @param minShares Minimum amount of Token M to be received
+    /// @param version The latest rebalance version
+    /// @return shares Received Token M amount
     function wrapAndCreate(
         address recipient,
         uint256 minShares,
@@ -221,6 +260,13 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         _tokenUnderlying.safeTransfer(address(fund), msg.value);
     }
 
+    /// @notice Redeem Token M to get underlying tokens back. Revert if there are still some
+    ///         queued redemptions that cannot be claimed now.
+    /// @param recipient Address that will receive redeemed underlying tokens
+    /// @param shares Spent Token M amount
+    /// @param minUnderlying Minimum amount of underlying tokens to be received
+    /// @param version The latest rebalance version
+    /// @return underlying Received underlying amount
     function redeem(
         address recipient,
         uint256 shares,
@@ -230,6 +276,14 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         underlying = _redeem(recipient, shares, minUnderlying, version);
     }
 
+    /// @notice Redeem Token M to get native currency back. The underlying must be wrapped token
+    ///         of the native currency. Revert if there are still some queued redemptions that
+    ///         cannot be claimed now.
+    /// @param recipient Address that will receive redeemed underlying tokens
+    /// @param shares Spent Token M amount
+    /// @param minUnderlying Minimum amount of underlying tokens to be received
+    /// @param version The latest rebalance version
+    /// @return underlying Received underlying amount
     function redeemAndUnwrap(
         address recipient,
         uint256 shares,
@@ -276,32 +330,43 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         emit Redeemed(recipient, shares, underlying, fee);
     }
 
+    /// @notice Redeem Token M and wait in the redemption queue. Redeemed underlying tokens will
+    ///         be claimable when the fund has enough balance to pay this redemption and all
+    ///         previous ones in the queue.
+    /// @param recipient Address that will receive redeemed underlying tokens
+    /// @param shares Spent Token M amount
+    /// @param minUnderlying Minimum amount of underlying tokens to be received
+    /// @param version The latest rebalance version
+    /// @return underlying Received underlying amount
+    /// @return index Index of the queued redemption
     function queueRedemption(
         address recipient,
         uint256 shares,
         uint256 minUnderlying,
         uint256 version
-    ) external override onlyActive nonReentrant {
+    ) external override onlyActive nonReentrant returns (uint256 underlying, uint256 index) {
         require(shares != 0, "Zero shares");
         fund.burn(TRANCHE_M, msg.sender, shares, version);
-        (uint256 underlying, uint256 fee) = getRedemption(shares);
+        uint256 fee;
+        (underlying, fee) = getRedemption(shares);
         require(underlying >= minUnderlying, "Min underlying redeemed");
-        uint256 oldTail = redemptionQueueTail;
-        QueuedRedemption storage newRedemption = queuedRedemptions[oldTail];
+        index = redemptionQueueTail;
+        QueuedRedemption storage newRedemption = queuedRedemptions[index];
         newRedemption.account = recipient;
         newRedemption.underlying = underlying;
         // overflow is desired
-        queuedRedemptions[oldTail + 1].previousPrefixSum =
+        queuedRedemptions[index + 1].previousPrefixSum =
             newRedemption.previousPrefixSum +
             underlying;
-        redemptionQueueTail = oldTail + 1;
+        redemptionQueueTail = index + 1;
         fund.primaryMarketAddDebt(underlying, fee);
         emit Redeemed(recipient, shares, underlying, fee);
-        emit RedemptionQueued(recipient, oldTail, underlying);
+        emit RedemptionQueued(recipient, index, underlying);
     }
 
-    /// @dev Remove a given number of redemptions from the front of the redemption queue,
-    ///      or revert if the fund cannot pay these redemptions now.
+    /// @dev Remove a given number of redemptions from the front of the redemption queue and fetch
+    ///      underlying tokens of these redemptions from the fund. Revert if the fund cannot pay
+    ///      these redemptions now.
     /// @param count The number of redemptions to be removed, or zero to completely empty the queue
     function _popRedemptionQueue(uint256 count) private {
         uint256 oldHead = redemptionQueueHead;
@@ -330,6 +395,11 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         emit RedemptionPopped(newHead);
     }
 
+    /// @notice Claim underlying tokens of queued redemptions. All these redemptions must
+    ///         belong to the same account.
+    /// @param account Recipient of the redemptions
+    /// @param indices Indices of the redemptions in the queue
+    /// @return underlying Total claimed underlying amount
     function claimRedemptions(address account, uint256[] calldata indices)
         external
         override
@@ -340,6 +410,11 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         _tokenUnderlying.safeTransfer(account, underlying);
     }
 
+    /// @notice Claim native currency of queued redemptions. The underlying must be wrapped token
+    ///         of the native currency. All these redemptions must belong to the same account.
+    /// @param account Recipient of the redemptions
+    /// @param indices Indices of the redemptions in the queue
+    /// @return underlying Total claimed underlying amount
     function claimRedemptionsAndUnwrap(address account, uint256[] calldata indices)
         external
         override

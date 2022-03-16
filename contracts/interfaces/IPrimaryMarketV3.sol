@@ -65,7 +65,7 @@ interface IPrimaryMarketV3 {
         uint256 shares,
         uint256 minUnderlying,
         uint256 version
-    ) external;
+    ) external returns (uint256 underlying, uint256 index);
 
     function claimRedemptions(address account, uint256[] calldata indices)
         external
