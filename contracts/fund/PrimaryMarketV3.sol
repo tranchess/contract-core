@@ -17,15 +17,12 @@ import "../interfaces/IWrappedERC20.sol";
 
 contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ownable {
     event Created(address indexed account, uint256 underlying, uint256 shares);
-    event Redeemed(
-        address indexed account,
-        uint256 shares,
-        uint256 underlying,
-        uint256 redemptionFee
-    );
+    event Redeemed(address indexed account, uint256 shares, uint256 underlying, uint256 fee);
     event Split(address indexed account, uint256 inM, uint256 outA, uint256 outB);
     event Merged(address indexed account, uint256 outM, uint256 inA, uint256 inB);
-    event Claimed(address indexed account, uint256 createdShares, uint256 redeemedUnderlying); // XXX
+    event RedemptionQueued(address indexed account, uint256 index, uint256 underlying);
+    event RedemptionPopped(uint256 newHead);
+    event RedemptionClaimed(address indexed account, uint256 index, uint256 underlying);
     event Settled(
         uint256 indexed day,
         uint256 sharesToMint,
@@ -299,7 +296,8 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
             underlying;
         redemptionQueueTail = oldTail + 1;
         fund.primaryMarketAddDebt(underlying, fee);
-        emit Redeemed(recipient, shares, 0, 0);
+        emit Redeemed(recipient, shares, underlying, fee);
+        emit RedemptionQueued(recipient, oldTail, underlying);
     }
 
     /// @dev Remove a given number of redemptions from the front of the redemption queue,
@@ -329,6 +327,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         );
         fund.primaryMarketPayDebt(requiredUnderlying);
         redemptionQueueHead = newHead;
+        emit RedemptionPopped(newHead);
     }
 
     function claimRedemptions(address account, uint256[] calldata indices)
@@ -375,6 +374,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
                 "Invalid redemption index"
             );
             underlying = underlying.add(redemption.underlying);
+            emit RedemptionClaimed(account, indices[i], redemption.underlying);
             redemption.account = address(0);
             redemption.underlying = 0;
             redemption.previousPrefixSum = 0;
