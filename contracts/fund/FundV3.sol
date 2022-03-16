@@ -896,18 +896,26 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         _payDebt();
     }
 
-    function transferToPrimaryMarket(
+    function primaryMarketTransferUnderlying(
         address recipient,
         uint256 amount,
         uint256 fee
     ) external override onlyPrimaryMarket {
-        if (amount > 0) {
-            IERC20(tokenUnderlying).safeTransfer(recipient, amount);
-        }
-        if (fee > 0) {
-            feeDebt = feeDebt.add(fee);
-            _totalDebt = _totalDebt.add(fee);
-        }
+        IERC20(tokenUnderlying).safeTransfer(recipient, amount);
+        feeDebt = feeDebt.add(fee);
+        _totalDebt = _totalDebt.add(fee);
+    }
+
+    function primaryMarketAddDebt(uint256 amount, uint256 fee) external override onlyPrimaryMarket {
+        redemptionDebts[msg.sender] = redemptionDebts[msg.sender].add(amount);
+        feeDebt = feeDebt.add(fee);
+        _totalDebt = _totalDebt.add(amount).add(fee);
+    }
+
+    function primaryMarketPayDebt(uint256 amount) external override onlyPrimaryMarket {
+        redemptionDebts[msg.sender] = redemptionDebts[msg.sender].sub(amount);
+        _totalDebt = _totalDebt.sub(amount);
+        IERC20(tokenUnderlying).safeTransfer(msg.sender, amount);
     }
 
     function reportProfit(uint256 profit, uint256 performanceFee) external override onlyStrategy {
@@ -1069,24 +1077,9 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         if (fee > 0) {
             uint256 amount = hot.min(fee);
             feeDebt = fee - amount;
-            total -= amount;
-            hot -= amount;
+            _totalDebt = total - amount;
             IERC20(tokenUnderlying).safeTransfer(feeCollector, amount);
         }
-        uint256 primaryMarketCount = getPrimaryMarketCount();
-        for (uint256 i = 0; i < primaryMarketCount && hot > 0 && total > 0; i++) {
-            address pm = getPrimaryMarketMember(i);
-            uint256 redemption = redemptionDebts[pm];
-            if (redemption > 0) {
-                uint256 amount = hot.min(redemption);
-                redemptionDebts[pm] = redemption - amount;
-                total -= amount;
-                hot -= amount;
-                IERC20(tokenUnderlying).safeTransfer(pm, amount);
-                IPrimaryMarketV3(pm).updateDelayedRedemptionDay();
-            }
-        }
-        _totalDebt = total;
     }
 
     /// @dev Check whether a new rebalance should be triggered. Rebalance is triggered if

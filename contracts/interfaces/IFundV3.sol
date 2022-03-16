@@ -215,11 +215,15 @@ interface IFundV3 {
 
     function reportLoss(uint256 loss) external;
 
-    function transferToPrimaryMarket(
+    function primaryMarketTransferUnderlying(
         address recipient,
         uint256 amount,
         uint256 fee
     ) external;
+
+    function primaryMarketAddDebt(uint256 amount, uint256 fee) external;
+
+    function primaryMarketPayDebt(uint256 amount) external;
 
     event RebalanceTriggered(
         uint256 indexed index,

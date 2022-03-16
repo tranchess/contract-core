@@ -44,6 +44,12 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
+    struct QueuedRedemption {
+        address account;
+        uint256 underlying;
+        uint256 previousPrefixSum;
+    }
+
     uint256 private constant MAX_REDEMPTION_FEE_RATE = 0.01e18;
     uint256 private constant MAX_SPLIT_FEE_RATE = 0.01e18;
     uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18;
@@ -64,6 +70,10 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     uint256 public fundCap;
 
     uint256 public currentFeeInShares;
+
+    mapping(uint256 => QueuedRedemption) public queuedRedemptions;
+    uint256 public redemptionQueueHead;
+    uint256 public redemptionQueueTail;
 
     constructor(
         address fund_,
@@ -86,7 +96,6 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     }
 
     function getCreation(uint256 underlying) public view override returns (uint256 shares) {
-        require(underlying >= minCreationUnderlying, "Min amount");
         uint256 fundUnderlying = fund.getTotalUnderlying();
         uint256 fundTotalShares = fund.getTotalShares();
         require(fundUnderlying.add(underlying) <= fundCap, "Exceed fund cap");
@@ -199,8 +208,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         uint256 minShares,
         uint256 version
     ) external override nonReentrant returns (uint256 shares) {
-        shares = _create(recipient, underlying, version);
-        require(shares >= minShares, "Min shares created");
+        shares = _create(recipient, underlying, minShares, version);
         _tokenUnderlying.safeTransferFrom(msg.sender, address(fund), underlying);
     }
 
@@ -209,20 +217,9 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         uint256 minShares,
         uint256 version
     ) external payable override nonReentrant returns (uint256 shares) {
-        shares = _create(recipient, msg.value, version);
-        require(shares >= minShares, "Min shares created");
+        shares = _create(recipient, msg.value, minShares, version);
         IWrappedERC20(address(_tokenUnderlying)).deposit{value: msg.value}();
         _tokenUnderlying.safeTransfer(address(fund), msg.value);
-    }
-
-    function delayRedeem(
-        address recipient,
-        uint256 shares,
-        uint256 version
-    ) external override onlyActive nonReentrant {
-        require(shares != 0, "Zero shares");
-        // TODO
-        emit Redeemed(recipient, shares, 0, 0);
     }
 
     function redeem(
@@ -231,8 +228,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         uint256 minUnderlying,
         uint256 version
     ) external override nonReentrant returns (uint256 underlying) {
-        underlying = _redeem(recipient, shares, version);
-        require(underlying >= minUnderlying, "Min underlying redeemed");
+        underlying = _redeem(recipient, shares, minUnderlying, version);
     }
 
     function redeemAndUnwrap(
@@ -241,8 +237,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         uint256 minUnderlying,
         uint256 version
     ) external override nonReentrant returns (uint256 underlying) {
-        underlying = _redeem(address(this), shares, version);
-        require(underlying >= minUnderlying, "Min underlying redeemed");
+        underlying = _redeem(address(this), shares, minUnderlying, version);
         IWrappedERC20(address(_tokenUnderlying)).withdraw(underlying);
         (bool success, ) = recipient.call{value: underlying}("");
         require(success, "Transfer failed");
@@ -251,9 +246,12 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     function _create(
         address recipient,
         uint256 underlying,
+        uint256 minShares,
         uint256 version
     ) private onlyActive returns (uint256 shares) {
+        require(underlying >= minCreationUnderlying, "Min amount");
         shares = getCreation(underlying);
+        require(shares >= minShares, "Min shares created");
         fund.mint(TRANCHE_M, recipient, shares, version);
         emit Created(recipient, underlying, shares);
     }
@@ -261,16 +259,124 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     function _redeem(
         address recipient,
         uint256 shares,
+        uint256 minUnderlying,
         uint256 version
     ) private onlyActive returns (uint256 underlying) {
         require(shares != 0, "Zero shares");
         fund.burn(TRANCHE_M, msg.sender, shares, version);
+        _popRedemptionQueue(0);
         uint256 fee;
         (underlying, fee) = getRedemption(shares);
-        uint256 balance = _tokenUnderlying.balanceOf(address(fund));
-        require(underlying <= balance, "Not enough available hot balance");
-        fund.transferToPrimaryMarket(recipient, underlying, fee);
+        require(underlying >= minUnderlying, "Min underlying redeemed");
+        // Redundant check for user-friendly revert message.
+        require(
+            underlying <= _tokenUnderlying.balanceOf(address(fund)),
+            "Not enough underlying in fund"
+        );
+        fund.primaryMarketTransferUnderlying(recipient, underlying, fee);
         emit Redeemed(recipient, shares, underlying, fee);
+    }
+
+    function queueRedemption(
+        address recipient,
+        uint256 shares,
+        uint256 minUnderlying,
+        uint256 version
+    ) external override onlyActive nonReentrant {
+        require(shares != 0, "Zero shares");
+        fund.burn(TRANCHE_M, msg.sender, shares, version);
+        (uint256 underlying, uint256 fee) = getRedemption(shares);
+        require(underlying >= minUnderlying, "Min underlying redeemed");
+        uint256 oldTail = redemptionQueueTail;
+        QueuedRedemption storage newRedemption = queuedRedemptions[oldTail];
+        newRedemption.account = recipient;
+        newRedemption.underlying = underlying;
+        // overflow is desired
+        queuedRedemptions[oldTail + 1].previousPrefixSum =
+            newRedemption.previousPrefixSum +
+            underlying;
+        redemptionQueueTail = oldTail + 1;
+        fund.primaryMarketAddDebt(underlying, fee);
+        emit Redeemed(recipient, shares, 0, 0);
+    }
+
+    /// @dev Remove a given number of redemptions from the front of the redemption queue,
+    ///      or revert if the fund cannot pay these redemptions now.
+    /// @param count The number of redemptions to be removed, or zero to completely empty the queue
+    function _popRedemptionQueue(uint256 count) private {
+        uint256 oldHead = redemptionQueueHead;
+        uint256 oldTail = redemptionQueueTail;
+        uint256 newHead;
+        if (count == 0) {
+            if (oldHead == oldTail) {
+                return;
+            }
+            newHead = oldTail;
+        } else {
+            newHead = oldHead.add(count);
+            require(newHead <= oldTail, "Redemption queue out of bound");
+        }
+        // overflow is desired
+        uint256 requiredUnderlying =
+            queuedRedemptions[newHead].previousPrefixSum -
+                queuedRedemptions[oldHead].previousPrefixSum;
+        // Redundant check for user-friendly revert message.
+        require(
+            requiredUnderlying <= _tokenUnderlying.balanceOf(address(fund)),
+            "Not enough underlying in fund"
+        );
+        fund.primaryMarketPayDebt(requiredUnderlying);
+        redemptionQueueHead = newHead;
+    }
+
+    function claimRedemptions(address account, uint256[] calldata indices)
+        external
+        override
+        nonReentrant
+        returns (uint256 underlying)
+    {
+        underlying = _claimRedemptions(account, indices);
+        _tokenUnderlying.safeTransfer(account, underlying);
+    }
+
+    function claimRedemptionsAndUnwrap(address account, uint256[] calldata indices)
+        external
+        override
+        nonReentrant
+        returns (uint256 underlying)
+    {
+        underlying = _claimRedemptions(account, indices);
+        IWrappedERC20(address(_tokenUnderlying)).withdraw(underlying);
+        (bool success, ) = account.call{value: underlying}("");
+        require(success, "Transfer failed");
+    }
+
+    function _claimRedemptions(address account, uint256[] calldata indices)
+        private
+        returns (uint256 underlying)
+    {
+        uint256 count = indices.length;
+        uint256 head = redemptionQueueHead;
+        uint256 maxIndex = 0;
+        for (uint256 i = 0; i < count; i++) {
+            if (maxIndex < indices[i]) {
+                maxIndex = indices[i];
+            }
+        }
+        if (maxIndex >= head) {
+            _popRedemptionQueue(maxIndex - head + 1);
+        }
+        for (uint256 i = 0; i < count; i++) {
+            QueuedRedemption storage redemption = queuedRedemptions[indices[i]];
+            require(
+                redemption.account == account && redemption.underlying != 0,
+                "Invalid redemption index"
+            );
+            underlying = underlying.add(redemption.underlying);
+            redemption.account = address(0);
+            redemption.underlying = 0;
+            redemption.previousPrefixSum = 0;
+        }
     }
 
     function split(

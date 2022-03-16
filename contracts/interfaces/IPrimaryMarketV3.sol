@@ -60,15 +60,20 @@ interface IPrimaryMarketV3 {
         uint256 version
     ) external returns (uint256 underlying);
 
-    function delayRedeem(
+    function queueRedemption(
         address recipient,
         uint256 shares,
+        uint256 minUnderlying,
         uint256 version
     ) external;
 
-    function claim(address account) external returns (uint256 redeemedUnderlying);
+    function claimRedemptions(address account, uint256[] calldata indices)
+        external
+        returns (uint256 underlying);
 
-    function claimAndUnwrap(address account) external returns (uint256 redeemedUnderlying);
+    function claimRedemptionsAndUnwrap(address account, uint256[] calldata indices)
+        external
+        returns (uint256 underlying);
 
     function split(
         address recipient,
@@ -97,6 +102,4 @@ interface IPrimaryMarketV3 {
             uint256 redemptionUnderlying,
             uint256 fee
         );
-
-    function updateDelayedRedemptionDay() external;
 }
