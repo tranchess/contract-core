@@ -21,7 +21,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     event Split(address indexed account, uint256 inM, uint256 outA, uint256 outB);
     event Merged(address indexed account, uint256 outM, uint256 inA, uint256 inB);
     event RedemptionQueued(address indexed account, uint256 index, uint256 underlying);
-    event RedemptionPopped(uint256 newHead);
+    event RedemptionPopped(uint256 count, uint256 newHead);
     event RedemptionClaimed(address indexed account, uint256 index, uint256 underlying);
     event Settled(
         uint256 indexed day,
@@ -304,7 +304,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     ) private onlyActive returns (uint256 shares) {
         require(underlying >= minCreationUnderlying, "Min amount");
         shares = getCreation(underlying);
-        require(shares >= minShares, "Min shares created");
+        require(shares >= minShares && shares > 0, "Min shares created");
         fund.mint(TRANCHE_M, recipient, shares, version);
         emit Created(recipient, underlying, shares);
     }
@@ -315,12 +315,11 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         uint256 minUnderlying,
         uint256 version
     ) private onlyActive returns (uint256 underlying) {
-        require(shares != 0, "Zero shares");
         fund.burn(TRANCHE_M, msg.sender, shares, version);
         _popRedemptionQueue(0);
         uint256 fee;
         (underlying, fee) = getRedemption(shares);
-        require(underlying >= minUnderlying, "Min underlying redeemed");
+        require(underlying >= minUnderlying && underlying > 0, "Min underlying redeemed");
         // Redundant check for user-friendly revert message.
         require(
             underlying <= _tokenUnderlying.balanceOf(address(fund)),
@@ -345,11 +344,10 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         uint256 minUnderlying,
         uint256 version
     ) external override onlyActive nonReentrant returns (uint256 underlying, uint256 index) {
-        require(shares != 0, "Zero shares");
         fund.burn(TRANCHE_M, msg.sender, shares, version);
         uint256 fee;
         (underlying, fee) = getRedemption(shares);
-        require(underlying >= minUnderlying, "Min underlying redeemed");
+        require(underlying >= minUnderlying && underlying > 0, "Min underlying redeemed");
         index = redemptionQueueTail;
         QueuedRedemption storage newRedemption = queuedRedemptions[index];
         newRedemption.account = recipient;
@@ -364,10 +362,14 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         emit RedemptionQueued(recipient, index, underlying);
     }
 
-    /// @dev Remove a given number of redemptions from the front of the redemption queue and fetch
-    ///      underlying tokens of these redemptions from the fund. Revert if the fund cannot pay
-    ///      these redemptions now.
+    /// @notice Remove a given number of redemptions from the front of the redemption queue and
+    ///         fetch underlying tokens of these redemptions from the fund. Revert if the fund
+    ///         cannot pay these redemptions now.
     /// @param count The number of redemptions to be removed, or zero to completely empty the queue
+    function popRedemptionQueue(uint256 count) external nonReentrant {
+        _popRedemptionQueue(count);
+    }
+
     function _popRedemptionQueue(uint256 count) private {
         uint256 oldHead = redemptionQueueHead;
         uint256 oldTail = redemptionQueueTail;
@@ -392,7 +394,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         );
         fund.primaryMarketPayDebt(requiredUnderlying);
         redemptionQueueHead = newHead;
-        emit RedemptionPopped(newHead);
+        emit RedemptionPopped(newHead - oldHead, newHead);
     }
 
     /// @notice Claim underlying tokens of queued redemptions. All these redemptions must
@@ -463,7 +465,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         fund.mint(TRANCHE_A, recipient, outA, version);
         fund.mint(TRANCHE_B, recipient, outB, version);
         fund.primaryMarketAddDebt(0, _getRedemptionBeforeFee(feeM));
-        emit Split(msg.sender, inM, outA, outB);
+        emit Split(recipient, inM, outA, outB);
     }
 
     function merge(
@@ -477,7 +479,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         fund.burn(TRANCHE_B, msg.sender, inB, version);
         fund.mint(TRANCHE_M, recipient, outM, version);
         fund.primaryMarketAddDebt(0, _getRedemptionBeforeFee(feeM));
-        emit Merged(msg.sender, outM, inA, inB);
+        emit Merged(recipient, outM, inA, inB);
     }
 
     /// @dev Nothing to do for daily fund settlement.
