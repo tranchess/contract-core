@@ -398,7 +398,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     /// @notice Claim underlying tokens of queued redemptions. All these redemptions must
     ///         belong to the same account.
     /// @param account Recipient of the redemptions
-    /// @param indices Indices of the redemptions in the queue
+    /// @param indices Indices of the redemptions in the queue, which must be in increasing order
     /// @return underlying Total claimed underlying amount
     function claimRedemptions(address account, uint256[] calldata indices)
         external
@@ -413,7 +413,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     /// @notice Claim native currency of queued redemptions. The underlying must be wrapped token
     ///         of the native currency. All these redemptions must belong to the same account.
     /// @param account Recipient of the redemptions
-    /// @param indices Indices of the redemptions in the queue
+    /// @param indices Indices of the redemptions in the queue, which must be in increasing order
     /// @return underlying Total claimed underlying amount
     function claimRedemptionsAndUnwrap(address account, uint256[] calldata indices)
         external
@@ -432,17 +432,15 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         returns (uint256 underlying)
     {
         uint256 count = indices.length;
+        if (count == 0) {
+            return 0;
+        }
         uint256 head = redemptionQueueHead;
-        uint256 maxIndex = 0;
-        for (uint256 i = 0; i < count; i++) {
-            if (maxIndex < indices[i]) {
-                maxIndex = indices[i];
-            }
-        }
-        if (maxIndex >= head) {
-            _popRedemptionQueue(maxIndex - head + 1);
+        if (indices[count - 1] >= head) {
+            _popRedemptionQueue(indices[count - 1] - head + 1);
         }
         for (uint256 i = 0; i < count; i++) {
+            require(i == 0 || indices[i] > indices[i - 1], "Indices out of order");
             QueuedRedemption storage redemption = queuedRedemptions[indices[i]];
             require(
                 redemption.account == account && redemption.underlying != 0,
@@ -450,9 +448,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
             );
             underlying = underlying.add(redemption.underlying);
             emit RedemptionClaimed(account, indices[i], redemption.underlying);
-            redemption.account = address(0);
-            redemption.underlying = 0;
-            redemption.previousPrefixSum = 0;
+            delete queuedRedemptions[indices[i]];
         }
     }
 
