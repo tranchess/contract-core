@@ -93,7 +93,7 @@ describe("FundV3", function () {
         const interestRateBallot = await deployMockForName(owner, "IBallot");
         await interestRateBallot.mock.count.returns(0);
 
-        const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV2");
+        const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV3");
 
         const Fund = await ethers.getContractFactory("FundV3");
         const fund = await Fund.connect(owner).deploy(
@@ -838,12 +838,12 @@ describe("FundV3", function () {
                 0
             );
             const oldM = await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address);
-            await primaryMarket.mock.updateDelayedRedemptionDay.returns();
             await expect(() => fund.settle()).to.changeTokenBalances(
                 btc,
                 [fund, primaryMarket],
-                [parseBtc("-3").sub(protocolFee), parseBtc("3")]
+                [protocolFee.mul(-1), 0]
             );
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(parseBtc("3"));
             expect(await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
                 oldM.sub(parseEther("3000"))
             );
@@ -863,16 +863,12 @@ describe("FundV3", function () {
                 parseBtc("3.6"),
                 totalFee
             );
-            await primaryMarket.mock.updateDelayedRedemptionDay.returns();
             await expect(() => fund.settle()).to.changeTokenBalances(
                 btc,
                 [fund, primaryMarket, feeCollector],
-                [
-                    parseBtc("-2.6").sub(totalFee).sub(protocolFee),
-                    parseBtc("2.6"),
-                    totalFee.add(protocolFee),
-                ]
+                [totalFee.add(protocolFee).mul(-1), 0, totalFee.add(protocolFee)]
             );
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(parseBtc("2.6"));
         });
 
         it("Should update NAV according to primary market operations", async function () {
@@ -978,7 +974,6 @@ describe("FundV3", function () {
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
             await btc.mint(primaryMarket.address, parseBtc("1"));
             await primaryMarket.mock.settle.returns(parseEther("1000"), 0, parseBtc("1"), 0, 0);
-            await primaryMarket.mock.updateDelayedRedemptionDay.returns();
             await advanceOneDayAndSettle();
 
             await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
@@ -1621,7 +1616,6 @@ describe("FundV3", function () {
         beforeEach(async function () {
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
-            await primaryMarket.mock.updateDelayedRedemptionDay.returns();
             // Change strategy
             await fund.connect(owner).proposeStrategyUpdate(strategy.address);
             await advanceBlockAtTime(startTimestamp + HOUR + STRATEGY_UPDATE_MIN_DELAY + 10);
@@ -1716,9 +1710,9 @@ describe("FundV3", function () {
             await expect(() => fund.settle()).to.changeTokenBalances(
                 btc,
                 [fund, feeCollector, primaryMarket],
-                [parseBtc("-1"), fee, parseBtc("1").sub(fee)]
+                [fee.mul(-1), fee, 0]
             );
-            const debt = parseBtc("2").add(fee);
+            const debt = parseBtc("3");
             expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(debt);
             expect(await fund.getTotalDebt()).to.equal(debt);
         });
@@ -1726,16 +1720,11 @@ describe("FundV3", function () {
         it("Should cumulate redemption debt", async function () {
             await advanceBlockAtTime(startDay + DAY * 2);
             await primaryMarket.mock.settle.returns(0, parseEther("3000"), 0, parseBtc("3"), 0);
-            await fund.settle();
-            const feeDay1 = parseBtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
-            const debtDay1 = parseBtc("2").add(feeDay1);
-
+            await fund.settle(); // protocol fee is paid, redemption debt is cumulated
             await primaryMarket.mock.settle.returns(0, parseEther("4000"), 0, parseBtc("4"), 0);
-            await fund.settle();
-            const feeDay2 = parseBtc("7").sub(feeDay1).mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
-            const debt = debtDay1.add(parseBtc("4"));
-            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(debt);
-            expect(await fund.getTotalDebt()).to.equal(debt.add(feeDay2));
+            await fund.settle(); // protocol fee is paid, redemption debt is cumulated
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(parseBtc("7"));
+            expect(await fund.getTotalDebt()).to.equal(parseBtc("7"));
         });
 
         it("Should net creation, redemption and debt", async function () {
@@ -1743,7 +1732,6 @@ describe("FundV3", function () {
             await primaryMarket.mock.settle.returns(0, parseEther("3000"), 0, parseBtc("3"), 0);
             await fund.settle();
             const feeDay1 = parseBtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
-            const debtDay1 = parseBtc("2").add(feeDay1);
 
             await btc.mint(primaryMarket.address, parseBtc("4"));
             await primaryMarket.mock.settle.returns(
@@ -1754,29 +1742,30 @@ describe("FundV3", function () {
                 0
             );
             const feeDay2 = parseBtc("7").sub(feeDay1).mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
-            const net = parseBtc("4").sub(debtDay1);
             await expect(() => fund.settle()).to.changeTokenBalances(
                 btc,
                 [fund, feeCollector, primaryMarket],
-                [net.sub(feeDay2), feeDay2, net.mul(-1)]
+                [parseBtc("1").sub(feeDay2), feeDay2, parseBtc("-1")]
             );
             expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(0);
             expect(await fund.getTotalDebt()).to.equal(0);
         });
 
-        it("Should pay debt on transfer from strategy", async function () {
+        it("Should pay fee debt on transfer from strategy", async function () {
+            await fund.connect(strategy).transferToStrategy(parseBtc("1"));
             await advanceBlockAtTime(startDay + DAY * 2);
             await primaryMarket.mock.settle.returns(0, parseEther("3000"), 0, parseBtc("3"), 0);
             await fund.settle();
             const fee = parseBtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
+            expect(await fund.feeDebt()).to.equal(fee);
 
-            await fund.connect(strategy).transferFromStrategy(fee.add(parseBtc("0.5")));
-            expect(await fund.feeDebt()).to.equal(0);
-            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(parseBtc("1.5"));
-            expect(await fund.getTotalDebt()).to.equal(parseBtc("1.5"));
+            await fund.connect(strategy).transferFromStrategy(fee.div(10));
+            expect(await fund.feeDebt()).to.equal(fee.sub(fee.div(10)));
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(parseBtc("3"));
             await fund.connect(strategy).transferFromStrategy(parseBtc("2"));
-            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(0);
-            expect(await fund.getTotalDebt()).to.equal(0);
+            expect(await fund.feeDebt()).to.equal(0);
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(parseBtc("3"));
+            expect(await fund.getTotalDebt()).to.equal(parseBtc("3"));
         });
 
         it("Should reject strategy change with debt", async function () {

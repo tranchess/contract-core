@@ -813,7 +813,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
 
         _settlePrimaryMarkets(day, price);
 
-        _payDebt();
+        _payFeeDebt();
 
         // Calculate NAV
         uint256 totalShares = getTotalShares();
@@ -893,7 +893,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
     function transferFromStrategy(uint256 amount) external override onlyStrategy {
         _strategyUnderlying = _strategyUnderlying.sub(amount);
         IERC20(tokenUnderlying).safeTransferFrom(strategy, address(this), amount);
-        _payDebt();
+        _payFeeDebt();
     }
 
     function primaryMarketTransferUnderlying(
@@ -1064,7 +1064,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         _totalDebt = newTotalDebt;
     }
 
-    function _payDebt() private {
+    function _payFeeDebt() private {
         uint256 total = _totalDebt;
         if (total == 0) {
             return;
