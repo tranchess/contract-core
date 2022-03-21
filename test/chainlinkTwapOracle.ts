@@ -32,6 +32,7 @@ describe("ChainlinkTwapOracle", function () {
         readonly btc: Contract;
         readonly usdc: Contract;
         readonly swap: MockContract;
+        readonly fallbackOracle: MockContract;
         readonly twapOracle: Contract;
         readonly nextRoundID: number;
     }
@@ -46,6 +47,7 @@ describe("ChainlinkTwapOracle", function () {
     let btc: Contract;
     let usdc: Contract;
     let swap: MockContract;
+    let fallbackOracle: MockContract;
     let twapOracle: Contract;
     let nextRoundID: number;
 
@@ -87,10 +89,15 @@ describe("ChainlinkTwapOracle", function () {
         await swap.mock.price1CumulativeLast.returns(0);
         await swap.mock.getReserves.returns(SWAP_RESERVE_BTC, SWAP_RESERVE_USDC, startTimestamp);
 
+        const fallbackOracle = await deployMockForName(owner, "ITwapOracle");
+
         const ChainlinkTwapOracle = await ethers.getContractFactory("ChainlinkTwapOracle");
         const twapOracle = await ChainlinkTwapOracle.connect(owner).deploy(
             aggregator.address,
+            MIN_MESSAGE_COUNT,
             swap.address,
+            fallbackOracle.address,
+            startEpoch,
             "BTC"
         );
 
@@ -101,6 +108,7 @@ describe("ChainlinkTwapOracle", function () {
             btc,
             usdc,
             swap,
+            fallbackOracle,
             twapOracle: twapOracle.connect(user1),
             nextRoundID,
         };
@@ -126,6 +134,7 @@ describe("ChainlinkTwapOracle", function () {
         btc = fixtureData.btc;
         usdc = fixtureData.usdc;
         swap = fixtureData.swap;
+        fallbackOracle = fixtureData.fallbackOracle;
         twapOracle = fixtureData.twapOracle;
         nextRoundID = fixtureData.nextRoundID;
     });
@@ -133,6 +142,7 @@ describe("ChainlinkTwapOracle", function () {
     describe("Initialization", function () {
         it("Initialized states", async function () {
             expect(await twapOracle.lastTimestamp()).to.equal(startEpoch);
+            expect(await twapOracle.fallbackTimestamp()).to.equal(startEpoch);
             expect(await twapOracle.lastRoundID()).to.equal(nextRoundID - 1);
             expect(await twapOracle.lastSwapTimestamp()).to.equal(0);
         });
@@ -140,7 +150,14 @@ describe("ChainlinkTwapOracle", function () {
         it("Should check Uniswap token symbol", async function () {
             const ChainlinkTwapOracle = await ethers.getContractFactory("ChainlinkTwapOracle");
             await expect(
-                ChainlinkTwapOracle.deploy(aggregator.address, swap.address, "OTHERSYMBOL")
+                ChainlinkTwapOracle.deploy(
+                    aggregator.address,
+                    MIN_MESSAGE_COUNT,
+                    swap.address,
+                    fallbackOracle.address,
+                    startEpoch,
+                    "OTHERSYMBOL"
+                )
             ).to.be.revertedWith("Symbol mismatch");
         });
     });
@@ -478,7 +495,10 @@ describe("ChainlinkTwapOracle", function () {
             const ChainlinkTwapOracle = await ethers.getContractFactory("ChainlinkTwapOracle");
             const newTwapOracle = await ChainlinkTwapOracle.connect(owner).deploy(
                 aggregator.address,
+                MIN_MESSAGE_COUNT,
                 newSwap.address,
+                fallbackOracle.address,
+                startEpoch,
                 "BTC"
             );
 
@@ -576,6 +596,69 @@ describe("ChainlinkTwapOracle", function () {
                 .withArgs(startEpoch + EPOCH * 4, START_PRICE.add(20), UPDATE_TYPE_OWNER);
             expect(await twapOracle.getTwap(startEpoch + EPOCH * 4)).to.equal(START_PRICE.add(20));
             expect(await twapOracle.lastTimestamp()).to.equal(startEpoch + EPOCH * 5);
+        });
+    });
+
+    describe("Fallback oracle", function () {
+        it("Should call fallback oracle", async function () {
+            await fallbackOracle.mock.getTwap.withArgs(startEpoch).returns(12345);
+            expect(await twapOracle.getTwap(startEpoch)).to.equal(12345);
+            await fallbackOracle.mock.getTwap.withArgs(startEpoch - EPOCH * 10).returns(6789);
+            expect(await twapOracle.getTwap(startEpoch - EPOCH * 10)).to.equal(6789);
+        });
+
+        it("Should revert if fallback timestamp is too early", async function () {
+            const ChainlinkTwapOracle = await ethers.getContractFactory("ChainlinkTwapOracle");
+            await expect(
+                ChainlinkTwapOracle.connect(owner).deploy(
+                    aggregator.address,
+                    MIN_MESSAGE_COUNT,
+                    swap.address,
+                    fallbackOracle.address,
+                    startEpoch - 1,
+                    "BTC"
+                )
+            ).to.be.revertedWith("Fallback timestamp too early");
+        });
+
+        it("Should work when fallback timestamp is later", async function () {
+            const ChainlinkTwapOracle = await ethers.getContractFactory("ChainlinkTwapOracle");
+            const newTwapOracle = await ChainlinkTwapOracle.connect(owner).deploy(
+                aggregator.address,
+                MIN_MESSAGE_COUNT,
+                swap.address,
+                fallbackOracle.address,
+                startEpoch + EPOCH * 2,
+                "BTC"
+            );
+            await fallbackOracle.mock.getTwap.withArgs(startEpoch + EPOCH).returns(123);
+            await fallbackOracle.mock.getTwap.withArgs(startEpoch + EPOCH * 2).returns(456);
+            await fallbackOracle.mock.getTwap.withArgs(startEpoch + EPOCH * 3).returns(789);
+
+            await advanceBlockAtTime(startEpoch + EPOCH + 1);
+            await newTwapOracle.update(); // First observation
+            await advanceBlockAtTime(startEpoch + EPOCH * 2 + 1);
+            await newTwapOracle.update(); // Update epoch (startEpoch + EPOCH * 2)
+            await advanceBlockAtTime(startEpoch + EPOCH * 3 + 1);
+            await newTwapOracle.update(); // Update epoch (startEpoch + EPOCH * 3)
+
+            expect(await newTwapOracle.getTwap(startEpoch + EPOCH)).to.equal(123);
+            expect(await newTwapOracle.getTwap(startEpoch + EPOCH * 2)).to.equal(456);
+            expect(await newTwapOracle.getTwap(startEpoch + EPOCH * 3)).to.equal(START_PRICE);
+        });
+
+        it("Should return zero if fallback oracle is zero", async function () {
+            const ChainlinkTwapOracle = await ethers.getContractFactory("ChainlinkTwapOracle");
+            const newTwapOracle = await ChainlinkTwapOracle.connect(owner).deploy(
+                aggregator.address,
+                MIN_MESSAGE_COUNT,
+                swap.address,
+                ethers.constants.AddressZero,
+                0,
+                "BTC"
+            );
+            expect(await newTwapOracle.getTwap(startEpoch)).to.equal(0);
+            expect(await newTwapOracle.getTwap(startEpoch - EPOCH * 10)).to.equal(0);
         });
     });
 

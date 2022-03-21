@@ -20,8 +20,7 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
     uint256 private constant MAX_ITERATION = 500;
 
     ITwapOracle public immutable fallbackOracle;
-
-    uint256 public startEpoch;
+    uint256 public immutable fallbackTimestamp;
 
     /// @notice A linked-list of epochs when TWAP is updated.
     ///         Epochs ending at the end of trading days are always stored.
@@ -42,15 +41,18 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
     mapping(address => bool) public reporters;
 
     constructor(
-        uint256 startEpoch_,
         uint256 initialTwap_,
-        address fallbackOracle_
+        address fallbackOracle_,
+        uint256 fallbackTimestamp_
     ) public {
-        require(startEpoch_ % EPOCH == 0);
+        lastStoredEpoch = _endOfDay(block.timestamp) - 1 days;
+        storedEpochs[lastStoredEpoch].twap = initialTwap_;
         fallbackOracle = ITwapOracle(fallbackOracle_);
-        startEpoch = startEpoch_ > 0 ? startEpoch_ : _endOfDay(block.timestamp) - 1 days;
-        storedEpochs[startEpoch].twap = initialTwap_;
-        lastStoredEpoch = startEpoch;
+        require(
+            fallbackOracle_ == address(0) || fallbackTimestamp_ >= lastStoredEpoch,
+            "Fallback timestamp too early"
+        );
+        fallbackTimestamp = fallbackTimestamp_;
         catchUp();
         reporters[msg.sender] = true;
         emit ReporterAdded(msg.sender);
@@ -84,7 +86,7 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
     function catchUp() public {
         uint256 nextEpoch = _nextEpoch();
         uint256 lastEpoch = lastStoredEpoch;
-        if (nextEpoch == lastEpoch) {
+        if (nextEpoch <= lastEpoch) {
             return;
         }
         uint256 nextStoredEpoch = _endOfDay(lastEpoch);
@@ -125,7 +127,7 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
     }
 
     function getTwap(uint256 timestamp) external view override returns (uint256) {
-        if (timestamp < startEpoch) {
+        if (timestamp <= fallbackTimestamp) {
             if (address(fallbackOracle) == address(0)) {
                 return 0;
             } else {
