@@ -444,12 +444,13 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         for (uint256 i = 0; i < count; i++) {
             require(i == 0 || indices[i] > indices[i - 1], "Indices out of order");
             QueuedRedemption storage redemption = queuedRedemptions[indices[i]];
+            uint256 redemptionUnderlying = redemption.underlying;
             require(
-                redemption.account == account && redemption.underlying != 0,
+                redemption.account == account && redemptionUnderlying != 0,
                 "Invalid redemption index"
             );
-            underlying = underlying.add(redemption.underlying);
-            emit RedemptionClaimed(account, indices[i], redemption.underlying);
+            underlying = underlying.add(redemptionUnderlying);
+            emit RedemptionClaimed(account, indices[i], redemptionUnderlying);
             delete queuedRedemptions[indices[i]];
         }
     }
