@@ -2,43 +2,50 @@
 pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 import "@chainlink/contracts/src/v0.6/interfaces/KeeperCompatibleInterface.sol";
 
 contract BatchKeeperHelperBase is KeeperCompatibleInterface, Ownable {
+    using EnumerableSet for EnumerableSet.AddressSet;
+
     event AllowlistAdded(address contractAddress);
     event AllowlistRemoved(address contractAddress);
 
-    uint256 private constant FALSE = 0;
-    uint256 private constant TRUE = 1;
-
-    mapping(address => uint256) public allowlist;
+    EnumerableSet.AddressSet private _allowlist;
 
     constructor(address[] memory contracts_) public {
         for (uint256 i = 0; i < contracts_.length; i++) {
-            allowlist[contracts_[i]] = TRUE;
+            _allowlist.add(contracts_[i]);
             emit AllowlistAdded(contracts_[i]);
         }
     }
 
+    function allowlist() external view returns (address[] memory list) {
+        uint256 length = _allowlist.length();
+        list = new address[](length);
+        for (uint256 i = 0; i < length; i++) {
+            list[i] = _allowlist.at(i);
+        }
+    }
+
     function addAllowlist(address contractAddress) external onlyOwner {
-        allowlist[contractAddress] = TRUE;
+        _allowlist.add(contractAddress);
         emit AllowlistAdded(contractAddress);
     }
 
     function removeAllowlist(address contractAddress) external onlyOwner {
-        allowlist[contractAddress] = FALSE;
+        _allowlist.remove(contractAddress);
         emit AllowlistRemoved(contractAddress);
     }
 
-    function checkUpkeep(bytes calldata checkData)
+    function checkUpkeep(bytes calldata)
         external
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        uint256 contractLength = checkData.length / 20;
-        for (uint256 i = 0; i < contractLength; i++) {
-            address contractAddress = _getContractAddr(i);
-            require(allowlist[contractAddress] != FALSE, "Not allowlisted");
+        uint256 length = _allowlist.length();
+        for (uint256 i = 0; i < length; i++) {
+            address contractAddress = _allowlist.at(i);
             if (_checkUpkeep(contractAddress)) {
                 upkeepNeeded = true;
                 performData = abi.encodePacked(performData, contractAddress);
@@ -51,7 +58,7 @@ contract BatchKeeperHelperBase is KeeperCompatibleInterface, Ownable {
         require(contractLength > 0);
         for (uint256 i = 0; i < contractLength; i++) {
             address contractAddress = _getContractAddr(i);
-            require(allowlist[contractAddress] != FALSE, "Not allowlisted");
+            require(_allowlist.contains(contractAddress), "Not allowlisted");
             _performUpkeep(contractAddress);
         }
     }
