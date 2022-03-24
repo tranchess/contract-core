@@ -559,7 +559,7 @@ describe("VotingEscrowV2", function () {
             const balance2 = amount2.mul(WEEK * 5 - DAY * 4).div(MAX_TIME);
             const supply = balance1.add(balance2);
             await advanceBlockAtTime(startWeek + DAY * 4);
-            expect(await votingEscrow.totalSupply()).to.closeToBn(supply, 30);
+            expect(await votingEscrow.totalSupply()).to.closeTo(supply, 30);
         });
 
         it("Should calculate current total supply when someone will unlock soon", async function () {
@@ -572,7 +572,7 @@ describe("VotingEscrowV2", function () {
             const balance2 = amount2.mul(WEEK * 5 - DAY * 10).div(MAX_TIME);
             const supply = balance1.add(balance2);
             await advanceBlockAtTime(startWeek + DAY * 10);
-            expect(await votingEscrow.totalSupply()).to.closeToBn(supply, 30);
+            expect(await votingEscrow.totalSupply()).to.closeTo(supply, 30);
         });
 
         it("Should calculate current total supply after someone unlocks", async function () {
@@ -583,7 +583,7 @@ describe("VotingEscrowV2", function () {
 
             const balance2 = amount2.mul(DAY * 4).div(MAX_TIME);
             await advanceBlockAtTime(startWeek + WEEK * 4 + DAY * 3);
-            expect(await votingEscrow.totalSupply()).to.closeToBn(balance2, 30);
+            expect(await votingEscrow.totalSupply()).to.closeTo(balance2, 30);
         });
 
         it("Should calculate current total supply after increaseAmount()", async function () {
@@ -600,14 +600,14 @@ describe("VotingEscrowV2", function () {
                 .div(MAX_TIME);
             const balance2 = amount2.mul(WEEK * 5 - DAY * 10).div(MAX_TIME);
             const supply = balance1.add(balance2);
-            expect(await votingEscrow.totalSupply()).to.closeToBn(supply, 30);
+            expect(await votingEscrow.totalSupply()).to.closeTo(supply, 30);
 
             const newBalance2 = amount2.mul(DAY * 4).div(MAX_TIME);
             await advanceBlockAtTime(startWeek + WEEK * 4 + DAY * 3);
-            expect(await votingEscrow.totalSupply()).to.closeToBn(newBalance2, 30);
+            expect(await votingEscrow.totalSupply()).to.closeTo(newBalance2, 30);
 
             await advanceBlockAtTime(startWeek + WEEK * 6);
-            expect(await votingEscrow.totalSupply()).to.closeToBn(0, 30);
+            expect(await votingEscrow.totalSupply()).to.closeTo(BigNumber.from(0), 30);
         });
 
         it("Should calculate current total supply after increaseUnlockTime()", async function () {
@@ -621,14 +621,14 @@ describe("VotingEscrowV2", function () {
             const balance1 = amount1.mul(WEEK * 4 - DAY * 10).div(MAX_TIME);
             const balance2 = amount2.mul(WEEK * 5 - DAY * 10).div(MAX_TIME);
             const supply = balance1.add(balance2);
-            expect(await votingEscrow.totalSupply()).to.closeToBn(supply, 30);
+            expect(await votingEscrow.totalSupply()).to.closeTo(supply, 30);
 
             const newBalance2 = amount2.mul(DAY * 4).div(MAX_TIME);
             await advanceBlockAtTime(startWeek + WEEK * 4 + DAY * 3);
-            expect(await votingEscrow.totalSupply()).to.closeToBn(newBalance2, 30);
+            expect(await votingEscrow.totalSupply()).to.closeTo(newBalance2, 30);
 
             await advanceBlockAtTime(startWeek + WEEK * 6);
-            expect(await votingEscrow.totalSupply()).to.closeToBn(0, 30);
+            expect(await votingEscrow.totalSupply()).to.closeTo(BigNumber.from(0), 30);
         });
 
         it("Should calculate historical supply for one week", async function () {
@@ -643,13 +643,13 @@ describe("VotingEscrowV2", function () {
             const supply = balance1.add(balance2);
             await advanceBlockAtTime(startWeek + DAY);
             await votingEscrow.increaseAmount(addr1, 1); // Trigger checkpoint
-            expect(await votingEscrow.veSupplyPerWeek(startWeek)).to.closeToBn(supply, 30);
+            expect(await votingEscrow.veSupplyPerWeek(startWeek)).to.closeTo(supply, 30);
 
             // The calculated supply in the past does not change any more
             await advanceBlockAtTime(startWeek + DAY * 10);
-            expect(await votingEscrow.veSupplyPerWeek(startWeek)).to.closeToBn(supply, 30);
+            expect(await votingEscrow.veSupplyPerWeek(startWeek)).to.closeTo(supply, 30);
             await votingEscrow.increaseUnlockTime(startWeek + WEEK * 10);
-            expect(await votingEscrow.veSupplyPerWeek(startWeek)).to.closeToBn(supply, 30);
+            expect(await votingEscrow.veSupplyPerWeek(startWeek)).to.closeTo(supply, 30);
         });
 
         it("Should calculate historical supply for multiple weeks", async function () {
@@ -667,17 +667,17 @@ describe("VotingEscrowV2", function () {
             const balance2w0 = amount2.mul(WEEK * 2).div(MAX_TIME);
             const balance3w0 = amount3.mul(WEEK * 8).div(MAX_TIME);
             const supply0 = balance1w0.add(balance2w0).add(balance3w0);
-            expect(await votingEscrow.veSupplyPerWeek(w0)).to.closeToBn(supply0, 30);
+            expect(await votingEscrow.veSupplyPerWeek(w0)).to.closeTo(supply0, 30);
 
             const w1 = startWeek + WEEK;
             const balance2w1 = amount2.mul(WEEK).div(MAX_TIME);
             const balance3w1 = amount3.mul(WEEK * 7).div(MAX_TIME);
             const supply1 = balance2w1.add(balance3w1);
-            expect(await votingEscrow.veSupplyPerWeek(w1)).to.closeToBn(supply1, 30);
+            expect(await votingEscrow.veSupplyPerWeek(w1)).to.closeTo(supply1, 30);
 
             const w2 = startWeek + WEEK * 2;
             const supply2 = amount3.mul(WEEK * 6).div(MAX_TIME);
-            expect(await votingEscrow.veSupplyPerWeek(w2)).to.closeToBn(supply2, 30);
+            expect(await votingEscrow.veSupplyPerWeek(w2)).to.closeTo(supply2, 30);
         });
 
         it("Reproduce rounding errors", async function () {
