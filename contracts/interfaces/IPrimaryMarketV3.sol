@@ -1,24 +1,91 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
 
+import "./IFundV3.sol";
+
 interface IPrimaryMarketV3 {
-    function create(address recipient, uint256 underlying) external;
+    function fund() external view returns (IFundV3);
 
-    function wrapAndCreate(address recipient) external payable;
+    function getCreation(uint256 underlying) external view returns (uint256 shares);
 
-    function redeem(address recipient, uint256 shares) external;
+    function getRedemption(uint256 shares) external view returns (uint256 underlying, uint256 fee);
 
-    function claim(address account)
+    function getSplit(uint256 inM)
         external
-        returns (uint256 createdShares, uint256 redeemedUnderlying);
+        view
+        returns (
+            uint256 outA,
+            uint256 outB,
+            uint256 feeM
+        );
 
-    function claimAndUnwrap(address account)
+    function getTokenAMForSplitB(uint256 outB) external view returns (uint256 outA, uint256 inM);
+
+    function getMerge(uint256 expectA)
         external
-        returns (uint256 createdShares, uint256 redeemedUnderlying);
+        view
+        returns (
+            uint256 inA,
+            uint256 inB,
+            uint256 outM,
+            uint256 feeM
+        );
 
-    function split(address recipient, uint256 inM) external returns (uint256 outA, uint256 outB);
+    function getTokenAMForMergeB(uint256 inB) external view returns (uint256 inA, uint256 outM);
 
-    function merge(address recipient, uint256 inA) external returns (uint256 inB, uint256 outM);
+    function create(
+        address recipient,
+        uint256 underlying,
+        uint256 minShares,
+        uint256 version
+    ) external returns (uint256 shares);
+
+    function wrapAndCreate(
+        address recipient,
+        uint256 minShares,
+        uint256 version
+    ) external payable returns (uint256 shares);
+
+    function redeem(
+        address recipient,
+        uint256 shares,
+        uint256 minUnderlying,
+        uint256 version
+    ) external returns (uint256 underlying);
+
+    function redeemAndUnwrap(
+        address recipient,
+        uint256 shares,
+        uint256 minUnderlying,
+        uint256 version
+    ) external returns (uint256 underlying);
+
+    function queueRedemption(
+        address recipient,
+        uint256 shares,
+        uint256 minUnderlying,
+        uint256 version
+    ) external returns (uint256 underlying, uint256 index);
+
+    function claimRedemptions(address account, uint256[] calldata indices)
+        external
+        returns (uint256 underlying);
+
+    function claimRedemptionsAndUnwrap(address account, uint256[] calldata indices)
+        external
+        returns (uint256 underlying);
+
+    function split(
+        address recipient,
+        uint256 inM,
+        uint256 version
+    ) external returns (uint256 outA, uint256 outB);
+
+    function merge(
+        address recipient,
+        uint256 inA,
+        uint256 version
+    ) external returns (uint256 inB, uint256 outM);
 
     function settle(
         uint256 day,
@@ -35,6 +102,4 @@ interface IPrimaryMarketV3 {
             uint256 redemptionUnderlying,
             uint256 fee
         );
-
-    function updateDelayedRedemptionDay() external;
 }

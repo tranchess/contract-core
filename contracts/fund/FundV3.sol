@@ -656,8 +656,9 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
     function mint(
         uint256 tranche,
         address account,
-        uint256 amount
-    ) external override onlyPrimaryMarket {
+        uint256 amount,
+        uint256 version
+    ) external override onlyPrimaryMarket onlyCurrentVersion(version) {
         _refreshBalance(account, _rebalanceSize);
         _mint(tranche, account, amount);
     }
@@ -665,8 +666,9 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
     function burn(
         uint256 tranche,
         address account,
-        uint256 amount
-    ) external override onlyPrimaryMarket {
+        uint256 amount,
+        uint256 version
+    ) external override onlyPrimaryMarket onlyCurrentVersion(version) {
         _refreshBalance(account, _rebalanceSize);
         _burn(tranche, account, amount);
     }
@@ -811,7 +813,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
 
         _settlePrimaryMarkets(day, price);
 
-        _payDebt();
+        _payFeeDebt();
 
         // Calculate NAV
         uint256 totalShares = getTotalShares();
@@ -891,7 +893,29 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
     function transferFromStrategy(uint256 amount) external override onlyStrategy {
         _strategyUnderlying = _strategyUnderlying.sub(amount);
         IERC20(tokenUnderlying).safeTransferFrom(strategy, address(this), amount);
-        _payDebt();
+        _payFeeDebt();
+    }
+
+    function primaryMarketTransferUnderlying(
+        address recipient,
+        uint256 amount,
+        uint256 fee
+    ) external override onlyPrimaryMarket {
+        IERC20(tokenUnderlying).safeTransfer(recipient, amount);
+        feeDebt = feeDebt.add(fee);
+        _totalDebt = _totalDebt.add(fee);
+    }
+
+    function primaryMarketAddDebt(uint256 amount, uint256 fee) external override onlyPrimaryMarket {
+        redemptionDebts[msg.sender] = redemptionDebts[msg.sender].add(amount);
+        feeDebt = feeDebt.add(fee);
+        _totalDebt = _totalDebt.add(amount).add(fee);
+    }
+
+    function primaryMarketPayDebt(uint256 amount) external override onlyPrimaryMarket {
+        redemptionDebts[msg.sender] = redemptionDebts[msg.sender].sub(amount);
+        _totalDebt = _totalDebt.sub(amount);
+        IERC20(tokenUnderlying).safeTransfer(msg.sender, amount);
     }
 
     function reportProfit(uint256 profit, uint256 performanceFee) external override onlyStrategy {
@@ -1040,7 +1064,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         _totalDebt = newTotalDebt;
     }
 
-    function _payDebt() private {
+    function _payFeeDebt() private {
         uint256 total = _totalDebt;
         if (total == 0) {
             return;
@@ -1053,24 +1077,9 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         if (fee > 0) {
             uint256 amount = hot.min(fee);
             feeDebt = fee - amount;
-            total -= amount;
-            hot -= amount;
+            _totalDebt = total - amount;
             IERC20(tokenUnderlying).safeTransfer(feeCollector, amount);
         }
-        uint256 primaryMarketCount = getPrimaryMarketCount();
-        for (uint256 i = 0; i < primaryMarketCount && hot > 0 && total > 0; i++) {
-            address pm = getPrimaryMarketMember(i);
-            uint256 redemption = redemptionDebts[pm];
-            if (redemption > 0) {
-                uint256 amount = hot.min(redemption);
-                redemptionDebts[pm] = redemption - amount;
-                total -= amount;
-                hot -= amount;
-                IERC20(tokenUnderlying).safeTransfer(pm, amount);
-                IPrimaryMarketV3(pm).updateDelayedRedemptionDay();
-            }
-        }
-        _totalDebt = total;
     }
 
     /// @dev Check whether a new rebalance should be triggered. Rebalance is triggered if
@@ -1275,5 +1284,10 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         newAllowanceM = allowanceM.saturatingMultiplyDecimal(rebalance.ratioM);
         newAllowanceA = allowanceA.saturatingMultiplyDecimal(rebalance.ratioAB);
         newAllowanceB = allowanceB.saturatingMultiplyDecimal(rebalance.ratioAB);
+    }
+
+    modifier onlyCurrentVersion(uint256 version) {
+        require(_rebalanceSize == version, "Only current version");
+        _;
     }
 }

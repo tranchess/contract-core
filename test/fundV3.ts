@@ -93,7 +93,7 @@ describe("FundV3", function () {
         const interestRateBallot = await deployMockForName(owner, "IBallot");
         await interestRateBallot.mock.count.returns(0);
 
-        const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV2");
+        const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV3");
 
         const Fund = await ethers.getContractFactory("FundV3");
         const fund = await Fund.connect(owner).deploy(
@@ -417,9 +417,9 @@ describe("FundV3", function () {
 
             f.fund = f.fund.connect(f.wallets.user2);
             // Mint some shares to user2
-            await f.fund.mint(TRANCHE_M, f.wallets.user2.address, 10000);
-            await f.fund.mint(TRANCHE_A, f.wallets.user2.address, 10000);
-            await f.fund.mint(TRANCHE_B, f.wallets.user2.address, 10000);
+            await f.fund.mint(TRANCHE_M, f.wallets.user2.address, 10000, 0);
+            await f.fund.mint(TRANCHE_A, f.wallets.user2.address, 10000, 0);
+            await f.fund.mint(TRANCHE_B, f.wallets.user2.address, 10000, 0);
             return f;
         }
 
@@ -444,19 +444,25 @@ describe("FundV3", function () {
 
         describe("mint()", function () {
             it("Should revert if not called from PrimaryMarket", async function () {
-                await expect(fund.connect(user1).mint(TRANCHE_M, addr1, 1)).to.be.revertedWith(
+                await expect(fund.connect(user1).mint(TRANCHE_M, addr1, 1, 0)).to.be.revertedWith(
                     "FundRoles: only primary market"
                 );
             });
 
+            it("Should revert if version mismatch", async function () {
+                await expect(fund.mint(TRANCHE_M, addr1, 1, 1)).to.be.revertedWith(
+                    "Only current version"
+                );
+            });
+
             it("Should update balance and total supply", async function () {
-                await fund.mint(TRANCHE_M, addr1, 123);
+                await fund.mint(TRANCHE_M, addr1, 123, 0);
                 expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(123);
-                await fund.mint(TRANCHE_M, addr1, 456);
+                await fund.mint(TRANCHE_M, addr1, 456, 0);
                 expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(579);
-                await fund.mint(TRANCHE_M, addr2, 1000);
-                await fund.mint(TRANCHE_A, addr2, 10);
-                await fund.mint(TRANCHE_B, addr2, 100);
+                await fund.mint(TRANCHE_M, addr2, 1000, 0);
+                await fund.mint(TRANCHE_A, addr2, 10, 0);
+                await fund.mint(TRANCHE_B, addr2, 100, 0);
                 expect(await fund.shareBalanceOf(TRANCHE_M, addr2)).to.equal(11000);
                 expect(await fund.shareBalanceOf(TRANCHE_A, addr2)).to.equal(10010);
                 expect(await fund.shareBalanceOf(TRANCHE_B, addr2)).to.equal(10100);
@@ -467,34 +473,40 @@ describe("FundV3", function () {
 
             it("Should revert on minting to the zero address", async function () {
                 await expect(
-                    fund.mint(TRANCHE_M, ethers.constants.AddressZero, 100)
+                    fund.mint(TRANCHE_M, ethers.constants.AddressZero, 100, 0)
                 ).to.be.revertedWith("ERC20: mint to the zero address");
             });
 
             it("Should revert on overflow", async function () {
                 const HALF_MAX = BigNumber.from("2").pow(255);
-                await fund.mint(TRANCHE_M, addr1, HALF_MAX);
-                await expect(fund.mint(TRANCHE_M, addr1, HALF_MAX)).to.be.reverted;
-                await expect(fund.mint(TRANCHE_M, addr2, HALF_MAX)).to.be.reverted;
+                await fund.mint(TRANCHE_M, addr1, HALF_MAX, 0);
+                await expect(fund.mint(TRANCHE_M, addr1, HALF_MAX, 0)).to.be.reverted;
+                await expect(fund.mint(TRANCHE_M, addr2, HALF_MAX, 0)).to.be.reverted;
             });
         });
 
         describe("burn()", function () {
             it("Should revert if not called from PrimaryMarket", async function () {
-                await expect(fund.connect(user1).burn(TRANCHE_M, addr1, 1)).to.be.revertedWith(
+                await expect(fund.connect(user1).burn(TRANCHE_M, addr1, 1, 0)).to.be.revertedWith(
                     "FundRoles: only primary market"
                 );
             });
 
+            it("Should revert if version mismatch", async function () {
+                await expect(fund.burn(TRANCHE_M, addr1, 1, 1)).to.be.revertedWith(
+                    "Only current version"
+                );
+            });
+
             it("Should update balance and total supply", async function () {
-                await fund.mint(TRANCHE_M, addr1, 10000);
-                await fund.burn(TRANCHE_M, addr1, 1000);
+                await fund.mint(TRANCHE_M, addr1, 10000, 0);
+                await fund.burn(TRANCHE_M, addr1, 1000, 0);
                 expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(9000);
-                await fund.burn(TRANCHE_M, addr1, 2000);
+                await fund.burn(TRANCHE_M, addr1, 2000, 0);
                 expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(7000);
-                await fund.burn(TRANCHE_M, addr2, 100);
-                await fund.burn(TRANCHE_A, addr2, 10);
-                await fund.burn(TRANCHE_B, addr2, 1);
+                await fund.burn(TRANCHE_M, addr2, 100, 0);
+                await fund.burn(TRANCHE_A, addr2, 10, 0);
+                await fund.burn(TRANCHE_B, addr2, 1, 0);
                 expect(await fund.shareBalanceOf(TRANCHE_M, addr2)).to.equal(9900);
                 expect(await fund.shareBalanceOf(TRANCHE_A, addr2)).to.equal(9990);
                 expect(await fund.shareBalanceOf(TRANCHE_B, addr2)).to.equal(9999);
@@ -505,14 +517,14 @@ describe("FundV3", function () {
 
             it("Should revert on burning from the zero address", async function () {
                 await expect(
-                    fund.burn(TRANCHE_M, ethers.constants.AddressZero, 100)
+                    fund.burn(TRANCHE_M, ethers.constants.AddressZero, 100, 0)
                 ).to.be.revertedWith("ERC20: burn from the zero address");
             });
 
             it("Should revert if balance is not enough", async function () {
-                await expect(fund.burn(TRANCHE_M, addr1, 1)).to.be.reverted;
-                await fund.mint(TRANCHE_M, addr1, 100);
-                await expect(fund.burn(TRANCHE_M, addr1, 101)).to.be.reverted;
+                await expect(fund.burn(TRANCHE_M, addr1, 1, 0)).to.be.reverted;
+                await fund.mint(TRANCHE_M, addr1, 100, 0);
+                await expect(fund.burn(TRANCHE_M, addr1, 101, 0)).to.be.reverted;
             });
         });
 
@@ -826,12 +838,12 @@ describe("FundV3", function () {
                 0
             );
             const oldM = await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address);
-            await primaryMarket.mock.updateDelayedRedemptionDay.returns();
             await expect(() => fund.settle()).to.changeTokenBalances(
                 btc,
                 [fund, primaryMarket],
-                [parseBtc("-3").sub(protocolFee), parseBtc("3")]
+                [protocolFee.mul(-1), 0]
             );
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(parseBtc("3"));
             expect(await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
                 oldM.sub(parseEther("3000"))
             );
@@ -851,16 +863,12 @@ describe("FundV3", function () {
                 parseBtc("3.6"),
                 totalFee
             );
-            await primaryMarket.mock.updateDelayedRedemptionDay.returns();
             await expect(() => fund.settle()).to.changeTokenBalances(
                 btc,
                 [fund, primaryMarket, feeCollector],
-                [
-                    parseBtc("-2.6").sub(totalFee).sub(protocolFee),
-                    parseBtc("2.6"),
-                    totalFee.add(protocolFee),
-                ]
+                [totalFee.add(protocolFee).mul(-1), 0, totalFee.add(protocolFee)]
             );
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(parseBtc("2.6"));
         });
 
         it("Should update NAV according to primary market operations", async function () {
@@ -966,7 +974,6 @@ describe("FundV3", function () {
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
             await btc.mint(primaryMarket.address, parseBtc("1"));
             await primaryMarket.mock.settle.returns(parseEther("1000"), 0, parseBtc("1"), 0, 0);
-            await primaryMarket.mock.updateDelayedRedemptionDay.returns();
             await advanceOneDayAndSettle();
 
             await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
@@ -1102,7 +1109,7 @@ describe("FundV3", function () {
             await advanceOneDayAndSettle();
 
             const day = (await fund.currentDay()).toNumber();
-            await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, parseEther("1000"));
+            await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, parseEther("1000"), 0);
             await btc.mint(fund.address, parseBtc("1"));
             await advanceOneDayAndSettle();
 
@@ -1160,7 +1167,7 @@ describe("FundV3", function () {
         });
 
         it("Should not trigger at exactly upper rebalance threshold", async function () {
-            await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, parseEther("1000"));
+            await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, parseEther("1000"), 0);
             await btc.mint(fund.address, parseBtc("1.5"));
             await advanceOneDayAndSettle();
             expect(await fund.getRebalanceSize()).to.equal(0);
@@ -1169,7 +1176,7 @@ describe("FundV3", function () {
         });
 
         it("Should not trigger at exactly lower rebalance threshold", async function () {
-            await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, parseEther("1000"));
+            await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, parseEther("1000"), 0);
             await btc.mint(fund.address, parseBtc("0.75"));
             await advanceOneDayAndSettle();
             expect(await fund.getRebalanceSize()).to.equal(0);
@@ -1180,7 +1187,7 @@ describe("FundV3", function () {
         it("Should not trigger at exactly fixed rebalance threshold", async function () {
             // Set daily interest rate to 10%
             await aprOracle.mock.capture.returns(parseEther("0.1"));
-            await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, parseEther("1000"));
+            await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, parseEther("1000"), 0);
             await btc.mint(fund.address, parseBtc("1"));
             await advanceOneDayAndSettle();
 
@@ -1214,12 +1221,12 @@ describe("FundV3", function () {
             await f.fund.settle();
             const addr1 = f.wallets.user1.address;
             const addr2 = f.wallets.user2.address;
-            await f.primaryMarket.call(f.fund, "mint", TRANCHE_M, addr1, INIT_P_1);
-            await f.primaryMarket.call(f.fund, "mint", TRANCHE_A, addr1, INIT_A_1);
-            await f.primaryMarket.call(f.fund, "mint", TRANCHE_B, addr1, INIT_B_1);
-            await f.primaryMarket.call(f.fund, "mint", TRANCHE_M, addr2, INIT_P_2);
-            await f.primaryMarket.call(f.fund, "mint", TRANCHE_A, addr2, INIT_A_2);
-            await f.primaryMarket.call(f.fund, "mint", TRANCHE_B, addr2, INIT_B_2);
+            await f.primaryMarket.call(f.fund, "mint", TRANCHE_M, addr1, INIT_P_1, 0);
+            await f.primaryMarket.call(f.fund, "mint", TRANCHE_A, addr1, INIT_A_1, 0);
+            await f.primaryMarket.call(f.fund, "mint", TRANCHE_B, addr1, INIT_B_1, 0);
+            await f.primaryMarket.call(f.fund, "mint", TRANCHE_M, addr2, INIT_P_2, 0);
+            await f.primaryMarket.call(f.fund, "mint", TRANCHE_A, addr2, INIT_A_2, 0);
+            await f.primaryMarket.call(f.fund, "mint", TRANCHE_B, addr2, INIT_B_2, 0);
             await f.btc.mint(f.fund.address, INIT_BTC);
             await advanceBlockAtTime(f.startDay + DAY);
             await f.fund.settle();
@@ -1457,7 +1464,7 @@ describe("FundV3", function () {
                 await preDefinedRebalance070();
                 await preDefinedRebalance200();
                 const oldA = await fund.shareBalanceOf(TRANCHE_A, addr1);
-                await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, 1);
+                await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, 1, 2);
                 expect(await fund.shareBalanceVersion(addr1)).to.equal(2);
                 expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
             });
@@ -1466,7 +1473,7 @@ describe("FundV3", function () {
                 await preDefinedRebalance070();
                 await preDefinedRebalance200();
                 const oldB = await fund.shareBalanceOf(TRANCHE_B, addr2);
-                await primaryMarket.call(fund, "burn", TRANCHE_A, addr2, 1);
+                await primaryMarket.call(fund, "burn", TRANCHE_A, addr2, 1, 2);
                 expect(await fund.shareBalanceVersion(addr2)).to.equal(2);
                 expect(await fund.shareBalanceOf(TRANCHE_B, addr2)).to.equal(oldB);
             });
@@ -1609,7 +1616,6 @@ describe("FundV3", function () {
         beforeEach(async function () {
             await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
-            await primaryMarket.mock.updateDelayedRedemptionDay.returns();
             // Change strategy
             await fund.connect(owner).proposeStrategyUpdate(strategy.address);
             await advanceBlockAtTime(startTimestamp + HOUR + STRATEGY_UPDATE_MIN_DELAY + 10);
@@ -1704,9 +1710,9 @@ describe("FundV3", function () {
             await expect(() => fund.settle()).to.changeTokenBalances(
                 btc,
                 [fund, feeCollector, primaryMarket],
-                [parseBtc("-1"), fee, parseBtc("1").sub(fee)]
+                [fee.mul(-1), fee, 0]
             );
-            const debt = parseBtc("2").add(fee);
+            const debt = parseBtc("3");
             expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(debt);
             expect(await fund.getTotalDebt()).to.equal(debt);
         });
@@ -1714,16 +1720,11 @@ describe("FundV3", function () {
         it("Should cumulate redemption debt", async function () {
             await advanceBlockAtTime(startDay + DAY * 2);
             await primaryMarket.mock.settle.returns(0, parseEther("3000"), 0, parseBtc("3"), 0);
-            await fund.settle();
-            const feeDay1 = parseBtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
-            const debtDay1 = parseBtc("2").add(feeDay1);
-
+            await fund.settle(); // protocol fee is paid, redemption debt is cumulated
             await primaryMarket.mock.settle.returns(0, parseEther("4000"), 0, parseBtc("4"), 0);
-            await fund.settle();
-            const feeDay2 = parseBtc("7").sub(feeDay1).mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
-            const debt = debtDay1.add(parseBtc("4"));
-            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(debt);
-            expect(await fund.getTotalDebt()).to.equal(debt.add(feeDay2));
+            await fund.settle(); // protocol fee is paid, redemption debt is cumulated
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(parseBtc("7"));
+            expect(await fund.getTotalDebt()).to.equal(parseBtc("7"));
         });
 
         it("Should net creation, redemption and debt", async function () {
@@ -1731,7 +1732,6 @@ describe("FundV3", function () {
             await primaryMarket.mock.settle.returns(0, parseEther("3000"), 0, parseBtc("3"), 0);
             await fund.settle();
             const feeDay1 = parseBtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
-            const debtDay1 = parseBtc("2").add(feeDay1);
 
             await btc.mint(primaryMarket.address, parseBtc("4"));
             await primaryMarket.mock.settle.returns(
@@ -1742,29 +1742,30 @@ describe("FundV3", function () {
                 0
             );
             const feeDay2 = parseBtc("7").sub(feeDay1).mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
-            const net = parseBtc("4").sub(debtDay1);
             await expect(() => fund.settle()).to.changeTokenBalances(
                 btc,
                 [fund, feeCollector, primaryMarket],
-                [net.sub(feeDay2), feeDay2, net.mul(-1)]
+                [parseBtc("1").sub(feeDay2), feeDay2, parseBtc("-1")]
             );
             expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(0);
             expect(await fund.getTotalDebt()).to.equal(0);
         });
 
-        it("Should pay debt on transfer from strategy", async function () {
+        it("Should pay fee debt on transfer from strategy", async function () {
+            await fund.connect(strategy).transferToStrategy(parseBtc("1"));
             await advanceBlockAtTime(startDay + DAY * 2);
             await primaryMarket.mock.settle.returns(0, parseEther("3000"), 0, parseBtc("3"), 0);
             await fund.settle();
             const fee = parseBtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
+            expect(await fund.feeDebt()).to.equal(fee);
 
-            await fund.connect(strategy).transferFromStrategy(fee.add(parseBtc("0.5")));
-            expect(await fund.feeDebt()).to.equal(0);
-            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(parseBtc("1.5"));
-            expect(await fund.getTotalDebt()).to.equal(parseBtc("1.5"));
+            await fund.connect(strategy).transferFromStrategy(fee.div(10));
+            expect(await fund.feeDebt()).to.equal(fee.sub(fee.div(10)));
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(parseBtc("3"));
             await fund.connect(strategy).transferFromStrategy(parseBtc("2"));
-            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(0);
-            expect(await fund.getTotalDebt()).to.equal(0);
+            expect(await fund.feeDebt()).to.equal(0);
+            expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(parseBtc("3"));
+            expect(await fund.getTotalDebt()).to.equal(parseBtc("3"));
         });
 
         it("Should reject strategy change with debt", async function () {
