@@ -9,9 +9,7 @@ import { deployMockForName } from "./mock";
 import { TRANCHE_M, TRANCHE_A, TRANCHE_B, DAY, FixtureWalletMap } from "./utils";
 
 const REDEMPTION_FEE_BPS = 35;
-const SPLIT_FEE_BPS = 40;
 const MERGE_FEE_BPS = 45;
-const MIN_CREATION_AMOUNT = 5;
 
 const TOTAL_UNDERLYING = parseBtc("10");
 const TOTAL_SHARES = parseEther("10000");
@@ -45,7 +43,6 @@ describe("PrimaryMarketV3", function () {
         const btc = await MockToken.connect(owner).deploy("Wrapped BTC", "BTC", 8);
         const twapOracle = await deployMockForName(owner, "ITwapOracle");
         const fund = await deployMockForName(owner, "FundV3");
-        await fund.mock.trancheWeights.returns(1, 1);
         await fund.mock.tokenUnderlying.returns(btc.address);
         await fund.mock.underlyingDecimalMultiplier.returns(1e10);
         await fund.mock.isPrimaryMarketActive.returns(true);
@@ -56,9 +53,7 @@ describe("PrimaryMarketV3", function () {
         const primaryMarket = await PrimaryMarket.connect(owner).deploy(
             fund.address,
             parseEther("0.0001").mul(REDEMPTION_FEE_BPS),
-            parseEther("0.0001").mul(SPLIT_FEE_BPS),
             parseEther("0.0001").mul(MERGE_FEE_BPS),
-            MIN_CREATION_AMOUNT,
             BigNumber.from(1).shl(256).sub(1)
         );
 
@@ -103,14 +98,6 @@ describe("PrimaryMarketV3", function () {
             await expect(primaryMarket.create(addr1, inBtc, 0, 0)).to.be.revertedWith(
                 "Only when active"
             );
-        });
-
-        it("Should check minimum creation amount", async function () {
-            await fund.mock.mint.returns();
-            await expect(
-                primaryMarket.create(addr1, MIN_CREATION_AMOUNT - 1, 0, 0)
-            ).to.be.revertedWith("Min amount");
-            await primaryMarket.create(addr1, MIN_CREATION_AMOUNT, 0, 0);
         });
 
         it("Should transfer underlying from msg.sender", async function () {
@@ -263,19 +250,11 @@ describe("PrimaryMarketV3", function () {
 
     describe("split()", function () {
         const inM = parseEther("10");
-        const feeM = inM.mul(SPLIT_FEE_BPS).div(10000);
-        const outAB = inM.sub(feeM).div(2);
-        const feeBtc = feeM.mul(TOTAL_UNDERLYING).div(TOTAL_SHARES);
+        const outAB = inM.div(2);
 
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
             await expect(primaryMarket.split(addr1, inM, 0)).to.be.revertedWith("Only when active");
-        });
-
-        it("Should revert if too little to split", async function () {
-            await expect(primaryMarket.split(addr1, 1, 0)).to.be.revertedWith(
-                "Too little to split"
-            );
         });
 
         it("Should burn and mint shares and add fee debt", async function () {
@@ -289,17 +268,22 @@ describe("PrimaryMarketV3", function () {
                 },
                 {
                     func: fund.mock.mint.withArgs(TRANCHE_B, addr2, outAB, version),
-                },
-                {
-                    func: fund.mock.primaryMarketAddDebt.withArgs(0, feeBtc),
                 }
             );
+        });
+
+        it("Should return split amount", async function () {
+            await fund.mock.burn.returns();
+            await fund.mock.mint.returns();
+            expect(await primaryMarket.callStatic.split(addr2, 0, 0)).to.equal(0);
+            expect(await primaryMarket.callStatic.split(addr2, 1, 0)).to.equal(0);
+            expect(await primaryMarket.callStatic.split(addr2, 2, 0)).to.equal(1);
+            expect(await primaryMarket.callStatic.split(addr2, inM, 0)).to.equal(outAB);
         });
 
         it("Should emit an event", async function () {
             await fund.mock.burn.returns();
             await fund.mock.mint.returns();
-            await fund.mock.primaryMarketAddDebt.returns();
             await expect(primaryMarket.split(addr2, inM, 0))
                 .to.emit(primaryMarket, "Split")
                 .withArgs(addr2, inM, outAB, outAB);
@@ -319,13 +303,6 @@ describe("PrimaryMarketV3", function () {
             );
         });
 
-        it("Should revert if too little to merge", async function () {
-            await fund.mock.trancheWeights.returns(100, 1);
-            await expect(primaryMarket.merge(addr1, 99, 0)).to.be.revertedWith(
-                "Too little to merge"
-            );
-        });
-
         it("Should burn and mint shares and add fee debt", async function () {
             const version = 999;
             await expect(() => primaryMarket.merge(addr2, inAB, version)).to.callMocks(
@@ -342,6 +319,15 @@ describe("PrimaryMarketV3", function () {
                     func: fund.mock.primaryMarketAddDebt.withArgs(0, feeBtc),
                 }
             );
+        });
+
+        it("Should return merged amount", async function () {
+            await fund.mock.burn.returns();
+            await fund.mock.mint.returns();
+            await fund.mock.primaryMarketAddDebt.returns();
+            expect(await primaryMarket.callStatic.merge(addr2, 0, 0)).to.equal(0);
+            expect(await primaryMarket.callStatic.merge(addr2, 1, 0)).to.equal(2);
+            expect(await primaryMarket.callStatic.merge(addr2, inAB, 0)).to.equal(outM);
         });
 
         it("Should emit an event", async function () {
@@ -752,6 +738,51 @@ describe("PrimaryMarketV3", function () {
         });
     });
 
+    describe("Reverse getters", function () {
+        it("getCreationForShares()", async function () {
+            await fund.mock.getTotalUnderlying.returns(7);
+            await fund.mock.getTotalShares.returns(10);
+            expect(await primaryMarket.getCreationForShares(0)).to.equal(0);
+            expect(await primaryMarket.getCreationForShares(1)).to.equal(1);
+
+            // More shares can be created
+            expect(await primaryMarket.getCreationForShares(6)).to.equal(5);
+            expect(await primaryMarket.getCreation(5)).to.equal(7);
+        });
+
+        it("getRedemptionForUnderlying()", async function () {
+            await fund.mock.getTotalUnderlying.returns(10000);
+            await fund.mock.getTotalShares.returns(13000);
+            await primaryMarket.connect(owner).updateRedemptionFeeRate(parseEther("0.003"));
+            expect(await primaryMarket.getRedemptionForUnderlying(0)).to.equal(0);
+            expect(await primaryMarket.getRedemptionForUnderlying(997)).to.equal(1300);
+
+            // Less Token M can be redeemed, i.e. suboptimal solution
+            expect(await primaryMarket.getRedemptionForUnderlying(665)).to.equal(868);
+            expect((await primaryMarket.getRedemption(866)).underlying).to.equal(665);
+        });
+
+        it("getSplitForAB()", async function () {
+            expect(await primaryMarket.getSplitForAB(0)).to.equal(0);
+            expect(await primaryMarket.getSplitForAB(1)).to.equal(2);
+            expect(await primaryMarket.getSplitForAB(parseEther("1"))).to.equal(parseEther("2"));
+        });
+
+        it("getMergeForM()", async function () {
+            await primaryMarket.connect(owner).updateMergeFeeRate(parseEther("0.003"));
+            expect(await primaryMarket.getMergeForM(0)).to.equal(0);
+            expect(await primaryMarket.getMergeForM(9970)).to.equal(5000);
+
+            // More Token M can be received
+            expect(await primaryMarket.getMergeForM(1000)).to.equal(502);
+            expect((await primaryMarket.getMerge(502)).outM).to.equal(1001);
+
+            // Less Token A/B can be spent, i.e. suboptimal solution
+            expect(await primaryMarket.getMergeForM(665)).to.equal(334);
+            expect((await primaryMarket.getMerge(333)).outM).to.equal(665);
+        });
+    });
+
     describe("Wrapped native currency", function () {
         const ETH_TOTAL_UNDERLYING = parseEther("10");
         let weth: Contract;
@@ -767,9 +798,7 @@ describe("PrimaryMarketV3", function () {
             primaryMarket = await PrimaryMarket.connect(owner).deploy(
                 fund.address,
                 parseEther("0.0001").mul(REDEMPTION_FEE_BPS),
-                parseEther("0.0001").mul(SPLIT_FEE_BPS),
                 parseEther("0.0001").mul(MERGE_FEE_BPS),
-                MIN_CREATION_AMOUNT,
                 BigNumber.from(1).shl(256).sub(1)
             );
             primaryMarket = primaryMarket.connect(user1);

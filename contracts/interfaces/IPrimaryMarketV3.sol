@@ -8,30 +8,22 @@ interface IPrimaryMarketV3 {
 
     function getCreation(uint256 underlying) external view returns (uint256 shares);
 
+    function getCreationForShares(uint256 minShares) external view returns (uint256 underlying);
+
     function getRedemption(uint256 shares) external view returns (uint256 underlying, uint256 fee);
 
-    function getSplit(uint256 inM)
+    function getRedemptionForUnderlying(uint256 minUnderlying)
         external
         view
-        returns (
-            uint256 outA,
-            uint256 outB,
-            uint256 feeM
-        );
+        returns (uint256 shares);
 
-    function getTokenAMForSplitB(uint256 outB) external view returns (uint256 outA, uint256 inM);
+    function getSplit(uint256 inM) external view returns (uint256 outAB);
 
-    function getMerge(uint256 expectA)
-        external
-        view
-        returns (
-            uint256 inA,
-            uint256 inB,
-            uint256 outM,
-            uint256 feeM
-        );
+    function getSplitForAB(uint256 minOutAB) external view returns (uint256 inM);
 
-    function getTokenAMForMergeB(uint256 inB) external view returns (uint256 inA, uint256 outM);
+    function getMerge(uint256 inAB) external view returns (uint256 outM, uint256 feeM);
+
+    function getMergeForM(uint256 minOutM) external view returns (uint256 inAB);
 
     function create(
         address recipient,
@@ -79,13 +71,13 @@ interface IPrimaryMarketV3 {
         address recipient,
         uint256 inM,
         uint256 version
-    ) external returns (uint256 outA, uint256 outB);
+    ) external returns (uint256 outAB);
 
     function merge(
         address recipient,
-        uint256 inA,
+        uint256 inAB,
         uint256 version
-    ) external returns (uint256 inB, uint256 outM);
+    ) external returns (uint256 outM);
 
     function settle(
         uint256 day,

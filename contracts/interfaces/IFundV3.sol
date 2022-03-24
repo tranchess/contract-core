@@ -26,8 +26,6 @@ interface IFundV3 {
         uint256 timestamp;
     }
 
-    function trancheWeights() external pure returns (uint256 weightA, uint256 weightB);
-
     function tokenUnderlying() external view returns (address);
 
     function tokenM() external view returns (address);

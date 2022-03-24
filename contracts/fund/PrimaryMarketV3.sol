@@ -33,9 +33,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     );
     event FundCapUpdated(uint256 newCap);
     event RedemptionFeeRateUpdated(uint256 newRedemptionFeeRate);
-    event SplitFeeRateUpdated(uint256 newSplitFeeRate);
     event MergeFeeRateUpdated(uint256 newMergeFeeRate);
-    event MinCreationUnderlyingUpdated(uint256 newMinCreationUnderlying);
 
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
@@ -48,16 +46,13 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     }
 
     uint256 private constant MAX_REDEMPTION_FEE_RATE = 0.01e18;
-    uint256 private constant MAX_SPLIT_FEE_RATE = 0.01e18;
     uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18;
 
     IFundV3 public immutable override fund;
     IERC20 private immutable _tokenUnderlying;
 
     uint256 public redemptionFeeRate;
-    uint256 public splitFeeRate;
     uint256 public mergeFeeRate;
-    uint256 public minCreationUnderlying;
 
     /// @notice The upper limit of underlying that the fund can hold. This contract rejects
     ///         creations that may break this limit.
@@ -82,20 +77,15 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     constructor(
         address fund_,
         uint256 redemptionFeeRate_,
-        uint256 splitFeeRate_,
         uint256 mergeFeeRate_,
-        uint256 minCreationUnderlying_,
         uint256 fundCap_
     ) public Ownable() {
         require(redemptionFeeRate_ <= MAX_REDEMPTION_FEE_RATE, "Exceed max redemption fee rate");
-        require(splitFeeRate_ <= MAX_SPLIT_FEE_RATE, "Exceed max split fee rate");
         require(mergeFeeRate_ <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
         fund = IFundV3(fund_);
         _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
         redemptionFeeRate = redemptionFeeRate_;
-        splitFeeRate = splitFeeRate_;
         mergeFeeRate = mergeFeeRate_;
-        minCreationUnderlying = minCreationUnderlying_;
         fundCap = fundCap_;
     }
 
@@ -123,6 +113,35 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         }
     }
 
+    /// @notice Calculate the amount of underlying tokens to create at least the given amount of
+    ///         Token M. This only works with non-empty fund for simplicity.
+    /// @param minShares Minimum received Token M amount
+    /// @return underlying Underlying amount that should be used for creation
+    function getCreationForShares(uint256 minShares)
+        external
+        view
+        override
+        returns (uint256 underlying)
+    {
+        // Assume:
+        //   minShares * fundUnderlying = a * fundTotalShares - b
+        // where a and b are integers and 0 <= b < fundTotalShares
+        // Then
+        //   underlying = a
+        //   getCreation(underlying)
+        //     = floor(a * fundTotalShares / fundUnderlying)
+        //    >= floor((a * fundTotalShares - b) / fundUnderlying)
+        //     = minShares
+        //   getCreation(underlying - 1)
+        //     = floor((a * fundTotalShares - fundTotalShares) / fundUnderlying)
+        //     < (a * fundTotalShares - b) / fundUnderlying
+        //     = minShares
+        uint256 fundUnderlying = fund.getTotalUnderlying();
+        uint256 fundTotalShares = fund.getTotalShares();
+        require(fundTotalShares > 0, "Cannot calculate creation for empty fund");
+        return minShares.mul(fundUnderlying).add(fundTotalShares - 1).div(fundTotalShares);
+    }
+
     function _getRedemptionBeforeFee(uint256 shares) private view returns (uint256 underlying) {
         uint256 fundUnderlying = fund.getTotalUnderlying();
         uint256 fundTotalShares = fund.getTotalShares();
@@ -144,88 +163,86 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         underlying = underlying.sub(fee);
     }
 
-    /// @notice Calculate the result of a split.
-    /// @param inM Token M amount to be split
-    /// @return outA Received Token A amount
-    /// @return outB Received Token B amount
-    /// @return feeM Token M amount charged as split fee
-    function getSplit(uint256 inM)
-        public
-        view
-        override
-        returns (
-            uint256 outA,
-            uint256 outB,
-            uint256 feeM
-        )
-    {
-        (uint256 weightA, uint256 weightB) = fund.trancheWeights();
-        // Charge splitting fee and round it to a multiple of (weightA + weightB)
-        uint256 unit = inM.sub(inM.multiplyDecimal(splitFeeRate)) / (weightA + weightB);
-        require(unit > 0, "Too little to split");
-        uint256 inMAfterFee = unit * (weightA + weightB);
-        outA = unit * weightA;
-        outB = inMAfterFee - outA;
-        feeM = inM - inMAfterFee;
-    }
-
-    function getTokenAMForSplitB(uint256 outB)
+    /// @notice Calculate the amount of Token M that can be redeemed for at least the given amount
+    ///         of underlying tokens.
+    /// @dev The return value may not be the minimum solution due to rounding errors.
+    /// @param minUnderlying Minimum received underlying amount
+    /// @return shares Token M amount that should be redeemed
+    function getRedemptionForUnderlying(uint256 minUnderlying)
         external
         view
         override
-        returns (uint256 outA, uint256 inM)
+        returns (uint256 shares)
     {
-        (uint256 weightA, uint256 weightB) = fund.trancheWeights();
-        outA = outB.mul(weightA) / weightB;
-        uint256 inMAfterFee = outA.add(outB);
-        inM = inMAfterFee.divideDecimal(uint256(1e18).sub(splitFeeRate)).add(1);
+        // Assume:
+        //   minUnderlying * 1e18 = a * (1e18 - redemptionFeeRate) + b
+        //   a * fundTotalShares = c * fundUnderlying - d
+        // where
+        //   a, b, c, d are integers
+        //   0 <= b < 1e18 - redemptionFeeRate
+        //   0 <= d < fundUnderlying
+        // Then
+        //   underlyingBeforeFee = a
+        //   shares = c
+        //   getRedemption(shares).underlying
+        //     = floor(c * fundUnderlying / fundTotalShares) -
+        //       - floor(floor(c * fundUnderlying / fundTotalShares) * redemptionFeeRate / 1e18)
+        //     = ceil(floor(c * fundUnderlying / fundTotalShares) * (1e18 - redemptionFeeRate) / 1e18)
+        //    >= ceil(floor((c * fundUnderlying - d) / fundTotalShares) * (1e18 - redemptionFeeRate) / 1e18)
+        //     = ceil(a * (1e18 - redemptionFeeRate) / 1e18)
+        //     = (a * (1e18 - redemptionFeeRate) + b) / 1e18        // because b < 1e18
+        //     = minUnderlying
+        uint256 fundUnderlying = fund.getTotalUnderlying();
+        uint256 fundTotalShares = fund.getTotalShares();
+        uint256 underlyingBeforeFee = minUnderlying.divideDecimal(1e18 - redemptionFeeRate);
+        return underlyingBeforeFee.mul(fundTotalShares).add(fundUnderlying - 1).div(fundUnderlying);
+    }
+
+    /// @notice Calculate the result of a split.
+    /// @param inM Token M amount to be split
+    /// @return outAB Received amount of Token A and Token B
+    function getSplit(uint256 inM) public view override returns (uint256 outAB) {
+        return inM / 2;
+    }
+
+    /// @notice Calculate the amount of Token M that can be split into the given amount of
+    ///         Token A and Token B.
+    /// @param minOutAB Received Token A and Token B amount
+    /// @return inM Token M amount that should be split
+    function getSplitForAB(uint256 minOutAB) external view override returns (uint256 inM) {
+        return minOutAB * 2;
     }
 
     /// @notice Calculate the result of a merge.
-    /// @param expectA Minimum amount of Token M to be received
-    /// @return inA Spent Token A amount
-    /// @return inB Spent Token B amount
+    /// @param inAB Spent amount of Token A and Token B
     /// @return outM Received Token M amount
     /// @return feeM Token M amount charged as merge fee
-    function getMerge(uint256 expectA)
-        public
-        view
-        override
-        returns (
-            uint256 inA,
-            uint256 inB,
-            uint256 outM,
-            uint256 feeM
-        )
-    {
-        (uint256 weightA, uint256 weightB) = fund.trancheWeights();
-        // Round to tranche weights
-        uint256 unit = expectA / weightA;
-        require(unit > 0, "Too little to merge");
-        // Keep unmergable Token A unchanged.
-        inA = unit * weightA;
-        inB = unit.mul(weightB);
-        uint256 outMBeforeFee = inA.add(inB);
+    function getMerge(uint256 inAB) public view override returns (uint256 outM, uint256 feeM) {
+        uint256 outMBeforeFee = inAB.mul(2);
         feeM = outMBeforeFee.multiplyDecimal(mergeFeeRate);
         outM = outMBeforeFee.sub(feeM);
     }
 
-    function getTokenAMForMergeB(uint256 inB)
-        external
-        view
-        override
-        returns (uint256 inA, uint256 outM)
-    {
-        (uint256 weightA, uint256 weightB) = fund.trancheWeights();
-        // Round to tranche weights
-        uint256 unit = inB / weightB;
-        require(unit > 0, "Too little to merge");
-        // Keep unmergable Token A unchanged.
-        inA = unit * weightA;
-        inB = unit * weightB;
-        uint256 outMBeforeFee = inA.add(inB);
-        uint256 feeM = outMBeforeFee.multiplyDecimal(mergeFeeRate);
-        outM = outMBeforeFee.sub(feeM);
+    /// @notice Calculate the amount of Token A and Token B that can be merged into at least
+    ///      the given amount of Token M.
+    /// @dev The return value may not be the minimum solution due to rounding errors.
+    /// @param minOutM Minimum received Token M amount
+    /// @return inAB Token A and Token B amount that should be merged
+    function getMergeForM(uint256 minOutM) external view override returns (uint256 inAB) {
+        // Assume:
+        //   minOutM * 1e18 = a * (1e18 - mergeFeeRate) + b
+        // where a and b are integers and 0 <= b < 1e18 - mergeFeeRate
+        // Then
+        //   outMBeforeFee = a
+        //   inAB = ceil(a / 2)
+        //   getMerge(inAB).outM
+        //     = inAB * 2 - floor(inAB * 2 * mergeFeeRate / 1e18)
+        //     = ceil(inAB * 2 * (1e18 - mergeFeeRate) / 1e18)
+        //    >= ceil(a * (1e18 - mergeFeeRate) / 1e18)
+        //     = (a * (1e18 - mergeFeeRate) + b) / 1e18         // because b < 1e18
+        //     = minOutM
+        uint256 outMBeforeFee = minOutM.divideDecimal(1e18 - mergeFeeRate);
+        inAB = outMBeforeFee.add(1) / 2;
     }
 
     /// @notice Create Token M using underlying tokens.
@@ -302,7 +319,6 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         uint256 minShares,
         uint256 version
     ) private onlyActive returns (uint256 shares) {
-        require(underlying >= minCreationUnderlying, "Min amount");
         shares = getCreation(underlying);
         require(shares >= minShares && shares > 0, "Min shares created");
         fund.mint(TRANCHE_M, recipient, shares, version);
@@ -459,28 +475,26 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         address recipient,
         uint256 inM,
         uint256 version
-    ) external override onlyActive returns (uint256 outA, uint256 outB) {
-        uint256 feeM;
-        (outA, outB, feeM) = getSplit(inM);
+    ) external override onlyActive returns (uint256 outAB) {
+        outAB = getSplit(inM);
         fund.burn(TRANCHE_M, msg.sender, inM, version);
-        fund.mint(TRANCHE_A, recipient, outA, version);
-        fund.mint(TRANCHE_B, recipient, outB, version);
-        fund.primaryMarketAddDebt(0, _getRedemptionBeforeFee(feeM));
-        emit Split(recipient, inM, outA, outB);
+        fund.mint(TRANCHE_A, recipient, outAB, version);
+        fund.mint(TRANCHE_B, recipient, outAB, version);
+        emit Split(recipient, inM, outAB, outAB);
     }
 
     function merge(
         address recipient,
-        uint256 inA,
+        uint256 inAB,
         uint256 version
-    ) external override onlyActive returns (uint256 inB, uint256 outM) {
+    ) external override onlyActive returns (uint256 outM) {
         uint256 feeM;
-        (inA, inB, outM, feeM) = getMerge(inA);
-        fund.burn(TRANCHE_A, msg.sender, inA, version);
-        fund.burn(TRANCHE_B, msg.sender, inB, version);
+        (outM, feeM) = getMerge(inAB);
+        fund.burn(TRANCHE_A, msg.sender, inAB, version);
+        fund.burn(TRANCHE_B, msg.sender, inAB, version);
         fund.mint(TRANCHE_M, recipient, outM, version);
         fund.primaryMarketAddDebt(0, _getRedemptionBeforeFee(feeM));
-        emit Merged(recipient, outM, inA, inB);
+        emit Merged(recipient, outM, inAB, inAB);
     }
 
     /// @dev Nothing to do for daily fund settlement.
@@ -517,21 +531,10 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         emit RedemptionFeeRateUpdated(newRedemptionFeeRate);
     }
 
-    function updateSplitFeeRate(uint256 newSplitFeeRate) external onlyOwner {
-        require(newSplitFeeRate <= MAX_SPLIT_FEE_RATE, "Exceed max split fee rate");
-        splitFeeRate = newSplitFeeRate;
-        emit SplitFeeRateUpdated(newSplitFeeRate);
-    }
-
     function updateMergeFeeRate(uint256 newMergeFeeRate) external onlyOwner {
         require(newMergeFeeRate <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
         mergeFeeRate = newMergeFeeRate;
         emit MergeFeeRateUpdated(newMergeFeeRate);
-    }
-
-    function updateMinCreationUnderlying(uint256 newMinCreationUnderlying) external onlyOwner {
-        minCreationUnderlying = newMinCreationUnderlying;
-        emit MinCreationUnderlyingUpdated(newMinCreationUnderlying);
     }
 
     /// @notice Receive unwrapped transfer from the wrapped token.

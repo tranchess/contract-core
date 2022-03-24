@@ -48,10 +48,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
     uint256 private constant MAX_INTEREST_RATE = 0.2e18; // 20% daily
     uint256 private constant MAX_DAILY_PROTOCOL_FEE_RATE = 0.05e18; // 5% daily rate
 
-    uint256 private constant WEIGHT_A = 1;
-    uint256 private constant WEIGHT_B = 1;
-    uint256 private constant WEIGHT_M = WEIGHT_A + WEIGHT_B;
-
     uint256 private constant STRATEGY_UPDATE_MIN_DELAY = 3 days;
     uint256 private constant STRATEGY_UPDATE_MAX_DELAY = 7 days;
 
@@ -226,13 +222,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         _initializeRoles(tokenM_, tokenA_, tokenB_, primaryMarket_);
         emit StrategyUpdated(strategy, strategy_);
         strategy = strategy_;
-    }
-
-    /// @notice Return weights of Token A and B when splitting Token M.
-    /// @return weightA Weight of Token A
-    /// @return weightB Weight of Token B
-    function trancheWeights() external pure override returns (uint256 weightA, uint256 weightB) {
-        return (WEIGHT_A, WEIGHT_B);
     }
 
     /// @notice UTC time of a day when the fund settles.
@@ -439,8 +428,8 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
 
     function calculateNavB(uint256 navM, uint256 navA) public pure override returns (uint256) {
         // Using unchecked multiplications because they are unlikely to overflow
-        if (navM * WEIGHT_M >= navA * WEIGHT_A) {
-            return (navM * WEIGHT_M - navA * WEIGHT_A) / WEIGHT_B;
+        if (navM * 2 >= navA) {
+            return navM * 2 - navA;
         } else {
             return 0;
         }
@@ -1151,7 +1140,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         if (navBOrZero <= navA) {
             // Lower rebalance
             ratioAB = navBOrZero;
-            ratioA2M = ((navM - navBOrZero) * WEIGHT_M) / WEIGHT_A;
+            ratioA2M = (navM - navBOrZero) * 2;
             ratioB2M = 0;
         } else {
             // Upper rebalance
