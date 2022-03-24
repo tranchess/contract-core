@@ -385,11 +385,11 @@ describe("Exchange upgrade V2 to V3", function () {
             await setNextBlockTime(startEpoch + 300);
             await upgradeToV3();
             await advanceBlockAtTime(startEpoch + 1000);
-            expect(await exchange.callStatic["claimableRewards"](addr1)).to.be.closeToBn(
+            expect(await exchange.callStatic["claimableRewards"](addr1)).to.be.closeTo(
                 rate1.mul(1000),
                 1000
             );
-            expect(await exchange.callStatic["claimableRewards"](addr2)).to.be.closeToBn(
+            expect(await exchange.callStatic["claimableRewards"](addr2)).to.be.closeTo(
                 rate2.mul(1000),
                 1000
             );
