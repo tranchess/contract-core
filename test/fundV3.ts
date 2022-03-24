@@ -22,8 +22,8 @@ const POST_REBALANCE_DELAY_TIME = HOUR * 12;
 const DAILY_PROTOCOL_FEE_BPS = 1; // 0.01% per day, 3.65% per year
 const UPPER_REBALANCE_THRESHOLD = parseEther("2");
 const LOWER_REBALANCE_THRESHOLD = parseEther("0.5");
-const STRATEGY_UPDATE_MIN_DELAY = DAY * 3;
-const STRATEGY_UPDATE_MAX_DELAY = DAY * 7;
+const ROLE_UPDATE_MIN_DELAY = DAY * 3;
+const ROLE_UPDATE_MAX_DELAY = DAY * 15;
 
 describe("FundV3", function () {
     interface FixtureData {
@@ -96,26 +96,23 @@ describe("FundV3", function () {
         const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV3");
 
         const Fund = await ethers.getContractFactory("FundV3");
-        const fund = await Fund.connect(owner).deploy(
+        const fund = await Fund.connect(owner).deploy([
             btc.address,
             8,
+            shareM.address,
+            shareA.address,
+            shareB.address,
+            primaryMarket.address,
+            ethers.constants.AddressZero,
             parseEther("0.0001").mul(DAILY_PROTOCOL_FEE_BPS),
             UPPER_REBALANCE_THRESHOLD,
             LOWER_REBALANCE_THRESHOLD,
             twapOracle.address,
             aprOracle.address,
             interestRateBallot.address,
-            feeCollector.address
-        );
+            feeCollector.address,
+        ]);
         await primaryMarket.call(btc, "approve", fund.address, BigNumber.from("2").pow(256).sub(1));
-
-        await fund.initialize(
-            shareM.address,
-            shareA.address,
-            shareB.address,
-            primaryMarket.address,
-            ethers.constants.AddressZero
-        );
 
         return {
             wallets: { user1, user2, owner, shareM, shareA, shareB, feeCollector, strategy },
@@ -310,73 +307,139 @@ describe("FundV3", function () {
     });
 
     describe("FundRoles", function () {
-        describe("PrimaryMarket", function () {
-            it("Should initialize the only PrimaryMarket address", async function () {
-                expect(await fund.isPrimaryMarket(primaryMarket.address)).to.equal(true);
-                expect(await fund.getPrimaryMarketCount()).to.equal(1);
+        describe("Primary market and strategy", function () {
+            let newPm: MockContract;
+
+            beforeEach(async function () {
+                newPm = await deployMockForName(owner, "IPrimaryMarketV3");
+                await primaryMarket.mock.canBeRemovedFromFund.returns(true);
             });
 
-            it("Should be able to add PrimaryMarket", async function () {
-                await fund.connect(owner).addNewPrimaryMarket(addr1);
-                await fund.connect(owner).addNewPrimaryMarket(addr1);
-                expect(await fund.isPrimaryMarket(primaryMarket.address)).to.equal(true);
-
-                await twapOracle.mock.getTwap.returns(parseEther("1000"));
-                await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
-                await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
-                await advanceBlockAtTime((await fund.currentDay()).toNumber());
-
-                await expect(fund.settle()).to.emit(fund, "PrimaryMarketAdded").withArgs(addr1);
-
-                expect(await fund.isPrimaryMarket(addr1)).to.equal(true);
-                expect(await fund.getPrimaryMarketCount()).to.equal(2);
-                await fund.connect(owner).addObsoletePrimaryMarket(primaryMarket.address);
-            });
-
-            it("Should be able to remove PrimaryMarket", async function () {
-                await fund.connect(owner).addObsoletePrimaryMarket(primaryMarket.address);
-                await fund.connect(owner).addObsoletePrimaryMarket(primaryMarket.address);
-                expect(await fund.isPrimaryMarket(primaryMarket.address)).to.equal(true);
-
-                await twapOracle.mock.getTwap.returns(parseEther("1000"));
-                await aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
-                await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
-                await advanceBlockAtTime((await fund.currentDay()).toNumber());
-
-                await expect(fund.settle())
-                    .to.emit(fund, "PrimaryMarketRemoved")
-                    .withArgs(primaryMarket.address);
-
-                expect(await fund.isPrimaryMarket(primaryMarket.address)).to.equal(false);
-                expect(await fund.getPrimaryMarketCount()).to.equal(0);
-            });
-
-            it("Should reject if PrimaryMarket has already been added or removed", async function () {
-                await expect(
-                    fund.connect(owner).addNewPrimaryMarket(primaryMarket.address)
-                ).to.be.revertedWith("The address is already a primary market");
-
-                await expect(
-                    fund.connect(owner).addObsoletePrimaryMarket(addr1)
-                ).to.be.revertedWith("The address is not a primary market");
-            });
-
-            it("Should reject changing PrimaryMarket from non-admin address", async function () {
-                await expect(fund.addNewPrimaryMarket(addr1)).to.be.revertedWith(
+            it("Should revert if not proposed by owner", async function () {
+                await expect(fund.proposePrimaryMarketUpdate(newPm.address)).to.be.revertedWith(
                     "Ownable: caller is not the owner"
                 );
-
-                await expect(fund.addObsoletePrimaryMarket(addr1)).to.be.revertedWith(
+                await expect(fund.proposeStrategyUpdate(strategy.address)).to.be.revertedWith(
                     "Ownable: caller is not the owner"
                 );
+            });
+
+            it("Should revert if the original address is proposed", async function () {
+                await expect(fund.connect(owner).proposePrimaryMarketUpdate(primaryMarket.address))
+                    .to.be.reverted;
+                await expect(fund.connect(owner).proposeStrategyUpdate(await fund.strategy())).to.be
+                    .reverted;
+            });
+
+            it("Should save proposed change", async function () {
+                await fund.connect(owner).proposePrimaryMarketUpdate(newPm.address);
+                expect(await fund.proposedPrimaryMarket()).to.equal(newPm.address);
+                await fund.connect(owner).proposeStrategyUpdate(strategy.address);
+                expect(await fund.proposedStrategy()).to.equal(strategy.address);
+            });
+
+            it("Should emit event on proposal", async function () {
+                const t = startTimestamp + HOUR;
+                await setNextBlockTime(t);
+                await expect(fund.connect(owner).proposePrimaryMarketUpdate(newPm.address))
+                    .to.emit(fund, "PrimaryMarketUpdateProposed")
+                    .withArgs(newPm.address, t + ROLE_UPDATE_MIN_DELAY, t + ROLE_UPDATE_MAX_DELAY);
+                await setNextBlockTime(t + 100);
+                await expect(fund.connect(owner).proposeStrategyUpdate(strategy.address))
+                    .to.emit(fund, "StrategyUpdateProposed")
+                    .withArgs(
+                        strategy.address,
+                        t + 100 + ROLE_UPDATE_MIN_DELAY,
+                        t + 100 + ROLE_UPDATE_MAX_DELAY
+                    );
+            });
+
+            it("Should revert if not applied by owner", async function () {
+                await expect(fund.applyPrimaryMarketUpdate(newPm.address)).to.be.revertedWith(
+                    "Ownable: caller is not the owner"
+                );
+                await expect(fund.applyStrategyUpdate(strategy.address)).to.be.revertedWith(
+                    "Ownable: caller is not the owner"
+                );
+            });
+
+            it("Should revert if apply a different strategy change", async function () {
+                await fund.connect(owner).proposePrimaryMarketUpdate(newPm.address);
+                await expect(
+                    fund.connect(owner).applyPrimaryMarketUpdate(addr1)
+                ).to.be.revertedWith("Proposed address mismatch");
+                await fund.connect(owner).proposeStrategyUpdate(strategy.address);
+                await expect(fund.connect(owner).applyStrategyUpdate(addr1)).to.be.revertedWith(
+                    "Proposed address mismatch"
+                );
+            });
+
+            it("Should revert if apply too early or too late", async function () {
+                const t = startTimestamp + HOUR;
+                await setNextBlockTime(t);
+                await fund.connect(owner).proposePrimaryMarketUpdate(newPm.address);
+                await fund.connect(owner).proposeStrategyUpdate(strategy.address);
+
+                await advanceBlockAtTime(t + ROLE_UPDATE_MIN_DELAY - 10);
+                await expect(
+                    fund.connect(owner).applyPrimaryMarketUpdate(newPm.address)
+                ).to.be.revertedWith("Not ready to update");
+                await expect(
+                    fund.connect(owner).applyStrategyUpdate(strategy.address)
+                ).to.be.revertedWith("Not ready to update");
+                await advanceBlockAtTime(t + ROLE_UPDATE_MAX_DELAY + 10);
+                await expect(
+                    fund.connect(owner).applyPrimaryMarketUpdate(newPm.address)
+                ).to.be.revertedWith("Not ready to update");
+                await expect(
+                    fund.connect(owner).applyStrategyUpdate(strategy.address)
+                ).to.be.revertedWith("Not ready to update");
+            });
+
+            it("Should reject primary market change if it is not ready", async function () {
+                await primaryMarket.mock.canBeRemovedFromFund.returns(false);
+                const t = startTimestamp + HOUR;
+                await setNextBlockTime(t);
+                await fund.connect(owner).proposePrimaryMarketUpdate(newPm.address);
+                await advanceBlockAtTime(t + ROLE_UPDATE_MIN_DELAY - 10);
+                await expect(
+                    fund.connect(owner).applyPrimaryMarketUpdate(newPm.address)
+                ).to.be.revertedWith("Cannot update primary market");
+            });
+
+            it("Should reject strategy change with debt", async function () {
+                await primaryMarket.call(fund, "primaryMarketAddDebt", 1, 0);
+                const t = startTimestamp + HOUR;
+                await setNextBlockTime(t);
+                await fund.connect(owner).proposeStrategyUpdate(strategy.address);
+                await advanceBlockAtTime(t + ROLE_UPDATE_MIN_DELAY - 10);
+                await expect(
+                    fund.connect(owner).applyStrategyUpdate(strategy.address)
+                ).to.be.revertedWith("Cannot update strategy with debt");
+            });
+
+            it("Should update role", async function () {
+                const t = startTimestamp + HOUR;
+                await setNextBlockTime(t);
+                await fund.connect(owner).proposePrimaryMarketUpdate(newPm.address);
+                await fund.connect(owner).proposeStrategyUpdate(strategy.address);
+                await advanceBlockAtTime(t + ROLE_UPDATE_MIN_DELAY + 10);
+                await fund.connect(owner).applyPrimaryMarketUpdate(newPm.address);
+                await fund.connect(owner).applyStrategyUpdate(strategy.address);
+                expect(await fund.primaryMarket()).to.equal(newPm.address);
+                expect(await fund.proposedPrimaryMarket()).to.equal(ethers.constants.AddressZero);
+                expect(await fund.proposedPrimaryMarketTimestamp()).to.equal(0);
+                expect(await fund.strategy()).to.equal(strategy.address);
+                expect(await fund.proposedStrategy()).to.equal(ethers.constants.AddressZero);
+                expect(await fund.proposedStrategyTimestamp()).to.equal(0);
             });
         });
 
         describe("Share", function () {
             it("Should initialize the three Share addresses", async function () {
-                expect(await fund.isShare(shareM.address)).to.equal(true);
-                expect(await fund.isShare(shareA.address)).to.equal(true);
-                expect(await fund.isShare(shareB.address)).to.equal(true);
+                expect(await fund.tokenM()).to.equal(shareM.address);
+                expect(await fund.tokenA()).to.equal(shareA.address);
+                expect(await fund.tokenB()).to.equal(shareB.address);
             });
         });
     });
@@ -405,21 +468,11 @@ describe("FundV3", function () {
         async function fakePrimaryMarketFixture(): Promise<FixtureData> {
             const oldF = await loadFixture(deployFixture);
             const f = { ...oldF };
-            // Initiating transactions from a Waffle mock contract doesn't work well
-            // in Hardhat and may fail with gas estimating errors. We grant the role
-            // to an EOA to make test development easier.
-            await f.fund.connect(f.wallets.owner).addNewPrimaryMarket(f.wallets.user2.address);
             await f.twapOracle.mock.getTwap.returns(parseEther("1000"));
             await f.aprOracle.mock.capture.returns(parseEther("0.001")); // 0.1% per day
             await f.primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
-            await advanceBlockAtTime((await fund.currentDay()).toNumber());
+            await advanceBlockAtTime((await f.fund.currentDay()).toNumber());
             await f.fund.settle();
-
-            f.fund = f.fund.connect(f.wallets.user2);
-            // Mint some shares to user2
-            await f.fund.mint(TRANCHE_M, f.wallets.user2.address, 10000, 0);
-            await f.fund.mint(TRANCHE_A, f.wallets.user2.address, 10000, 0);
-            await f.fund.mint(TRANCHE_B, f.wallets.user2.address, 10000, 0);
             return f;
         }
 
@@ -434,18 +487,31 @@ describe("FundV3", function () {
             currentFixture = outerFixture;
         });
 
-        beforeEach(function () {
+        beforeEach(async function () {
             fundFromShares = [
                 { fundFromShare: fund.connect(shareM), tranche: TRANCHE_M },
                 { fundFromShare: fund.connect(shareA), tranche: TRANCHE_A },
                 { fundFromShare: fund.connect(shareB), tranche: TRANCHE_B },
             ];
+            // Initiating transactions from a Waffle mock contract doesn't work well in Hardhat
+            // and may fail with gas estimating errors. We impersonate the address and directly send
+            // transactions from it to make test development easier.
+            await ethers.provider.send("hardhat_setBalance", [
+                primaryMarket.address,
+                parseEther("10").toHexString(),
+            ]);
+            await ethers.provider.send("hardhat_impersonateAccount", [primaryMarket.address]);
+            fund = fund.connect(await ethers.getSigner(primaryMarket.address));
+        });
+
+        afterEach(async function () {
+            await ethers.provider.send("hardhat_stopImpersonatingAccount", [primaryMarket.address]);
         });
 
         describe("mint()", function () {
             it("Should revert if not called from PrimaryMarket", async function () {
                 await expect(fund.connect(user1).mint(TRANCHE_M, addr1, 1, 0)).to.be.revertedWith(
-                    "FundRoles: only primary market"
+                    "Only primary market"
                 );
             });
 
@@ -463,12 +529,12 @@ describe("FundV3", function () {
                 await fund.mint(TRANCHE_M, addr2, 1000, 0);
                 await fund.mint(TRANCHE_A, addr2, 10, 0);
                 await fund.mint(TRANCHE_B, addr2, 100, 0);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr2)).to.equal(11000);
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr2)).to.equal(10010);
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr2)).to.equal(10100);
-                expect(await fund.shareTotalSupply(TRANCHE_M)).to.equal(11579);
-                expect(await fund.shareTotalSupply(TRANCHE_A)).to.equal(10010);
-                expect(await fund.shareTotalSupply(TRANCHE_B)).to.equal(10100);
+                expect(await fund.shareBalanceOf(TRANCHE_M, addr2)).to.equal(1000);
+                expect(await fund.shareBalanceOf(TRANCHE_A, addr2)).to.equal(10);
+                expect(await fund.shareBalanceOf(TRANCHE_B, addr2)).to.equal(100);
+                expect(await fund.shareTotalSupply(TRANCHE_M)).to.equal(1579);
+                expect(await fund.shareTotalSupply(TRANCHE_A)).to.equal(10);
+                expect(await fund.shareTotalSupply(TRANCHE_B)).to.equal(100);
             });
 
             it("Should revert on minting to the zero address", async function () {
@@ -488,7 +554,7 @@ describe("FundV3", function () {
         describe("burn()", function () {
             it("Should revert if not called from PrimaryMarket", async function () {
                 await expect(fund.connect(user1).burn(TRANCHE_M, addr1, 1, 0)).to.be.revertedWith(
-                    "FundRoles: only primary market"
+                    "Only primary market"
                 );
             });
 
@@ -500,6 +566,10 @@ describe("FundV3", function () {
 
             it("Should update balance and total supply", async function () {
                 await fund.mint(TRANCHE_M, addr1, 10000, 0);
+                await fund.mint(TRANCHE_M, addr2, 10000, 0);
+                await fund.mint(TRANCHE_A, addr2, 10000, 0);
+                await fund.mint(TRANCHE_B, addr2, 10000, 0);
+
                 await fund.burn(TRANCHE_M, addr1, 1000, 0);
                 expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(9000);
                 await fund.burn(TRANCHE_M, addr1, 2000, 0);
@@ -531,7 +601,7 @@ describe("FundV3", function () {
         describe("transfer()", function () {
             it("Should revert if not called from Share", async function () {
                 await expect(fund.transfer(TRANCHE_M, addr1, addr2, 1)).to.be.revertedWith(
-                    "FundRoles: only share"
+                    "Only share"
                 );
             });
 
@@ -553,6 +623,7 @@ describe("FundV3", function () {
 
             it("Should update balance and keep total supply", async function () {
                 for (const { fundFromShare, tranche } of fundFromShares) {
+                    await fund.mint(tranche, addr2, 10000, 0);
                     await fundFromShare.transfer(tranche, addr2, addr1, 10000);
                     expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(10000);
                     expect(await fund.shareBalanceOf(TRANCHE_M, addr2)).to.equal(0);
@@ -572,7 +643,7 @@ describe("FundV3", function () {
         describe("approve()", function () {
             it("Should revert if not called from Share", async function () {
                 await expect(fund.approve(TRANCHE_M, addr1, addr2, 1)).to.be.revertedWith(
-                    "FundRoles: only share"
+                    "Only share"
                 );
             });
 
@@ -1131,24 +1202,22 @@ describe("FundV3", function () {
 
         // Overwrite the fund with a new one with zero protocol fee
         const Fund = await ethers.getContractFactory("FundV3");
-        f.fund = await Fund.connect(f.wallets.owner).deploy(
+        f.fund = await Fund.connect(f.wallets.owner).deploy([
             f.btc.address,
             8,
+            f.wallets.shareM.address,
+            f.wallets.shareA.address,
+            f.wallets.shareB.address,
+            f.primaryMarket.address,
+            ethers.constants.AddressZero,
             0, // Zero protocol fee
             UPPER_REBALANCE_THRESHOLD,
             LOWER_REBALANCE_THRESHOLD,
             f.twapOracle.address,
             f.aprOracle.address,
             f.interestRateBallot.address,
-            f.wallets.feeCollector.address
-        );
-        await f.fund.initialize(
-            f.wallets.shareM.address,
-            f.wallets.shareA.address,
-            f.wallets.shareB.address,
-            f.primaryMarket.address,
-            ethers.constants.AddressZero
-        );
+            f.wallets.feeCollector.address,
+        ]);
         return f;
     }
 
@@ -1532,82 +1601,6 @@ describe("FundV3", function () {
         });
     });
 
-    describe("Strategy update", function () {
-        it("Should revert if not proposed by owner", async function () {
-            await expect(fund.proposeStrategyUpdate(strategy.address)).to.be.revertedWith(
-                "Ownable: caller is not the owner"
-            );
-        });
-
-        it("Should revert if the original strategy is proposed", async function () {
-            await expect(fund.connect(owner).proposeStrategyUpdate(await fund.strategy())).to.be
-                .reverted;
-        });
-
-        it("Should update proposed change", async function () {
-            await fund.connect(owner).proposeStrategyUpdate(strategy.address);
-            expect(await fund.proposedStrategy()).to.equal(strategy.address);
-        });
-
-        it("Should emit event on proposal", async function () {
-            const t = startTimestamp + HOUR;
-            await setNextBlockTime(t);
-            await expect(fund.connect(owner).proposeStrategyUpdate(strategy.address))
-                .to.emit(fund, "StrategyUpdateProposed")
-                .withArgs(
-                    strategy.address,
-                    t + STRATEGY_UPDATE_MIN_DELAY,
-                    t + STRATEGY_UPDATE_MAX_DELAY
-                );
-        });
-
-        it("Should revert if not applied by owner", async function () {
-            await expect(fund.applyStrategyUpdate(strategy.address)).to.be.revertedWith(
-                "Ownable: caller is not the owner"
-            );
-        });
-
-        it("Should revert if apply a different strategy change", async function () {
-            await fund.connect(owner).proposeStrategyUpdate(strategy.address);
-            await expect(fund.connect(owner).applyStrategyUpdate(user1.address)).to.be.revertedWith(
-                "Proposed strategy mismatch"
-            );
-        });
-
-        it("Should revert if apply too early or too late", async function () {
-            const t = startTimestamp + HOUR;
-            await setNextBlockTime(t);
-            await fund.connect(owner).proposeStrategyUpdate(strategy.address);
-
-            await advanceBlockAtTime(t + STRATEGY_UPDATE_MIN_DELAY - 10);
-            await expect(
-                fund.connect(owner).applyStrategyUpdate(strategy.address)
-            ).to.be.revertedWith("Not ready to update strategy");
-            await advanceBlockAtTime(t + STRATEGY_UPDATE_MAX_DELAY + 10);
-            await expect(
-                fund.connect(owner).applyStrategyUpdate(strategy.address)
-            ).to.be.revertedWith("Not ready to update strategy");
-        });
-
-        it("Should update strategy", async function () {
-            const t = startTimestamp + HOUR;
-            await setNextBlockTime(t);
-            await fund.connect(owner).proposeStrategyUpdate(strategy.address);
-            await advanceBlockAtTime(t + STRATEGY_UPDATE_MIN_DELAY + 10);
-            await fund.connect(owner).applyStrategyUpdate(strategy.address);
-            expect(await fund.strategy()).to.equal(strategy.address);
-            expect(await fund.proposedStrategy()).to.equal(ethers.constants.AddressZero);
-            // Expect that the proposed timestamp is also reset.
-            await expect(
-                fund.connect(owner).applyStrategyUpdate(ethers.constants.AddressZero)
-            ).to.be.revertedWith("Not ready to update strategy");
-            await advanceBlockAtTime(t + STRATEGY_UPDATE_MIN_DELAY * 2 + 20);
-            await expect(
-                fund.connect(owner).applyStrategyUpdate(ethers.constants.AddressZero)
-            ).to.be.revertedWith("Not ready to update strategy");
-        });
-    });
-
     describe("Settlement with strategy", function () {
         const navA = parseEther("1.001")
             .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
@@ -1618,15 +1611,15 @@ describe("FundV3", function () {
             await twapOracle.mock.getTwap.returns(parseEther("1000"));
             // Change strategy
             await fund.connect(owner).proposeStrategyUpdate(strategy.address);
-            await advanceBlockAtTime(startTimestamp + HOUR + STRATEGY_UPDATE_MIN_DELAY + 10);
+            await advanceBlockAtTime(startTimestamp + HOUR + ROLE_UPDATE_MIN_DELAY + 10);
             await fund.connect(owner).applyStrategyUpdate(strategy.address);
             await btc.connect(strategy).approve(fund.address, BigNumber.from("2").pow(256).sub(1));
             // Settle days before the strategy change
             await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
-            for (let i = 0; i < STRATEGY_UPDATE_MIN_DELAY / DAY; i++) {
+            for (let i = 0; i < ROLE_UPDATE_MIN_DELAY / DAY; i++) {
                 await fund.settle();
             }
-            startDay += STRATEGY_UPDATE_MIN_DELAY;
+            startDay += ROLE_UPDATE_MIN_DELAY;
             // Create 10000 shares with 10 BTC on the first day.
             await btc.mint(primaryMarket.address, parseBtc("10"));
             await primaryMarket.mock.settle.returns(parseEther("10000"), 0, parseBtc("10"), 0, 0);
@@ -1774,7 +1767,7 @@ describe("FundV3", function () {
             await primaryMarket.mock.settle.returns(0, parseEther("100"), 0, 0, parseBtc("0.1"));
             await fund.settle();
             await fund.connect(owner).proposeStrategyUpdate(addr1);
-            await advanceBlockAtTime(startDay + DAY + STRATEGY_UPDATE_MIN_DELAY + DAY / 2);
+            await advanceBlockAtTime(startDay + DAY + ROLE_UPDATE_MIN_DELAY + DAY / 2);
             await expect(fund.connect(owner).applyStrategyUpdate(addr1)).to.be.revertedWith(
                 "Cannot update strategy with debt"
             );

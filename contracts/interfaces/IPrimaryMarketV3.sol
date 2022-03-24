@@ -25,6 +25,8 @@ interface IPrimaryMarketV3 {
 
     function getMergeForM(uint256 minOutM) external view returns (uint256 inAB);
 
+    function canBeRemovedFromFund() external view returns (bool);
+
     function create(
         address recipient,
         uint256 underlying,
