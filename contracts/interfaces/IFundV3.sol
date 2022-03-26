@@ -42,11 +42,11 @@ interface IFundV3 {
 
     function endOfDay(uint256 timestamp) external pure returns (uint256);
 
-    function shareTotalSupply(uint256 tranche) external view returns (uint256);
+    function trancheTotalSupply(uint256 tranche) external view returns (uint256);
 
-    function shareBalanceOf(uint256 tranche, address account) external view returns (uint256);
+    function trancheBalanceOf(uint256 tranche, address account) external view returns (uint256);
 
-    function allShareBalanceOf(address account)
+    function trancheAllBalanceOf(address account)
         external
         view
         returns (
@@ -55,15 +55,18 @@ interface IFundV3 {
             uint256
         );
 
-    function shareBalanceVersion(address account) external view returns (uint256);
+    function trancheBalanceVersion(address account) external view returns (uint256);
 
-    function shareAllowance(
+    function trancheAllowance(
         uint256 tranche,
         address owner,
         address spender
     ) external view returns (uint256);
 
-    function shareAllowanceVersion(address owner, address spender) external view returns (uint256);
+    function trancheAllowanceVersion(address owner, address spender)
+        external
+        view
+        returns (uint256);
 
     function getRebalanceSize() external view returns (uint256);
 

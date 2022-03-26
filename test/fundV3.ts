@@ -523,18 +523,18 @@ describe("FundV3", function () {
 
             it("Should update balance and total supply", async function () {
                 await fund.primaryMarketMint(TRANCHE_M, addr1, 123, 0);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(123);
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(123);
                 await fund.primaryMarketMint(TRANCHE_M, addr1, 456, 0);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(579);
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(579);
                 await fund.primaryMarketMint(TRANCHE_M, addr2, 1000, 0);
                 await fund.primaryMarketMint(TRANCHE_A, addr2, 10, 0);
                 await fund.primaryMarketMint(TRANCHE_B, addr2, 100, 0);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr2)).to.equal(1000);
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr2)).to.equal(10);
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr2)).to.equal(100);
-                expect(await fund.shareTotalSupply(TRANCHE_M)).to.equal(1579);
-                expect(await fund.shareTotalSupply(TRANCHE_A)).to.equal(10);
-                expect(await fund.shareTotalSupply(TRANCHE_B)).to.equal(100);
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(1000);
+                expect(await fund.trancheBalanceOf(TRANCHE_A, addr2)).to.equal(10);
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(100);
+                expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(1579);
+                expect(await fund.trancheTotalSupply(TRANCHE_A)).to.equal(10);
+                expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(100);
             });
 
             it("Should revert on minting to the zero address", async function () {
@@ -571,18 +571,18 @@ describe("FundV3", function () {
                 await fund.primaryMarketMint(TRANCHE_B, addr2, 10000, 0);
 
                 await fund.primaryMarketBurn(TRANCHE_M, addr1, 1000, 0);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(9000);
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(9000);
                 await fund.primaryMarketBurn(TRANCHE_M, addr1, 2000, 0);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(7000);
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(7000);
                 await fund.primaryMarketBurn(TRANCHE_M, addr2, 100, 0);
                 await fund.primaryMarketBurn(TRANCHE_A, addr2, 10, 0);
                 await fund.primaryMarketBurn(TRANCHE_B, addr2, 1, 0);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr2)).to.equal(9900);
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr2)).to.equal(9990);
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr2)).to.equal(9999);
-                expect(await fund.shareTotalSupply(TRANCHE_M)).to.equal(16900);
-                expect(await fund.shareTotalSupply(TRANCHE_A)).to.equal(9990);
-                expect(await fund.shareTotalSupply(TRANCHE_B)).to.equal(9999);
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(9900);
+                expect(await fund.trancheBalanceOf(TRANCHE_A, addr2)).to.equal(9990);
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(9999);
+                expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(16900);
+                expect(await fund.trancheTotalSupply(TRANCHE_A)).to.equal(9990);
+                expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(9999);
             });
 
             it("Should revert on burning from the zero address", async function () {
@@ -625,9 +625,9 @@ describe("FundV3", function () {
                 for (const { fundFromShare, tranche } of fundFromShares) {
                     await fund.primaryMarketMint(tranche, addr2, 10000, 0);
                     await fundFromShare.transfer(tranche, addr2, addr1, 10000);
-                    expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(10000);
-                    expect(await fund.shareBalanceOf(TRANCHE_M, addr2)).to.equal(0);
-                    expect(await fund.shareTotalSupply(TRANCHE_M)).to.equal(10000);
+                    expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(10000);
+                    expect(await fund.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(0);
+                    expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(10000);
                 }
             });
 
@@ -665,11 +665,11 @@ describe("FundV3", function () {
 
             it("Should update allowance", async function () {
                 for (const { fundFromShare, tranche } of fundFromShares) {
-                    expect(await fund.shareAllowance(tranche, addr1, addr2)).to.equal(0);
+                    expect(await fund.trancheAllowance(tranche, addr1, addr2)).to.equal(0);
                     await fundFromShare.approve(tranche, addr1, addr2, 100);
-                    expect(await fund.shareAllowance(tranche, addr1, addr2)).to.equal(100);
+                    expect(await fund.trancheAllowance(tranche, addr1, addr2)).to.equal(100);
                     await fundFromShare.approve(tranche, addr1, addr2, 10);
-                    expect(await fund.shareAllowance(tranche, addr1, addr2)).to.equal(10);
+                    expect(await fund.trancheAllowance(tranche, addr1, addr2)).to.equal(10);
                 }
             });
         });
@@ -753,7 +753,7 @@ describe("FundV3", function () {
             await btc.mint(primaryMarket.address, parseBtc("1"));
             await primaryMarketSettle.returns(parseEther("1010"), 0, parseBtc("1"), 0, 0);
             await fund.settle();
-            expect(await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
+            expect(await fund.trancheBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
                 parseEther("1010")
             );
         });
@@ -792,7 +792,7 @@ describe("FundV3", function () {
             expect(navs[TRANCHE_A]).to.equal(parseEther("1"));
             expect(navs[TRANCHE_B]).to.equal(parseEther("1"));
             // Shares in the primary market is rebalanced on read
-            expect(await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
+            expect(await fund.trancheBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
                 parseEther("1010")
             );
         });
@@ -887,13 +887,13 @@ describe("FundV3", function () {
                 parseBtc("0.4"),
                 0
             );
-            const oldM = await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address);
+            const oldM = await fund.trancheBalanceOf(TRANCHE_M, primaryMarket.address);
             await expect(() => fund.settle()).to.changeTokenBalances(
                 btc,
                 [fund, primaryMarket],
                 [parseBtc("0.6").sub(protocolFee), parseBtc("-0.6")]
             );
-            expect(await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
+            expect(await fund.trancheBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
                 oldM.add(parseEther("600"))
             );
         });
@@ -908,14 +908,14 @@ describe("FundV3", function () {
                 parseBtc("4"),
                 0
             );
-            const oldM = await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address);
+            const oldM = await fund.trancheBalanceOf(TRANCHE_M, primaryMarket.address);
             await expect(() => fund.settle()).to.changeTokenBalances(
                 btc,
                 [fund, primaryMarket],
                 [protocolFee.mul(-1), 0]
             );
             expect(await fund.redemptionDebts(primaryMarket.address)).to.equal(parseBtc("3"));
-            expect(await fund.shareBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
+            expect(await fund.trancheBalanceOf(TRANCHE_M, primaryMarket.address)).to.equal(
                 oldM.sub(parseEther("3000"))
             );
         });
@@ -1388,15 +1388,15 @@ describe("FundV3", function () {
                 expect(rebalance.ratioB2M).to.equal(parseEther("1.3"));
                 expect(rebalance.ratioAB).to.equal(parseEther("1"));
                 expect(rebalance.timestamp).to.equal(settlementTimestamp);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(parseEther("690"));
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(parseEther("100"));
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(0);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr2)).to.equal(parseEther("410"));
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr2)).to.equal(parseEther("200"));
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr2)).to.equal(parseEther("300"));
-                expect(await fund.shareTotalSupply(TRANCHE_M)).to.equal(parseEther("1100"));
-                expect(await fund.shareTotalSupply(TRANCHE_A)).to.equal(parseEther("300"));
-                expect(await fund.shareTotalSupply(TRANCHE_B)).to.equal(parseEther("300"));
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(parseEther("690"));
+                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(parseEther("100"));
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(0);
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(parseEther("410"));
+                expect(await fund.trancheBalanceOf(TRANCHE_A, addr2)).to.equal(parseEther("200"));
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(parseEther("300"));
+                expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(parseEther("1100"));
+                expect(await fund.trancheTotalSupply(TRANCHE_A)).to.equal(parseEther("300"));
+                expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(parseEther("300"));
                 expect(await fund.getTotalShares()).to.equal(parseEther("1700"));
             });
 
@@ -1414,15 +1414,15 @@ describe("FundV3", function () {
                 expect(rebalance.ratioB2M).to.equal(0);
                 expect(rebalance.ratioAB).to.equal(parseEther("0.3"));
                 expect(rebalance.timestamp).to.equal(settlementTimestamp);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(parseEther("360"));
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(parseEther("30"));
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(0);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr2)).to.equal(parseEther("160"));
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr2)).to.equal(parseEther("60"));
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr2)).to.equal(parseEther("90"));
-                expect(await fund.shareTotalSupply(TRANCHE_M)).to.equal(parseEther("520"));
-                expect(await fund.shareTotalSupply(TRANCHE_A)).to.equal(parseEther("90"));
-                expect(await fund.shareTotalSupply(TRANCHE_B)).to.equal(parseEther("90"));
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(parseEther("360"));
+                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(parseEther("30"));
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(0);
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(parseEther("160"));
+                expect(await fund.trancheBalanceOf(TRANCHE_A, addr2)).to.equal(parseEther("60"));
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(parseEther("90"));
+                expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(parseEther("520"));
+                expect(await fund.trancheTotalSupply(TRANCHE_A)).to.equal(parseEther("90"));
+                expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(parseEther("90"));
                 expect(await fund.getTotalShares()).to.equal(parseEther("700"));
             });
 
@@ -1440,15 +1440,15 @@ describe("FundV3", function () {
                 expect(rebalance.ratioB2M).to.equal(0);
                 expect(rebalance.ratioAB).to.equal(0);
                 expect(rebalance.timestamp).to.equal(settlementTimestamp);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(parseEther("240"));
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(0);
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(0);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr2)).to.equal(parseEther("160"));
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr2)).to.equal(0);
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr2)).to.equal(0);
-                expect(await fund.shareTotalSupply(TRANCHE_M)).to.equal(parseEther("400"));
-                expect(await fund.shareTotalSupply(TRANCHE_A)).to.equal(0);
-                expect(await fund.shareTotalSupply(TRANCHE_B)).to.equal(0);
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(parseEther("240"));
+                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(0);
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(0);
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(parseEther("160"));
+                expect(await fund.trancheBalanceOf(TRANCHE_A, addr2)).to.equal(0);
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(0);
+                expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(parseEther("400"));
+                expect(await fund.trancheTotalSupply(TRANCHE_A)).to.equal(0);
+                expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(0);
                 expect(await fund.getTotalShares()).to.equal(parseEther("400"));
             });
         });
@@ -1540,39 +1540,39 @@ describe("FundV3", function () {
             it("No refresh when rebalance is triggered", async function () {
                 await preDefinedRebalance070();
                 await preDefinedRebalance200();
-                expect(await fund.shareBalanceVersion(addr1)).to.equal(0);
-                expect(await fund.shareBalanceVersion(addr2)).to.equal(0);
+                expect(await fund.trancheBalanceVersion(addr1)).to.equal(0);
+                expect(await fund.trancheBalanceVersion(addr2)).to.equal(0);
             });
 
             it("transfer()", async function () {
                 await preDefinedRebalance070();
                 await preDefinedRebalance200();
-                const oldA1 = await fund.shareBalanceOf(TRANCHE_A, addr1);
-                const oldB2 = await fund.shareBalanceOf(TRANCHE_B, addr2);
+                const oldA1 = await fund.trancheBalanceOf(TRANCHE_A, addr1);
+                const oldB2 = await fund.trancheBalanceOf(TRANCHE_B, addr2);
                 await advanceOneDayAndSettle();
                 await fund.connect(shareM).transfer(TRANCHE_M, addr1, addr2, 1);
-                expect(await fund.shareBalanceVersion(addr1)).to.equal(2);
-                expect(await fund.shareBalanceVersion(addr2)).to.equal(2);
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(oldA1);
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr2)).to.equal(oldB2);
+                expect(await fund.trancheBalanceVersion(addr1)).to.equal(2);
+                expect(await fund.trancheBalanceVersion(addr2)).to.equal(2);
+                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(oldA1);
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(oldB2);
             });
 
             it("primaryMarketMint()", async function () {
                 await preDefinedRebalance070();
                 await preDefinedRebalance200();
-                const oldA = await fund.shareBalanceOf(TRANCHE_A, addr1);
+                const oldA = await fund.trancheBalanceOf(TRANCHE_A, addr1);
                 await primaryMarket.call(fund, "primaryMarketMint", TRANCHE_M, addr1, 1, 2);
-                expect(await fund.shareBalanceVersion(addr1)).to.equal(2);
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
+                expect(await fund.trancheBalanceVersion(addr1)).to.equal(2);
+                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
             });
 
             it("primaryMarketBurn()", async function () {
                 await preDefinedRebalance070();
                 await preDefinedRebalance200();
-                const oldB = await fund.shareBalanceOf(TRANCHE_B, addr2);
+                const oldB = await fund.trancheBalanceOf(TRANCHE_B, addr2);
                 await primaryMarket.call(fund, "primaryMarketBurn", TRANCHE_A, addr2, 1, 2);
-                expect(await fund.shareBalanceVersion(addr2)).to.equal(2);
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr2)).to.equal(oldB);
+                expect(await fund.trancheBalanceVersion(addr2)).to.equal(2);
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(oldB);
             });
         });
 
@@ -1583,48 +1583,48 @@ describe("FundV3", function () {
                 await preDefinedRebalance170();
                 await preDefinedRebalance040();
                 await preDefinedRebalance070();
-                const oldM = await fund.shareBalanceOf(TRANCHE_M, addr1);
-                const oldA = await fund.shareBalanceOf(TRANCHE_A, addr1);
-                const oldB = await fund.shareBalanceOf(TRANCHE_B, addr1);
+                const oldM = await fund.trancheBalanceOf(TRANCHE_M, addr1);
+                const oldA = await fund.trancheBalanceOf(TRANCHE_A, addr1);
+                const oldB = await fund.trancheBalanceOf(TRANCHE_B, addr1);
                 await fund.refreshBalance(addr1, 2);
-                expect(await fund.shareBalanceVersion(addr1)).to.equal(2);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(oldM);
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(oldB);
+                expect(await fund.trancheBalanceVersion(addr1)).to.equal(2);
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(oldM);
+                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(oldB);
                 await fund.refreshBalance(addr1, 5);
-                expect(await fund.shareBalanceVersion(addr1)).to.equal(5);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(oldM);
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(oldB);
+                expect(await fund.trancheBalanceVersion(addr1)).to.equal(5);
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(oldM);
+                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(oldB);
             });
 
             it("Zero targetVersion", async function () {
                 await preDefinedRebalance070();
                 await preDefinedRebalance200();
                 await preDefinedRebalance170();
-                const oldM = await fund.shareBalanceOf(TRANCHE_M, addr1);
-                const oldA = await fund.shareBalanceOf(TRANCHE_A, addr1);
-                const oldB = await fund.shareBalanceOf(TRANCHE_B, addr1);
+                const oldM = await fund.trancheBalanceOf(TRANCHE_M, addr1);
+                const oldA = await fund.trancheBalanceOf(TRANCHE_A, addr1);
+                const oldB = await fund.trancheBalanceOf(TRANCHE_B, addr1);
                 await fund.refreshBalance(addr1, 0);
-                expect(await fund.shareBalanceVersion(addr1)).to.equal(3);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(oldM);
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(oldB);
+                expect(await fund.trancheBalanceVersion(addr1)).to.equal(3);
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(oldM);
+                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(oldB);
             });
 
             it("Should make no change if targetVersion is older", async function () {
                 await preDefinedRebalance070();
                 await preDefinedRebalance200();
                 await preDefinedRebalance170();
-                const oldM = await fund.shareBalanceOf(TRANCHE_M, addr1);
-                const oldA = await fund.shareBalanceOf(TRANCHE_A, addr1);
-                const oldB = await fund.shareBalanceOf(TRANCHE_B, addr1);
+                const oldM = await fund.trancheBalanceOf(TRANCHE_M, addr1);
+                const oldA = await fund.trancheBalanceOf(TRANCHE_A, addr1);
+                const oldB = await fund.trancheBalanceOf(TRANCHE_B, addr1);
                 await fund.refreshBalance(addr1, 3);
                 await fund.refreshBalance(addr1, 1);
-                expect(await fund.shareBalanceVersion(addr1)).to.equal(3);
-                expect(await fund.shareBalanceOf(TRANCHE_M, addr1)).to.equal(oldM);
-                expect(await fund.shareBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
-                expect(await fund.shareBalanceOf(TRANCHE_B, addr1)).to.equal(oldB);
+                expect(await fund.trancheBalanceVersion(addr1)).to.equal(3);
+                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(oldM);
+                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(oldB);
             });
         });
     });

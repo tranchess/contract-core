@@ -521,7 +521,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _refreshAllowance(owner, spender, targetVersion);
     }
 
-    function shareBalanceOf(uint256 tranche, address account)
+    function trancheBalanceOf(uint256 tranche, address account)
         external
         view
         override
@@ -555,7 +555,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
 
     /// @notice Return all three share balances transformed to the latest rebalance version.
     /// @param account Owner of the shares
-    function allShareBalanceOf(address account)
+    function trancheAllBalanceOf(address account)
         external
         view
         override
@@ -577,11 +577,11 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         return (amountM, amountA, amountB);
     }
 
-    function shareBalanceVersion(address account) external view override returns (uint256) {
+    function trancheBalanceVersion(address account) external view override returns (uint256) {
         return _balanceVersions[account];
     }
 
-    function shareAllowance(
+    function trancheAllowance(
         uint256 tranche,
         address owner,
         address spender
@@ -617,7 +617,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         }
     }
 
-    function shareAllowanceVersion(address owner, address spender)
+    function trancheAllowanceVersion(address owner, address spender)
         external
         view
         override
@@ -626,7 +626,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         return _allowanceVersions[owner][spender];
     }
 
-    function shareTotalSupply(uint256 tranche) external view override returns (uint256) {
+    function trancheTotalSupply(uint256 tranche) external view override returns (uint256) {
         return _totalSupplies[tranche];
     }
 
