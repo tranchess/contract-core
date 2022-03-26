@@ -630,7 +630,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         return _totalSupplies[tranche];
     }
 
-    function mint(
+    function primaryMarketMint(
         uint256 tranche,
         address account,
         uint256 amount,
@@ -640,7 +640,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _mint(tranche, account, amount);
     }
 
-    function burn(
+    function primaryMarketBurn(
         uint256 tranche,
         address account,
         uint256 amount,

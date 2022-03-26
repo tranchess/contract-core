@@ -147,14 +147,14 @@ interface IFundV3 {
         uint256 targetVersion
     ) external;
 
-    function mint(
+    function primaryMarketMint(
         uint256 tranche,
         address account,
         uint256 amount,
         uint256 version
     ) external;
 
-    function burn(
+    function primaryMarketBurn(
         uint256 tranche,
         address account,
         uint256 amount,
