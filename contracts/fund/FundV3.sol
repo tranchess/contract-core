@@ -17,22 +17,15 @@ import "../interfaces/ITwapOracle.sol";
 import "../interfaces/IAprOracle.sol";
 import "../interfaces/IBallot.sol";
 import "../interfaces/IVotingEscrow.sol";
-import "../interfaces/ITrancheIndex.sol";
 
-import "./FundRoles.sol";
+import "./FundRolesV2.sol";
 
-contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, ITrancheIndex {
+contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
-    event StrategyUpdateProposed(
-        address indexed newStrategy,
-        uint256 minTimestamp,
-        uint256 maxTimestamp
-    );
-    event StrategyUpdated(address indexed previousStrategy, address indexed newStrategy);
     event ProfitReported(uint256 profit, uint256 performanceFee);
     event LossReported(uint256 loss);
     event ObsoletePrimaryMarketAdded(address obsoletePrimaryMarket);
@@ -77,15 +70,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
 
     /// @notice Fee Collector address.
     address public override feeCollector;
-
-    /// @notice Address of Token M.
-    address public override tokenM;
-
-    /// @notice Address of Token A.
-    address public override tokenA;
-
-    /// @notice Address of Token B.
-    address public override tokenB;
 
     /// @notice End timestamp of the current trading day.
     ///         A trading day starts at UTC time `SETTLEMENT_TIME` of a day (inclusive)
@@ -161,39 +145,50 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
     /// @dev Sum of the fee debt and redemption debts of all primary markets.
     uint256 private _totalDebt;
 
-    address public strategy;
-
-    address public proposedStrategy;
-
-    uint256 private _proposedStrategyTimestamp;
-
     uint256 private _strategyUnderlying;
 
-    constructor(
-        address tokenUnderlying_,
-        uint256 underlyingDecimals_,
-        uint256 dailyProtocolFeeRate_,
-        uint256 upperRebalanceThreshold_,
-        uint256 lowerRebalanceThreshold_,
-        address twapOracle_,
-        address aprOracle_,
-        address ballot_,
-        address feeCollector_
-    ) public Ownable() FundRoles() {
-        tokenUnderlying = tokenUnderlying_;
-        require(underlyingDecimals_ <= 18, "Underlying decimals larger than 18");
-        underlyingDecimalMultiplier = 10**(18 - underlyingDecimals_);
+    struct ConstructorParameters {
+        address tokenUnderlying;
+        uint256 underlyingDecimals;
+        address tokenM;
+        address tokenA;
+        address tokenB;
+        address primaryMarket;
+        address strategy;
+        uint256 dailyProtocolFeeRate;
+        uint256 upperRebalanceThreshold;
+        uint256 lowerRebalanceThreshold;
+        address twapOracle;
+        address aprOracle;
+        address ballot;
+        address feeCollector;
+    }
+
+    constructor(ConstructorParameters memory params)
+        public
+        Ownable()
+        FundRolesV2(
+            params.tokenM,
+            params.tokenA,
+            params.tokenB,
+            params.primaryMarket,
+            params.strategy
+        )
+    {
+        tokenUnderlying = params.tokenUnderlying;
+        require(params.underlyingDecimals <= 18, "Underlying decimals larger than 18");
+        underlyingDecimalMultiplier = 10**(18 - params.underlyingDecimals);
         require(
-            dailyProtocolFeeRate_ <= MAX_DAILY_PROTOCOL_FEE_RATE,
+            params.dailyProtocolFeeRate <= MAX_DAILY_PROTOCOL_FEE_RATE,
             "Exceed max protocol fee rate"
         );
-        dailyProtocolFeeRate = dailyProtocolFeeRate_;
-        upperRebalanceThreshold = upperRebalanceThreshold_;
-        lowerRebalanceThreshold = lowerRebalanceThreshold_;
-        twapOracle = ITwapOracle(twapOracle_);
-        aprOracle = IAprOracle(aprOracle_);
-        ballot = IBallot(ballot_);
-        feeCollector = feeCollector_;
+        dailyProtocolFeeRate = params.dailyProtocolFeeRate;
+        upperRebalanceThreshold = params.upperRebalanceThreshold;
+        lowerRebalanceThreshold = params.lowerRebalanceThreshold;
+        twapOracle = ITwapOracle(params.twapOracle);
+        aprOracle = IAprOracle(params.aprOracle);
+        ballot = IBallot(params.ballot);
+        feeCollector = params.feeCollector;
 
         currentDay = endOfDay(block.timestamp);
         uint256 lastDay = currentDay - 1 days;
@@ -206,22 +201,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         fundActivityStartTime = lastDay;
         exchangeActivityStartTime = lastDay + 30 minutes;
         activityDelayTimeAfterRebalance = 12 hours;
-    }
-
-    function initialize(
-        address tokenM_,
-        address tokenA_,
-        address tokenB_,
-        address primaryMarket_,
-        address strategy_
-    ) external onlyOwner {
-        require(tokenM == address(0) && tokenM_ != address(0), "Already initialized");
-        tokenM = tokenM_;
-        tokenA = tokenA_;
-        tokenB = tokenB_;
-        _initializeRoles(tokenM_, tokenA_, tokenB_, primaryMarket_);
-        emit StrategyUpdated(strategy, strategy_);
-        strategy = strategy_;
     }
 
     /// @notice UTC time of a day when the fund settles.
@@ -249,6 +228,18 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         return _endOfWeek(timestamp);
     }
 
+    function tokenM() external view override returns (address) {
+        return _tokenM;
+    }
+
+    function tokenA() external view override returns (address) {
+        return _tokenA;
+    }
+
+    function tokenB() external view override returns (address) {
+        return _tokenB;
+    }
+
     /// @notice Return the status of the fund contract.
     /// @param timestamp Timestamp to assess
     /// @return True if the fund contract is active
@@ -257,19 +248,16 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
     }
 
     /// @notice Return the status of a given primary market contract.
-    /// @param primaryMarket The primary market contract address
+    /// @param pm The primary market contract address
     /// @param timestamp Timestamp to assess
     /// @return True if the primary market contract is active
-    function isPrimaryMarketActive(address primaryMarket, uint256 timestamp)
+    function isPrimaryMarketActive(address pm, uint256 timestamp)
         public
         view
         override
         returns (bool)
     {
-        return
-            isPrimaryMarket(primaryMarket) &&
-            timestamp >= fundActivityStartTime &&
-            timestamp < currentDay;
+        return pm == primaryMarket && timestamp >= fundActivityStartTime && timestamp < currentDay;
     }
 
     /// @notice Return the status of the exchange. Unlike the primary market, exchange is
@@ -800,7 +788,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
 
         _collectFee();
 
-        _settlePrimaryMarkets(day, price);
+        _settlePrimaryMarket(day, price);
 
         _payFeeDebt();
 
@@ -852,26 +840,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         _historicalNavs[day][TRANCHE_B] = navB;
         currentDay = day + 1 days;
 
-        if (obsoletePrimaryMarkets.length > 0) {
-            for (uint256 i = 0; i < obsoletePrimaryMarkets.length; i++) {
-                _removePrimaryMarket(obsoletePrimaryMarkets[i]);
-            }
-            delete obsoletePrimaryMarkets;
-        }
-
-        if (newPrimaryMarkets.length > 0) {
-            for (uint256 i = 0; i < newPrimaryMarkets.length; i++) {
-                _addPrimaryMarket(newPrimaryMarkets[i]);
-            }
-            delete newPrimaryMarkets;
-        }
-
         emit Settled(day, navM, navA, navB);
-    }
-
-    modifier onlyStrategy() {
-        require(msg.sender == strategy, "Only strategy");
-        _;
     }
 
     function transferToStrategy(uint256 amount) external override onlyStrategy {
@@ -920,41 +889,25 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         emit LossReported(loss);
     }
 
-    function proposeStrategyUpdate(address newStrategy) external onlyOwner {
-        require(newStrategy != strategy);
-        proposedStrategy = newStrategy;
-        _proposedStrategyTimestamp = block.timestamp;
-        emit StrategyUpdateProposed(
-            newStrategy,
-            block.timestamp + STRATEGY_UPDATE_MIN_DELAY,
-            block.timestamp + STRATEGY_UPDATE_MAX_DELAY
+    function proposePrimaryMarketUpdate(address newPrimaryMarket) external onlyOwner {
+        _proposePrimaryMarketUpdate(newPrimaryMarket);
+    }
+
+    function applyPrimaryMarketUpdate(address newPrimaryMarket) external onlyOwner {
+        require(
+            IPrimaryMarketV3(primaryMarket).canBeRemovedFromFund(),
+            "Cannot update primary market"
         );
+        _applyPrimaryMarketUpdate(newPrimaryMarket);
+    }
+
+    function proposeStrategyUpdate(address newStrategy) external onlyOwner {
+        _proposeStrategyUpdate(newStrategy);
     }
 
     function applyStrategyUpdate(address newStrategy) external onlyOwner {
-        require(proposedStrategy == newStrategy, "Proposed strategy mismatch");
-        require(
-            block.timestamp >= _proposedStrategyTimestamp + STRATEGY_UPDATE_MIN_DELAY &&
-                block.timestamp < _proposedStrategyTimestamp + STRATEGY_UPDATE_MAX_DELAY,
-            "Not ready to update strategy"
-        );
         require(_totalDebt == 0, "Cannot update strategy with debt");
-        emit StrategyUpdated(strategy, newStrategy);
-        strategy = newStrategy;
-        proposedStrategy = address(0);
-        _proposedStrategyTimestamp = 0;
-    }
-
-    function addObsoletePrimaryMarket(address obsoletePrimaryMarket) external onlyOwner {
-        require(isPrimaryMarket(obsoletePrimaryMarket), "The address is not a primary market");
-        obsoletePrimaryMarkets.push(obsoletePrimaryMarket);
-        emit ObsoletePrimaryMarketAdded(obsoletePrimaryMarket);
-    }
-
-    function addNewPrimaryMarket(address newPrimaryMarket) external onlyOwner {
-        require(!isPrimaryMarket(newPrimaryMarket), "The address is already a primary market");
-        newPrimaryMarkets.push(newPrimaryMarket);
-        emit NewPrimaryMarketAdded(newPrimaryMarket);
+        _applyStrategyUpdate(newStrategy);
     }
 
     function updateDailyProtocolFeeRate(uint256 newDailyProtocolFeeRate) external onlyOwner {
@@ -1007,48 +960,43 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRoles, CoreUtility, IT
         }
     }
 
-    /// @dev Settle primary market operations in every PrimaryMarket contract.
-    function _settlePrimaryMarkets(uint256 day, uint256 price) private {
-        uint256 day_ = day; // Fix the "stack too deep" error
+    /// @dev Settle primary market operations in the PrimaryMarket contract.
+    function _settlePrimaryMarket(uint256 day, uint256 price) private {
         uint256 totalShares = getTotalShares();
         uint256 underlying = getTotalUnderlying();
-        uint256 primaryMarketCount = getPrimaryMarketCount();
         uint256 prevNavM = _historicalNavs[day - 1 days][TRANCHE_M];
         uint256 newTotalDebt = _totalDebt;
-        for (uint256 i = 0; i < primaryMarketCount; i++) {
-            uint256 price_ = price; // Fix the "stack too deep" error
-            IPrimaryMarketV3 pm = IPrimaryMarketV3(getPrimaryMarketMember(i));
-            (
-                uint256 sharesToMint,
-                uint256 sharesToBurn,
-                uint256 creationUnderlying,
-                uint256 redemptionUnderlying,
-                uint256 fee
-            ) = pm.settle(day_, totalShares, underlying, price_, prevNavM);
-            if (sharesToMint > sharesToBurn) {
-                _mint(TRANCHE_M, address(pm), sharesToMint - sharesToBurn);
-            } else if (sharesToBurn > sharesToMint) {
-                _burn(TRANCHE_M, address(pm), sharesToBurn - sharesToMint);
-            }
-            uint256 debt = redemptionDebts[address(pm)];
-            uint256 redemptionAndDebt = redemptionUnderlying.add(debt);
-            if (creationUnderlying > redemptionAndDebt) {
-                IERC20(tokenUnderlying).safeTransferFrom(
-                    address(pm),
-                    address(this),
-                    creationUnderlying - redemptionAndDebt
-                );
-                redemptionDebts[address(pm)] = 0;
-                newTotalDebt -= debt;
-            } else {
-                uint256 newDebt = redemptionAndDebt - creationUnderlying;
-                redemptionDebts[address(pm)] = newDebt;
-                newTotalDebt = newTotalDebt.sub(debt).add(newDebt);
-            }
-            if (fee > 0) {
-                feeDebt = feeDebt.add(fee);
-                newTotalDebt = newTotalDebt.add(fee);
-            }
+        IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
+        (
+            uint256 sharesToMint,
+            uint256 sharesToBurn,
+            uint256 creationUnderlying,
+            uint256 redemptionUnderlying,
+            uint256 fee
+        ) = pm.settle(day, totalShares, underlying, price, prevNavM);
+        if (sharesToMint > sharesToBurn) {
+            _mint(TRANCHE_M, address(pm), sharesToMint - sharesToBurn);
+        } else if (sharesToBurn > sharesToMint) {
+            _burn(TRANCHE_M, address(pm), sharesToBurn - sharesToMint);
+        }
+        uint256 debt = redemptionDebts[address(pm)];
+        uint256 redemptionAndDebt = redemptionUnderlying.add(debt);
+        if (creationUnderlying > redemptionAndDebt) {
+            IERC20(tokenUnderlying).safeTransferFrom(
+                address(pm),
+                address(this),
+                creationUnderlying - redemptionAndDebt
+            );
+            redemptionDebts[address(pm)] = 0;
+            newTotalDebt -= debt;
+        } else {
+            uint256 newDebt = redemptionAndDebt - creationUnderlying;
+            redemptionDebts[address(pm)] = newDebt;
+            newTotalDebt = newTotalDebt.sub(debt).add(newDebt);
+        }
+        if (fee > 0) {
+            feeDebt = feeDebt.add(fee);
+            newTotalDebt = newTotalDebt.add(fee);
         }
         _totalDebt = newTotalDebt;
     }

@@ -245,6 +245,11 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         inAB = outMBeforeFee.add(1) / 2;
     }
 
+    /// @notice Return whether the fund can change its primary market to another contract.
+    function canBeRemovedFromFund() external view override returns (bool) {
+        return redemptionQueueHead == redemptionQueueTail;
+    }
+
     /// @notice Create Token M using underlying tokens.
     /// @param recipient Address that will receive created Token M
     /// @param underlying Spent underlying amount
