@@ -650,7 +650,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _burn(tranche, account, amount);
     }
 
-    function transfer(
+    function shareTransfer(
         uint256 tranche,
         address sender,
         address recipient,
@@ -662,14 +662,14 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _transfer(tranche, sender, recipient, amount);
     }
 
-    function transferFrom(
+    function shareTransferFrom(
         uint256 tranche,
         address spender,
         address sender,
         address recipient,
         uint256 amount
     ) external override onlyShare returns (uint256 newAllowance) {
-        transfer(tranche, sender, recipient, amount);
+        shareTransfer(tranche, sender, recipient, amount);
 
         _refreshAllowance(sender, spender, _rebalanceSize);
         newAllowance = _allowances[sender][spender][tranche].sub(
@@ -679,7 +679,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _approve(tranche, sender, spender, newAllowance);
     }
 
-    function approve(
+    function shareApprove(
         uint256 tranche,
         address owner,
         address spender,
@@ -689,7 +689,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _approve(tranche, owner, spender, amount);
     }
 
-    function increaseAllowance(
+    function shareIncreaseAllowance(
         uint256 tranche,
         address sender,
         address spender,
@@ -700,7 +700,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _approve(tranche, sender, spender, newAllowance);
     }
 
-    function decreaseAllowance(
+    function shareDecreaseAllowance(
         uint256 tranche,
         address sender,
         address spender,

@@ -180,7 +180,7 @@ describe("FundV3", function () {
 
             expect(await fund.isFundActive(startDay + HOUR * 12 - 1)).to.equal(false);
             await expect(
-                fund.connect(shareM).transfer(TRANCHE_M, addr1, addr2, 0)
+                fund.connect(shareM).shareTransfer(TRANCHE_M, addr1, addr2, 0)
             ).to.be.revertedWith("Transfer is inactive");
         });
 
@@ -600,7 +600,7 @@ describe("FundV3", function () {
 
         describe("transfer()", function () {
             it("Should revert if not called from Share", async function () {
-                await expect(fund.transfer(TRANCHE_M, addr1, addr2, 1)).to.be.revertedWith(
+                await expect(fund.shareTransfer(TRANCHE_M, addr1, addr2, 1)).to.be.revertedWith(
                     "Only share"
                 );
             });
@@ -608,7 +608,7 @@ describe("FundV3", function () {
             it("Should reject transfer from the zero address", async function () {
                 for (const { fundFromShare, tranche } of fundFromShares) {
                     await expect(
-                        fundFromShare.transfer(tranche, ethers.constants.AddressZero, addr1, 1)
+                        fundFromShare.shareTransfer(tranche, ethers.constants.AddressZero, addr1, 1)
                     ).to.be.revertedWith("ERC20: transfer from the zero address");
                 }
             });
@@ -616,7 +616,7 @@ describe("FundV3", function () {
             it("Should reject transfer to the zero address", async function () {
                 for (const { fundFromShare, tranche } of fundFromShares) {
                     await expect(
-                        fundFromShare.transfer(tranche, addr1, ethers.constants.AddressZero, 1)
+                        fundFromShare.shareTransfer(tranche, addr1, ethers.constants.AddressZero, 1)
                     ).to.be.revertedWith("ERC20: transfer to the zero address");
                 }
             });
@@ -624,7 +624,7 @@ describe("FundV3", function () {
             it("Should update balance and keep total supply", async function () {
                 for (const { fundFromShare, tranche } of fundFromShares) {
                     await fund.primaryMarketMint(tranche, addr2, 10000, 0);
-                    await fundFromShare.transfer(tranche, addr2, addr1, 10000);
+                    await fundFromShare.shareTransfer(tranche, addr2, addr1, 10000);
                     expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(10000);
                     expect(await fund.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(0);
                     expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(10000);
@@ -634,7 +634,7 @@ describe("FundV3", function () {
             it("Should revert if balance is not enough", async function () {
                 for (const { fundFromShare, tranche } of fundFromShares) {
                     await expect(
-                        fundFromShare.transfer(tranche, addr2, addr1, 10001)
+                        fundFromShare.shareTransfer(tranche, addr2, addr1, 10001)
                     ).to.be.revertedWith("ERC20: transfer amount exceeds balance");
                 }
             });
@@ -642,7 +642,7 @@ describe("FundV3", function () {
 
         describe("approve()", function () {
             it("Should revert if not called from Share", async function () {
-                await expect(fund.approve(TRANCHE_M, addr1, addr2, 1)).to.be.revertedWith(
+                await expect(fund.shareApprove(TRANCHE_M, addr1, addr2, 1)).to.be.revertedWith(
                     "Only share"
                 );
             });
@@ -650,7 +650,7 @@ describe("FundV3", function () {
             it("Should reject approval from the zero address", async function () {
                 for (const { fundFromShare, tranche } of fundFromShares) {
                     await expect(
-                        fundFromShare.approve(tranche, ethers.constants.AddressZero, addr1, 1)
+                        fundFromShare.shareApprove(tranche, ethers.constants.AddressZero, addr1, 1)
                     ).to.be.revertedWith("ERC20: approve from the zero address");
                 }
             });
@@ -658,7 +658,7 @@ describe("FundV3", function () {
             it("Should reject approval to the zero address", async function () {
                 for (const { fundFromShare, tranche } of fundFromShares) {
                     await expect(
-                        fundFromShare.approve(tranche, addr1, ethers.constants.AddressZero, 1)
+                        fundFromShare.shareApprove(tranche, addr1, ethers.constants.AddressZero, 1)
                     ).to.be.revertedWith("ERC20: approve to the zero address");
                 }
             });
@@ -666,9 +666,9 @@ describe("FundV3", function () {
             it("Should update allowance", async function () {
                 for (const { fundFromShare, tranche } of fundFromShares) {
                     expect(await fund.trancheAllowance(tranche, addr1, addr2)).to.equal(0);
-                    await fundFromShare.approve(tranche, addr1, addr2, 100);
+                    await fundFromShare.shareApprove(tranche, addr1, addr2, 100);
                     expect(await fund.trancheAllowance(tranche, addr1, addr2)).to.equal(100);
-                    await fundFromShare.approve(tranche, addr1, addr2, 10);
+                    await fundFromShare.shareApprove(tranche, addr1, addr2, 10);
                     expect(await fund.trancheAllowance(tranche, addr1, addr2)).to.equal(10);
                 }
             });
@@ -1550,7 +1550,7 @@ describe("FundV3", function () {
                 const oldA1 = await fund.trancheBalanceOf(TRANCHE_A, addr1);
                 const oldB2 = await fund.trancheBalanceOf(TRANCHE_B, addr2);
                 await advanceOneDayAndSettle();
-                await fund.connect(shareM).transfer(TRANCHE_M, addr1, addr2, 1);
+                await fund.connect(shareM).shareTransfer(TRANCHE_M, addr1, addr2, 1);
                 expect(await fund.trancheBalanceVersion(addr1)).to.equal(2);
                 expect(await fund.trancheBalanceVersion(addr2)).to.equal(2);
                 expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(oldA1);

@@ -164,14 +164,14 @@ interface IFundV3 {
         uint256 version
     ) external;
 
-    function transfer(
+    function shareTransfer(
         uint256 tranche,
         address sender,
         address recipient,
         uint256 amount
     ) external;
 
-    function transferFrom(
+    function shareTransferFrom(
         uint256 tranche,
         address spender,
         address sender,
@@ -179,21 +179,21 @@ interface IFundV3 {
         uint256 amount
     ) external returns (uint256 newAllowance);
 
-    function increaseAllowance(
+    function shareIncreaseAllowance(
         uint256 tranche,
         address sender,
         address spender,
         uint256 addedValue
     ) external returns (uint256 newAllowance);
 
-    function decreaseAllowance(
+    function shareDecreaseAllowance(
         uint256 tranche,
         address sender,
         address spender,
         uint256 subtractedValue
     ) external returns (uint256 newAllowance);
 
-    function approve(
+    function shareApprove(
         uint256 tranche,
         address owner,
         address spender,
