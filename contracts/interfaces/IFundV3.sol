@@ -42,11 +42,11 @@ interface IFundV3 {
 
     function endOfDay(uint256 timestamp) external pure returns (uint256);
 
-    function shareTotalSupply(uint256 tranche) external view returns (uint256);
+    function trancheTotalSupply(uint256 tranche) external view returns (uint256);
 
-    function shareBalanceOf(uint256 tranche, address account) external view returns (uint256);
+    function trancheBalanceOf(uint256 tranche, address account) external view returns (uint256);
 
-    function allShareBalanceOf(address account)
+    function trancheAllBalanceOf(address account)
         external
         view
         returns (
@@ -55,15 +55,18 @@ interface IFundV3 {
             uint256
         );
 
-    function shareBalanceVersion(address account) external view returns (uint256);
+    function trancheBalanceVersion(address account) external view returns (uint256);
 
-    function shareAllowance(
+    function trancheAllowance(
         uint256 tranche,
         address owner,
         address spender
     ) external view returns (uint256);
 
-    function shareAllowanceVersion(address owner, address spender) external view returns (uint256);
+    function trancheAllowanceVersion(address owner, address spender)
+        external
+        view
+        returns (uint256);
 
     function getRebalanceSize() external view returns (uint256);
 
@@ -147,28 +150,28 @@ interface IFundV3 {
         uint256 targetVersion
     ) external;
 
-    function mint(
+    function primaryMarketMint(
         uint256 tranche,
         address account,
         uint256 amount,
         uint256 version
     ) external;
 
-    function burn(
+    function primaryMarketBurn(
         uint256 tranche,
         address account,
         uint256 amount,
         uint256 version
     ) external;
 
-    function transfer(
+    function shareTransfer(
         uint256 tranche,
         address sender,
         address recipient,
         uint256 amount
     ) external;
 
-    function transferFrom(
+    function shareTransferFrom(
         uint256 tranche,
         address spender,
         address sender,
@@ -176,21 +179,21 @@ interface IFundV3 {
         uint256 amount
     ) external returns (uint256 newAllowance);
 
-    function increaseAllowance(
+    function shareIncreaseAllowance(
         uint256 tranche,
         address sender,
         address spender,
         uint256 addedValue
     ) external returns (uint256 newAllowance);
 
-    function decreaseAllowance(
+    function shareDecreaseAllowance(
         uint256 tranche,
         address sender,
         address spender,
         uint256 subtractedValue
     ) external returns (uint256 newAllowance);
 
-    function approve(
+    function shareApprove(
         uint256 tranche,
         address owner,
         address spender,

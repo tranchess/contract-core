@@ -521,7 +521,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _refreshAllowance(owner, spender, targetVersion);
     }
 
-    function shareBalanceOf(uint256 tranche, address account)
+    function trancheBalanceOf(uint256 tranche, address account)
         external
         view
         override
@@ -555,7 +555,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
 
     /// @notice Return all three share balances transformed to the latest rebalance version.
     /// @param account Owner of the shares
-    function allShareBalanceOf(address account)
+    function trancheAllBalanceOf(address account)
         external
         view
         override
@@ -577,11 +577,11 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         return (amountM, amountA, amountB);
     }
 
-    function shareBalanceVersion(address account) external view override returns (uint256) {
+    function trancheBalanceVersion(address account) external view override returns (uint256) {
         return _balanceVersions[account];
     }
 
-    function shareAllowance(
+    function trancheAllowance(
         uint256 tranche,
         address owner,
         address spender
@@ -617,7 +617,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         }
     }
 
-    function shareAllowanceVersion(address owner, address spender)
+    function trancheAllowanceVersion(address owner, address spender)
         external
         view
         override
@@ -626,11 +626,11 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         return _allowanceVersions[owner][spender];
     }
 
-    function shareTotalSupply(uint256 tranche) external view override returns (uint256) {
+    function trancheTotalSupply(uint256 tranche) external view override returns (uint256) {
         return _totalSupplies[tranche];
     }
 
-    function mint(
+    function primaryMarketMint(
         uint256 tranche,
         address account,
         uint256 amount,
@@ -640,7 +640,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _mint(tranche, account, amount);
     }
 
-    function burn(
+    function primaryMarketBurn(
         uint256 tranche,
         address account,
         uint256 amount,
@@ -650,7 +650,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _burn(tranche, account, amount);
     }
 
-    function transfer(
+    function shareTransfer(
         uint256 tranche,
         address sender,
         address recipient,
@@ -662,14 +662,14 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _transfer(tranche, sender, recipient, amount);
     }
 
-    function transferFrom(
+    function shareTransferFrom(
         uint256 tranche,
         address spender,
         address sender,
         address recipient,
         uint256 amount
     ) external override onlyShare returns (uint256 newAllowance) {
-        transfer(tranche, sender, recipient, amount);
+        shareTransfer(tranche, sender, recipient, amount);
 
         _refreshAllowance(sender, spender, _rebalanceSize);
         newAllowance = _allowances[sender][spender][tranche].sub(
@@ -679,7 +679,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _approve(tranche, sender, spender, newAllowance);
     }
 
-    function approve(
+    function shareApprove(
         uint256 tranche,
         address owner,
         address spender,
@@ -689,7 +689,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _approve(tranche, owner, spender, amount);
     }
 
-    function increaseAllowance(
+    function shareIncreaseAllowance(
         uint256 tranche,
         address sender,
         address spender,
@@ -700,7 +700,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _approve(tranche, sender, spender, newAllowance);
     }
 
-    function decreaseAllowance(
+    function shareDecreaseAllowance(
         uint256 tranche,
         address sender,
         address spender,

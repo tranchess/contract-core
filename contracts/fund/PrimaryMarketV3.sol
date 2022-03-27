@@ -326,7 +326,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     ) private onlyActive returns (uint256 shares) {
         shares = getCreation(underlying);
         require(shares >= minShares && shares > 0, "Min shares created");
-        fund.mint(TRANCHE_M, recipient, shares, version);
+        fund.primaryMarketMint(TRANCHE_M, recipient, shares, version);
         emit Created(recipient, underlying, shares);
     }
 
@@ -336,7 +336,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         uint256 minUnderlying,
         uint256 version
     ) private onlyActive returns (uint256 underlying) {
-        fund.burn(TRANCHE_M, msg.sender, shares, version);
+        fund.primaryMarketBurn(TRANCHE_M, msg.sender, shares, version);
         _popRedemptionQueue(0);
         uint256 fee;
         (underlying, fee) = getRedemption(shares);
@@ -365,7 +365,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         uint256 minUnderlying,
         uint256 version
     ) external override onlyActive nonReentrant returns (uint256 underlying, uint256 index) {
-        fund.burn(TRANCHE_M, msg.sender, shares, version);
+        fund.primaryMarketBurn(TRANCHE_M, msg.sender, shares, version);
         uint256 fee;
         (underlying, fee) = getRedemption(shares);
         require(underlying >= minUnderlying && underlying > 0, "Min underlying redeemed");
@@ -482,9 +482,9 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         uint256 version
     ) external override onlyActive returns (uint256 outAB) {
         outAB = getSplit(inM);
-        fund.burn(TRANCHE_M, msg.sender, inM, version);
-        fund.mint(TRANCHE_A, recipient, outAB, version);
-        fund.mint(TRANCHE_B, recipient, outAB, version);
+        fund.primaryMarketBurn(TRANCHE_M, msg.sender, inM, version);
+        fund.primaryMarketMint(TRANCHE_A, recipient, outAB, version);
+        fund.primaryMarketMint(TRANCHE_B, recipient, outAB, version);
         emit Split(recipient, inM, outAB, outAB);
     }
 
@@ -495,9 +495,9 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     ) external override onlyActive returns (uint256 outM) {
         uint256 feeM;
         (outM, feeM) = getMerge(inAB);
-        fund.burn(TRANCHE_A, msg.sender, inAB, version);
-        fund.burn(TRANCHE_B, msg.sender, inAB, version);
-        fund.mint(TRANCHE_M, recipient, outM, version);
+        fund.primaryMarketBurn(TRANCHE_A, msg.sender, inAB, version);
+        fund.primaryMarketBurn(TRANCHE_B, msg.sender, inAB, version);
+        fund.primaryMarketMint(TRANCHE_M, recipient, outM, version);
         fund.primaryMarketAddDebt(0, _getRedemptionBeforeFee(feeM));
         emit Merged(recipient, outM, inAB, inAB);
     }
