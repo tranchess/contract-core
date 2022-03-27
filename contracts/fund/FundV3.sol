@@ -13,6 +13,7 @@ import "../utils/CoreUtility.sol";
 
 import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/IFundV3.sol";
+import "../interfaces/IShareV2.sol";
 import "../interfaces/ITwapOracle.sol";
 import "../interfaces/IAprOracle.sol";
 import "../interfaces/IBallot.sol";
@@ -651,26 +652,25 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     }
 
     function shareTransfer(
-        uint256 tranche,
         address sender,
         address recipient,
         uint256 amount
-    ) public override onlyShare {
+    ) public override {
         require(isFundActive(block.timestamp), "Transfer is inactive");
+        uint256 tranche = _getTranche(msg.sender);
         _refreshBalance(sender, _rebalanceSize);
         _refreshBalance(recipient, _rebalanceSize);
         _transfer(tranche, sender, recipient, amount);
     }
 
     function shareTransferFrom(
-        uint256 tranche,
         address spender,
         address sender,
         address recipient,
         uint256 amount
-    ) external override onlyShare returns (uint256 newAllowance) {
-        shareTransfer(tranche, sender, recipient, amount);
-
+    ) external override returns (uint256 newAllowance) {
+        uint256 tranche = _getTranche(msg.sender);
+        shareTransfer(sender, recipient, amount);
         _refreshAllowance(sender, spender, _rebalanceSize);
         newAllowance = _allowances[sender][spender][tranche].sub(
             amount,
@@ -680,32 +680,32 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     }
 
     function shareApprove(
-        uint256 tranche,
         address owner,
         address spender,
         uint256 amount
-    ) external override onlyShare {
+    ) external override {
+        uint256 tranche = _getTranche(msg.sender);
         _refreshAllowance(owner, spender, _rebalanceSize);
         _approve(tranche, owner, spender, amount);
     }
 
     function shareIncreaseAllowance(
-        uint256 tranche,
         address sender,
         address spender,
         uint256 addedValue
-    ) external override onlyShare returns (uint256 newAllowance) {
+    ) external override returns (uint256 newAllowance) {
+        uint256 tranche = _getTranche(msg.sender);
         _refreshAllowance(sender, spender, _rebalanceSize);
         newAllowance = _allowances[sender][spender][tranche].add(addedValue);
         _approve(tranche, sender, spender, newAllowance);
     }
 
     function shareDecreaseAllowance(
-        uint256 tranche,
         address sender,
         address spender,
         uint256 subtractedValue
-    ) external override onlyShare returns (uint256 newAllowance) {
+    ) external override returns (uint256 newAllowance) {
+        uint256 tranche = _getTranche(msg.sender);
         _refreshAllowance(sender, spender, _rebalanceSize);
         newAllowance = _allowances[sender][spender][tranche].sub(subtractedValue);
         _approve(tranche, sender, spender, newAllowance);
@@ -719,14 +719,12 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     ) private {
         require(sender != address(0), "ERC20: transfer from the zero address");
         require(recipient != address(0), "ERC20: transfer to the zero address");
-
         _balances[sender][tranche] = _balances[sender][tranche].sub(
             amount,
             "ERC20: transfer amount exceeds balance"
         );
         _balances[recipient][tranche] = _balances[recipient][tranche].add(amount);
-
-        emit Transfer(tranche, sender, recipient, amount);
+        IShareV2(_getShare(tranche)).fundEmitTransfer(sender, recipient, amount);
     }
 
     function _mint(
@@ -735,11 +733,9 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         uint256 amount
     ) private {
         require(account != address(0), "ERC20: mint to the zero address");
-
         _totalSupplies[tranche] = _totalSupplies[tranche].add(amount);
         _balances[account][tranche] = _balances[account][tranche].add(amount);
-
-        emit Transfer(tranche, address(0), account, amount);
+        IShareV2(_getShare(tranche)).fundEmitTransfer(address(0), account, amount);
     }
 
     function _burn(
@@ -748,14 +744,12 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         uint256 amount
     ) private {
         require(account != address(0), "ERC20: burn from the zero address");
-
         _balances[account][tranche] = _balances[account][tranche].sub(
             amount,
             "ERC20: burn amount exceeds balance"
         );
         _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
-
-        emit Transfer(tranche, account, address(0), amount);
+        IShareV2(_getShare(tranche)).fundEmitTransfer(account, address(0), amount);
     }
 
     function _approve(
@@ -766,10 +760,8 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     ) private {
         require(owner != address(0), "ERC20: approve from the zero address");
         require(spender != address(0), "ERC20: approve to the zero address");
-
         _allowances[owner][spender][tranche] = amount;
-
-        emit Approval(tranche, owner, spender, amount);
+        IShareV2(_getShare(tranche)).fundEmitApproval(owner, spender, amount);
     }
 
     /// @notice Settle the current trading day. Settlement includes the following changes

@@ -34,6 +34,9 @@ describe("FundV3", function () {
         readonly btc: Contract;
         readonly aprOracle: MockContract;
         readonly interestRateBallot: MockContract;
+        readonly shareM: MockContract;
+        readonly shareA: MockContract;
+        readonly shareB: MockContract;
         readonly primaryMarket: MockContract;
         readonly fund: Contract;
     }
@@ -46,9 +49,6 @@ describe("FundV3", function () {
     let user1: Wallet;
     let user2: Wallet;
     let owner: Wallet;
-    let shareM: Wallet;
-    let shareA: Wallet;
-    let shareB: Wallet;
     let feeCollector: Wallet;
     let strategy: Wallet;
     let addr1: string;
@@ -57,6 +57,9 @@ describe("FundV3", function () {
     let btc: Contract;
     let aprOracle: MockContract;
     let interestRateBallot: MockContract;
+    let shareM: MockContract;
+    let shareA: MockContract;
+    let shareB: MockContract;
     let primaryMarket: MockContract;
     let fund: Contract;
 
@@ -64,8 +67,7 @@ describe("FundV3", function () {
         // Initiating transactions from a Waffle mock contract doesn't work well in Hardhat
         // and may fail with gas estimating errors. We use EOAs for the shares to make
         // test development easier.
-        const [user1, user2, owner, shareM, shareA, shareB, feeCollector, strategy] =
-            provider.getWallets();
+        const [user1, user2, owner, feeCollector, strategy] = provider.getWallets();
 
         // Start at 12 hours after settlement time of the 6th day in a week, which makes sure that
         // the first settlement after the fund's deployment settles the last day in a week and
@@ -93,6 +95,13 @@ describe("FundV3", function () {
         const interestRateBallot = await deployMockForName(owner, "IBallot");
         await interestRateBallot.mock.count.returns(0);
 
+        const shareM = await deployMockForName(owner, "IShareV2");
+        const shareA = await deployMockForName(owner, "IShareV2");
+        const shareB = await deployMockForName(owner, "IShareV2");
+        for (const share of [shareM, shareA, shareB]) {
+            await share.mock.fundEmitTransfer.returns();
+            await share.mock.fundEmitApproval.returns();
+        }
         const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV3");
 
         const Fund = await ethers.getContractFactory("FundV3");
@@ -115,13 +124,16 @@ describe("FundV3", function () {
         await primaryMarket.call(btc, "approve", fund.address, BigNumber.from("2").pow(256).sub(1));
 
         return {
-            wallets: { user1, user2, owner, shareM, shareA, shareB, feeCollector, strategy },
+            wallets: { user1, user2, owner, feeCollector, strategy },
             startDay,
             startTimestamp,
             twapOracle,
             btc,
             aprOracle,
             interestRateBallot,
+            shareM,
+            shareA,
+            shareB,
             primaryMarket,
             fund: fund.connect(user1),
         };
@@ -141,9 +153,6 @@ describe("FundV3", function () {
         user1 = fixtureData.wallets.user1;
         user2 = fixtureData.wallets.user2;
         owner = fixtureData.wallets.owner;
-        shareM = fixtureData.wallets.shareM;
-        shareA = fixtureData.wallets.shareA;
-        shareB = fixtureData.wallets.shareB;
         feeCollector = fixtureData.wallets.feeCollector;
         strategy = fixtureData.wallets.strategy;
         addr1 = user1.address;
@@ -154,6 +163,9 @@ describe("FundV3", function () {
         btc = fixtureData.btc;
         aprOracle = fixtureData.aprOracle;
         interestRateBallot = fixtureData.interestRateBallot;
+        shareM = fixtureData.shareM;
+        shareA = fixtureData.shareA;
+        shareB = fixtureData.shareB;
         primaryMarket = fixtureData.primaryMarket;
         fund = fixtureData.fund;
     });
@@ -179,9 +191,9 @@ describe("FundV3", function () {
             await advanceOneDayAndSettle();
 
             expect(await fund.isFundActive(startDay + HOUR * 12 - 1)).to.equal(false);
-            await expect(
-                fund.connect(shareM).shareTransfer(TRANCHE_M, addr1, addr2, 0)
-            ).to.be.revertedWith("Transfer is inactive");
+            await expect(shareM.call(fund, "shareTransfer", addr1, addr2, 0)).to.be.revertedWith(
+                "Transfer is inactive"
+            );
         });
 
         it("Should return the activity window without rebalance", async function () {
@@ -488,24 +500,37 @@ describe("FundV3", function () {
         });
 
         beforeEach(async function () {
-            fundFromShares = [
-                { fundFromShare: fund.connect(shareM), tranche: TRANCHE_M },
-                { fundFromShare: fund.connect(shareA), tranche: TRANCHE_A },
-                { fundFromShare: fund.connect(shareB), tranche: TRANCHE_B },
-            ];
             // Initiating transactions from a Waffle mock contract doesn't work well in Hardhat
             // and may fail with gas estimating errors. We impersonate the address and directly send
             // transactions from it to make test development easier.
-            await ethers.provider.send("hardhat_setBalance", [
-                primaryMarket.address,
-                parseEther("10").toHexString(),
-            ]);
-            await ethers.provider.send("hardhat_impersonateAccount", [primaryMarket.address]);
+            for (const contract of [primaryMarket, shareM, shareA, shareB]) {
+                await ethers.provider.send("hardhat_setBalance", [
+                    contract.address,
+                    parseEther("10").toHexString(),
+                ]);
+                await ethers.provider.send("hardhat_impersonateAccount", [contract.address]);
+            }
             fund = fund.connect(await ethers.getSigner(primaryMarket.address));
+            fundFromShares = [
+                {
+                    fundFromShare: fund.connect(await ethers.getSigner(shareM.address)),
+                    tranche: TRANCHE_M,
+                },
+                {
+                    fundFromShare: fund.connect(await ethers.getSigner(shareA.address)),
+                    tranche: TRANCHE_A,
+                },
+                {
+                    fundFromShare: fund.connect(await ethers.getSigner(shareB.address)),
+                    tranche: TRANCHE_B,
+                },
+            ];
         });
 
         afterEach(async function () {
-            await ethers.provider.send("hardhat_stopImpersonatingAccount", [primaryMarket.address]);
+            for (const contract of [primaryMarket, shareM, shareA, shareB]) {
+                await ethers.provider.send("hardhat_stopImpersonatingAccount", [contract.address]);
+            }
         });
 
         describe("primaryMarketMint()", function () {
@@ -600,23 +625,21 @@ describe("FundV3", function () {
 
         describe("transfer()", function () {
             it("Should revert if not called from Share", async function () {
-                await expect(fund.shareTransfer(TRANCHE_M, addr1, addr2, 1)).to.be.revertedWith(
-                    "Only share"
-                );
+                await expect(fund.shareTransfer(addr1, addr2, 1)).to.be.revertedWith("Only share");
             });
 
             it("Should reject transfer from the zero address", async function () {
-                for (const { fundFromShare, tranche } of fundFromShares) {
+                for (const { fundFromShare } of fundFromShares) {
                     await expect(
-                        fundFromShare.shareTransfer(tranche, ethers.constants.AddressZero, addr1, 1)
+                        fundFromShare.shareTransfer(ethers.constants.AddressZero, addr1, 1)
                     ).to.be.revertedWith("ERC20: transfer from the zero address");
                 }
             });
 
             it("Should reject transfer to the zero address", async function () {
-                for (const { fundFromShare, tranche } of fundFromShares) {
+                for (const { fundFromShare } of fundFromShares) {
                     await expect(
-                        fundFromShare.shareTransfer(tranche, addr1, ethers.constants.AddressZero, 1)
+                        fundFromShare.shareTransfer(addr1, ethers.constants.AddressZero, 1)
                     ).to.be.revertedWith("ERC20: transfer to the zero address");
                 }
             });
@@ -624,7 +647,7 @@ describe("FundV3", function () {
             it("Should update balance and keep total supply", async function () {
                 for (const { fundFromShare, tranche } of fundFromShares) {
                     await fund.primaryMarketMint(tranche, addr2, 10000, 0);
-                    await fundFromShare.shareTransfer(tranche, addr2, addr1, 10000);
+                    await fundFromShare.shareTransfer(addr2, addr1, 10000);
                     expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(10000);
                     expect(await fund.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(0);
                     expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(10000);
@@ -632,9 +655,9 @@ describe("FundV3", function () {
             });
 
             it("Should revert if balance is not enough", async function () {
-                for (const { fundFromShare, tranche } of fundFromShares) {
+                for (const { fundFromShare } of fundFromShares) {
                     await expect(
-                        fundFromShare.shareTransfer(tranche, addr2, addr1, 10001)
+                        fundFromShare.shareTransfer(addr2, addr1, 10001)
                     ).to.be.revertedWith("ERC20: transfer amount exceeds balance");
                 }
             });
@@ -642,23 +665,21 @@ describe("FundV3", function () {
 
         describe("approve()", function () {
             it("Should revert if not called from Share", async function () {
-                await expect(fund.shareApprove(TRANCHE_M, addr1, addr2, 1)).to.be.revertedWith(
-                    "Only share"
-                );
+                await expect(fund.shareApprove(addr1, addr2, 1)).to.be.revertedWith("Only share");
             });
 
             it("Should reject approval from the zero address", async function () {
-                for (const { fundFromShare, tranche } of fundFromShares) {
+                for (const { fundFromShare } of fundFromShares) {
                     await expect(
-                        fundFromShare.shareApprove(tranche, ethers.constants.AddressZero, addr1, 1)
+                        fundFromShare.shareApprove(ethers.constants.AddressZero, addr1, 1)
                     ).to.be.revertedWith("ERC20: approve from the zero address");
                 }
             });
 
             it("Should reject approval to the zero address", async function () {
-                for (const { fundFromShare, tranche } of fundFromShares) {
+                for (const { fundFromShare } of fundFromShares) {
                     await expect(
-                        fundFromShare.shareApprove(tranche, addr1, ethers.constants.AddressZero, 1)
+                        fundFromShare.shareApprove(addr1, ethers.constants.AddressZero, 1)
                     ).to.be.revertedWith("ERC20: approve to the zero address");
                 }
             });
@@ -666,9 +687,9 @@ describe("FundV3", function () {
             it("Should update allowance", async function () {
                 for (const { fundFromShare, tranche } of fundFromShares) {
                     expect(await fund.trancheAllowance(tranche, addr1, addr2)).to.equal(0);
-                    await fundFromShare.shareApprove(tranche, addr1, addr2, 100);
+                    await fundFromShare.shareApprove(addr1, addr2, 100);
                     expect(await fund.trancheAllowance(tranche, addr1, addr2)).to.equal(100);
-                    await fundFromShare.shareApprove(tranche, addr1, addr2, 10);
+                    await fundFromShare.shareApprove(addr1, addr2, 10);
                     expect(await fund.trancheAllowance(tranche, addr1, addr2)).to.equal(10);
                 }
             });
@@ -1212,9 +1233,9 @@ describe("FundV3", function () {
         f.fund = await Fund.connect(f.wallets.owner).deploy([
             f.btc.address,
             8,
-            f.wallets.shareM.address,
-            f.wallets.shareA.address,
-            f.wallets.shareB.address,
+            f.shareM.address,
+            f.shareA.address,
+            f.shareB.address,
             f.primaryMarket.address,
             ethers.constants.AddressZero,
             0, // Zero protocol fee
@@ -1550,7 +1571,7 @@ describe("FundV3", function () {
                 const oldA1 = await fund.trancheBalanceOf(TRANCHE_A, addr1);
                 const oldB2 = await fund.trancheBalanceOf(TRANCHE_B, addr2);
                 await advanceOneDayAndSettle();
-                await fund.connect(shareM).shareTransfer(TRANCHE_M, addr1, addr2, 1);
+                await shareM.call(fund, "shareTransfer", addr1, addr2, 1);
                 expect(await fund.trancheBalanceVersion(addr1)).to.equal(2);
                 expect(await fund.trancheBalanceVersion(addr2)).to.equal(2);
                 expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(oldA1);
