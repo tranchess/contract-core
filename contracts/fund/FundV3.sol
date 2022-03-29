@@ -183,12 +183,17 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
             "Exceed max protocol fee rate"
         );
         dailyProtocolFeeRate = params.dailyProtocolFeeRate;
+        emit DailyProtocolFeeRateUpdated(params.dailyProtocolFeeRate);
         upperRebalanceThreshold = params.upperRebalanceThreshold;
         lowerRebalanceThreshold = params.lowerRebalanceThreshold;
         twapOracle = ITwapOracle(params.twapOracle);
+        emit TwapOracleUpdated(params.twapOracle);
         aprOracle = IAprOracle(params.aprOracle);
+        emit AprOracleUpdated(params.aprOracle);
         ballot = IBallot(params.ballot);
+        emit BallotUpdated(params.ballot);
         feeCollector = params.feeCollector;
+        emit FeeCollectorUpdated(params.feeCollector);
 
         currentDay = endOfDay(block.timestamp);
         uint256 lastDay = currentDay - 1 days;
@@ -201,6 +206,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         fundActivityStartTime = lastDay;
         exchangeActivityStartTime = lastDay + 30 minutes;
         activityDelayTimeAfterRebalance = 12 hours;
+        emit ActivityDelayTimeUpdated(12 hours);
     }
 
     /// @notice UTC time of a day when the fund settles.

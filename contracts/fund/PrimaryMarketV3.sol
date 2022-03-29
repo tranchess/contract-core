@@ -85,8 +85,11 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         fund = IFundV3(fund_);
         _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
         redemptionFeeRate = redemptionFeeRate_;
+        emit RedemptionFeeRateUpdated(redemptionFeeRate_);
         mergeFeeRate = mergeFeeRate_;
+        emit MergeFeeRateUpdated(mergeFeeRate_);
         fundCap = fundCap_;
+        emit FundCapUpdated(fundCap_);
     }
 
     /// @notice Calculate the result of a creation.
