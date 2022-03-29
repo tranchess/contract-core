@@ -245,6 +245,70 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         inAB = outMBeforeFee.add(1) / 2;
     }
 
+    /// @notice Return index of the first queued redemption that cannot be claimed now.
+    ///         Users can use this function to determine which indices can be passed to
+    ///         `claimRedemptions()`.
+    /// @return Index of the first redemption that cannot be claimed now
+    function getNewRedemptionQueueHead() external view returns (uint256) {
+        uint256 available = _tokenUnderlying.balanceOf(address(fund));
+        uint256 l = redemptionQueueHead;
+        uint256 r = redemptionQueueTail;
+        uint256 startPrefixSum = queuedRedemptions[l].previousPrefixSum;
+        // overflow is desired
+        if (queuedRedemptions[r].previousPrefixSum - startPrefixSum <= available) {
+            return r;
+        }
+        // Iteration count is bounded by log2(tail - head), which is at most 256.
+        while (l + 1 < r) {
+            uint256 m = (l + r) / 2;
+            if (queuedRedemptions[m].previousPrefixSum - startPrefixSum <= available) {
+                l = m;
+            } else {
+                r = m;
+            }
+        }
+        return l;
+    }
+
+    /// @notice Search in the redemption queue.
+    /// @param account Owner of the redemptions, or zero address to return all redemptions
+    /// @param startIndex Redemption index where the search starts, or zero to start from the head
+    /// @param maxIterationCount Maximum number of redemptions to be scanned, or zero for no limit
+    /// @return indices Indices of found redemptions
+    /// @return underlying Total underlying of found redemptions
+    function getQueuedRedemptions(
+        address account,
+        uint256 startIndex,
+        uint256 maxIterationCount
+    ) external view returns (uint256[] memory indices, uint256 underlying) {
+        uint256 head = redemptionQueueHead;
+        uint256 tail = redemptionQueueTail;
+        if (startIndex == 0) {
+            startIndex = head;
+        } else {
+            require(startIndex >= head && startIndex <= tail, "startIndex out of bound");
+        }
+        uint256 endIndex = tail;
+        if (maxIterationCount != 0 && tail - startIndex > maxIterationCount) {
+            endIndex = startIndex + maxIterationCount;
+        }
+        indices = new uint256[](endIndex - startIndex);
+        uint256 count = 0;
+        for (uint256 i = startIndex; i < endIndex; i++) {
+            if (account == address(0) || queuedRedemptions[i].account == account) {
+                indices[count] = i;
+                underlying += queuedRedemptions[i].underlying;
+                count++;
+            }
+        }
+        if (count != endIndex - startIndex) {
+            // Shrink the array
+            assembly {
+                mstore(indices, count)
+            }
+        }
+    }
+
     /// @notice Return whether the fund can change its primary market to another contract.
     function canBeRemovedFromFund() external view override returns (bool) {
         return redemptionQueueHead == redemptionQueueTail;
