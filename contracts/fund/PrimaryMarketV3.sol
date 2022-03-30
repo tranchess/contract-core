@@ -84,12 +84,9 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         require(mergeFeeRate_ <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
         fund = IFundV3(fund_);
         _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
-        redemptionFeeRate = redemptionFeeRate_;
-        emit RedemptionFeeRateUpdated(redemptionFeeRate_);
-        mergeFeeRate = mergeFeeRate_;
-        emit MergeFeeRateUpdated(mergeFeeRate_);
-        fundCap = fundCap_;
-        emit FundCapUpdated(fundCap_);
+        _updateRedemptionFeeRate(redemptionFeeRate_);
+        _updateMergeFeeRate(mergeFeeRate_);
+        _updateFundCap(fundCap_);
     }
 
     /// @notice Calculate the result of a creation.
@@ -528,21 +525,33 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         return (0, 0, 0, 0, 0);
     }
 
-    function updateFundCap(uint256 newCap) external onlyOwner {
+    function _updateFundCap(uint256 newCap) private {
         fundCap = newCap;
         emit FundCapUpdated(newCap);
     }
 
-    function updateRedemptionFeeRate(uint256 newRedemptionFeeRate) external onlyOwner {
+    function updateFundCap(uint256 newCap) external onlyOwner {
+        _updateFundCap(newCap);
+    }
+
+    function _updateRedemptionFeeRate(uint256 newRedemptionFeeRate) private {
         require(newRedemptionFeeRate <= MAX_REDEMPTION_FEE_RATE, "Exceed max redemption fee rate");
         redemptionFeeRate = newRedemptionFeeRate;
         emit RedemptionFeeRateUpdated(newRedemptionFeeRate);
     }
 
-    function updateMergeFeeRate(uint256 newMergeFeeRate) external onlyOwner {
+    function updateRedemptionFeeRate(uint256 newRedemptionFeeRate) external onlyOwner {
+        _updateRedemptionFeeRate(newRedemptionFeeRate);
+    }
+
+    function _updateMergeFeeRate(uint256 newMergeFeeRate) private {
         require(newMergeFeeRate <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
         mergeFeeRate = newMergeFeeRate;
         emit MergeFeeRateUpdated(newMergeFeeRate);
+    }
+
+    function updateMergeFeeRate(uint256 newMergeFeeRate) external onlyOwner {
+        _updateMergeFeeRate(newMergeFeeRate);
     }
 
     /// @notice Receive unwrapped transfer from the wrapped token.
