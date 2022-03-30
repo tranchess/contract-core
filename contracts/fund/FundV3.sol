@@ -178,17 +178,13 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         tokenUnderlying = params.tokenUnderlying;
         require(params.underlyingDecimals <= 18, "Underlying decimals larger than 18");
         underlyingDecimalMultiplier = 10**(18 - params.underlyingDecimals);
-        require(
-            params.dailyProtocolFeeRate <= MAX_DAILY_PROTOCOL_FEE_RATE,
-            "Exceed max protocol fee rate"
-        );
-        dailyProtocolFeeRate = params.dailyProtocolFeeRate;
+        _updateDailyProtocolFeeRate(params.dailyProtocolFeeRate);
         upperRebalanceThreshold = params.upperRebalanceThreshold;
         lowerRebalanceThreshold = params.lowerRebalanceThreshold;
-        twapOracle = ITwapOracle(params.twapOracle);
-        aprOracle = IAprOracle(params.aprOracle);
-        ballot = IBallot(params.ballot);
-        feeCollector = params.feeCollector;
+        _updateTwapOracle(params.twapOracle);
+        _updateAprOracle(params.aprOracle);
+        _updateBallot(params.ballot);
+        _updateFeeCollector(params.feeCollector);
 
         currentDay = endOfDay(block.timestamp);
         uint256 lastDay = currentDay - 1 days;
@@ -200,7 +196,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         historicalInterestRate[_endOfWeek(lastDay)] = MAX_INTEREST_RATE.min(aprOracle.capture());
         fundActivityStartTime = lastDay;
         exchangeActivityStartTime = lastDay + 30 minutes;
-        activityDelayTimeAfterRebalance = 12 hours;
+        _updateActivityDelayTime(12 hours);
     }
 
     /// @notice UTC time of a day when the fund settles.
@@ -910,7 +906,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _applyStrategyUpdate(newStrategy);
     }
 
-    function updateDailyProtocolFeeRate(uint256 newDailyProtocolFeeRate) external onlyOwner {
+    function _updateDailyProtocolFeeRate(uint256 newDailyProtocolFeeRate) private {
         require(
             newDailyProtocolFeeRate <= MAX_DAILY_PROTOCOL_FEE_RATE,
             "Exceed max protocol fee rate"
@@ -919,33 +915,57 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         emit DailyProtocolFeeRateUpdated(newDailyProtocolFeeRate);
     }
 
-    function updateTwapOracle(address newTwapOracle) external onlyOwner {
+    function updateDailyProtocolFeeRate(uint256 newDailyProtocolFeeRate) external onlyOwner {
+        _updateDailyProtocolFeeRate(newDailyProtocolFeeRate);
+    }
+
+    function _updateTwapOracle(address newTwapOracle) private {
         twapOracle = ITwapOracle(newTwapOracle);
         emit TwapOracleUpdated(newTwapOracle);
     }
 
-    function updateAprOracle(address newAprOracle) external onlyOwner {
+    function updateTwapOracle(address newTwapOracle) external onlyOwner {
+        _updateTwapOracle(newTwapOracle);
+    }
+
+    function _updateAprOracle(address newAprOracle) private {
         aprOracle = IAprOracle(newAprOracle);
         emit AprOracleUpdated(newAprOracle);
     }
 
-    function updateBallot(address newBallot) external onlyOwner {
+    function updateAprOracle(address newAprOracle) external onlyOwner {
+        _updateAprOracle(newAprOracle);
+    }
+
+    function _updateBallot(address newBallot) private {
         ballot = IBallot(newBallot);
         emit BallotUpdated(newBallot);
     }
 
-    function updateFeeCollector(address newFeeCollector) external onlyOwner {
+    function updateBallot(address newBallot) external onlyOwner {
+        _updateBallot(newBallot);
+    }
+
+    function _updateFeeCollector(address newFeeCollector) private {
         feeCollector = newFeeCollector;
         emit FeeCollectorUpdated(newFeeCollector);
     }
 
-    function updateActivityDelayTime(uint256 delayTime) external onlyOwner {
+    function updateFeeCollector(address newFeeCollector) external onlyOwner {
+        _updateFeeCollector(newFeeCollector);
+    }
+
+    function _updateActivityDelayTime(uint256 delayTime) private {
         require(
             delayTime >= 30 minutes && delayTime <= 12 hours,
             "Exceed allowed delay time range"
         );
         activityDelayTimeAfterRebalance = delayTime;
         emit ActivityDelayTimeUpdated(delayTime);
+    }
+
+    function updateActivityDelayTime(uint256 delayTime) external onlyOwner {
+        _updateActivityDelayTime(delayTime);
     }
 
     /// @dev Transfer protocol fee of the current trading day to the fee collector.
