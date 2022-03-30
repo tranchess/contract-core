@@ -80,8 +80,6 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         uint256 mergeFeeRate_,
         uint256 fundCap_
     ) public Ownable() {
-        require(redemptionFeeRate_ <= MAX_REDEMPTION_FEE_RATE, "Exceed max redemption fee rate");
-        require(mergeFeeRate_ <= MAX_MERGE_FEE_RATE, "Exceed max merge fee rate");
         fund = IFundV3(fund_);
         _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
         _updateRedemptionFeeRate(redemptionFeeRate_);

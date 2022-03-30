@@ -178,10 +178,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         tokenUnderlying = params.tokenUnderlying;
         require(params.underlyingDecimals <= 18, "Underlying decimals larger than 18");
         underlyingDecimalMultiplier = 10**(18 - params.underlyingDecimals);
-        require(
-            params.dailyProtocolFeeRate <= MAX_DAILY_PROTOCOL_FEE_RATE,
-            "Exceed max protocol fee rate"
-        );
         _updateDailyProtocolFeeRate(params.dailyProtocolFeeRate);
         upperRebalanceThreshold = params.upperRebalanceThreshold;
         lowerRebalanceThreshold = params.lowerRebalanceThreshold;
