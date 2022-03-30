@@ -68,6 +68,28 @@ interface IFundV3 {
         view
         returns (uint256);
 
+    function trancheTransfer(
+        uint256 tranche,
+        address recipient,
+        uint256 amount,
+        uint256 version
+    ) external;
+
+    function trancheTransferFrom(
+        uint256 tranche,
+        address sender,
+        address recipient,
+        uint256 amount,
+        uint256 version
+    ) external;
+
+    function trancheApprove(
+        uint256 tranche,
+        address spender,
+        uint256 amount,
+        uint256 version
+    ) external;
+
     function getRebalanceSize() external view returns (uint256);
 
     function getRebalance(uint256 index) external view returns (Rebalance memory);
