@@ -662,7 +662,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         uint256 amount,
         uint256 version
     ) external override onlyCurrentVersion(version) {
-        _refreshAllowance(msg.sender, spender, _rebalanceSize);
+        _refreshAllowance(msg.sender, spender, version);
         _approve(tranche, msg.sender, spender, amount);
     }
 
@@ -676,7 +676,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         uint256 amount,
         uint256 version
     ) external override onlyPrimaryMarket onlyCurrentVersion(version) {
-        _refreshBalance(account, _rebalanceSize);
+        _refreshBalance(account, version);
         _mint(tranche, account, amount);
     }
 
@@ -686,7 +686,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         uint256 amount,
         uint256 version
     ) external override onlyPrimaryMarket onlyCurrentVersion(version) {
-        _refreshBalance(account, _rebalanceSize);
+        _refreshBalance(account, version);
         _burn(tranche, account, amount);
     }
 
