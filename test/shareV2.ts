@@ -382,4 +382,16 @@ describe("ShareV2", function () {
             expect(await shareB.allowance(addr1, addr2)).to.equal(parseEther("29"));
         });
     });
+
+    describe("fundEmitTransfer()", function () {
+        it("Should revert if not called by fund", async function () {
+            await expect(shareM.fundEmitTransfer(addr1, addr2, 1)).to.be.revertedWith("Only fund");
+        });
+    });
+
+    describe("fundEmitApproval()", function () {
+        it("Should revert if not called by fund", async function () {
+            await expect(shareM.fundEmitApproval(addr1, addr2, 1)).to.be.revertedWith("Only fund");
+        });
+    });
 });

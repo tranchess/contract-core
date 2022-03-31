@@ -65,11 +65,16 @@ contract ShareV2 is IShareV2 {
         return true;
     }
 
+    modifier onlyFund() {
+        require(msg.sender == address(fund), "Only fund");
+        _;
+    }
+
     function fundEmitTransfer(
         address sender,
         address recipient,
         uint256 amount
-    ) external override {
+    ) external override onlyFund {
         emit Transfer(sender, recipient, amount);
     }
 
@@ -77,7 +82,7 @@ contract ShareV2 is IShareV2 {
         address owner,
         address spender,
         uint256 amount
-    ) external override {
+    ) external override onlyFund {
         emit Approval(owner, spender, amount);
     }
 }
