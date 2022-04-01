@@ -102,10 +102,7 @@ describe("Exchange", function () {
         const chessSchedule = await deployMockForName(owner, "IChessSchedule");
         await chessSchedule.mock.getRate.returns(0);
 
-        const chessController = await deployMockForName(
-            owner,
-            "contracts/exchange/Staking.sol:IChessController"
-        );
+        const chessController = await deployMockForName(owner, "IChessController");
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
 
         const MockToken = await ethers.getContractFactory("MockToken");

@@ -10,16 +10,10 @@ import "../../utils/SafeDecimalMath.sol";
 import "../../utils/CoreUtility.sol";
 
 import "../interfaces/IFund.sol";
+import "../../interfaces/IChessController.sol";
 import "../../interfaces/IChessSchedule.sol";
 import "../../interfaces/ITrancheIndex.sol";
 import "../interfaces/IPrimaryMarket.sol";
-
-interface IChessController {
-    function getFundRelativeWeight(address account, uint256 timestamp)
-        external
-        view
-        returns (uint256);
-}
 
 abstract contract Staking is ITrancheIndex, CoreUtility {
     /// @dev Reserved storage slots for future sibling contract upgrades
