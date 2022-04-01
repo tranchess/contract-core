@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { BigNumber, Contract, Wallet } from "ethers";
+import { BigNumber, BigNumberish, Contract, Wallet } from "ethers";
 import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
@@ -446,7 +446,7 @@ describe("PrimaryMarketV3", function () {
         });
     });
 
-    describe("Pop from the redemption queue", function () {
+    describe("Redemption queue", function () {
         const outBtcList: BigNumber[] = [];
         const outPrefixSum: BigNumber[] = [];
 
@@ -461,6 +461,8 @@ describe("PrimaryMarketV3", function () {
                 { addr: addr2, inM: parseEther("7") },
             ];
             let sum = BigNumber.from(0);
+            outBtcList.length = 0; // clear the array
+            outPrefixSum.length = 0; // clear the array
             for (const { addr, inM } of inputList) {
                 await primaryMarket.queueRedemption(addr, inM, 0, 0);
                 const feeBtc = inM
@@ -473,6 +475,93 @@ describe("PrimaryMarketV3", function () {
                 sum = sum.add(outBtc);
                 outPrefixSum.push(sum);
             }
+        });
+
+        describe("getNewRedemptionQueueHead()", function () {
+            it("Should return the old head when no underlying is available", async function () {
+                expect(await primaryMarket.getNewRedemptionQueueHead()).to.equal(0);
+            });
+
+            it("Should return the correct new head", async function () {
+                await btc.mint(fund.address, outPrefixSum[2]);
+                expect(await primaryMarket.getNewRedemptionQueueHead()).to.equal(3);
+                await btc.mint(fund.address, outPrefixSum[3].mul(100));
+                expect(await primaryMarket.getNewRedemptionQueueHead()).to.equal(4);
+            });
+        });
+
+        describe("getQueuedRedemptions()", function () {
+            async function getQueuedRedemptions(
+                addr: string | null,
+                startIndex: BigNumberish,
+                maxIterationCount: BigNumberish
+            ): Promise<{ indices: number[]; underlying: BigNumber }> {
+                const ret = await primaryMarket.getQueuedRedemptions(
+                    addr ?? ethers.constants.AddressZero,
+                    startIndex,
+                    maxIterationCount
+                );
+                return {
+                    indices: ret.indices.map((x: BigNumber) => x.toNumber()),
+                    underlying: ret.underlying,
+                };
+            }
+
+            it("Should return a slice of the queue", async function () {
+                expect(await getQueuedRedemptions(null, 0, 0)).to.eql({
+                    indices: [0, 1, 2, 3],
+                    underlying: outPrefixSum[3],
+                });
+                expect(await getQueuedRedemptions(null, 1, 0)).to.eql({
+                    indices: [1, 2, 3],
+                    underlying: outBtcList[1].add(outBtcList[2]).add(outBtcList[3]),
+                });
+                expect(await getQueuedRedemptions(null, 1, 2)).to.eql({
+                    indices: [1, 2],
+                    underlying: outBtcList[1].add(outBtcList[2]),
+                });
+                expect(await getQueuedRedemptions(null, 1, 100)).to.eql({
+                    indices: [1, 2, 3],
+                    underlying: outBtcList[1].add(outBtcList[2]).add(outBtcList[3]),
+                });
+                expect(await getQueuedRedemptions(null, 4, 0)).to.eql({
+                    indices: [],
+                    underlying: BigNumber.from(0),
+                });
+            });
+
+            it("Should filter by address", async function () {
+                expect(await getQueuedRedemptions(addr1, 0, 0)).to.eql({
+                    indices: [1],
+                    underlying: outBtcList[1],
+                });
+                expect(await getQueuedRedemptions(addr1, 0, 1)).to.eql({
+                    indices: [],
+                    underlying: BigNumber.from(0),
+                });
+                expect(await getQueuedRedemptions(addr2, 0, 0)).to.eql({
+                    indices: [0, 2, 3],
+                    underlying: outBtcList[0].add(outBtcList[2]).add(outBtcList[3]),
+                });
+                expect(await getQueuedRedemptions(addr2, 0, 3)).to.eql({
+                    indices: [0, 2],
+                    underlying: outBtcList[0].add(outBtcList[2]),
+                });
+                expect(await getQueuedRedemptions(addr2, 1, 100)).to.eql({
+                    indices: [2, 3],
+                    underlying: outBtcList[2].add(outBtcList[3]),
+                });
+                expect(await getQueuedRedemptions(owner.address, 0, 0)).to.eql({
+                    indices: [],
+                    underlying: BigNumber.from(0),
+                });
+            });
+
+            it("Should revert if start index is out of bound", async function () {
+                await expect(getQueuedRedemptions(null, 5, 0)).to.be.revertedWith(
+                    "startIndex out of bound"
+                );
+            });
         });
 
         describe("popRedemptionQueue()", function () {
@@ -535,6 +624,7 @@ describe("PrimaryMarketV3", function () {
                 await primaryMarket.popRedemptionQueue(0);
                 expect(await primaryMarket.redemptionQueueHead()).to.equal(4);
                 expect(await primaryMarket.redemptionQueueTail()).to.equal(4);
+                expect(await primaryMarket.getNewRedemptionQueueHead()).to.equal(4);
             });
 
             it("Should emit an event", async function () {
