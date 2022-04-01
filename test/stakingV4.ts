@@ -9,7 +9,6 @@ import {
     TRANCHE_M,
     TRANCHE_A,
     TRANCHE_B,
-    DAY,
     WEEK,
     SETTLEMENT_TIME,
     FixtureWalletMap,
@@ -17,12 +16,45 @@ import {
     setNextBlockTime,
     setAutomine,
 } from "./utils";
-import {
-    REWARD_WEIGHT_M,
-    REWARD_WEIGHT_A,
-    REWARD_WEIGHT_B,
-    boostedWorkingBalance,
-} from "./stakingV2Formula";
+
+export const REWARD_WEIGHT_M = 3;
+export const REWARD_WEIGHT_A = 4;
+export const REWARD_WEIGHT_B = 2;
+export const MAX_BOOSTING_FACTOR = parseEther("3");
+
+export function boostedWorkingBalance(
+    amountM: BigNumber,
+    amountA: BigNumber,
+    amountB: BigNumber,
+    weightedSupply: BigNumber,
+    veProportion: BigNumber
+): BigNumber {
+    const e18 = parseEther("1");
+    const weightedAB = amountA
+        .mul(REWARD_WEIGHT_A)
+        .add(amountB.mul(REWARD_WEIGHT_B))
+        .div(REWARD_WEIGHT_M);
+    const upperBoundAB = weightedAB.mul(MAX_BOOSTING_FACTOR).div(e18);
+    let workingAB = weightedAB.add(
+        weightedSupply.mul(veProportion).div(e18).mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18)
+    );
+    let workingM = amountM;
+    if (upperBoundAB.lte(workingAB)) {
+        const excessiveBoosting = workingAB
+            .sub(upperBoundAB)
+            .mul(e18)
+            .div(MAX_BOOSTING_FACTOR.sub(e18));
+        workingAB = upperBoundAB;
+        const upperBoundBoostingPowerM = weightedSupply.mul(veProportion).div(e18).div(2);
+        const boostingPowerM = excessiveBoosting.lte(upperBoundBoostingPowerM)
+            ? excessiveBoosting
+            : upperBoundBoostingPowerM;
+        workingM = amountM.add(boostingPowerM.mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18));
+        const upperBoundM = amountM.mul(MAX_BOOSTING_FACTOR);
+        workingM = workingM.lte(upperBoundM) ? workingM : upperBoundM;
+    }
+    return workingAB.add(workingM);
+}
 
 // Initial balance:
 // User 1: 400 M + 120 A + 180 B
@@ -85,7 +117,6 @@ describe("StakingV4", function () {
         readonly checkpointTimestamp: number;
         readonly fund: MockContract;
         readonly chessSchedule: MockContract;
-        readonly chessController: MockContract;
         readonly votingEscrow: MockContract;
         readonly usdc: Contract;
         readonly staking: Contract;
@@ -102,7 +133,6 @@ describe("StakingV4", function () {
     let addr2: string;
     let fund: MockContract;
     let chessSchedule: MockContract;
-    let chessController: MockContract;
     let votingEscrow: MockContract;
     let usdc: Contract;
     let staking: Contract;
@@ -154,7 +184,6 @@ describe("StakingV4", function () {
             checkpointTimestamp,
             fund,
             chessSchedule,
-            chessController,
             votingEscrow,
             usdc,
             staking: staking.connect(user1),
@@ -175,7 +204,6 @@ describe("StakingV4", function () {
         addr2 = user2.address;
         fund = fixtureData.fund;
         chessSchedule = fixtureData.chessSchedule;
-        chessController = fixtureData.chessController;
         votingEscrow = fixtureData.votingEscrow;
         usdc = fixtureData.usdc;
         staking = fixtureData.staking;

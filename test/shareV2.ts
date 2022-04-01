@@ -76,7 +76,7 @@ describe("ShareV2", function () {
         const interestRateBallot = await deployMockForName(owner, "IBallot");
         await interestRateBallot.mock.count.returns(0);
 
-        const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV2");
+        const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV3");
         await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
 
         // Predict address of the shares

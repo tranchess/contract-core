@@ -143,10 +143,10 @@ describe("StableSwapRebalance", function () {
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
         await votingEscrow.mock.getLockedBalance.returns([0, 0]);
 
-        const fund0 = await deployMockForName(owner, "IFund");
-        const fund1 = await deployMockForName(owner, "IFund");
-        const primaryMarket0 = await deployMockForName(owner, "IPrimaryMarket");
-        const primaryMarket1 = await deployMockForName(owner, "IPrimaryMarket");
+        const fund0 = await deployMockForName(owner, "IFundV3");
+        const fund1 = await deployMockForName(owner, "IFundV3");
+        const primaryMarket0 = await deployMockForName(owner, "IPrimaryMarketV3");
+        const primaryMarket1 = await deployMockForName(owner, "IPrimaryMarketV3");
         await fund0.mock.currentDay.returns(0);
         await fund0.mock.extrapolateNav.returns(0, parseEther("1"), parseEther("1"));
         await fund0.mock.getRebalanceSize.returns(0);
@@ -815,8 +815,8 @@ describe("StableSwapNoRebalance", function () {
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
         await votingEscrow.mock.getLockedBalance.returns([0, 0]);
 
-        const fund0 = await deployMockForName(owner, "IFundV2");
-        const primaryMarket0 = await deployMockForName(owner, "IPrimaryMarket");
+        const fund0 = await deployMockForName(owner, "IFundV3");
+        const primaryMarket0 = await deployMockForName(owner, "IPrimaryMarketV3");
         await fund0.mock.currentDay.returns(0);
         await fund0.mock.getRebalanceSize.returns(0);
         await fund0.mock.refreshBalance.returns();
