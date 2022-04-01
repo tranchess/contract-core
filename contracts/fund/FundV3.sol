@@ -623,6 +623,46 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         return _allowanceVersions[owner][spender];
     }
 
+    function trancheTransfer(
+        uint256 tranche,
+        address recipient,
+        uint256 amount,
+        uint256 version
+    ) external override onlyCurrentVersion(version) {
+        _refreshBalance(msg.sender, version);
+        _refreshBalance(recipient, version);
+        _transfer(tranche, msg.sender, recipient, amount);
+    }
+
+    function trancheTransferFrom(
+        uint256 tranche,
+        address sender,
+        address recipient,
+        uint256 amount,
+        uint256 version
+    ) external override onlyCurrentVersion(version) {
+        _refreshAllowance(sender, msg.sender, version);
+        uint256 newAllowance =
+            _allowances[sender][msg.sender][tranche].sub(
+                amount,
+                "ERC20: transfer amount exceeds allowance"
+            );
+        _approve(tranche, sender, msg.sender, newAllowance);
+        _refreshBalance(sender, version);
+        _refreshBalance(recipient, version);
+        _transfer(tranche, sender, recipient, amount);
+    }
+
+    function trancheApprove(
+        uint256 tranche,
+        address spender,
+        uint256 amount,
+        uint256 version
+    ) external override onlyCurrentVersion(version) {
+        _refreshAllowance(msg.sender, spender, version);
+        _approve(tranche, msg.sender, spender, amount);
+    }
+
     function trancheTotalSupply(uint256 tranche) external view override returns (uint256) {
         return _totalSupplies[tranche];
     }
@@ -633,7 +673,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         uint256 amount,
         uint256 version
     ) external override onlyPrimaryMarket onlyCurrentVersion(version) {
-        _refreshBalance(account, _rebalanceSize);
+        _refreshBalance(account, version);
         _mint(tranche, account, amount);
     }
 
@@ -643,7 +683,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         uint256 amount,
         uint256 version
     ) external override onlyPrimaryMarket onlyCurrentVersion(version) {
-        _refreshBalance(account, _rebalanceSize);
+        _refreshBalance(account, version);
         _burn(tranche, account, amount);
     }
 
