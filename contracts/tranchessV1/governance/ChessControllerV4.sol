@@ -4,11 +4,11 @@ pragma solidity >=0.6.10 <0.8.0;
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-import "../utils/CoreUtility.sol";
-import "../utils/SafeDecimalMath.sol";
-import "../interfaces/IChessController.sol";
+import "../../utils/CoreUtility.sol";
+import "../../utils/SafeDecimalMath.sol";
+import "../../interfaces/IChessController.sol";
 import "../interfaces/IFund.sol";
-import "../interfaces/IControllerBallot.sol";
+import "../../interfaces/IControllerBallot.sol";
 
 contract ChessControllerV4 is IChessController, CoreUtility {
     /// @dev Reserved storage slots for future base contract upgrades

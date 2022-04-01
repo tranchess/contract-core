@@ -3,7 +3,7 @@ pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import "../interfaces/IVotingEscrow.sol";
+import "../../interfaces/IVotingEscrow.sol";
 
 /// @title Tranchess's Exchange Role Contract
 /// @notice Exchange role management

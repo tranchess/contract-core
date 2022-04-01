@@ -2,7 +2,7 @@
 pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
-import "./ITwapOracle.sol";
+import "../../interfaces/ITwapOracle.sol";
 
 interface IFund {
     /// @notice A linear transformation matrix that represents a rebalance.

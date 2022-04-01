@@ -5,9 +5,9 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
-import "../interfaces/ITrancheIndex.sol";
-import "../interfaces/IChessSchedule.sol";
-import "../utils/CoreUtility.sol";
+import "../../interfaces/ITrancheIndex.sol";
+import "../../interfaces/IChessSchedule.sol";
+import "../../utils/CoreUtility.sol";
 
 import {UnsettledTrade} from "../exchange/LibUnsettledTrade.sol";
 import {VESnapshot} from "../exchange/StakingV2.sol";
@@ -16,11 +16,11 @@ import "../fund/Fund.sol";
 import "../fund/FundV2.sol";
 import "../fund/PrimaryMarket.sol";
 import "../fund/PrimaryMarketV2.sol";
-import "../governance/InterestRateBallot.sol";
-import "../governance/FeeDistributor.sol";
-import "../governance/VotingEscrowV2.sol";
+import "../../governance/InterestRateBallot.sol";
+import "../../governance/FeeDistributor.sol";
+import "../../governance/VotingEscrowV2.sol";
 import "../governance/ChessControllerV4.sol";
-import "../governance/ControllerBallot.sol";
+import "../../governance/ControllerBallot.sol";
 
 interface IExchange {
     function chessSchedule() external view returns (IChessSchedule);

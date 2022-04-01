@@ -6,12 +6,12 @@ import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
-import "../utils/SafeDecimalMath.sol";
-import "../utils/CoreUtility.sol";
+import "../../utils/SafeDecimalMath.sol";
+import "../../utils/CoreUtility.sol";
 
 import "../interfaces/IFund.sol";
-import "../interfaces/IChessSchedule.sol";
-import "../interfaces/ITrancheIndex.sol";
+import "../../interfaces/IChessSchedule.sol";
+import "../../interfaces/ITrancheIndex.sol";
 import "../interfaces/IPrimaryMarket.sol";
 
 interface IChessController {

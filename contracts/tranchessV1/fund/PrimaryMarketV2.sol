@@ -9,14 +9,14 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "../utils/SafeDecimalMath.sol";
+import "../../utils/SafeDecimalMath.sol";
 
 import {DelayedRedemption, LibDelayedRedemption} from "./LibDelayedRedemption.sol";
 
 import "../interfaces/IPrimaryMarketV2.sol";
 import "../interfaces/IFundV2.sol";
-import "../interfaces/ITrancheIndex.sol";
-import "../interfaces/IWrappedERC20.sol";
+import "../../interfaces/ITrancheIndex.sol";
+import "../../interfaces/IWrappedERC20.sol";
 
 contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ownable {
     event Created(address indexed account, uint256 underlying);

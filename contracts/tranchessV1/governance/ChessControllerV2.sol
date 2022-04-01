@@ -4,9 +4,9 @@ pragma solidity >=0.6.10 <0.8.0;
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-import "../utils/CoreUtility.sol";
-import "../utils/SafeDecimalMath.sol";
-import "../interfaces/IChessController.sol";
+import "../../utils/CoreUtility.sol";
+import "../../utils/SafeDecimalMath.sol";
+import "../../interfaces/IChessController.sol";
 import "../interfaces/IFund.sol";
 
 contract ChessControllerV2 is IChessController, CoreUtility {

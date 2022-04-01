@@ -9,11 +9,11 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "../utils/SafeDecimalMath.sol";
+import "../../utils/SafeDecimalMath.sol";
 
 import "../interfaces/IPrimaryMarket.sol";
 import "../interfaces/IFund.sol";
-import "../interfaces/ITrancheIndex.sol";
+import "../../interfaces/ITrancheIndex.sol";
 
 contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownable {
     event Created(address indexed account, uint256 underlying);

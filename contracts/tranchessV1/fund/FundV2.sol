@@ -8,16 +8,16 @@ import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-import "../utils/SafeDecimalMath.sol";
-import "../utils/CoreUtility.sol";
+import "../../utils/SafeDecimalMath.sol";
+import "../../utils/CoreUtility.sol";
 
 import "../interfaces/IPrimaryMarketV2.sol";
 import "../interfaces/IFundV2.sol";
-import "../interfaces/ITwapOracle.sol";
-import "../interfaces/IAprOracle.sol";
-import "../interfaces/IBallot.sol";
-import "../interfaces/IVotingEscrow.sol";
-import "../interfaces/ITrancheIndex.sol";
+import "../../interfaces/ITwapOracle.sol";
+import "../../interfaces/IAprOracle.sol";
+import "../../interfaces/IBallot.sol";
+import "../../interfaces/IVotingEscrow.sol";
+import "../../interfaces/ITrancheIndex.sol";
 
 import "./FundRoles.sol";
 

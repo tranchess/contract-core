@@ -4,8 +4,8 @@ pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
-import "../utils/SafeDecimalMath.sol";
-import "../utils/ProxyUtility.sol";
+import "../../utils/SafeDecimalMath.sol";
+import "../../utils/ProxyUtility.sol";
 
 import {Order, OrderQueue, LibOrderQueue} from "./LibOrderQueue.sol";
 import {

@@ -7,16 +7,16 @@ import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
-import "../utils/SafeDecimalMath.sol";
-import "../utils/CoreUtility.sol";
-import "../utils/ManagedPausable.sol";
+import "../../utils/SafeDecimalMath.sol";
+import "../../utils/CoreUtility.sol";
+import "../../utils/ManagedPausable.sol";
 
 import "../interfaces/IFund.sol";
-import "../interfaces/IChessController.sol";
-import "../interfaces/IChessSchedule.sol";
-import "../interfaces/ITrancheIndex.sol";
+import "../../interfaces/IChessController.sol";
+import "../../interfaces/IChessSchedule.sol";
+import "../../interfaces/ITrancheIndex.sol";
 import "../interfaces/IPrimaryMarketV2.sol";
-import "../interfaces/IVotingEscrow.sol";
+import "../../interfaces/IVotingEscrow.sol";
 
 /// @notice Chess locking snapshot used in calculating working balance of an account.
 /// @param veProportion The account's veCHESS divided by the total veCHESS supply.
