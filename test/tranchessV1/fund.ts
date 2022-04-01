@@ -5,7 +5,7 @@ import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
-import { deployMockForName } from "./mock";
+import { deployMockForName } from "../mock";
 import {
     TRANCHE_M,
     TRANCHE_A,
@@ -15,7 +15,7 @@ import {
     SETTLEMENT_TIME,
     FixtureWalletMap,
     advanceBlockAtTime,
-} from "./utils";
+} from "../utils";
 
 const POST_REBALANCE_DELAY_TIME = HOUR * 12;
 const DAILY_PROTOCOL_FEE_BPS = 1; // 0.01% per day, 3.65% per year

@@ -5,7 +5,7 @@ import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 const parseUsdc = (value: string) => parseUnits(value, 6);
-import { deployMockForName } from "./mock";
+import { deployMockForName } from "../mock";
 import {
     TRANCHE_M,
     TRANCHE_A,
@@ -14,7 +14,7 @@ import {
     WEEK,
     FixtureWalletMap,
     advanceBlockAtTime,
-} from "./utils";
+} from "../utils";
 
 const EPOCH = 1800; // 30 min
 const USDC_TO_ETHER = parseUnits("1", 12);

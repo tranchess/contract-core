@@ -3,8 +3,8 @@ import { BigNumber, Contract, Wallet } from "ethers";
 import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
-import { DAY, WEEK, SETTLEMENT_TIME, FixtureWalletMap, advanceBlockAtTime } from "./utils";
-import { deployMockForName } from "./mock";
+import { DAY, WEEK, SETTLEMENT_TIME, FixtureWalletMap, advanceBlockAtTime } from "../utils";
+import { deployMockForName } from "../mock";
 import { parseEther } from "@ethersproject/units";
 
 const MIN_WEIGHT = parseEther("0.05");

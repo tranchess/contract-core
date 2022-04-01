@@ -5,7 +5,7 @@ import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
-import { deployMockForName } from "./mock";
+import { deployMockForName } from "../mock";
 import {
     TRANCHE_M,
     TRANCHE_A,
@@ -15,7 +15,7 @@ import {
     SETTLEMENT_TIME,
     FixtureWalletMap,
     advanceBlockAtTime,
-} from "./utils";
+} from "../utils";
 
 const UPPER_REBALANCE_THRESHOLD = parseEther("2");
 const LOWER_REBALANCE_THRESHOLD = parseEther("0.5");
