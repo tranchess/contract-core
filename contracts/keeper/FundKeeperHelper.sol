@@ -2,9 +2,9 @@
 pragma solidity >=0.6.10 <0.8.0;
 
 import "./BatchKeeperHelperBase.sol";
-import "../interfaces/IFund.sol";
+import "../interfaces/IFundV3.sol";
 
-interface IFundSettlement is IFund {
+interface IFundSettlement is IFundV3 {
     function settle() external;
 }
 

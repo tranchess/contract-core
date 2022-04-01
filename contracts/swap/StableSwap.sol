@@ -8,8 +8,7 @@ import "@chainlink/contracts/src/v0.6/interfaces/AggregatorV3Interface.sol";
 
 import "../interfaces/IStableSwap.sol";
 import "../interfaces/ILiquidityGauge.sol";
-import "../interfaces/IFund.sol";
-import "../interfaces/IPrimaryMarket.sol";
+import "../interfaces/IFundV3.sol";
 import "../interfaces/ITranchessSwapCallee.sol";
 
 import "../utils/SafeDecimalMath.sol";
@@ -78,8 +77,8 @@ contract StableSwap is IStableSwap, ReentrancyGuard {
         baseAddress = baseAddress_;
         quoteAddress = quoteAddress_;
 
-        uint256 rebalanceVersion = IFund(fund_).getRebalanceSize();
-        IFund(fund).refreshBalance(address(this), rebalanceVersion);
+        uint256 rebalanceVersion = IFundV3(fund_).getRebalanceSize();
+        IFundV3(fund).refreshBalance(address(this), rebalanceVersion);
         currentRebalanceVersion = rebalanceVersion;
 
         initialAmpl = initialAmpl_;

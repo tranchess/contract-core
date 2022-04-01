@@ -15,7 +15,6 @@ import "../interfaces/IFundV3.sol";
 import "../interfaces/IChessController.sol";
 import "../interfaces/IChessSchedule.sol";
 import "../interfaces/ITrancheIndex.sol";
-import "../interfaces/IPrimaryMarketV2.sol";
 import "../interfaces/IVotingEscrow.sol";
 
 /// @notice Chess locking snapshot used in calculating working balance of an account.
