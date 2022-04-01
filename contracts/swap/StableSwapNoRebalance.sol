@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
 
-import "../interfaces/IFundV2.sol";
+import "../interfaces/IFundV3.sol";
 import "../utils/SafeDecimalMath.sol";
 import "./StableSwap.sol";
 
@@ -36,26 +36,26 @@ contract StableSwapNoRebalance is StableSwap {
     {}
 
     function handleRebalance() public override {
-        uint256 rebalanceVersion = IFund(fund).getRebalanceSize();
+        uint256 rebalanceVersion = IFundV3(fund).getRebalanceSize();
         uint256 currentVersion = currentRebalanceVersion;
 
         if (currentVersion < rebalanceVersion) {
-            (baseBalance, , ) = IFund(fund).batchRebalance(
+            (baseBalance, , ) = IFundV3(fund).batchRebalance(
                 baseBalance,
                 0,
                 0,
                 currentVersion,
                 rebalanceVersion
             );
-            IFund(fund).refreshBalance(address(this), rebalanceVersion);
+            IFundV3(fund).refreshBalance(address(this), rebalanceVersion);
         }
     }
 
     function checkOracle(
         Operation /*op*/
     ) public view override returns (uint256 oracle) {
-        uint256 fundUnderlying = IFundV2(fund).getTotalUnderlying();
-        uint256 fundTotalShares = IFundV2(fund).getTotalShares();
+        uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
+        uint256 fundTotalShares = IFundV3(fund).getTotalShares();
         return fundUnderlying.divideDecimal(fundTotalShares);
     }
 }

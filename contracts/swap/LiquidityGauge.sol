@@ -11,7 +11,7 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "../interfaces/ILiquidityGauge.sol";
 import "../interfaces/IChessSchedule.sol";
 import "../interfaces/IChessController.sol";
-import "../interfaces/IFund.sol";
+import "../interfaces/IFundV3.sol";
 import "../interfaces/ITrancheIndex.sol";
 import "../interfaces/IStableSwap.sol";
 import "../interfaces/IVotingEscrow.sol";
@@ -48,7 +48,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndex, CoreUtility, Ownable 
 
     IChessSchedule public immutable chessSchedule;
     IChessController public immutable chessController;
-    IFund public immutable fund;
+    IFundV3 public immutable fund;
     IVotingEscrow public immutable votingEscrow;
 
     string public name;
@@ -87,7 +87,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndex, CoreUtility, Ownable 
         decimals = 18;
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
-        fund = IFund(fund_);
+        fund = IFundV3(fund_);
         votingEscrow = IVotingEscrow(votingEscrow_);
         lastTimestamp = block.timestamp;
     }
@@ -149,9 +149,9 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndex, CoreUtility, Ownable 
         IERC20(rewardToken).safeTransfer(account, claimableRewards[account]);
         delete claimableRewards[account];
 
-        IERC20(IFund(fund).tokenM()).safeTransfer(account, claimableAssets[account][TRANCHE_M]);
-        IERC20(IFund(fund).tokenA()).safeTransfer(account, claimableAssets[account][TRANCHE_A]);
-        IERC20(IFund(fund).tokenB()).safeTransfer(account, claimableAssets[account][TRANCHE_B]);
+        IERC20(fund.tokenM()).safeTransfer(account, claimableAssets[account][TRANCHE_M]);
+        IERC20(fund.tokenA()).safeTransfer(account, claimableAssets[account][TRANCHE_A]);
+        IERC20(fund.tokenB()).safeTransfer(account, claimableAssets[account][TRANCHE_B]);
         IERC20(IStableSwap(owner()).quoteAddress()).safeTransfer(
             account,
             claimableAssets[account][QUOTE_ASSET]
@@ -292,12 +292,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndex, CoreUtility, Ownable 
         uint256 amountB = claimableAssets[account][TRANCHE_B];
         uint256 amountU = claimableAssets[account][QUOTE_ASSET];
         for (; version < rebalanceVersion; version++) {
-            (amountM, amountA, amountB) = IFund(fund).doRebalance(
-                amountM,
-                amountA,
-                amountB,
-                version
-            );
+            (amountM, amountA, amountB) = fund.doRebalance(amountM, amountA, amountB, version);
             Distribution memory dist = distributions[version];
             amountM = amountM.add(dist.totalM.mul(workingBalance).div(dist.workingSupply));
             amountA = amountA.add(dist.totalA.mul(workingBalance).div(dist.workingSupply));

@@ -5,7 +5,7 @@ import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
-import { deployMockForName } from "./mock";
+import { deployMockForName } from "../mock";
 import {
     TRANCHE_M,
     TRANCHE_A,
@@ -15,14 +15,14 @@ import {
     SETTLEMENT_TIME,
     FixtureWalletMap,
     advanceBlockAtTime,
-} from "./utils";
+} from "../utils";
 
 const UPPER_REBALANCE_THRESHOLD = parseEther("2");
 const LOWER_REBALANCE_THRESHOLD = parseEther("0.5");
 const MAX_UINT256 = BigNumber.from(2).pow(256).sub(1);
 const SUB_MAX_UINT256 = MAX_UINT256.div(parseEther("1"));
 
-describe("ShareV2", function () {
+describe("Share", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly twapOracle: MockContract;
@@ -76,57 +76,47 @@ describe("ShareV2", function () {
         const interestRateBallot = await deployMockForName(owner, "IBallot");
         await interestRateBallot.mock.count.returns(0);
 
-        const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV3");
+        const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV2");
         await primaryMarket.mock.settle.returns(0, 0, 0, 0, 0);
 
-        // Predict address of the shares
-        const shareMAddress = ethers.utils.getContractAddress({
-            from: owner.address,
-            nonce: (await owner.getTransactionCount("pending")) + 1,
-        });
-        const shareAAddress = ethers.utils.getContractAddress({
-            from: owner.address,
-            nonce: (await owner.getTransactionCount("pending")) + 2,
-        });
-        const shareBAddress = ethers.utils.getContractAddress({
-            from: owner.address,
-            nonce: (await owner.getTransactionCount("pending")) + 3,
-        });
-
-        const Fund = await ethers.getContractFactory("FundV3");
-        const fund = await Fund.connect(owner).deploy([
+        const Fund = await ethers.getContractFactory("FundV2");
+        const fund = await Fund.connect(owner).deploy(
             btc.address,
             8,
-            shareMAddress,
-            shareAAddress,
-            shareBAddress,
-            primaryMarket.address,
-            ethers.constants.AddressZero,
             0,
             UPPER_REBALANCE_THRESHOLD,
             LOWER_REBALANCE_THRESHOLD,
             twapOracle.address,
             aprOracle.address,
             interestRateBallot.address,
-            feeCollector.address,
-        ]);
+            feeCollector.address
+        );
 
-        const Share = await ethers.getContractFactory("ShareV2");
+        await primaryMarket.call(btc, "approve", fund.address, BigNumber.from("2").pow(256).sub(1));
+
+        const Share = await ethers.getContractFactory("Share");
         const shareM = await Share.connect(owner).deploy("Token M", "M", fund.address, TRANCHE_M);
         const shareA = await Share.connect(owner).deploy("Token A", "A", fund.address, TRANCHE_A);
         const shareB = await Share.connect(owner).deploy("Token B", "B", fund.address, TRANCHE_B);
-        await primaryMarket.call(btc, "approve", fund.address, BigNumber.from("2").pow(256).sub(1));
+
+        await fund.initialize(
+            shareM.address,
+            shareA.address,
+            shareB.address,
+            primaryMarket.address,
+            ethers.constants.AddressZero
+        );
 
         await advanceBlockAtTime(startDay);
         await fund.settle();
         const addr1 = user1.address;
         const addr2 = user2.address;
-        await primaryMarket.call(fund, "primaryMarketMint", TRANCHE_M, addr1, INIT_P_1, 0);
-        await primaryMarket.call(fund, "primaryMarketMint", TRANCHE_A, addr1, INIT_A_1, 0);
-        await primaryMarket.call(fund, "primaryMarketMint", TRANCHE_B, addr1, INIT_B_1, 0);
-        await primaryMarket.call(fund, "primaryMarketMint", TRANCHE_M, addr2, INIT_P_2, 0);
-        await primaryMarket.call(fund, "primaryMarketMint", TRANCHE_A, addr2, INIT_A_2, 0);
-        await primaryMarket.call(fund, "primaryMarketMint", TRANCHE_B, addr2, INIT_B_2, 0);
+        await primaryMarket.call(fund, "mint", TRANCHE_M, addr1, INIT_P_1);
+        await primaryMarket.call(fund, "mint", TRANCHE_A, addr1, INIT_A_1);
+        await primaryMarket.call(fund, "mint", TRANCHE_B, addr1, INIT_B_1);
+        await primaryMarket.call(fund, "mint", TRANCHE_M, addr2, INIT_P_2);
+        await primaryMarket.call(fund, "mint", TRANCHE_A, addr2, INIT_A_2);
+        await primaryMarket.call(fund, "mint", TRANCHE_B, addr2, INIT_B_2);
         await btc.mint(fund.address, INIT_BTC);
         await advanceBlockAtTime(startDay + DAY);
         await fund.settle();
@@ -380,18 +370,6 @@ describe("ShareV2", function () {
             expect(await shareM.allowance(addr1, addr2)).to.equal(parseEther("118"));
             expect(await shareA.allowance(addr1, addr2)).to.equal(parseEther("29"));
             expect(await shareB.allowance(addr1, addr2)).to.equal(parseEther("29"));
-        });
-    });
-
-    describe("fundEmitTransfer()", function () {
-        it("Should revert if not called by fund", async function () {
-            await expect(shareM.fundEmitTransfer(addr1, addr2, 1)).to.be.revertedWith("Only fund");
-        });
-    });
-
-    describe("fundEmitApproval()", function () {
-        it("Should revert if not called by fund", async function () {
-            await expect(shareM.fundEmitApproval(addr1, addr2, 1)).to.be.revertedWith("Only fund");
         });
     });
 });
