@@ -11,11 +11,11 @@ import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
 import "../utils/ManagedPausable.sol";
 
-import "../interfaces/IFundV3.sol";
+import "../interfaces/IFund.sol";
 import "../interfaces/IChessController.sol";
 import "../interfaces/IChessSchedule.sol";
 import "../interfaces/ITrancheIndex.sol";
-import "../interfaces/IPrimaryMarketV3.sol";
+import "../interfaces/IPrimaryMarketV2.sol";
 import "../interfaces/IVotingEscrow.sol";
 
 /// @notice Chess locking snapshot used in calculating working balance of an account.
@@ -53,7 +53,7 @@ abstract contract StakingV3 is ITrancheIndex, CoreUtility, ManagedPausable {
     /// @dev Maximum fraction of veCHESS that can be used to boost Token M.
     uint256 private constant MAX_BOOSTING_POWER_M = 0.5e18;
 
-    IFundV3 public immutable fund;
+    IFund public immutable fund;
     IERC20 private immutable tokenM;
     IERC20 private immutable tokenA;
     IERC20 private immutable tokenB;
@@ -130,10 +130,10 @@ abstract contract StakingV3 is ITrancheIndex, CoreUtility, ManagedPausable {
         address votingEscrow_,
         address upgradeTool_
     ) public {
-        fund = IFundV3(fund_);
-        tokenM = IERC20(IFundV3(fund_).tokenM());
-        tokenA = IERC20(IFundV3(fund_).tokenA());
-        tokenB = IERC20(IFundV3(fund_).tokenB());
+        fund = IFund(fund_);
+        tokenM = IERC20(IFund(fund_).tokenM());
+        tokenA = IERC20(IFund(fund_).tokenA());
+        tokenB = IERC20(IFund(fund_).tokenB());
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
         quoteAssetAddress = quoteAssetAddress_;
@@ -381,6 +381,18 @@ abstract contract StakingV3 is ITrancheIndex, CoreUtility, ManagedPausable {
         }
 
         emit Deposited(tranche, msg.sender, amount);
+    }
+
+    /// @dev Claim settled Token M from the primary market and deposit to get rewards
+    /// @param primaryMarket The primary market to claim shares from
+    function claimAndDeposit(address primaryMarket) external {
+        (uint256 createdShares, ) = IPrimaryMarketV2(primaryMarket).claim(msg.sender);
+        deposit(TRANCHE_M, createdShares);
+    }
+
+    function claimAndUnwrapAndDeposit(address primaryMarket) external {
+        (uint256 createdShares, ) = IPrimaryMarketV2(primaryMarket).claimAndUnwrap(msg.sender);
+        deposit(TRANCHE_M, createdShares);
     }
 
     /// @dev Withdraw
