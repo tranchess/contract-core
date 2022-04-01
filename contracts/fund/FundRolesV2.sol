@@ -51,12 +51,28 @@ abstract contract FundRolesV2 is ITrancheIndex {
         emit StrategyUpdated(address(0), strategy_);
     }
 
-    modifier onlyShare() {
-        require(
-            msg.sender == _tokenM || msg.sender == _tokenA || msg.sender == _tokenB,
-            "Only share"
-        );
-        _;
+    function _getTranche(address share) internal view returns (uint256) {
+        if (share == _tokenM) {
+            return TRANCHE_M;
+        } else if (share == _tokenA) {
+            return TRANCHE_A;
+        } else if (share == _tokenB) {
+            return TRANCHE_B;
+        } else {
+            revert("Only share");
+        }
+    }
+
+    function _getShare(uint256 tranche) internal view returns (address) {
+        if (tranche == TRANCHE_M) {
+            return _tokenM;
+        } else if (tranche == TRANCHE_A) {
+            return _tokenA;
+        } else if (tranche == TRANCHE_B) {
+            return _tokenB;
+        } else {
+            revert("Invalid tranche");
+        }
     }
 
     modifier onlyPrimaryMarket() {

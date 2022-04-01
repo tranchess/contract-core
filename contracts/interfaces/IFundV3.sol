@@ -165,14 +165,12 @@ interface IFundV3 {
     ) external;
 
     function shareTransfer(
-        uint256 tranche,
         address sender,
         address recipient,
         uint256 amount
     ) external;
 
     function shareTransferFrom(
-        uint256 tranche,
         address spender,
         address sender,
         address recipient,
@@ -180,21 +178,18 @@ interface IFundV3 {
     ) external returns (uint256 newAllowance);
 
     function shareIncreaseAllowance(
-        uint256 tranche,
         address sender,
         address spender,
         uint256 addedValue
     ) external returns (uint256 newAllowance);
 
     function shareDecreaseAllowance(
-        uint256 tranche,
         address sender,
         address spender,
         uint256 subtractedValue
     ) external returns (uint256 newAllowance);
 
     function shareApprove(
-        uint256 tranche,
         address owner,
         address spender,
         uint256 amount
@@ -236,18 +231,6 @@ interface IFundV3 {
     );
     event Settled(uint256 indexed day, uint256 navM, uint256 navA, uint256 navB);
     event InterestRateUpdated(uint256 baseInterestRate, uint256 floatingInterestRate);
-    event Transfer(
-        uint256 indexed tranche,
-        address indexed from,
-        address indexed to,
-        uint256 amount
-    );
-    event Approval(
-        uint256 indexed tranche,
-        address indexed owner,
-        address indexed spender,
-        uint256 amount
-    );
     event BalancesRebalanced(
         address indexed account,
         uint256 version,
