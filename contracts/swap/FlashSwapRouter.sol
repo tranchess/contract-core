@@ -33,51 +33,17 @@ interface IPancakeRouter01 {
     ) external returns (uint256[] memory amounts);
 }
 
-interface IMooniswapFactory {
-    function pools(IERC20 tokenA, IERC20 tokenB) external view returns (Mooniswap pool);
-}
-
-interface Mooniswap {
-    function getReturn(
-        IERC20 src,
-        IERC20 dst,
-        uint256 amount
-    ) external view returns (uint256);
-
-    /**
-     * @param src address of the source token to exchange
-     * @param dst token address that will received
-     * @param amount amount to exchange
-     * @param minReturn minimal amount of the dst token that will receive (if result < minReturn then transaction fails)
-     * @param referral 1/20 from LP fees will be minted to referral wallet address (in liquidity token) (in case of address(0) no mints)
-     * @return result received amount
-     */
-    function swap(
-        IERC20 src,
-        IERC20 dst,
-        uint256 amount,
-        uint256 minReturn,
-        address referral
-    ) external payable returns (uint256 result);
-}
-
 contract FlashSwapRouter is ITranchessSwapCallee {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    enum RouterOption {LEAST_SLIPPAGE, PANCAKE_SWAP, ONE_INCH_LP}
+    enum RouterOption {LEAST_SLIPPAGE, PANCAKE_SWAP}
 
     IPancakeRouter01 public immutable pancakeRouter;
-    IMooniswapFactory public immutable oneinchFactory;
     ISwapRouter public immutable tranchessRouter;
 
-    constructor(
-        address pancakeRouter_,
-        address oneinchFactory_,
-        address tranchessRouter_
-    ) public {
+    constructor(address pancakeRouter_, address tranchessRouter_) public {
         pancakeRouter = IPancakeRouter01(pancakeRouter_);
-        oneinchFactory = IMooniswapFactory(oneinchFactory_);
         tranchessRouter = ISwapRouter(tranchessRouter_);
     }
 
@@ -115,7 +81,7 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         IStableSwap tranchessPair = tranchessRouter.getSwap(pm.fund().tokenA(), tokenQuote);
         // Send the user's portion of the payment to Tranchess swap
         uint256 resultAmount = totalQuoteAmount.sub(quoteAmount);
-        require(resultAmount <= maxQuote, "Insufficient input amount");
+        require(resultAmount <= maxQuote, "Insufficient input");
         bytes memory data = abi.encode(primaryMarket, underlyingAmount, recipient, version, mode);
         IERC20(tokenQuote).safeTransferFrom(msg.sender, address(this), resultAmount);
         tranchessPair.swap(0, quoteAmount, address(this), data);
@@ -156,8 +122,8 @@ contract FlashSwapRouter is ITranchessSwapCallee {
             msg.sender == address(tranchessRouter.getSwap(tokenQuote, pm.fund().tokenA())),
             "Tranchess Pair check failed"
         );
-        require(baseDeltaOut > 0 || quoteDeltaOut > 0, "Unidirectional check failed");
         if (baseDeltaOut > 0) {
+            require(quoteDeltaOut == 0, "Unidirectional check failed");
             uint256 quoteAmount;
             {
                 // Calculate the exact amount of quote asset to pay
@@ -179,7 +145,7 @@ contract FlashSwapRouter is ITranchessSwapCallee {
             IERC20(tokenQuote).safeTransfer(msg.sender, quoteAmount);
             // Send the rest of quote asset to user
             uint256 resultAmount = totalQuoteAmount.sub(quoteAmount);
-            require(resultAmount >= expectAmount, "Insufficient output amount");
+            require(resultAmount >= expectAmount, "Insufficient output");
             IERC20(tokenQuote).safeTransfer(recipient, resultAmount);
         } else {
             // Trade quote asset for underlying asset
@@ -210,16 +176,11 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         address tokenOut
     ) private view returns (uint256, RouterOption) {
         if (mode == RouterOption.LEAST_SLIPPAGE) {
-            uint256 pancakeResult = _pancakeGetAmountsIn(amountOut, tokenIn, tokenOut);
-            uint256 oneinchResult = _oneinchGetAmountsIn(amountOut, tokenIn, tokenOut);
-            return
-                pancakeResult <= oneinchResult
-                    ? (pancakeResult, RouterOption.PANCAKE_SWAP)
-                    : (oneinchResult, RouterOption.ONE_INCH_LP);
+            return (_pancakeGetAmountsIn(amountOut, tokenIn, tokenOut), mode);
         } else if (mode == RouterOption.PANCAKE_SWAP) {
             return (_pancakeGetAmountsIn(amountOut, tokenIn, tokenOut), mode);
-        } else if (mode == RouterOption.ONE_INCH_LP) {
-            return (_oneinchGetAmountsIn(amountOut, tokenIn, tokenOut), mode);
+        } else {
+            revert("Invalid external swap");
         }
     }
 
@@ -231,11 +192,7 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         address tokenOut
     ) private returns (uint256[] memory amounts) {
         if (mode == RouterOption.LEAST_SLIPPAGE) {
-            uint256 pancakeResult = _pancakeGetAmountsOut(amountIn, tokenIn, tokenOut);
-            uint256 oneinchResult = _oneinchGetAmountsOut(amountIn, tokenIn, tokenOut);
-            mode = pancakeResult >= oneinchResult
-                ? RouterOption.PANCAKE_SWAP
-                : RouterOption.ONE_INCH_LP;
+            mode = RouterOption.PANCAKE_SWAP;
         }
 
         if (mode == RouterOption.PANCAKE_SWAP) {
@@ -249,14 +206,8 @@ contract FlashSwapRouter is ITranchessSwapCallee {
                 address(this),
                 block.timestamp
             );
-        } else if (mode == RouterOption.ONE_INCH_LP) {
-            oneinchFactory.pools(IERC20(tokenIn), IERC20(tokenOut)).swap(
-                IERC20(tokenIn),
-                IERC20(tokenOut),
-                amountIn,
-                minAmountOut,
-                address(0)
-            );
+        } else {
+            revert("Invalid external swap");
         }
     }
 
@@ -280,29 +231,5 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         pancakePath[0] = tokenIn;
         pancakePath[1] = tokenOut;
         amount = pancakeRouter.getAmountsOut(amountIn, pancakePath)[1];
-    }
-
-    function _oneinchGetAmountsIn(
-        uint256 amountOut,
-        address tokenIn,
-        address tokenOut
-    ) private view returns (uint256 amount) {
-        amount = oneinchFactory.pools(IERC20(tokenIn), IERC20(tokenOut)).getReturn(
-            IERC20(tokenOut),
-            IERC20(tokenIn),
-            amountOut
-        );
-    }
-
-    function _oneinchGetAmountsOut(
-        uint256 amountIn,
-        address tokenIn,
-        address tokenOut
-    ) private view returns (uint256 amount) {
-        amount = oneinchFactory.pools(IERC20(tokenIn), IERC20(tokenOut)).getReturn(
-            IERC20(tokenIn),
-            IERC20(tokenOut),
-            amountIn
-        );
     }
 }

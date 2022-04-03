@@ -6,6 +6,7 @@ const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
+import { defaultAbiCoder } from "ethers/lib/utils";
 
 const UNIT = BigNumber.from(10).pow(18);
 const n = BigNumber.from("2");
@@ -1389,6 +1390,7 @@ describe("Flashloan", function () {
         readonly btc: Contract;
         readonly usd: Contract;
         readonly tokens: Contract[];
+        readonly swapRouter: Contract;
         readonly flashSwapRouter: Contract;
     }
 
@@ -1407,6 +1409,7 @@ describe("Flashloan", function () {
     let tokens: Contract[];
     let btc: Contract;
     let usd: Contract;
+    let swapRouter: Contract;
     let flashSwapRouter: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
@@ -1455,7 +1458,6 @@ describe("Flashloan", function () {
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
 
         const pancakeRouter = await deployMockForName(owner, "IPancakeRouter01");
-        const mooniswapFactory = await deployMockForName(owner, "IMooniswapFactory");
 
         const SwapRouter = await ethers.getContractFactory("SwapRouter");
         const swapRouter = await SwapRouter.connect(owner).deploy();
@@ -1463,7 +1465,6 @@ describe("Flashloan", function () {
         const FlashSwapRouter = await ethers.getContractFactory("FlashSwapRouter");
         const flashSwapRouter = await FlashSwapRouter.connect(owner).deploy(
             pancakeRouter.address,
-            mooniswapFactory.address,
             swapRouter.address
         );
 
@@ -1518,6 +1519,7 @@ describe("Flashloan", function () {
             btc,
             usd,
             tokens,
+            swapRouter,
             flashSwapRouter: flashSwapRouter.connect(user1),
         };
     }
@@ -1530,6 +1532,7 @@ describe("Flashloan", function () {
         fixtureData = await loadFixture(currentFixture);
         user1 = fixtureData.wallets.user1;
         addr1 = user1.address;
+        swapRouter = fixtureData.swapRouter;
         flashSwapRouter = fixtureData.flashSwapRouter;
         pancakeRouter = fixtureData.pancakeRouter;
         pancakeSwapRouter = fixtureData.pancakeSwapRouter;
@@ -1540,7 +1543,68 @@ describe("Flashloan", function () {
         tokens = fixtureData.tokens;
     });
 
+    describe("tranchessSwapCallback()", function () {
+        it("Should revert if call is not tranchess pair", async function () {
+            const stableSwap1 = await deployMockForName(user1, "StableSwapRebalance");
+            await stableSwap1.mock.quoteAddress.returns(usd.address);
+            await fund.mock.tokenA.returns(tokens[0].address);
+            await expect(
+                stableSwap1.call(
+                    flashSwapRouter,
+                    "tranchessSwapCallback",
+                    addr1,
+                    parseEther("1"),
+                    0,
+                    defaultAbiCoder.encode(
+                        ["address", "uint256", "address", "uint256", "uint256"],
+                        [primaryMarket.address, parseEther("1"), addr1, 0, 1]
+                    )
+                )
+            ).to.be.revertedWith("Tranchess Pair check failed");
+        });
+
+        it("Should revert if it's bidirectional", async function () {
+            const stableSwap1 = await deployMockForName(user1, "StableSwapRebalance");
+            await stableSwap1.mock.quoteAddress.returns(usd.address);
+            await fund.mock.tokenA.returns(tokens[0].address);
+            await swapRouter.addSwap(tokens[0].address, usd.address, stableSwap1.address);
+            await expect(
+                stableSwap1.call(
+                    flashSwapRouter,
+                    "tranchessSwapCallback",
+                    addr1,
+                    parseEther("1"),
+                    parseEther("1"),
+                    defaultAbiCoder.encode(
+                        ["address", "uint256", "address", "uint256", "uint256"],
+                        [primaryMarket.address, parseEther("1"), addr1, 0, 1]
+                    )
+                )
+            ).to.be.revertedWith("Unidirectional check failed");
+        });
+    });
+
     describe("buyTokenB()", function () {
+        it("Should revert if insufficient input quote", async function () {
+            const outAB = parseEther("1");
+            await fund.mock.tokenUnderlying.returns(btc.address);
+            await fund.mock.tokenA.returns(tokens[0].address);
+            await pancakeRouter.mock.getAmountsIn.returns([parseEther("1"), 0]);
+            await expect(
+                flashSwapRouter
+                    .connect(user1)
+                    .buyTokenB(
+                        primaryMarket.address,
+                        parseEther("0.03"),
+                        addr1,
+                        usd.address,
+                        1,
+                        0,
+                        outAB
+                    )
+            ).to.be.revertedWith("Insufficient input");
+        });
+
         it("Should buy with pancake", async function () {
             const outAB = parseEther("1");
             await fund.mock.tokenUnderlying.returns(btc.address);
@@ -1581,6 +1645,63 @@ describe("Flashloan", function () {
     });
 
     describe("sellTokenB()", function () {
+        it("Should revert if insufficient output quote", async function () {
+            const inAB = parseEther("1");
+            const quoteAmount = parseEther("2");
+            await fund.mock.tokenUnderlying.returns(btc.address);
+            await fund.mock.tokenA.returns(tokens[0].address);
+            await fund.mock.tokenB.returns(tokens[1].address);
+            await fund.mock.primaryMarketBurn
+                .withArgs(1, flashSwapRouter.address, inAB, 0)
+                .returns();
+            await fund.mock.primaryMarketBurn
+                .withArgs(2, flashSwapRouter.address, inAB, 0)
+                .returns();
+            const mergeAmount = inAB.mul(2);
+            const mergeFee = mergeAmount.mul(MERGE_FEE_BPS).div(10000);
+            await fund.mock.primaryMarketMint
+                .withArgs(0, flashSwapRouter.address, mergeAmount.sub(mergeFee), 0)
+                .returns();
+            await fund.mock.primaryMarketAddDebt
+                .withArgs(
+                    0,
+                    inAB
+                        .mul(2)
+                        .mul(MERGE_FEE_BPS)
+                        .div(10000)
+                        .mul(TOTAL_UNDERLYING)
+                        .div(TOTAL_SHARES)
+                )
+                .returns();
+            const redeemAmount = mergeAmount.sub(mergeFee).mul(TOTAL_UNDERLYING).div(TOTAL_SHARES);
+            const redeemFee = redeemAmount.mul(REDEMPTION_FEE_BPS).div(10000);
+            await fund.mock.primaryMarketTransferUnderlying
+                .withArgs(flashSwapRouter.address, redeemAmount.sub(redeemFee), redeemFee)
+                .returns();
+            await fund.mock.primaryMarketBurn
+                .withArgs(0, flashSwapRouter.address, mergeAmount.sub(mergeFee), 0)
+                .returns();
+            await pancakeRouter.mock.getAmountsIn.returns([parseEther("1"), 0]);
+            await pancakeRouter.mock.swapExactTokensForTokens.returns([0, quoteAmount]);
+            await tokens[1].mint(addr1, inAB);
+            await tokens[1].connect(user1).approve(flashSwapRouter.address, inAB);
+            await usd.mint(flashSwapRouter.address, quoteAmount);
+
+            await expect(
+                flashSwapRouter
+                    .connect(user1)
+                    .sellTokenB(
+                        primaryMarket.address,
+                        parseEther("1.4"),
+                        addr1,
+                        usd.address,
+                        1,
+                        0,
+                        inAB
+                    )
+            ).to.be.revertedWith("Insufficient output");
+        });
+
         it("Should sell with pancake", async function () {
             const inAB = parseEther("1");
             const quoteAmount = parseEther("2");
