@@ -162,7 +162,7 @@ contract FlashSwapRouter is ITranchessSwapCallee {
             uint256 shares = pm.create(address(this), underlyingAmount, 0, version);
             // Split tokenM into tokenA and tokenB
             uint256 outAB = pm.split(address(this), shares, version);
-            // Send tokenB to user
+            // Send back tokenA to tranchess swap
             IERC20(pm.fund().tokenA()).safeTransfer(msg.sender, outAB);
             // Send tokenB to user
             IERC20(pm.fund().tokenB()).safeTransfer(recipient, outAB);
