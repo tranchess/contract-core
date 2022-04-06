@@ -133,15 +133,11 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     ///         after settlement of the last day of the previous trading week.
     mapping(uint256 => uint256) public historicalInterestRate;
 
-    address[] private obsoletePrimaryMarkets;
-    address[] private newPrimaryMarkets;
-
     /// @notice Amount of fee not transfered to the fee collector yet.
     uint256 public feeDebt;
 
-    /// @dev Mapping of primary market => Amount of redemption underlying that the fund owes
-    ///      the primary market
-    mapping(address => uint256) public redemptionDebts;
+    /// @notice Amount of redemption underlying that the fund owes the primary market
+    uint256 public redemptionDebt;
 
     /// @dev Sum of the fee debt and redemption debts of all primary markets.
     uint256 private _totalDebt;
@@ -816,7 +812,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
 
         _collectFee();
 
-        _settlePrimaryMarket(day, price);
+        IPrimaryMarketV3(primaryMarket).settle(day);
 
         _payFeeDebt();
 
@@ -893,13 +889,13 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     }
 
     function primaryMarketAddDebt(uint256 amount, uint256 fee) external override onlyPrimaryMarket {
-        redemptionDebts[msg.sender] = redemptionDebts[msg.sender].add(amount);
+        redemptionDebt = redemptionDebt.add(amount);
         feeDebt = feeDebt.add(fee);
         _totalDebt = _totalDebt.add(amount).add(fee);
     }
 
     function primaryMarketPayDebt(uint256 amount) external override onlyPrimaryMarket {
-        redemptionDebts[msg.sender] = redemptionDebts[msg.sender].sub(amount);
+        redemptionDebt = redemptionDebt.sub(amount);
         _totalDebt = _totalDebt.sub(amount);
         IERC20(tokenUnderlying).safeTransfer(msg.sender, amount);
     }
@@ -1010,47 +1006,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
             feeDebt = feeDebt.add(fee);
             _totalDebt = _totalDebt.add(fee);
         }
-    }
-
-    /// @dev Settle primary market operations in the PrimaryMarket contract.
-    function _settlePrimaryMarket(uint256 day, uint256 price) private {
-        uint256 totalShares = getTotalShares();
-        uint256 underlying = getTotalUnderlying();
-        uint256 prevNavM = _historicalNavs[day - 1 days][TRANCHE_M];
-        uint256 newTotalDebt = _totalDebt;
-        IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
-        (
-            uint256 sharesToMint,
-            uint256 sharesToBurn,
-            uint256 creationUnderlying,
-            uint256 redemptionUnderlying,
-            uint256 fee
-        ) = pm.settle(day, totalShares, underlying, price, prevNavM);
-        if (sharesToMint > sharesToBurn) {
-            _mint(TRANCHE_M, address(pm), sharesToMint - sharesToBurn);
-        } else if (sharesToBurn > sharesToMint) {
-            _burn(TRANCHE_M, address(pm), sharesToBurn - sharesToMint);
-        }
-        uint256 debt = redemptionDebts[address(pm)];
-        uint256 redemptionAndDebt = redemptionUnderlying.add(debt);
-        if (creationUnderlying > redemptionAndDebt) {
-            IERC20(tokenUnderlying).safeTransferFrom(
-                address(pm),
-                address(this),
-                creationUnderlying - redemptionAndDebt
-            );
-            redemptionDebts[address(pm)] = 0;
-            newTotalDebt -= debt;
-        } else {
-            uint256 newDebt = redemptionAndDebt - creationUnderlying;
-            redemptionDebts[address(pm)] = newDebt;
-            newTotalDebt = newTotalDebt.sub(debt).add(newDebt);
-        }
-        if (fee > 0) {
-            feeDebt = feeDebt.add(fee);
-            newTotalDebt = newTotalDebt.add(fee);
-        }
-        _totalDebt = newTotalDebt;
     }
 
     function _payFeeDebt() private {

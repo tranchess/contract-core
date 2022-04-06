@@ -23,14 +23,6 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     event RedemptionQueued(address indexed account, uint256 index, uint256 underlying);
     event RedemptionPopped(uint256 count, uint256 newHead);
     event RedemptionClaimed(address indexed account, uint256 index, uint256 underlying);
-    event Settled(
-        uint256 indexed day,
-        uint256 sharesToMint,
-        uint256 sharesToBurn,
-        uint256 creationUnderlying,
-        uint256 redemptionUnderlying,
-        uint256 fee
-    );
     event FundCapUpdated(uint256 newCap);
     event RedemptionFeeRateUpdated(uint256 newRedemptionFeeRate);
     event MergeFeeRateUpdated(uint256 newMergeFeeRate);
@@ -565,27 +557,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     }
 
     /// @dev Nothing to do for daily fund settlement.
-    function settle(
-        uint256 day,
-        uint256,
-        uint256,
-        uint256,
-        uint256
-    )
-        external
-        override
-        onlyFund
-        returns (
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256
-        )
-    {
-        emit Settled(day, 0, 0, 0, 0, 0);
-        return (0, 0, 0, 0, 0);
-    }
+    function settle(uint256 day) external override onlyFund {}
 
     function _updateFundCap(uint256 newCap) private {
         fundCap = newCap;
