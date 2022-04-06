@@ -823,7 +823,7 @@ describe("StableSwapNoRebalance", function () {
         await fund0.mock.getRebalanceSize.returns(0);
         await fund0.mock.refreshBalance.returns();
         await fund0.mock.getTotalUnderlying.returns(parseEther("1"));
-        await fund0.mock.getTotalShares.returns(parseEther("1"));
+        await fund0.mock.getEquivalentTotalM.returns(parseEther("1"));
 
         const MockToken = await ethers.getContractFactory("MockToken");
         const tokens = [
@@ -1375,7 +1375,8 @@ describe("Flashloan", function () {
     const REDEMPTION_FEE_BPS = 35;
     const MERGE_FEE_BPS = 45;
     const TOTAL_UNDERLYING = parseBtc("10");
-    const TOTAL_SHARES = parseEther("10000");
+    const EQUIVALENT_TOTAL_M = parseEther("10");
+    const SPLIT_RATIO = parseEther("1000");
 
     interface FixtureWalletMap {
         readonly [name: string]: Wallet;
@@ -1437,8 +1438,9 @@ describe("Flashloan", function () {
         await fund.mock.tokenUnderlying.returns(btc.address);
         await fund.mock.underlyingDecimalMultiplier.returns(1e10);
         await fund.mock.isPrimaryMarketActive.returns(true);
+        await fund.mock.splitRatio.returns(SPLIT_RATIO);
         await fund.mock.getTotalUnderlying.returns(TOTAL_UNDERLYING);
-        await fund.mock.getTotalShares.returns(TOTAL_SHARES);
+        await fund.mock.getEquivalentTotalM.returns(EQUIVALENT_TOTAL_M);
         await fund.mock.currentDay.returns(0);
         await fund.mock.getRebalanceSize.returns(0);
         await fund.mock.refreshBalance.returns();
@@ -1607,14 +1609,15 @@ describe("Flashloan", function () {
 
         it("Should buy with pancake", async function () {
             const outAB = parseEther("1");
+            const createdM = outAB.mul(2).mul(parseEther("1")).div(SPLIT_RATIO);
             await fund.mock.tokenUnderlying.returns(btc.address);
             await fund.mock.tokenA.returns(tokens[0].address);
             await fund.mock.tokenB.returns(tokens[1].address);
             await fund.mock.primaryMarketMint
-                .withArgs(0, flashSwapRouter.address, outAB.mul(2), 0)
+                .withArgs(0, flashSwapRouter.address, createdM, 0)
                 .returns();
             await fund.mock.primaryMarketBurn
-                .withArgs(0, flashSwapRouter.address, outAB.mul(2), 0)
+                .withArgs(0, flashSwapRouter.address, createdM, 0)
                 .returns();
             await fund.mock.primaryMarketMint
                 .withArgs(1, flashSwapRouter.address, outAB, 0)
@@ -1657,23 +1660,18 @@ describe("Flashloan", function () {
             await fund.mock.primaryMarketBurn
                 .withArgs(2, flashSwapRouter.address, inAB, 0)
                 .returns();
-            const mergeAmount = inAB.mul(2);
+            const mergeAmount = inAB.mul(2).mul(parseEther("1")).div(SPLIT_RATIO);
             const mergeFee = mergeAmount.mul(MERGE_FEE_BPS).div(10000);
             await fund.mock.primaryMarketMint
                 .withArgs(0, flashSwapRouter.address, mergeAmount.sub(mergeFee), 0)
                 .returns();
             await fund.mock.primaryMarketAddDebt
-                .withArgs(
-                    0,
-                    inAB
-                        .mul(2)
-                        .mul(MERGE_FEE_BPS)
-                        .div(10000)
-                        .mul(TOTAL_UNDERLYING)
-                        .div(TOTAL_SHARES)
-                )
+                .withArgs(0, mergeFee.mul(TOTAL_UNDERLYING).div(EQUIVALENT_TOTAL_M))
                 .returns();
-            const redeemAmount = mergeAmount.sub(mergeFee).mul(TOTAL_UNDERLYING).div(TOTAL_SHARES);
+            const redeemAmount = mergeAmount
+                .sub(mergeFee)
+                .mul(TOTAL_UNDERLYING)
+                .div(EQUIVALENT_TOTAL_M);
             const redeemFee = redeemAmount.mul(REDEMPTION_FEE_BPS).div(10000);
             await fund.mock.primaryMarketTransferUnderlying
                 .withArgs(flashSwapRouter.address, redeemAmount.sub(redeemFee), redeemFee)
@@ -1714,23 +1712,18 @@ describe("Flashloan", function () {
             await fund.mock.primaryMarketBurn
                 .withArgs(2, flashSwapRouter.address, inAB, 0)
                 .returns();
-            const mergeAmount = inAB.mul(2);
+            const mergeAmount = inAB.mul(2).mul(parseEther("1")).div(SPLIT_RATIO);
             const mergeFee = mergeAmount.mul(MERGE_FEE_BPS).div(10000);
             await fund.mock.primaryMarketMint
                 .withArgs(0, flashSwapRouter.address, mergeAmount.sub(mergeFee), 0)
                 .returns();
             await fund.mock.primaryMarketAddDebt
-                .withArgs(
-                    0,
-                    inAB
-                        .mul(2)
-                        .mul(MERGE_FEE_BPS)
-                        .div(10000)
-                        .mul(TOTAL_UNDERLYING)
-                        .div(TOTAL_SHARES)
-                )
+                .withArgs(0, mergeFee.mul(TOTAL_UNDERLYING).div(EQUIVALENT_TOTAL_M))
                 .returns();
-            const redeemAmount = mergeAmount.sub(mergeFee).mul(TOTAL_UNDERLYING).div(TOTAL_SHARES);
+            const redeemAmount = mergeAmount
+                .sub(mergeFee)
+                .mul(TOTAL_UNDERLYING)
+                .div(EQUIVALENT_TOTAL_M);
             const redeemFee = redeemAmount.mul(REDEMPTION_FEE_BPS).div(10000);
             await fund.mock.primaryMarketTransferUnderlying
                 .withArgs(flashSwapRouter.address, redeemAmount.sub(redeemFee), redeemFee)
