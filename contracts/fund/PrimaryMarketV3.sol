@@ -208,7 +208,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     /// @param minOutAB Received Token A and Token B amount
     /// @return inM Token M amount that should be split
     function getSplitForAB(uint256 minOutAB) external view override returns (uint256 inM) {
-        return minOutAB * 2;
+        return minOutAB.mul(2);
     }
 
     /// @notice Calculate the result of a merge.
