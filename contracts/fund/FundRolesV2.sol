@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
 
-import "../interfaces/ITrancheIndex.sol";
+import "../interfaces/ITrancheIndexV2.sol";
 
-abstract contract FundRolesV2 is ITrancheIndex {
+abstract contract FundRolesV2 is ITrancheIndexV2 {
     event PrimaryMarketUpdateProposed(
         address indexed newPrimaryMarket,
         uint256 minTimestamp,

@@ -12,7 +12,7 @@ import "../../utils/CoreUtility.sol";
 import "../interfaces/IFund.sol";
 import "../../interfaces/IChessController.sol";
 import "../../interfaces/IChessSchedule.sol";
-import "../../interfaces/ITrancheIndex.sol";
+import "../interfaces/ITrancheIndex.sol";
 import "../interfaces/IPrimaryMarket.sol";
 
 abstract contract Staking is ITrancheIndex, CoreUtility {

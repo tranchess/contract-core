@@ -15,7 +15,7 @@ import {DelayedRedemption, LibDelayedRedemption} from "./LibDelayedRedemption.so
 
 import "../interfaces/IPrimaryMarketV2.sol";
 import "../interfaces/IFundV2.sol";
-import "../../interfaces/ITrancheIndex.sol";
+import "../interfaces/ITrancheIndex.sol";
 import "../../interfaces/IWrappedERC20.sol";
 
 contract PrimaryMarketV2 is IPrimaryMarketV2, ReentrancyGuard, ITrancheIndex, Ownable {

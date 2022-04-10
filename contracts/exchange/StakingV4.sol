@@ -14,7 +14,7 @@ import "../utils/ManagedPausable.sol";
 import "../interfaces/IFundV3.sol";
 import "../interfaces/IChessController.sol";
 import "../interfaces/IChessSchedule.sol";
-import "../interfaces/ITrancheIndex.sol";
+import "../interfaces/ITrancheIndexV2.sol";
 import "../interfaces/IVotingEscrow.sol";
 
 /// @notice Chess locking snapshot used in calculating working balance of an account.
@@ -25,7 +25,7 @@ struct VESnapshot {
     IVotingEscrow.LockedBalance veLocked;
 }
 
-contract StakingV4 is ITrancheIndex, CoreUtility {
+contract StakingV4 is ITrancheIndexV2, CoreUtility {
     /// @dev Reserved storage slots for future sibling contract upgrades
     uint256[32] private _reservedSlots;
 

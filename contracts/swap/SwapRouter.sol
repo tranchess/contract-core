@@ -4,7 +4,7 @@ pragma solidity >=0.6.10 <0.8.0;
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "../interfaces/ISwapRouter.sol";
-import "../interfaces/ITrancheIndex.sol";
+import "../interfaces/ITrancheIndexV2.sol";
 
 interface IStakingV2 {
     function deposit(
@@ -16,7 +16,7 @@ interface IStakingV2 {
 
 /// @title Tranchess Swap Router
 /// @notice Router for stateless execution of swaps against Tranchess stable swaps
-contract SwapRouter is ISwapRouter, ITrancheIndex {
+contract SwapRouter is ISwapRouter, ITrancheIndexV2 {
     using SafeERC20 for IERC20;
 
     mapping(address => mapping(address => IStableSwap)) swapMap;

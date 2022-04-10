@@ -12,7 +12,7 @@ import "../interfaces/ILiquidityGauge.sol";
 import "../interfaces/IChessSchedule.sol";
 import "../interfaces/IChessController.sol";
 import "../interfaces/IFundV3.sol";
-import "../interfaces/ITrancheIndex.sol";
+import "../interfaces/ITrancheIndexV2.sol";
 import "../interfaces/IStableSwap.sol";
 import "../interfaces/IVotingEscrow.sol";
 
@@ -45,7 +45,7 @@ struct VESnapshot {
     IVotingEscrow.LockedBalance veLocked;
 }
 
-contract LiquidityGauge is ILiquidityGauge, ITrancheIndex, CoreUtility, Ownable {
+contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownable {
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;

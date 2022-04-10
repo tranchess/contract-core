@@ -12,10 +12,10 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../utils/SafeDecimalMath.sol";
 
 import "../interfaces/IPrimaryMarketV3.sol";
-import "../interfaces/ITrancheIndex.sol";
+import "../interfaces/ITrancheIndexV2.sol";
 import "../interfaces/IWrappedERC20.sol";
 
-contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ownable {
+contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, Ownable {
     event Created(address indexed account, uint256 underlying, uint256 shares);
     event Redeemed(address indexed account, uint256 shares, uint256 underlying, uint256 fee);
     event Split(address indexed account, uint256 inM, uint256 outA, uint256 outB);

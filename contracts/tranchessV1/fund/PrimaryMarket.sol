@@ -13,7 +13,7 @@ import "../../utils/SafeDecimalMath.sol";
 
 import "../interfaces/IPrimaryMarket.sol";
 import "../interfaces/IFund.sol";
-import "../../interfaces/ITrancheIndex.sol";
+import "../interfaces/ITrancheIndex.sol";
 
 contract PrimaryMarket is IPrimaryMarket, ReentrancyGuard, ITrancheIndex, Ownable {
     event Created(address indexed account, uint256 underlying);
