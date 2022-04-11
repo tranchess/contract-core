@@ -14,7 +14,7 @@ const MERGE_FEE_BPS = 45;
 
 const TOTAL_UNDERLYING = parseBtc("10");
 const EQUIVALENT_TOTAL_M = parseEther("10000");
-const SPLIT_RATIO = parseEther("800");
+const SPLIT_RATIO = parseEther("400");
 
 describe("PrimaryMarketV3", function () {
     interface FixtureData {
@@ -175,7 +175,7 @@ describe("PrimaryMarketV3", function () {
                     .mul(BTC_TO_ETHER)
                     .mul(parseEther("1000"))
                     .div(SPLIT_RATIO)
-                    .mul(parseEther("2"))
+                    .mul(parseEther("1"))
                     .div(navA.add(navB))
             );
         });
@@ -265,7 +265,7 @@ describe("PrimaryMarketV3", function () {
 
     describe("split()", function () {
         const inM = parseEther("10");
-        const outAB = inM.mul(SPLIT_RATIO).div(parseEther("1")).div(2);
+        const outAB = inM.mul(SPLIT_RATIO).div(parseEther("1"));
 
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
@@ -297,7 +297,7 @@ describe("PrimaryMarketV3", function () {
         it("Should round down the result", async function () {
             await fund.mock.primaryMarketBurn.returns();
             await fund.mock.primaryMarketMint.returns();
-            await fund.mock.splitRatio.returns(parseEther("3"));
+            await fund.mock.splitRatio.returns(parseEther("1.5"));
             expect(await primaryMarket.callStatic.split(addr2, 1, 0)).to.equal(1);
             expect(await primaryMarket.callStatic.split(addr2, 5, 0)).to.equal(7);
         });
@@ -313,7 +313,7 @@ describe("PrimaryMarketV3", function () {
 
     describe("merge()", function () {
         const inAB = parseEther("10");
-        const outMBeforeFee = inAB.mul(2).mul(parseEther("1")).div(SPLIT_RATIO);
+        const outMBeforeFee = inAB.mul(parseEther("1")).div(SPLIT_RATIO);
         const feeM = outMBeforeFee.mul(MERGE_FEE_BPS).div(10000);
         const outM = outMBeforeFee.sub(feeM);
         const feeBtc = feeM.mul(TOTAL_UNDERLYING).div(EQUIVALENT_TOTAL_M);
@@ -355,7 +355,7 @@ describe("PrimaryMarketV3", function () {
             await fund.mock.primaryMarketBurn.returns();
             await fund.mock.primaryMarketMint.returns();
             await fund.mock.primaryMarketAddDebt.returns();
-            await fund.mock.splitRatio.returns(parseEther("3"));
+            await fund.mock.splitRatio.returns(parseEther("1.5"));
             expect(await primaryMarket.callStatic.merge(addr2, 4, 0)).to.equal(2);
             expect(await primaryMarket.callStatic.merge(addr2, 8, 0)).to.equal(5);
         });
@@ -883,7 +883,7 @@ describe("PrimaryMarketV3", function () {
         });
 
         it("getSplitForAB()", async function () {
-            await fund.mock.splitRatio.returns(parseEther("3"));
+            await fund.mock.splitRatio.returns(parseEther("1.5"));
             expect(await primaryMarket.getSplitForAB(0)).to.equal(0);
             expect(await primaryMarket.getSplitForAB(1)).to.equal(1);
             expect(await primaryMarket.getSplitForAB(2)).to.equal(2);
@@ -892,7 +892,7 @@ describe("PrimaryMarketV3", function () {
         });
 
         it("getMergeForM()", async function () {
-            await fund.mock.splitRatio.returns(parseEther("1.5"));
+            await fund.mock.splitRatio.returns(parseEther("0.75"));
             await primaryMarket.connect(owner).updateMergeFeeRate(parseEther("0.003"));
             expect(await primaryMarket.getMergeForM(0)).to.equal(0);
             expect(await primaryMarket.getMergeForM(9970)).to.equal(7500);

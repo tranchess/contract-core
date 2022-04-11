@@ -77,6 +77,8 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     ///         and ends at the same time of the next day (exclusive).
     uint256 public override currentDay;
 
+    /// @notice The amount of Token A received by splitting one Token M.
+    ///         This ratio changes on every rebalance.
     uint256 public override splitRatio; // TODO need event?
 
     /// @notice Start timestamp of the current primary market activity window.
@@ -292,18 +294,17 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
 
     /// @notice Equivalent Token A supply, as if all Token M are split.
     function getEquivalentTotalA() public view override returns (uint256) {
-        return
-            _totalSupplies[TRANCHE_M].multiplyDecimal(splitRatio).div(2).add(
-                _totalSupplies[TRANCHE_A]
-            );
+        return _totalSupplies[TRANCHE_M].multiplyDecimal(splitRatio).add(_totalSupplies[TRANCHE_A]);
     }
 
     /// @notice Equivalent Token M supply, as if all Token A and B are split.
     function getEquivalentTotalM() public view override returns (uint256) {
         return
-            _totalSupplies[TRANCHE_A].add(_totalSupplies[TRANCHE_B]).divideDecimal(splitRatio).add(
-                _totalSupplies[TRANCHE_M]
-            );
+            _totalSupplies[TRANCHE_A]
+                .add(_totalSupplies[TRANCHE_B])
+                .divideDecimal(splitRatio)
+                .div(2)
+                .add(_totalSupplies[TRANCHE_M]);
     }
 
     /// @notice Return the rebalance matrix at a given index. A zero struct is returned
@@ -1063,13 +1064,13 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         if (navBOrZero <= navA) {
             // Lower rebalance
             ratioAB = navBOrZero;
-            ratioA2M = (navSum - navBOrZero * 2).divideDecimal(newSplitRatio);
+            ratioA2M = (navSum / 2 - navBOrZero).divideDecimal(newSplitRatio);
             ratioB2M = 0;
         } else {
             // Upper rebalance
             ratioAB = UNIT;
-            ratioA2M = (navA - UNIT).divideDecimal(newSplitRatio);
-            ratioB2M = (navBOrZero - UNIT).divideDecimal(newSplitRatio);
+            ratioA2M = (navA - UNIT).divideDecimal(newSplitRatio) / 2;
+            ratioB2M = (navBOrZero - UNIT).divideDecimal(newSplitRatio) / 2;
         }
         return
             Rebalance({

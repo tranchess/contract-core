@@ -93,9 +93,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
             uint256 settledDay = fund.currentDay() - 1 days;
             uint256 underlyingPrice = fund.twapOracle().getTwap(settledDay);
             (uint256 navA, uint256 navB) = fund.historicalNavs(settledDay);
-            shares = shares.mul(underlyingPrice).mul(2).div(splitRatio).divideDecimal(
-                navA.add(navB)
-            );
+            shares = shares.mul(underlyingPrice).div(splitRatio).divideDecimal(navA.add(navB));
         } else {
             require(
                 fundUnderlying != 0,
@@ -198,7 +196,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     /// @param inM Token M amount to be split
     /// @return outAB Received amount of Token A and Token B
     function getSplit(uint256 inM) public view override returns (uint256 outAB) {
-        return inM.multiplyDecimal(fund.splitRatio()) / 2;
+        return inM.multiplyDecimal(fund.splitRatio());
     }
 
     /// @notice Calculate the amount of Token M that can be split into at least the given amount of
@@ -207,7 +205,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     /// @return inM Token M amount that should be split
     function getSplitForAB(uint256 minOutAB) external view override returns (uint256 inM) {
         uint256 splitRatio = fund.splitRatio();
-        return minOutAB.mul(2).mul(1e18).add(splitRatio.sub(1)).div(splitRatio);
+        return minOutAB.mul(1e18).add(splitRatio.sub(1)).div(splitRatio);
     }
 
     /// @notice Calculate the result of a merge.
@@ -215,7 +213,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     /// @return outM Received Token M amount
     /// @return feeM Token M amount charged as merge fee
     function getMerge(uint256 inAB) public view override returns (uint256 outM, uint256 feeM) {
-        uint256 outMBeforeFee = inAB.mul(2).divideDecimal(fund.splitRatio());
+        uint256 outMBeforeFee = inAB.divideDecimal(fund.splitRatio());
         feeM = outMBeforeFee.multiplyDecimal(mergeFeeRate);
         outM = outMBeforeFee.sub(feeM);
     }
@@ -228,19 +226,19 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     function getMergeForM(uint256 minOutM) external view override returns (uint256 inAB) {
         // Assume:
         //   minOutM * 1e18 = a * (1e18 - mergeFeeRate) + b
-        //   c = ceil(a * splitRatio / 1e18 / 2)
+        //   c = ceil(a * splitRatio / 1e18)
         // where a and b are integers and 0 <= b < 1e18 - mergeFeeRate
         // Then
         //   outMBeforeFee = a
         //   inAB = c
         //   getMerge(inAB).outM
-        //     = c * 2 * 1e18 / splitRatio - floor(c * 2 * 1e18 / splitRatio * mergeFeeRate / 1e18)
-        //     = ceil(c * 2 * 1e18 / splitRatio * (1e18 - mergeFeeRate) / 1e18)
+        //     = c * 1e18 / splitRatio - floor(c * 1e18 / splitRatio * mergeFeeRate / 1e18)
+        //     = ceil(c * 1e18 / splitRatio * (1e18 - mergeFeeRate) / 1e18)
         //    >= ceil(a * (1e18 - mergeFeeRate) / 1e18)
         //     = (a * (1e18 - mergeFeeRate) + b) / 1e18         // because b < 1e18
         //     = minOutM
         uint256 outMBeforeFee = minOutM.divideDecimal(1e18 - mergeFeeRate);
-        inAB = outMBeforeFee.mul(fund.splitRatio()).add(2e18 - 1).div(2e18);
+        inAB = outMBeforeFee.mul(fund.splitRatio()).add(1e18 - 1).div(1e18);
     }
 
     /// @notice Return index of the first queued redemption that cannot be claimed now.

@@ -32,7 +32,7 @@ describe("ShareV2", function () {
         readonly fund: Contract;
     }
 
-    const SPLIT_RATIO = parseEther("1000");
+    const SPLIT_RATIO = parseEther("500");
     // Initial balances
     // User 1: 0.4 M + 100 A
     // User 2:         200 A + 300 B

@@ -124,7 +124,7 @@ describe("FundV3", function () {
             interestRateBallot.address,
             feeCollector.address,
         ]);
-        await fund.initialize(parseEther("1000"), parseEther("1"), parseEther("1"));
+        await fund.initialize(parseEther("500"), parseEther("1"), parseEther("1"));
 
         return {
             wallets: { user1, user2, owner, feeCollector, strategy },
@@ -965,7 +965,7 @@ describe("FundV3", function () {
             f.interestRateBallot.address,
             f.wallets.feeCollector.address,
         ]);
-        await f.fund.initialize(parseEther("1000"), parseEther("1"), parseEther("1"));
+        await f.fund.initialize(parseEther("500"), parseEther("1"), parseEther("1"));
         return f;
     }
 
@@ -1094,7 +1094,7 @@ describe("FundV3", function () {
                 expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(parseEther("0.7"));
                 expect(await fund.trancheTotalSupply(TRANCHE_A)).to.equal(parseEther("300"));
                 expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(parseEther("300"));
-                expect(await fund.splitRatio()).to.equal(parseEther("2000"));
+                expect(await fund.splitRatio()).to.equal(parseEther("1000"));
                 expect(await fund.getEquivalentTotalM()).to.equal(parseEther("1"));
                 expect(await fund.getEquivalentTotalA()).to.equal(parseEther("1000"));
             });
@@ -1120,7 +1120,7 @@ describe("FundV3", function () {
                 expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(parseEther("0.625"));
                 expect(await fund.trancheTotalSupply(TRANCHE_A)).to.equal(parseEther("150"));
                 expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(parseEther("150"));
-                expect(await fund.splitRatio()).to.equal(parseEther("800"));
+                expect(await fund.splitRatio()).to.equal(parseEther("400"));
                 expect(await fund.getEquivalentTotalM()).to.equal(parseEther("1"));
                 expect(await fund.getEquivalentTotalA()).to.equal(parseEther("400"));
             });
@@ -1146,7 +1146,7 @@ describe("FundV3", function () {
                 expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(parseEther("1"));
                 expect(await fund.trancheTotalSupply(TRANCHE_A)).to.equal(0);
                 expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(0);
-                expect(await fund.splitRatio()).to.equal(parseEther("400"));
+                expect(await fund.splitRatio()).to.equal(parseEther("200"));
                 expect(await fund.getEquivalentTotalM()).to.equal(parseEther("1"));
                 expect(await fund.getEquivalentTotalA()).to.equal(parseEther("200"));
             });
@@ -1157,7 +1157,7 @@ describe("FundV3", function () {
                 await preDefinedRebalance080();
                 await preDefinedRebalance250();
                 await preDefinedRebalance200(); // This one is selected
-                const splitRatio = parseEther("4000");
+                const splitRatio = parseEther("2000");
                 expect(await fund.splitRatio()).to.equal(splitRatio);
                 await preDefinedRebalance040();
                 const [m, a, b] = await fund.doRebalance(
@@ -1166,8 +1166,8 @@ describe("FundV3", function () {
                     parseEther("1"),
                     2
                 );
-                const mFromA = parseEther("10").mul(parseEther("1")).div(splitRatio);
-                const mFromB = parseEther("1.9").mul(parseEther("1")).div(splitRatio);
+                const mFromA = parseEther("10").mul(parseEther("1")).div(splitRatio).div(2);
+                const mFromB = parseEther("1.9").mul(parseEther("1")).div(splitRatio).div(2);
                 expect(m).to.equal(parseEther("10000").add(mFromA).add(mFromB));
                 expect(a).to.equal(parseEther("100"));
                 expect(b).to.equal(parseEther("1"));
@@ -1195,8 +1195,8 @@ describe("FundV3", function () {
                     1,
                     4
                 );
-                // Before rebalance: 1000 + 2000 / splitRatio(400) = 1005 equivalent M
-                // After rebalance: 1004.375 + 1000 / splitRatio(1600) = 1005 equivalent M
+                // Before rebalance: 1000 + 1000 / splitRatio(200) = 1005 equivalent M
+                // After rebalance: 1004.375 + 500 / splitRatio(800) = 1005 equivalent M
                 expect(m).to.equal(parseEther("1004.375"));
                 expect(a).to.equal(parseEther("500"));
                 expect(b).to.equal(parseEther("500"));
@@ -1209,15 +1209,15 @@ describe("FundV3", function () {
                 await preDefinedRebalance040();
                 await preDefinedRebalance200();
                 const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
-                const splitRatio = parseEther("640");
+                const splitRatio = parseEther("320");
                 expect(await fund.splitRatio()).to.equal(splitRatio);
                 await preDefinedRebalance250();
                 const rebalance = await fund.getRebalance(2);
                 expect(rebalance.ratioA2M).to.equal(
-                    parseEther("0.1").mul(parseEther("1")).div(splitRatio)
+                    parseEther("0.1").mul(parseEther("1")).div(splitRatio).div(2)
                 );
                 expect(rebalance.ratioB2M).to.equal(
-                    parseEther("1.9").mul(parseEther("1")).div(splitRatio)
+                    parseEther("1.9").mul(parseEther("1")).div(splitRatio).div(2)
                 );
                 expect(rebalance.ratioAB).to.equal(parseEther("1"));
                 expect(rebalance.timestamp).to.equal(settlementTimestamp);
