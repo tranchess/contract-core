@@ -1376,7 +1376,7 @@ describe("Flashloan", function () {
     const MERGE_FEE_BPS = 45;
     const TOTAL_UNDERLYING = parseBtc("10");
     const EQUIVALENT_TOTAL_M = parseEther("10");
-    const SPLIT_RATIO = parseEther("1000");
+    const SPLIT_RATIO = parseEther("500");
 
     interface FixtureWalletMap {
         readonly [name: string]: Wallet;
@@ -1609,7 +1609,7 @@ describe("Flashloan", function () {
 
         it("Should buy with pancake", async function () {
             const outAB = parseEther("1");
-            const createdM = outAB.mul(2).mul(parseEther("1")).div(SPLIT_RATIO);
+            const createdM = outAB.mul(parseEther("1")).div(SPLIT_RATIO);
             await fund.mock.tokenUnderlying.returns(btc.address);
             await fund.mock.tokenA.returns(tokens[0].address);
             await fund.mock.tokenB.returns(tokens[1].address);
@@ -1660,7 +1660,7 @@ describe("Flashloan", function () {
             await fund.mock.primaryMarketBurn
                 .withArgs(2, flashSwapRouter.address, inAB, 0)
                 .returns();
-            const mergeAmount = inAB.mul(2).mul(parseEther("1")).div(SPLIT_RATIO);
+            const mergeAmount = inAB.mul(parseEther("1")).div(SPLIT_RATIO);
             const mergeFee = mergeAmount.mul(MERGE_FEE_BPS).div(10000);
             await fund.mock.primaryMarketMint
                 .withArgs(0, flashSwapRouter.address, mergeAmount.sub(mergeFee), 0)
@@ -1712,7 +1712,7 @@ describe("Flashloan", function () {
             await fund.mock.primaryMarketBurn
                 .withArgs(2, flashSwapRouter.address, inAB, 0)
                 .returns();
-            const mergeAmount = inAB.mul(2).mul(parseEther("1")).div(SPLIT_RATIO);
+            const mergeAmount = inAB.mul(parseEther("1")).div(SPLIT_RATIO);
             const mergeFee = mergeAmount.mul(MERGE_FEE_BPS).div(10000);
             await fund.mock.primaryMarketMint
                 .withArgs(0, flashSwapRouter.address, mergeAmount.sub(mergeFee), 0)
