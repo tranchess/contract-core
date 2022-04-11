@@ -120,9 +120,9 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndex, CoreUtility, Ownable 
 
     function mint(address account, uint256 amount) external override onlyOwner {
         require(account != address(0), "ERC20: mint to the zero address");
-        uint256 workingSupply = _workingSupply;
+        uint256 currentWorkingSupply = _workingSupply;
         uint256 workingBalance = _workingBalances[account];
-        _checkpoint(workingSupply);
+        _checkpoint(currentWorkingSupply);
         _tokenCheckpoint(account, workingBalance);
         uint256 balance = _balances[account];
         _assetCheckpoint(account, balance);
@@ -133,15 +133,21 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndex, CoreUtility, Ownable 
         _totalSupply = newTotalSupply;
         _balances[account] = newBalance;
 
-        _updateWorkingBalance(account, workingBalance, workingSupply, newBalance, newTotalSupply);
+        _updateWorkingBalance(
+            account,
+            workingBalance,
+            currentWorkingSupply,
+            newBalance,
+            newTotalSupply
+        );
         emit Transfer(address(0), account, amount);
     }
 
     function burnFrom(address account, uint256 amount) external override onlyOwner {
         require(account != address(0), "ERC20: burn from the zero address");
-        uint256 workingSupply = _workingSupply;
+        uint256 currentWorkingSupply = _workingSupply;
         uint256 workingBalance = _workingBalances[account];
-        _checkpoint(workingSupply);
+        _checkpoint(currentWorkingSupply);
         _tokenCheckpoint(account, workingBalance);
         uint256 balance = _balances[account];
         _assetCheckpoint(account, balance);
@@ -152,7 +158,13 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndex, CoreUtility, Ownable 
         _balances[account] = newBalance;
         _totalSupply = newTotalSupply;
 
-        _updateWorkingBalance(account, workingBalance, workingSupply, newBalance, newTotalSupply);
+        _updateWorkingBalance(
+            account,
+            workingBalance,
+            currentWorkingSupply,
+            newBalance,
+            newTotalSupply
+        );
         emit Transfer(account, address(0), amount);
     }
 
@@ -212,8 +224,8 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndex, CoreUtility, Ownable 
     }
 
     function userCheckpoint(address account) public override {
-        uint256 workingSupply = _workingSupply;
-        _checkpoint(workingSupply);
+        uint256 currentWorkingSupply = _workingSupply;
+        _checkpoint(currentWorkingSupply);
         uint256 workingBalance = _workingBalances[account];
         _tokenCheckpoint(account, workingBalance);
         uint256 balance = _balances[account];
@@ -222,15 +234,15 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndex, CoreUtility, Ownable 
         _updateWorkingBalance(
             account,
             workingBalance,
-            workingSupply,
+            currentWorkingSupply,
             _balances[account],
             _totalSupply
         );
     }
 
     function syncWithVotingEscrow(address account) external {
-        uint256 workingSupply = _workingSupply;
-        _checkpoint(workingSupply);
+        uint256 currentWorkingSupply = _workingSupply;
+        _checkpoint(currentWorkingSupply);
         uint256 workingBalance = _workingBalances[account];
         _tokenCheckpoint(account, workingBalance);
         uint256 balance = _balances[account];
@@ -260,7 +272,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndex, CoreUtility, Ownable 
         );
     }
 
-    function _checkpoint(uint256 workingSupply) private {
+    function _checkpoint(uint256 currentWorkingSupply) private {
         uint256 timestamp_ = lastTimestamp;
         uint256 endWeek = _endOfWeek(timestamp_);
         uint256 rate = chessSchedule.getRate(endWeek.sub(1 weeks));
@@ -268,7 +280,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndex, CoreUtility, Ownable 
             chessController.getFundRelativeWeight(address(this), endWeek.sub(1 weeks));
 
         // calculate overall integral till now
-        if (workingSupply != 0) {
+        if (currentWorkingSupply != 0) {
             uint256 overallIntegral_ = overallIntegral;
             for (uint256 i = 0; i < MAX_ITERATIONS && timestamp_ < block.timestamp; i++) {
                 uint256 endTimestamp = endWeek.min(block.timestamp);
@@ -278,7 +290,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndex, CoreUtility, Ownable 
                             .mul(relativeWeight)
                             .mul(endTimestamp.sub(timestamp_))
                             .decimalToPreciseDecimal()
-                            .div(workingSupply)
+                            .div(currentWorkingSupply)
                     );
                 }
                 rate = chessSchedule.getRate(endWeek);
@@ -398,7 +410,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndex, CoreUtility, Ownable 
         version++;
         for (; version < rebalanceVersion; version++) {
             (amountM, amountA, amountB) = fund.doRebalance(amountM, amountA, amountB, version);
-            Distribution memory dist = distributions[version];
+            dist = distributions[version];
             if (dist.totalSupply > 0) {
                 amountM = amountM.add(dist.totalM.mul(balance).div(dist.totalSupply));
                 amountA = amountA.add(dist.totalA.mul(balance).div(dist.totalSupply));
