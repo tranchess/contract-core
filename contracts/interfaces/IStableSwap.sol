@@ -18,7 +18,7 @@ interface IStableSwap {
         uint256 base,
         uint256 quote,
         uint256 ampl,
-        uint256 navA
+        uint256 navB
     ) external view returns (uint256 D);
 
     function getQuoteDeltaOut(uint256 baseDelta)

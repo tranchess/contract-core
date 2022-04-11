@@ -26,9 +26,9 @@ interface ILiquidityGauge {
         returns (
             uint256 amountToken,
             uint256 amountReward,
-            uint256 amountM,
-            uint256 amountA,
+            uint256 amountQ,
             uint256 amountB,
+            uint256 amountR,
             uint256 amountU
         );
 
@@ -39,9 +39,9 @@ interface ILiquidityGauge {
     // ----------------------- Asset Distribution ------------------------------
 
     function snapshot(
-        uint256 amountM,
-        uint256 amountA,
+        uint256 amountQ,
         uint256 amountB,
+        uint256 amountR,
         uint256 amountU,
         uint256 rebalanceVersion
     ) external;

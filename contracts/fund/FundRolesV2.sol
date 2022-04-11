@@ -23,9 +23,9 @@ abstract contract FundRolesV2 is ITrancheIndexV2 {
     uint256 private constant ROLE_UPDATE_MIN_DELAY = 3 days;
     uint256 private constant ROLE_UPDATE_MAX_DELAY = 15 days;
 
-    address internal immutable _tokenM;
-    address internal immutable _tokenA;
+    address internal immutable _tokenQ;
     address internal immutable _tokenB;
+    address internal immutable _tokenR;
 
     address public primaryMarket;
     address public proposedPrimaryMarket;
@@ -36,15 +36,15 @@ abstract contract FundRolesV2 is ITrancheIndexV2 {
     uint256 public proposedStrategyTimestamp;
 
     constructor(
-        address tokenM_,
-        address tokenA_,
+        address tokenQ_,
         address tokenB_,
+        address tokenR_,
         address primaryMarket_,
         address strategy_
     ) public {
-        _tokenM = tokenM_;
-        _tokenA = tokenA_;
+        _tokenQ = tokenQ_;
         _tokenB = tokenB_;
+        _tokenR = tokenR_;
         primaryMarket = primaryMarket_;
         strategy = strategy_;
         emit PrimaryMarketUpdated(address(0), primaryMarket_);
@@ -52,24 +52,24 @@ abstract contract FundRolesV2 is ITrancheIndexV2 {
     }
 
     function _getTranche(address share) internal view returns (uint256) {
-        if (share == _tokenM) {
-            return TRANCHE_M;
-        } else if (share == _tokenA) {
-            return TRANCHE_A;
+        if (share == _tokenQ) {
+            return TRANCHE_Q;
         } else if (share == _tokenB) {
             return TRANCHE_B;
+        } else if (share == _tokenR) {
+            return TRANCHE_R;
         } else {
             revert("Only share");
         }
     }
 
     function _getShare(uint256 tranche) internal view returns (address) {
-        if (tranche == TRANCHE_M) {
-            return _tokenM;
-        } else if (tranche == TRANCHE_A) {
-            return _tokenA;
+        if (tranche == TRANCHE_Q) {
+            return _tokenQ;
         } else if (tranche == TRANCHE_B) {
             return _tokenB;
+        } else if (tranche == TRANCHE_R) {
+            return _tokenR;
         } else {
             revert("Invalid tranche");
         }

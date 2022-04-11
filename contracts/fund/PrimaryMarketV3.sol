@@ -18,8 +18,8 @@ import "../interfaces/IWrappedERC20.sol";
 contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, Ownable {
     event Created(address indexed account, uint256 underlying, uint256 shares);
     event Redeemed(address indexed account, uint256 shares, uint256 underlying, uint256 fee);
-    event Split(address indexed account, uint256 inM, uint256 outA, uint256 outB);
-    event Merged(address indexed account, uint256 outM, uint256 inA, uint256 inB);
+    event Split(address indexed account, uint256 inQ, uint256 outB, uint256 outR);
+    event Merged(address indexed account, uint256 outQ, uint256 inB, uint256 inR);
     event RedemptionQueued(address indexed account, uint256 index, uint256 underlying);
     event RedemptionPopped(uint256 count, uint256 newHead);
     event RedemptionClaimed(address indexed account, uint256 index, uint256 underlying);
@@ -81,31 +81,31 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
 
     /// @notice Calculate the result of a creation.
     /// @param underlying Underlying amount spent for the creation
-    /// @return shares Created Token M amount
+    /// @return shares Created QUEEN amount
     function getCreation(uint256 underlying) public view override returns (uint256 shares) {
         uint256 fundUnderlying = fund.getTotalUnderlying();
-        uint256 fundEquivalentTotalM = fund.getEquivalentTotalM();
+        uint256 fundEquivalentTotalQ = fund.getEquivalentTotalQ();
         require(fundUnderlying.add(underlying) <= fundCap, "Exceed fund cap");
-        if (fundEquivalentTotalM == 0) {
+        if (fundEquivalentTotalQ == 0) {
             shares = underlying.mul(fund.underlyingDecimalMultiplier());
             uint256 splitRatio = fund.splitRatio();
             require(splitRatio != 0, "Fund is not initialized");
             uint256 settledDay = fund.currentDay() - 1 days;
             uint256 underlyingPrice = fund.twapOracle().getTwap(settledDay);
-            (uint256 navA, uint256 navB) = fund.historicalNavs(settledDay);
-            shares = shares.mul(underlyingPrice).div(splitRatio).divideDecimal(navA.add(navB));
+            (uint256 navB, uint256 navR) = fund.historicalNavs(settledDay);
+            shares = shares.mul(underlyingPrice).div(splitRatio).divideDecimal(navB.add(navR));
         } else {
             require(
                 fundUnderlying != 0,
                 "Cannot create shares for fund with shares but no underlying"
             );
-            shares = underlying.mul(fundEquivalentTotalM).div(fundUnderlying);
+            shares = underlying.mul(fundEquivalentTotalQ).div(fundUnderlying);
         }
     }
 
-    /// @notice Calculate the amount of underlying tokens to create at least the given amount of
-    ///         Token M. This only works with non-empty fund for simplicity.
-    /// @param minShares Minimum received Token M amount
+    /// @notice Calculate the amount of underlying tokens to create at least the given QUEEN amount.
+    ///         This only works with non-empty fund for simplicity.
+    /// @param minShares Minimum received QUEEN amount
     /// @return underlying Underlying amount that should be used for creation
     function getCreationForShares(uint256 minShares)
         external
@@ -114,33 +114,33 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         returns (uint256 underlying)
     {
         // Assume:
-        //   minShares * fundUnderlying = a * fundEquivalentTotalM - b
-        // where a and b are integers and 0 <= b < fundEquivalentTotalM
+        //   minShares * fundUnderlying = a * fundEquivalentTotalQ - b
+        // where a and b are integers and 0 <= b < fundEquivalentTotalQ
         // Then
         //   underlying = a
         //   getCreation(underlying)
-        //     = floor(a * fundEquivalentTotalM / fundUnderlying)
-        //    >= floor((a * fundEquivalentTotalM - b) / fundUnderlying)
+        //     = floor(a * fundEquivalentTotalQ / fundUnderlying)
+        //    >= floor((a * fundEquivalentTotalQ - b) / fundUnderlying)
         //     = minShares
         //   getCreation(underlying - 1)
-        //     = floor((a * fundEquivalentTotalM - fundEquivalentTotalM) / fundUnderlying)
-        //     < (a * fundEquivalentTotalM - b) / fundUnderlying
+        //     = floor((a * fundEquivalentTotalQ - fundEquivalentTotalQ) / fundUnderlying)
+        //     < (a * fundEquivalentTotalQ - b) / fundUnderlying
         //     = minShares
         uint256 fundUnderlying = fund.getTotalUnderlying();
-        uint256 fundEquivalentTotalM = fund.getEquivalentTotalM();
-        require(fundEquivalentTotalM > 0, "Cannot calculate creation for empty fund");
+        uint256 fundEquivalentTotalQ = fund.getEquivalentTotalQ();
+        require(fundEquivalentTotalQ > 0, "Cannot calculate creation for empty fund");
         return
-            minShares.mul(fundUnderlying).add(fundEquivalentTotalM - 1).div(fundEquivalentTotalM);
+            minShares.mul(fundUnderlying).add(fundEquivalentTotalQ - 1).div(fundEquivalentTotalQ);
     }
 
     function _getRedemptionBeforeFee(uint256 shares) private view returns (uint256 underlying) {
         uint256 fundUnderlying = fund.getTotalUnderlying();
-        uint256 fundEquivalentTotalM = fund.getEquivalentTotalM();
-        underlying = shares.mul(fundUnderlying).div(fundEquivalentTotalM);
+        uint256 fundEquivalentTotalQ = fund.getEquivalentTotalQ();
+        underlying = shares.mul(fundUnderlying).div(fundEquivalentTotalQ);
     }
 
     /// @notice Calculate the result of a redemption.
-    /// @param shares Token M amount spent for the redemption
+    /// @param shares QUEEN amount spent for the redemption
     /// @return underlying Redeemed underlying amount
     /// @return fee Underlying amount charged as redemption fee
     function getRedemption(uint256 shares)
@@ -154,11 +154,11 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         underlying = underlying.sub(fee);
     }
 
-    /// @notice Calculate the amount of Token M that can be redeemed for at least the given amount
+    /// @notice Calculate the amount of QUEEN that can be redeemed for at least the given amount
     ///         of underlying tokens.
     /// @dev The return value may not be the minimum solution due to rounding errors.
     /// @param minUnderlying Minimum received underlying amount
-    /// @return shares Token M amount that should be redeemed
+    /// @return shares QUEEN amount that should be redeemed
     function getRedemptionForUnderlying(uint256 minUnderlying)
         external
         view
@@ -167,7 +167,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     {
         // Assume:
         //   minUnderlying * 1e18 = a * (1e18 - redemptionFeeRate) + b
-        //   a * fundEquivalentTotalM = c * fundUnderlying - d
+        //   a * fundEquivalentTotalQ = c * fundUnderlying - d
         // where
         //   a, b, c, d are integers
         //   0 <= b < 1e18 - redemptionFeeRate
@@ -176,69 +176,69 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         //   underlyingBeforeFee = a
         //   shares = c
         //   getRedemption(shares).underlying
-        //     = floor(c * fundUnderlying / fundEquivalentTotalM) -
-        //       - floor(floor(c * fundUnderlying / fundEquivalentTotalM) * redemptionFeeRate / 1e18)
-        //     = ceil(floor(c * fundUnderlying / fundEquivalentTotalM) * (1e18 - redemptionFeeRate) / 1e18)
-        //    >= ceil(floor((c * fundUnderlying - d) / fundEquivalentTotalM) * (1e18 - redemptionFeeRate) / 1e18)
+        //     = floor(c * fundUnderlying / fundEquivalentTotalQ) -
+        //       - floor(floor(c * fundUnderlying / fundEquivalentTotalQ) * redemptionFeeRate / 1e18)
+        //     = ceil(floor(c * fundUnderlying / fundEquivalentTotalQ) * (1e18 - redemptionFeeRate) / 1e18)
+        //    >= ceil(floor((c * fundUnderlying - d) / fundEquivalentTotalQ) * (1e18 - redemptionFeeRate) / 1e18)
         //     = ceil(a * (1e18 - redemptionFeeRate) / 1e18)
         //     = (a * (1e18 - redemptionFeeRate) + b) / 1e18        // because b < 1e18
         //     = minUnderlying
         uint256 fundUnderlying = fund.getTotalUnderlying();
-        uint256 fundEquivalentTotalM = fund.getEquivalentTotalM();
+        uint256 fundEquivalentTotalQ = fund.getEquivalentTotalQ();
         uint256 underlyingBeforeFee = minUnderlying.divideDecimal(1e18 - redemptionFeeRate);
         return
-            underlyingBeforeFee.mul(fundEquivalentTotalM).add(fundUnderlying - 1).div(
+            underlyingBeforeFee.mul(fundEquivalentTotalQ).add(fundUnderlying - 1).div(
                 fundUnderlying
             );
     }
 
     /// @notice Calculate the result of a split.
-    /// @param inM Token M amount to be split
-    /// @return outAB Received amount of Token A and Token B
-    function getSplit(uint256 inM) public view override returns (uint256 outAB) {
-        return inM.multiplyDecimal(fund.splitRatio());
+    /// @param inQ QUEEN amount to be split
+    /// @return outB Received BISHOP amount, which is also received ROOK amount
+    function getSplit(uint256 inQ) public view override returns (uint256 outB) {
+        return inQ.multiplyDecimal(fund.splitRatio());
     }
 
-    /// @notice Calculate the amount of Token M that can be split into at least the given amount of
-    ///         Token A and Token B.
-    /// @param minOutAB Received Token A and Token B amount
-    /// @return inM Token M amount that should be split
-    function getSplitForAB(uint256 minOutAB) external view override returns (uint256 inM) {
+    /// @notice Calculate the amount of QUEEN that can be split into at least the given amount of
+    ///         BISHOP and ROOK.
+    /// @param minOutB Received BISHOP amount, which is also received ROOK amount
+    /// @return inQ QUEEN amount that should be split
+    function getSplitForB(uint256 minOutB) external view override returns (uint256 inQ) {
         uint256 splitRatio = fund.splitRatio();
-        return minOutAB.mul(1e18).add(splitRatio.sub(1)).div(splitRatio);
+        return minOutB.mul(1e18).add(splitRatio.sub(1)).div(splitRatio);
     }
 
     /// @notice Calculate the result of a merge.
-    /// @param inAB Spent amount of Token A and Token B
-    /// @return outM Received Token M amount
-    /// @return feeM Token M amount charged as merge fee
-    function getMerge(uint256 inAB) public view override returns (uint256 outM, uint256 feeM) {
-        uint256 outMBeforeFee = inAB.divideDecimal(fund.splitRatio());
-        feeM = outMBeforeFee.multiplyDecimal(mergeFeeRate);
-        outM = outMBeforeFee.sub(feeM);
+    /// @param inB Spent BISHOP amount, which is also spent ROOK amount
+    /// @return outQ Received QUEEN amount
+    /// @return feeQ QUEEN amount charged as merge fee
+    function getMerge(uint256 inB) public view override returns (uint256 outQ, uint256 feeQ) {
+        uint256 outQBeforeFee = inB.divideDecimal(fund.splitRatio());
+        feeQ = outQBeforeFee.multiplyDecimal(mergeFeeRate);
+        outQ = outQBeforeFee.sub(feeQ);
     }
 
-    /// @notice Calculate the amount of Token A and Token B that can be merged into at least
-    ///      the given amount of Token M.
+    /// @notice Calculate the amount of BISHOP and ROOK that can be merged into at least
+    ///      the given amount of QUEEN.
     /// @dev The return value may not be the minimum solution due to rounding errors.
-    /// @param minOutM Minimum received Token M amount
-    /// @return inAB Token A and Token B amount that should be merged
-    function getMergeForM(uint256 minOutM) external view override returns (uint256 inAB) {
+    /// @param minOutQ Minimum received QUEEN amount
+    /// @return inB BISHOP amount that should be merged, which is also spent ROOK amount
+    function getMergeForQ(uint256 minOutQ) external view override returns (uint256 inB) {
         // Assume:
-        //   minOutM * 1e18 = a * (1e18 - mergeFeeRate) + b
+        //   minOutQ * 1e18 = a * (1e18 - mergeFeeRate) + b
         //   c = ceil(a * splitRatio / 1e18)
         // where a and b are integers and 0 <= b < 1e18 - mergeFeeRate
         // Then
-        //   outMBeforeFee = a
-        //   inAB = c
-        //   getMerge(inAB).outM
+        //   outQBeforeFee = a
+        //   inB = c
+        //   getMerge(inB).outQ
         //     = c * 1e18 / splitRatio - floor(c * 1e18 / splitRatio * mergeFeeRate / 1e18)
         //     = ceil(c * 1e18 / splitRatio * (1e18 - mergeFeeRate) / 1e18)
         //    >= ceil(a * (1e18 - mergeFeeRate) / 1e18)
         //     = (a * (1e18 - mergeFeeRate) + b) / 1e18         // because b < 1e18
-        //     = minOutM
-        uint256 outMBeforeFee = minOutM.divideDecimal(1e18 - mergeFeeRate);
-        inAB = outMBeforeFee.mul(fund.splitRatio()).add(1e18 - 1).div(1e18);
+        //     = minOutQ
+        uint256 outQBeforeFee = minOutQ.divideDecimal(1e18 - mergeFeeRate);
+        inB = outQBeforeFee.mul(fund.splitRatio()).add(1e18 - 1).div(1e18);
     }
 
     /// @notice Return index of the first queued redemption that cannot be claimed now.
@@ -310,12 +310,12 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         return redemptionQueueHead == redemptionQueueTail;
     }
 
-    /// @notice Create Token M using underlying tokens.
-    /// @param recipient Address that will receive created Token M
+    /// @notice Create QUEEN using underlying tokens.
+    /// @param recipient Address that will receive created QUEEN
     /// @param underlying Spent underlying amount
-    /// @param minShares Minimum amount of Token M to be received
+    /// @param minShares Minimum QUEEN amount to be received
     /// @param version The latest rebalance version
-    /// @return shares Received Token M amount
+    /// @return shares Received QUEEN amount
     function create(
         address recipient,
         uint256 underlying,
@@ -326,12 +326,12 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         _tokenUnderlying.safeTransferFrom(msg.sender, address(fund), underlying);
     }
 
-    /// @notice Create Token M using native currency. The underlying must be wrapped token
+    /// @notice Create QUEEN using native currency. The underlying must be wrapped token
     ///         of the native currency.
-    /// @param recipient Address that will receive created Token M
-    /// @param minShares Minimum amount of Token M to be received
+    /// @param recipient Address that will receive created QUEEN
+    /// @param minShares Minimum amount of QUEEN to be received
     /// @param version The latest rebalance version
-    /// @return shares Received Token M amount
+    /// @return shares Received QUEEN amount
     function wrapAndCreate(
         address recipient,
         uint256 minShares,
@@ -342,10 +342,10 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         _tokenUnderlying.safeTransfer(address(fund), msg.value);
     }
 
-    /// @notice Redeem Token M to get underlying tokens back. Revert if there are still some
+    /// @notice Redeem QUEEN to get underlying tokens back. Revert if there are still some
     ///         queued redemptions that cannot be claimed now.
     /// @param recipient Address that will receive redeemed underlying tokens
-    /// @param shares Spent Token M amount
+    /// @param shares Spent QUEEN amount
     /// @param minUnderlying Minimum amount of underlying tokens to be received
     /// @param version The latest rebalance version
     /// @return underlying Received underlying amount
@@ -358,11 +358,11 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         underlying = _redeem(recipient, shares, minUnderlying, version);
     }
 
-    /// @notice Redeem Token M to get native currency back. The underlying must be wrapped token
+    /// @notice Redeem QUEEN to get native currency back. The underlying must be wrapped token
     ///         of the native currency. Revert if there are still some queued redemptions that
     ///         cannot be claimed now.
     /// @param recipient Address that will receive redeemed underlying tokens
-    /// @param shares Spent Token M amount
+    /// @param shares Spent QUEEN amount
     /// @param minUnderlying Minimum amount of underlying tokens to be received
     /// @param version The latest rebalance version
     /// @return underlying Received underlying amount
@@ -386,7 +386,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     ) private onlyActive returns (uint256 shares) {
         shares = getCreation(underlying);
         require(shares >= minShares && shares > 0, "Min shares created");
-        fund.primaryMarketMint(TRANCHE_M, recipient, shares, version);
+        fund.primaryMarketMint(TRANCHE_Q, recipient, shares, version);
         emit Created(recipient, underlying, shares);
     }
 
@@ -396,7 +396,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 minUnderlying,
         uint256 version
     ) private onlyActive returns (uint256 underlying) {
-        fund.primaryMarketBurn(TRANCHE_M, msg.sender, shares, version);
+        fund.primaryMarketBurn(TRANCHE_Q, msg.sender, shares, version);
         _popRedemptionQueue(0);
         uint256 fee;
         (underlying, fee) = getRedemption(shares);
@@ -410,11 +410,11 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         emit Redeemed(recipient, shares, underlying, fee);
     }
 
-    /// @notice Redeem Token M and wait in the redemption queue. Redeemed underlying tokens will
+    /// @notice Redeem QUEEN and wait in the redemption queue. Redeemed underlying tokens will
     ///         be claimable when the fund has enough balance to pay this redemption and all
     ///         previous ones in the queue.
     /// @param recipient Address that will receive redeemed underlying tokens
-    /// @param shares Spent Token M amount
+    /// @param shares Spent QUEEN amount
     /// @param minUnderlying Minimum amount of underlying tokens to be received
     /// @param version The latest rebalance version
     /// @return underlying Received underlying amount
@@ -425,7 +425,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 minUnderlying,
         uint256 version
     ) external override onlyActive nonReentrant returns (uint256 underlying, uint256 index) {
-        fund.primaryMarketBurn(TRANCHE_M, msg.sender, shares, version);
+        fund.primaryMarketBurn(TRANCHE_Q, msg.sender, shares, version);
         uint256 fee;
         (underlying, fee) = getRedemption(shares);
         require(underlying >= minUnderlying && underlying > 0, "Min underlying redeemed");
@@ -538,28 +538,28 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
 
     function split(
         address recipient,
-        uint256 inM,
+        uint256 inQ,
         uint256 version
-    ) external override onlyActive returns (uint256 outAB) {
-        outAB = getSplit(inM);
-        fund.primaryMarketBurn(TRANCHE_M, msg.sender, inM, version);
-        fund.primaryMarketMint(TRANCHE_A, recipient, outAB, version);
-        fund.primaryMarketMint(TRANCHE_B, recipient, outAB, version);
-        emit Split(recipient, inM, outAB, outAB);
+    ) external override onlyActive returns (uint256 outB) {
+        outB = getSplit(inQ);
+        fund.primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
+        fund.primaryMarketMint(TRANCHE_B, recipient, outB, version);
+        fund.primaryMarketMint(TRANCHE_R, recipient, outB, version);
+        emit Split(recipient, inQ, outB, outB);
     }
 
     function merge(
         address recipient,
-        uint256 inAB,
+        uint256 inB,
         uint256 version
-    ) external override onlyActive returns (uint256 outM) {
-        uint256 feeM;
-        (outM, feeM) = getMerge(inAB);
-        fund.primaryMarketBurn(TRANCHE_A, msg.sender, inAB, version);
-        fund.primaryMarketBurn(TRANCHE_B, msg.sender, inAB, version);
-        fund.primaryMarketMint(TRANCHE_M, recipient, outM, version);
-        fund.primaryMarketAddDebt(0, _getRedemptionBeforeFee(feeM));
-        emit Merged(recipient, outM, inAB, inAB);
+    ) external override onlyActive returns (uint256 outQ) {
+        uint256 feeQ;
+        (outQ, feeQ) = getMerge(inB);
+        fund.primaryMarketBurn(TRANCHE_B, msg.sender, inB, version);
+        fund.primaryMarketBurn(TRANCHE_R, msg.sender, inB, version);
+        fund.primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
+        fund.primaryMarketAddDebt(0, _getRedemptionBeforeFee(feeQ));
+        emit Merged(recipient, outQ, inB, inB);
     }
 
     /// @dev Nothing to do for daily fund settlement.

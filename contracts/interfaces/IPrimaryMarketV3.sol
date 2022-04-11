@@ -17,13 +17,13 @@ interface IPrimaryMarketV3 {
         view
         returns (uint256 shares);
 
-    function getSplit(uint256 inM) external view returns (uint256 outAB);
+    function getSplit(uint256 inQ) external view returns (uint256 outB);
 
-    function getSplitForAB(uint256 minOutAB) external view returns (uint256 inM);
+    function getSplitForB(uint256 minOutB) external view returns (uint256 inQ);
 
-    function getMerge(uint256 inAB) external view returns (uint256 outM, uint256 feeM);
+    function getMerge(uint256 inB) external view returns (uint256 outQ, uint256 feeQ);
 
-    function getMergeForM(uint256 minOutM) external view returns (uint256 inAB);
+    function getMergeForQ(uint256 minOutQ) external view returns (uint256 inB);
 
     function canBeRemovedFromFund() external view returns (bool);
 
@@ -71,15 +71,15 @@ interface IPrimaryMarketV3 {
 
     function split(
         address recipient,
-        uint256 inM,
+        uint256 inQ,
         uint256 version
-    ) external returns (uint256 outAB);
+    ) external returns (uint256 outB);
 
     function merge(
         address recipient,
-        uint256 inAB,
+        uint256 inB,
         uint256 version
-    ) external returns (uint256 outM);
+    ) external returns (uint256 outQ);
 
     function settle(uint256 day) external;
 }

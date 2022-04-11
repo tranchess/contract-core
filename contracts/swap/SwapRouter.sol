@@ -83,7 +83,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2 {
             _swap(amounts, path, to);
         } else {
             _swap(amounts, path, address(this));
-            IStakingV2(staking).deposit(TRANCHE_A, amounts[amounts.length - 1], to);
+            IStakingV2(staking).deposit(TRANCHE_B, amounts[amounts.length - 1], to);
         }
     }
 
@@ -110,7 +110,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2 {
             _swap(amounts, path, to);
         } else {
             _swap(amounts, path, address(this));
-            IStakingV2(staking).deposit(TRANCHE_A, amounts[0], to);
+            IStakingV2(staking).deposit(TRANCHE_B, amounts[0], to);
         }
     }
 
