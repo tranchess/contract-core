@@ -63,7 +63,7 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         {
             address tokenUnderlying = IFundV3(pm.fund()).tokenUnderlying();
             uint256 inQ = pm.getSplitForB(outR);
-            underlyingAmount = pm.getCreationForShares(inQ);
+            underlyingAmount = pm.getCreationForQ(inQ);
             // Calculate the exact amount of quote asset to pay
             (totalQuoteAmount, mode) = _externalGetAmountsIn(
                 mode,
@@ -159,9 +159,9 @@ contract FlashSwapRouter is ITranchessSwapCallee {
                 )[1];
             // Create QUEEN using the borrowed underlying
             IERC20(pm.fund().tokenUnderlying()).safeApprove(address(pm), underlyingAmount);
-            uint256 shares = pm.create(address(this), underlyingAmount, 0, version);
+            uint256 outQ = pm.create(address(this), underlyingAmount, 0, version);
             // Split QUEEN into BISHOP and ROOK
-            uint256 outB = pm.split(address(this), shares, version);
+            uint256 outB = pm.split(address(this), outQ, version);
             // Send back BISHOP to tranchess swap
             IERC20(pm.fund().tokenB()).safeTransfer(msg.sender, outB);
             // Send ROOK to user

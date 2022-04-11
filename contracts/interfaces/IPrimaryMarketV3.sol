@@ -6,16 +6,13 @@ import "./IFundV3.sol";
 interface IPrimaryMarketV3 {
     function fund() external view returns (IFundV3);
 
-    function getCreation(uint256 underlying) external view returns (uint256 shares);
+    function getCreation(uint256 underlying) external view returns (uint256 outQ);
 
-    function getCreationForShares(uint256 minShares) external view returns (uint256 underlying);
+    function getCreationForQ(uint256 minOutQ) external view returns (uint256 underlying);
 
-    function getRedemption(uint256 shares) external view returns (uint256 underlying, uint256 fee);
+    function getRedemption(uint256 inQ) external view returns (uint256 underlying, uint256 fee);
 
-    function getRedemptionForUnderlying(uint256 minUnderlying)
-        external
-        view
-        returns (uint256 shares);
+    function getRedemptionForUnderlying(uint256 minUnderlying) external view returns (uint256 inQ);
 
     function getSplit(uint256 inQ) external view returns (uint256 outB);
 
@@ -30,33 +27,33 @@ interface IPrimaryMarketV3 {
     function create(
         address recipient,
         uint256 underlying,
-        uint256 minShares,
+        uint256 minOutQ,
         uint256 version
-    ) external returns (uint256 shares);
+    ) external returns (uint256 outQ);
 
     function wrapAndCreate(
         address recipient,
-        uint256 minShares,
+        uint256 minOutQ,
         uint256 version
-    ) external payable returns (uint256 shares);
+    ) external payable returns (uint256 outQ);
 
     function redeem(
         address recipient,
-        uint256 shares,
+        uint256 inQ,
         uint256 minUnderlying,
         uint256 version
     ) external returns (uint256 underlying);
 
     function redeemAndUnwrap(
         address recipient,
-        uint256 shares,
+        uint256 inQ,
         uint256 minUnderlying,
         uint256 version
     ) external returns (uint256 underlying);
 
     function queueRedemption(
         address recipient,
-        uint256 shares,
+        uint256 inQ,
         uint256 minUnderlying,
         uint256 version
     ) external returns (uint256 underlying, uint256 index);

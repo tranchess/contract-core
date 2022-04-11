@@ -113,32 +113,32 @@ describe("PrimaryMarketV3", function () {
             );
         });
 
-        it("Should mint shares to the given recipient", async function () {
+        it("Should mint QUEEN to the given recipient", async function () {
             const version = 999;
             await expect(() => primaryMarket.create(addr2, inBtc, 0, version)).to.callMocks({
                 func: fund.mock.primaryMarketMint.withArgs(TRANCHE_Q, addr2, outQ, version),
             });
         });
 
-        it("Should return created share amount", async function () {
+        it("Should return created QUEEN amount", async function () {
             await fund.mock.primaryMarketMint.returns();
             expect(await primaryMarket.callStatic.create(addr2, inBtc, 0, 0)).to.equal(outQ);
         });
 
-        it("Should check min shares created", async function () {
+        it("Should check min QUEEN created", async function () {
             await fund.mock.primaryMarketMint.returns();
             await expect(primaryMarket.create(addr2, inBtc, outQ.add(1), 0)).to.be.revertedWith(
-                "Min shares created"
+                "Min QUEEN created"
             );
             await primaryMarket.create(addr2, inBtc, outQ, 0);
         });
 
-        it("Should revert if no share can be created", async function () {
+        it("Should revert if no QUEEN can be created", async function () {
             await fund.mock.primaryMarketMint.returns();
             await fund.mock.getEquivalentTotalQ.returns(1);
             await fund.mock.getTotalUnderlying.returns(parseBtc("10"));
             await expect(primaryMarket.create(addr2, parseBtc("1"), 0, 0)).to.be.revertedWith(
-                "Min shares created"
+                "Min QUEEN created"
             );
         });
 
@@ -204,7 +204,7 @@ describe("PrimaryMarketV3", function () {
             );
         });
 
-        it("Should burn shares and transfer underlying", async function () {
+        it("Should burn QUEEN and transfer underlying", async function () {
             const version = 999;
             await expect(() => primaryMarket.redeem(addr2, inQ, 0, version)).to.callMocks(
                 {
@@ -231,7 +231,7 @@ describe("PrimaryMarketV3", function () {
             await primaryMarket.redeem(addr2, inQ, outBtc, 0);
         });
 
-        it("Should revert if no share can be created", async function () {
+        it("Should revert if no underlying can be redeemed", async function () {
             await fund.mock.primaryMarketBurn.returns();
             await fund.mock.primaryMarketTransferUnderlying.returns();
             await fund.mock.getEquivalentTotalQ.returns(parseEther("10000"));
@@ -272,7 +272,7 @@ describe("PrimaryMarketV3", function () {
             await expect(primaryMarket.split(addr1, inQ, 0)).to.be.revertedWith("Only when active");
         });
 
-        it("Should burn and mint shares and add fee debt", async function () {
+        it("Should burn and mint tranche tokens and add fee debt", async function () {
             const version = 999;
             await expect(() => primaryMarket.split(addr2, inQ, version)).to.callMocks(
                 {
@@ -320,12 +320,10 @@ describe("PrimaryMarketV3", function () {
 
         it("Should check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
-            await expect(primaryMarket.merge(addr1, inB, 0)).to.be.revertedWith(
-                "Only when active"
-            );
+            await expect(primaryMarket.merge(addr1, inB, 0)).to.be.revertedWith("Only when active");
         });
 
-        it("Should burn and mint shares and add fee debt", async function () {
+        it("Should burn and mint tranche tokens and add fee debt", async function () {
             const version = 999;
             await expect(() => primaryMarket.merge(addr2, inB, version)).to.callMocks(
                 {
@@ -386,7 +384,7 @@ describe("PrimaryMarketV3", function () {
             );
         });
 
-        it("Should burn shares and add debt", async function () {
+        it("Should burn QUEEN and add debt", async function () {
             const version = 999;
             await expect(() => primaryMarket.queueRedemption(addr2, inQ, 0, version)).to.callMocks(
                 {
@@ -414,7 +412,7 @@ describe("PrimaryMarketV3", function () {
             await primaryMarket.queueRedemption(addr2, inQ, outBtc, 0);
         });
 
-        it("Should revert if no share can be created", async function () {
+        it("Should revert if no underlying can be redeemed", async function () {
             await fund.mock.primaryMarketBurn.returns();
             await fund.mock.primaryMarketAddDebt.returns();
             await fund.mock.getEquivalentTotalQ.returns(parseEther("10000"));
@@ -859,14 +857,14 @@ describe("PrimaryMarketV3", function () {
     });
 
     describe("Reverse getters", function () {
-        it("getCreationForShares()", async function () {
+        it("getCreationForQ()", async function () {
             await fund.mock.getTotalUnderlying.returns(7);
             await fund.mock.getEquivalentTotalQ.returns(10);
-            expect(await primaryMarket.getCreationForShares(0)).to.equal(0);
-            expect(await primaryMarket.getCreationForShares(1)).to.equal(1);
+            expect(await primaryMarket.getCreationForQ(0)).to.equal(0);
+            expect(await primaryMarket.getCreationForQ(1)).to.equal(1);
 
-            // More shares can be created
-            expect(await primaryMarket.getCreationForShares(6)).to.equal(5);
+            // More QUEEN can be created
+            expect(await primaryMarket.getCreationForQ(6)).to.equal(5);
             expect(await primaryMarket.getCreation(5)).to.equal(7);
         });
 

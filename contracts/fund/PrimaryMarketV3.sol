@@ -16,8 +16,8 @@ import "../interfaces/ITrancheIndexV2.sol";
 import "../interfaces/IWrappedERC20.sol";
 
 contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, Ownable {
-    event Created(address indexed account, uint256 underlying, uint256 shares);
-    event Redeemed(address indexed account, uint256 shares, uint256 underlying, uint256 fee);
+    event Created(address indexed account, uint256 underlying, uint256 outQ);
+    event Redeemed(address indexed account, uint256 inQ, uint256 underlying, uint256 fee);
     event Split(address indexed account, uint256 inQ, uint256 outB, uint256 outR);
     event Merged(address indexed account, uint256 outQ, uint256 inB, uint256 inR);
     event RedemptionQueued(address indexed account, uint256 index, uint256 underlying);
@@ -81,75 +81,69 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
 
     /// @notice Calculate the result of a creation.
     /// @param underlying Underlying amount spent for the creation
-    /// @return shares Created QUEEN amount
-    function getCreation(uint256 underlying) public view override returns (uint256 shares) {
+    /// @return outQ Created QUEEN amount
+    function getCreation(uint256 underlying) public view override returns (uint256 outQ) {
         uint256 fundUnderlying = fund.getTotalUnderlying();
         uint256 fundEquivalentTotalQ = fund.getEquivalentTotalQ();
         require(fundUnderlying.add(underlying) <= fundCap, "Exceed fund cap");
         if (fundEquivalentTotalQ == 0) {
-            shares = underlying.mul(fund.underlyingDecimalMultiplier());
+            outQ = underlying.mul(fund.underlyingDecimalMultiplier());
             uint256 splitRatio = fund.splitRatio();
             require(splitRatio != 0, "Fund is not initialized");
             uint256 settledDay = fund.currentDay() - 1 days;
             uint256 underlyingPrice = fund.twapOracle().getTwap(settledDay);
             (uint256 navB, uint256 navR) = fund.historicalNavs(settledDay);
-            shares = shares.mul(underlyingPrice).div(splitRatio).divideDecimal(navB.add(navR));
+            outQ = outQ.mul(underlyingPrice).div(splitRatio).divideDecimal(navB.add(navR));
         } else {
             require(
                 fundUnderlying != 0,
-                "Cannot create shares for fund with shares but no underlying"
+                "Cannot create QUEEN for fund with shares but no underlying"
             );
-            shares = underlying.mul(fundEquivalentTotalQ).div(fundUnderlying);
+            outQ = underlying.mul(fundEquivalentTotalQ).div(fundUnderlying);
         }
     }
 
     /// @notice Calculate the amount of underlying tokens to create at least the given QUEEN amount.
     ///         This only works with non-empty fund for simplicity.
-    /// @param minShares Minimum received QUEEN amount
+    /// @param minOutQ Minimum received QUEEN amount
     /// @return underlying Underlying amount that should be used for creation
-    function getCreationForShares(uint256 minShares)
-        external
-        view
-        override
-        returns (uint256 underlying)
-    {
+    function getCreationForQ(uint256 minOutQ) external view override returns (uint256 underlying) {
         // Assume:
-        //   minShares * fundUnderlying = a * fundEquivalentTotalQ - b
+        //   minOutQ * fundUnderlying = a * fundEquivalentTotalQ - b
         // where a and b are integers and 0 <= b < fundEquivalentTotalQ
         // Then
         //   underlying = a
         //   getCreation(underlying)
         //     = floor(a * fundEquivalentTotalQ / fundUnderlying)
         //    >= floor((a * fundEquivalentTotalQ - b) / fundUnderlying)
-        //     = minShares
+        //     = minOutQ
         //   getCreation(underlying - 1)
         //     = floor((a * fundEquivalentTotalQ - fundEquivalentTotalQ) / fundUnderlying)
         //     < (a * fundEquivalentTotalQ - b) / fundUnderlying
-        //     = minShares
+        //     = minOutQ
         uint256 fundUnderlying = fund.getTotalUnderlying();
         uint256 fundEquivalentTotalQ = fund.getEquivalentTotalQ();
         require(fundEquivalentTotalQ > 0, "Cannot calculate creation for empty fund");
-        return
-            minShares.mul(fundUnderlying).add(fundEquivalentTotalQ - 1).div(fundEquivalentTotalQ);
+        return minOutQ.mul(fundUnderlying).add(fundEquivalentTotalQ - 1).div(fundEquivalentTotalQ);
     }
 
-    function _getRedemptionBeforeFee(uint256 shares) private view returns (uint256 underlying) {
+    function _getRedemptionBeforeFee(uint256 inQ) private view returns (uint256 underlying) {
         uint256 fundUnderlying = fund.getTotalUnderlying();
         uint256 fundEquivalentTotalQ = fund.getEquivalentTotalQ();
-        underlying = shares.mul(fundUnderlying).div(fundEquivalentTotalQ);
+        underlying = inQ.mul(fundUnderlying).div(fundEquivalentTotalQ);
     }
 
     /// @notice Calculate the result of a redemption.
-    /// @param shares QUEEN amount spent for the redemption
+    /// @param inQ QUEEN amount spent for the redemption
     /// @return underlying Redeemed underlying amount
     /// @return fee Underlying amount charged as redemption fee
-    function getRedemption(uint256 shares)
+    function getRedemption(uint256 inQ)
         public
         view
         override
         returns (uint256 underlying, uint256 fee)
     {
-        underlying = _getRedemptionBeforeFee(shares);
+        underlying = _getRedemptionBeforeFee(inQ);
         fee = underlying.multiplyDecimal(redemptionFeeRate);
         underlying = underlying.sub(fee);
     }
@@ -158,12 +152,12 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     ///         of underlying tokens.
     /// @dev The return value may not be the minimum solution due to rounding errors.
     /// @param minUnderlying Minimum received underlying amount
-    /// @return shares QUEEN amount that should be redeemed
+    /// @return inQ QUEEN amount that should be redeemed
     function getRedemptionForUnderlying(uint256 minUnderlying)
         external
         view
         override
-        returns (uint256 shares)
+        returns (uint256 inQ)
     {
         // Assume:
         //   minUnderlying * 1e18 = a * (1e18 - redemptionFeeRate) + b
@@ -174,8 +168,8 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         //   0 <= d < fundUnderlying
         // Then
         //   underlyingBeforeFee = a
-        //   shares = c
-        //   getRedemption(shares).underlying
+        //   inQ = c
+        //   getRedemption(inQ).underlying
         //     = floor(c * fundUnderlying / fundEquivalentTotalQ) -
         //       - floor(floor(c * fundUnderlying / fundEquivalentTotalQ) * redemptionFeeRate / 1e18)
         //     = ceil(floor(c * fundUnderlying / fundEquivalentTotalQ) * (1e18 - redemptionFeeRate) / 1e18)
@@ -313,31 +307,31 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     /// @notice Create QUEEN using underlying tokens.
     /// @param recipient Address that will receive created QUEEN
     /// @param underlying Spent underlying amount
-    /// @param minShares Minimum QUEEN amount to be received
+    /// @param minOutQ Minimum QUEEN amount to be received
     /// @param version The latest rebalance version
-    /// @return shares Received QUEEN amount
+    /// @return outQ Received QUEEN amount
     function create(
         address recipient,
         uint256 underlying,
-        uint256 minShares,
+        uint256 minOutQ,
         uint256 version
-    ) external override nonReentrant returns (uint256 shares) {
-        shares = _create(recipient, underlying, minShares, version);
+    ) external override nonReentrant returns (uint256 outQ) {
+        outQ = _create(recipient, underlying, minOutQ, version);
         _tokenUnderlying.safeTransferFrom(msg.sender, address(fund), underlying);
     }
 
     /// @notice Create QUEEN using native currency. The underlying must be wrapped token
     ///         of the native currency.
     /// @param recipient Address that will receive created QUEEN
-    /// @param minShares Minimum amount of QUEEN to be received
+    /// @param minOutQ Minimum amount of QUEEN to be received
     /// @param version The latest rebalance version
-    /// @return shares Received QUEEN amount
+    /// @return outQ Received QUEEN amount
     function wrapAndCreate(
         address recipient,
-        uint256 minShares,
+        uint256 minOutQ,
         uint256 version
-    ) external payable override nonReentrant returns (uint256 shares) {
-        shares = _create(recipient, msg.value, minShares, version);
+    ) external payable override nonReentrant returns (uint256 outQ) {
+        outQ = _create(recipient, msg.value, minOutQ, version);
         IWrappedERC20(address(_tokenUnderlying)).deposit{value: msg.value}();
         _tokenUnderlying.safeTransfer(address(fund), msg.value);
     }
@@ -345,34 +339,34 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     /// @notice Redeem QUEEN to get underlying tokens back. Revert if there are still some
     ///         queued redemptions that cannot be claimed now.
     /// @param recipient Address that will receive redeemed underlying tokens
-    /// @param shares Spent QUEEN amount
+    /// @param inQ Spent QUEEN amount
     /// @param minUnderlying Minimum amount of underlying tokens to be received
     /// @param version The latest rebalance version
     /// @return underlying Received underlying amount
     function redeem(
         address recipient,
-        uint256 shares,
+        uint256 inQ,
         uint256 minUnderlying,
         uint256 version
     ) external override nonReentrant returns (uint256 underlying) {
-        underlying = _redeem(recipient, shares, minUnderlying, version);
+        underlying = _redeem(recipient, inQ, minUnderlying, version);
     }
 
     /// @notice Redeem QUEEN to get native currency back. The underlying must be wrapped token
     ///         of the native currency. Revert if there are still some queued redemptions that
     ///         cannot be claimed now.
     /// @param recipient Address that will receive redeemed underlying tokens
-    /// @param shares Spent QUEEN amount
+    /// @param inQ Spent QUEEN amount
     /// @param minUnderlying Minimum amount of underlying tokens to be received
     /// @param version The latest rebalance version
     /// @return underlying Received underlying amount
     function redeemAndUnwrap(
         address recipient,
-        uint256 shares,
+        uint256 inQ,
         uint256 minUnderlying,
         uint256 version
     ) external override nonReentrant returns (uint256 underlying) {
-        underlying = _redeem(address(this), shares, minUnderlying, version);
+        underlying = _redeem(address(this), inQ, minUnderlying, version);
         IWrappedERC20(address(_tokenUnderlying)).withdraw(underlying);
         (bool success, ) = recipient.call{value: underlying}("");
         require(success, "Transfer failed");
@@ -381,25 +375,25 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     function _create(
         address recipient,
         uint256 underlying,
-        uint256 minShares,
+        uint256 minOutQ,
         uint256 version
-    ) private onlyActive returns (uint256 shares) {
-        shares = getCreation(underlying);
-        require(shares >= minShares && shares > 0, "Min shares created");
-        fund.primaryMarketMint(TRANCHE_Q, recipient, shares, version);
-        emit Created(recipient, underlying, shares);
+    ) private onlyActive returns (uint256 outQ) {
+        outQ = getCreation(underlying);
+        require(outQ >= minOutQ && outQ > 0, "Min QUEEN created");
+        fund.primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
+        emit Created(recipient, underlying, outQ);
     }
 
     function _redeem(
         address recipient,
-        uint256 shares,
+        uint256 inQ,
         uint256 minUnderlying,
         uint256 version
     ) private onlyActive returns (uint256 underlying) {
-        fund.primaryMarketBurn(TRANCHE_Q, msg.sender, shares, version);
+        fund.primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         _popRedemptionQueue(0);
         uint256 fee;
-        (underlying, fee) = getRedemption(shares);
+        (underlying, fee) = getRedemption(inQ);
         require(underlying >= minUnderlying && underlying > 0, "Min underlying redeemed");
         // Redundant check for user-friendly revert message.
         require(
@@ -407,27 +401,27 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
             "Not enough underlying in fund"
         );
         fund.primaryMarketTransferUnderlying(recipient, underlying, fee);
-        emit Redeemed(recipient, shares, underlying, fee);
+        emit Redeemed(recipient, inQ, underlying, fee);
     }
 
     /// @notice Redeem QUEEN and wait in the redemption queue. Redeemed underlying tokens will
     ///         be claimable when the fund has enough balance to pay this redemption and all
     ///         previous ones in the queue.
     /// @param recipient Address that will receive redeemed underlying tokens
-    /// @param shares Spent QUEEN amount
+    /// @param inQ Spent QUEEN amount
     /// @param minUnderlying Minimum amount of underlying tokens to be received
     /// @param version The latest rebalance version
     /// @return underlying Received underlying amount
     /// @return index Index of the queued redemption
     function queueRedemption(
         address recipient,
-        uint256 shares,
+        uint256 inQ,
         uint256 minUnderlying,
         uint256 version
     ) external override onlyActive nonReentrant returns (uint256 underlying, uint256 index) {
-        fund.primaryMarketBurn(TRANCHE_Q, msg.sender, shares, version);
+        fund.primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         uint256 fee;
-        (underlying, fee) = getRedemption(shares);
+        (underlying, fee) = getRedemption(inQ);
         require(underlying >= minUnderlying && underlying > 0, "Min underlying redeemed");
         index = redemptionQueueTail;
         QueuedRedemption storage newRedemption = queuedRedemptions[index];
@@ -439,7 +433,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
             underlying;
         redemptionQueueTail = index + 1;
         fund.primaryMarketAddDebt(underlying, fee);
-        emit Redeemed(recipient, shares, underlying, fee);
+        emit Redeemed(recipient, inQ, underlying, fee);
         emit RedemptionQueued(recipient, index, underlying);
     }
 
