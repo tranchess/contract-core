@@ -176,6 +176,10 @@ describe("StableSwapRebalance", function () {
         await chessSchedule.mock.getRate.returns(parseEther("1"));
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
 
+        const swapReward = await deployMockForName(owner, "SwapReward");
+        await swapReward.mock.rewardToken.returns(tokens[0].address);
+        await swapReward.mock.getReward.returns();
+
         const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
         const lpToken0 = await LiquidityGauge.connect(owner).deploy(
             "pool2 token",
@@ -183,7 +187,8 @@ describe("StableSwapRebalance", function () {
             chessSchedule.address,
             chessController.address,
             fund0.address,
-            votingEscrow.address
+            votingEscrow.address,
+            swapReward.address
         );
         const lpToken1 = await LiquidityGauge.connect(owner).deploy(
             "pool2 token",
@@ -191,7 +196,8 @@ describe("StableSwapRebalance", function () {
             chessSchedule.address,
             chessController.address,
             fund1.address,
-            votingEscrow.address
+            votingEscrow.address,
+            swapReward.address
         );
 
         const SwapRouter = await ethers.getContractFactory("SwapRouter");
@@ -840,6 +846,10 @@ describe("StableSwapNoRebalance", function () {
         await chessSchedule.mock.getRate.returns(parseEther("1"));
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
 
+        const swapReward = await deployMockForName(owner, "SwapReward");
+        await swapReward.mock.rewardToken.returns(tokens[0].address);
+        await swapReward.mock.getReward.returns();
+
         const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
         const lpToken0 = await LiquidityGauge.connect(owner).deploy(
             "pool2 token",
@@ -847,7 +857,8 @@ describe("StableSwapNoRebalance", function () {
             chessSchedule.address,
             chessController.address,
             fund0.address,
-            votingEscrow.address
+            votingEscrow.address,
+            swapReward.address
         );
 
         const SwapRouter = await ethers.getContractFactory("SwapRouter");
@@ -1468,6 +1479,10 @@ describe("Flashloan", function () {
             swapRouter.address
         );
 
+        const swapReward = await deployMockForName(owner, "SwapReward");
+        await swapReward.mock.rewardToken.returns(tokens[0].address);
+        await swapReward.mock.getReward.returns();
+
         const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
         const lpToken0 = await LiquidityGauge.connect(owner).deploy(
             "pool2 token",
@@ -1475,7 +1490,8 @@ describe("Flashloan", function () {
             chessSchedule.address,
             chessController.address,
             fund.address,
-            votingEscrow.address
+            votingEscrow.address,
+            swapReward.address
         );
         const StableSwapRebalance = await ethers.getContractFactory("StableSwapRebalance");
         const stableSwap0 = await StableSwapRebalance.connect(owner).deploy(
