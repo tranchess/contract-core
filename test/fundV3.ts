@@ -7,9 +7,9 @@ const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
 import {
-    TRANCHE_M,
-    TRANCHE_A,
+    TRANCHE_Q,
     TRANCHE_B,
+    TRANCHE_R,
     DAY,
     HOUR,
     SETTLEMENT_TIME,
@@ -34,9 +34,9 @@ describe("FundV3", function () {
         readonly btc: Contract;
         readonly aprOracle: MockContract;
         readonly interestRateBallot: MockContract;
-        readonly shareM: MockContract;
-        readonly shareA: MockContract;
+        readonly shareQ: MockContract;
         readonly shareB: MockContract;
+        readonly shareR: MockContract;
         readonly primaryMarket: MockContract;
         readonly fund: Contract;
     }
@@ -57,9 +57,9 @@ describe("FundV3", function () {
     let btc: Contract;
     let aprOracle: MockContract;
     let interestRateBallot: MockContract;
-    let shareM: MockContract;
-    let shareA: MockContract;
+    let shareQ: MockContract;
     let shareB: MockContract;
+    let shareR: MockContract;
     let primaryMarket: MockContract;
     let fund: Contract;
 
@@ -71,7 +71,7 @@ describe("FundV3", function () {
 
         // Start at 12 hours after settlement time of the 6th day in a week, which makes sure that
         // the first settlement after the fund's deployment settles the last day in a week and
-        // starts a new week by updating interest rate of Token A. Many test cases in this file
+        // starts a new week by updating interest rate of BISHOP. Many test cases in this file
         // rely on this fact to change the interest rate.
         //
         // As Fund settles at 14:00 everyday and an Unix timestamp starts a week on Thursday,
@@ -97,10 +97,10 @@ describe("FundV3", function () {
         const interestRateBallot = await deployMockForName(owner, "IBallot");
         await interestRateBallot.mock.count.returns(0);
 
-        const shareM = await deployMockForName(owner, "IShareV2");
-        const shareA = await deployMockForName(owner, "IShareV2");
+        const shareQ = await deployMockForName(owner, "IShareV2");
         const shareB = await deployMockForName(owner, "IShareV2");
-        for (const share of [shareM, shareA, shareB]) {
+        const shareR = await deployMockForName(owner, "IShareV2");
+        for (const share of [shareQ, shareB, shareR]) {
             await share.mock.fundEmitTransfer.returns();
             await share.mock.fundEmitApproval.returns();
         }
@@ -111,9 +111,9 @@ describe("FundV3", function () {
         const fund = await Fund.connect(owner).deploy([
             btc.address,
             8,
-            shareM.address,
-            shareA.address,
+            shareQ.address,
             shareB.address,
+            shareR.address,
             primaryMarket.address,
             ethers.constants.AddressZero,
             0,
@@ -134,9 +134,9 @@ describe("FundV3", function () {
             btc,
             aprOracle,
             interestRateBallot,
-            shareM,
-            shareA,
+            shareQ,
             shareB,
+            shareR,
             primaryMarket,
             fund: fund.connect(user1),
         };
@@ -150,16 +150,16 @@ describe("FundV3", function () {
     async function pmCreate(
         user: Wallet,
         inBtc: BigNumberish,
-        outM: BigNumberish,
+        outQ: BigNumberish,
         version?: number
     ): Promise<void> {
         await btc.connect(user).transfer(fund.address, inBtc);
         await primaryMarket.call(
             fund,
             "primaryMarketMint",
-            TRANCHE_M,
+            TRANCHE_Q,
             user.address,
-            outM,
+            outQ,
             version ?? 0
         );
     }
@@ -183,9 +183,9 @@ describe("FundV3", function () {
         btc = fixtureData.btc;
         aprOracle = fixtureData.aprOracle;
         interestRateBallot = fixtureData.interestRateBallot;
-        shareM = fixtureData.shareM;
-        shareA = fixtureData.shareA;
+        shareQ = fixtureData.shareQ;
         shareB = fixtureData.shareB;
+        shareR = fixtureData.shareR;
         primaryMarket = fixtureData.primaryMarket;
         fund = fixtureData.fund;
     });
@@ -212,7 +212,7 @@ describe("FundV3", function () {
             expect(await fund.isFundActive(startDay + POST_REBALANCE_DELAY_TIME - 1)).to.equal(
                 false
             );
-            await expect(shareM.call(fund, "shareTransfer", addr1, addr2, 0)).to.be.revertedWith(
+            await expect(shareQ.call(fund, "shareTransfer", addr1, addr2, 0)).to.be.revertedWith(
                 "Transfer is inactive"
             );
         });
@@ -460,9 +460,9 @@ describe("FundV3", function () {
 
         describe("Share", function () {
             it("Should initialize the three Share addresses", async function () {
-                expect(await fund.tokenM()).to.equal(shareM.address);
-                expect(await fund.tokenA()).to.equal(shareA.address);
+                expect(await fund.tokenQ()).to.equal(shareQ.address);
                 expect(await fund.tokenB()).to.equal(shareB.address);
+                expect(await fund.tokenR()).to.equal(shareR.address);
             });
         });
     });
@@ -511,7 +511,7 @@ describe("FundV3", function () {
             // Initiating transactions from a Waffle mock contract doesn't work well in Hardhat
             // and may fail with gas estimating errors. We impersonate the address and directly send
             // transactions from it to make test development easier.
-            for (const contract of [primaryMarket, shareM, shareA, shareB]) {
+            for (const contract of [primaryMarket, shareQ, shareB, shareR]) {
                 await ethers.provider.send("hardhat_setBalance", [
                     contract.address,
                     parseEther("10").toHexString(),
@@ -521,22 +521,22 @@ describe("FundV3", function () {
             fund = fund.connect(await ethers.getSigner(primaryMarket.address));
             fundFromShares = [
                 {
-                    fundFromShare: fund.connect(await ethers.getSigner(shareM.address)),
-                    tranche: TRANCHE_M,
-                },
-                {
-                    fundFromShare: fund.connect(await ethers.getSigner(shareA.address)),
-                    tranche: TRANCHE_A,
+                    fundFromShare: fund.connect(await ethers.getSigner(shareQ.address)),
+                    tranche: TRANCHE_Q,
                 },
                 {
                     fundFromShare: fund.connect(await ethers.getSigner(shareB.address)),
                     tranche: TRANCHE_B,
                 },
+                {
+                    fundFromShare: fund.connect(await ethers.getSigner(shareR.address)),
+                    tranche: TRANCHE_R,
+                },
             ];
         });
 
         afterEach(async function () {
-            for (const contract of [primaryMarket, shareM, shareA, shareB]) {
+            for (const contract of [primaryMarket, shareQ, shareB, shareR]) {
                 await ethers.provider.send("hardhat_stopImpersonatingAccount", [contract.address]);
             }
         });
@@ -544,90 +544,90 @@ describe("FundV3", function () {
         describe("primaryMarketMint()", function () {
             it("Should revert if not called from PrimaryMarket", async function () {
                 await expect(
-                    fund.connect(user1).primaryMarketMint(TRANCHE_M, addr1, 1, 0)
+                    fund.connect(user1).primaryMarketMint(TRANCHE_Q, addr1, 1, 0)
                 ).to.be.revertedWith("Only primary market");
             });
 
             it("Should revert if version mismatch", async function () {
-                await expect(fund.primaryMarketMint(TRANCHE_M, addr1, 1, 1)).to.be.revertedWith(
+                await expect(fund.primaryMarketMint(TRANCHE_Q, addr1, 1, 1)).to.be.revertedWith(
                     "Only current version"
                 );
             });
 
             it("Should update balance and total supply", async function () {
-                await fund.primaryMarketMint(TRANCHE_M, addr1, 123, 0);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(123);
-                await fund.primaryMarketMint(TRANCHE_M, addr1, 456, 0);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(579);
-                await fund.primaryMarketMint(TRANCHE_M, addr2, 1000, 0);
-                await fund.primaryMarketMint(TRANCHE_A, addr2, 10, 0);
-                await fund.primaryMarketMint(TRANCHE_B, addr2, 100, 0);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(1000);
-                expect(await fund.trancheBalanceOf(TRANCHE_A, addr2)).to.equal(10);
-                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(100);
-                expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(1579);
-                expect(await fund.trancheTotalSupply(TRANCHE_A)).to.equal(10);
-                expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(100);
+                await fund.primaryMarketMint(TRANCHE_Q, addr1, 123, 0);
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr1)).to.equal(123);
+                await fund.primaryMarketMint(TRANCHE_Q, addr1, 456, 0);
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr1)).to.equal(579);
+                await fund.primaryMarketMint(TRANCHE_Q, addr2, 1000, 0);
+                await fund.primaryMarketMint(TRANCHE_B, addr2, 10, 0);
+                await fund.primaryMarketMint(TRANCHE_R, addr2, 100, 0);
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr2)).to.equal(1000);
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(10);
+                expect(await fund.trancheBalanceOf(TRANCHE_R, addr2)).to.equal(100);
+                expect(await fund.trancheTotalSupply(TRANCHE_Q)).to.equal(1579);
+                expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(10);
+                expect(await fund.trancheTotalSupply(TRANCHE_R)).to.equal(100);
             });
 
             it("Should revert on minting to the zero address", async function () {
                 await expect(
-                    fund.primaryMarketMint(TRANCHE_M, ethers.constants.AddressZero, 100, 0)
+                    fund.primaryMarketMint(TRANCHE_Q, ethers.constants.AddressZero, 100, 0)
                 ).to.be.revertedWith("ERC20: mint to the zero address");
             });
 
             it("Should revert on overflow", async function () {
                 const HALF_MAX = BigNumber.from("2").pow(255);
-                await fund.primaryMarketMint(TRANCHE_M, addr1, HALF_MAX, 0);
-                await expect(fund.primaryMarketMint(TRANCHE_M, addr1, HALF_MAX, 0)).to.be.reverted;
-                await expect(fund.primaryMarketMint(TRANCHE_M, addr2, HALF_MAX, 0)).to.be.reverted;
+                await fund.primaryMarketMint(TRANCHE_Q, addr1, HALF_MAX, 0);
+                await expect(fund.primaryMarketMint(TRANCHE_Q, addr1, HALF_MAX, 0)).to.be.reverted;
+                await expect(fund.primaryMarketMint(TRANCHE_Q, addr2, HALF_MAX, 0)).to.be.reverted;
             });
         });
 
         describe("primaryMarketBurn()", function () {
             it("Should revert if not called from PrimaryMarket", async function () {
                 await expect(
-                    fund.connect(user1).primaryMarketBurn(TRANCHE_M, addr1, 1, 0)
+                    fund.connect(user1).primaryMarketBurn(TRANCHE_Q, addr1, 1, 0)
                 ).to.be.revertedWith("Only primary market");
             });
 
             it("Should revert if version mismatch", async function () {
-                await expect(fund.primaryMarketBurn(TRANCHE_M, addr1, 1, 1)).to.be.revertedWith(
+                await expect(fund.primaryMarketBurn(TRANCHE_Q, addr1, 1, 1)).to.be.revertedWith(
                     "Only current version"
                 );
             });
 
             it("Should update balance and total supply", async function () {
-                await fund.primaryMarketMint(TRANCHE_M, addr1, 10000, 0);
-                await fund.primaryMarketMint(TRANCHE_M, addr2, 10000, 0);
-                await fund.primaryMarketMint(TRANCHE_A, addr2, 10000, 0);
+                await fund.primaryMarketMint(TRANCHE_Q, addr1, 10000, 0);
+                await fund.primaryMarketMint(TRANCHE_Q, addr2, 10000, 0);
                 await fund.primaryMarketMint(TRANCHE_B, addr2, 10000, 0);
+                await fund.primaryMarketMint(TRANCHE_R, addr2, 10000, 0);
 
-                await fund.primaryMarketBurn(TRANCHE_M, addr1, 1000, 0);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(9000);
-                await fund.primaryMarketBurn(TRANCHE_M, addr1, 2000, 0);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(7000);
-                await fund.primaryMarketBurn(TRANCHE_M, addr2, 100, 0);
-                await fund.primaryMarketBurn(TRANCHE_A, addr2, 10, 0);
-                await fund.primaryMarketBurn(TRANCHE_B, addr2, 1, 0);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(9900);
-                expect(await fund.trancheBalanceOf(TRANCHE_A, addr2)).to.equal(9990);
-                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(9999);
-                expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(16900);
-                expect(await fund.trancheTotalSupply(TRANCHE_A)).to.equal(9990);
-                expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(9999);
+                await fund.primaryMarketBurn(TRANCHE_Q, addr1, 1000, 0);
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr1)).to.equal(9000);
+                await fund.primaryMarketBurn(TRANCHE_Q, addr1, 2000, 0);
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr1)).to.equal(7000);
+                await fund.primaryMarketBurn(TRANCHE_Q, addr2, 100, 0);
+                await fund.primaryMarketBurn(TRANCHE_B, addr2, 10, 0);
+                await fund.primaryMarketBurn(TRANCHE_R, addr2, 1, 0);
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr2)).to.equal(9900);
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(9990);
+                expect(await fund.trancheBalanceOf(TRANCHE_R, addr2)).to.equal(9999);
+                expect(await fund.trancheTotalSupply(TRANCHE_Q)).to.equal(16900);
+                expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(9990);
+                expect(await fund.trancheTotalSupply(TRANCHE_R)).to.equal(9999);
             });
 
             it("Should revert on burning from the zero address", async function () {
                 await expect(
-                    fund.primaryMarketBurn(TRANCHE_M, ethers.constants.AddressZero, 100, 0)
+                    fund.primaryMarketBurn(TRANCHE_Q, ethers.constants.AddressZero, 100, 0)
                 ).to.be.revertedWith("ERC20: burn from the zero address");
             });
 
             it("Should revert if balance is not enough", async function () {
-                await expect(fund.primaryMarketBurn(TRANCHE_M, addr1, 1, 0)).to.be.reverted;
-                await fund.primaryMarketMint(TRANCHE_M, addr1, 100, 0);
-                await expect(fund.primaryMarketBurn(TRANCHE_M, addr1, 101, 0)).to.be.reverted;
+                await expect(fund.primaryMarketBurn(TRANCHE_Q, addr1, 1, 0)).to.be.reverted;
+                await fund.primaryMarketMint(TRANCHE_Q, addr1, 100, 0);
+                await expect(fund.primaryMarketBurn(TRANCHE_Q, addr1, 101, 0)).to.be.reverted;
             });
         });
 
@@ -656,9 +656,9 @@ describe("FundV3", function () {
                 for (const { fundFromShare, tranche } of fundFromShares) {
                     await fund.primaryMarketMint(tranche, addr2, 10000, 0);
                     await fundFromShare.shareTransfer(addr2, addr1, 10000);
-                    expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(10000);
-                    expect(await fund.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(0);
-                    expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(10000);
+                    expect(await fund.trancheBalanceOf(TRANCHE_Q, addr1)).to.equal(10000);
+                    expect(await fund.trancheBalanceOf(TRANCHE_Q, addr2)).to.equal(0);
+                    expect(await fund.trancheTotalSupply(TRANCHE_Q)).to.equal(10000);
                 }
             });
 
@@ -734,8 +734,8 @@ describe("FundV3", function () {
             expect(await fund.currentDay()).to.equal(startDay + DAY);
             expect(await fund.getRebalanceSize()).to.equal(0);
             const navs = await fund.historicalNavs(startDay);
-            expect(navs.navA).to.equal(parseEther("1"));
             expect(navs.navB).to.equal(parseEther("1"));
+            expect(navs.navR).to.equal(parseEther("1"));
         });
     });
 
@@ -744,27 +744,31 @@ describe("FundV3", function () {
         const protocolFee = parseBtc("10").mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
         const btcInFund = parseBtc("10").sub(protocolFee);
         const totalShares = parseEther("10000");
-        const navA = parseEther("1.001");
+        const navB = parseEther("1.001");
 
         beforeEach(async function () {
             await fund
                 .connect(owner)
                 .updateDailyProtocolFeeRate(parseEther("0.0001").mul(DAILY_PROTOCOL_FEE_BPS));
-            // Create 10 Token M with 10 BTC on the first day.
+            // Create 10 QUEEN with 10 BTC on the first day.
             await pmCreate(user1, parseBtc("10"), parseEther("10"));
             await twapOracle.mock.getTwap.withArgs(startDay).returns(parseEther("1000"));
         });
 
         it("Should charge protocol fee and interest", async function () {
-            const navM = btcInFund.mul(BTC_TO_ETHER).mul(parseEther("1000")).div(totalShares);
-            const navB = navM.mul(2).sub(navA);
+            const navSum = btcInFund
+                .mul(BTC_TO_ETHER)
+                .mul(parseEther("1000"))
+                .mul(2)
+                .div(totalShares);
+            const navR = navSum.sub(navB);
             await advanceBlockAtTime(startDay);
-            await expect(fund.settle()).to.emit(fund, "Settled").withArgs(startDay, navA, navB);
+            await expect(fund.settle()).to.emit(fund, "Settled").withArgs(startDay, navB, navR);
             expect(await fund.currentDay()).to.equal(startDay + DAY);
             expect(await fund.getRebalanceSize()).to.equal(0);
             const navs = await fund.historicalNavs(startDay);
-            expect(navs.navA).to.equal(navA);
             expect(navs.navB).to.equal(navB);
+            expect(navs.navR).to.equal(navR);
         });
 
         it("Should transfer fee to the fee collector", async function () {
@@ -782,53 +786,53 @@ describe("FundV3", function () {
         it("Should not trigger upper rebalance when price is not high enough", async function () {
             const price = parseEther("1500");
             await twapOracle.mock.getTwap.withArgs(startDay).returns(price);
-            const navM = btcInFund.mul(BTC_TO_ETHER).mul(price).div(totalShares);
-            const navB = navM.mul(2).sub(navA);
-            const navBOverA = navB.mul(parseEther("1")).div(navA);
-            expect(navBOverA).to.be.lt(UPPER_REBALANCE_THRESHOLD);
+            const navSum = btcInFund.mul(BTC_TO_ETHER).mul(price).mul(2).div(totalShares);
+            const navR = navSum.sub(navB);
+            const navROverB = navR.mul(parseEther("1")).div(navB);
+            expect(navROverB).to.be.lt(UPPER_REBALANCE_THRESHOLD);
             await advanceOneDayAndSettle();
             expect(await fund.getRebalanceSize()).to.equal(0);
             const navs = await fund.historicalNavs(startDay);
-            expect(navs.navB).to.equal(navB);
+            expect(navs.navR).to.equal(navR);
         });
 
         it("Should trigger upper rebalance when price is high enough", async function () {
             const price = parseEther("1510");
             await twapOracle.mock.getTwap.withArgs(startDay).returns(price);
-            const navM = btcInFund.mul(BTC_TO_ETHER).mul(price).div(totalShares);
-            const navB = navM.mul(2).sub(navA);
-            const navBOverA = navB.mul(parseEther("1")).div(navA);
-            expect(navBOverA).to.be.gt(UPPER_REBALANCE_THRESHOLD);
+            const navSum = btcInFund.mul(BTC_TO_ETHER).mul(price).mul(2).div(totalShares);
+            const navR = navSum.sub(navB);
+            const navROverB = navR.mul(parseEther("1")).div(navB);
+            expect(navROverB).to.be.gt(UPPER_REBALANCE_THRESHOLD);
             await advanceOneDayAndSettle();
             expect(await fund.getRebalanceSize()).to.equal(1);
             const navs = await fund.historicalNavs(startDay);
-            expect(navs.navB).to.equal(parseEther("1"));
+            expect(navs.navR).to.equal(parseEther("1"));
         });
 
         it("Should not trigger lower rebalance when price is not low enough", async function () {
             const price = parseEther("755");
             await twapOracle.mock.getTwap.withArgs(startDay).returns(price);
-            const navM = btcInFund.mul(BTC_TO_ETHER).mul(price).div(totalShares);
-            const navB = navM.mul(2).sub(navA);
-            const navBOverA = navB.mul(parseEther("1")).div(navA);
-            expect(navBOverA).to.be.gt(LOWER_REBALANCE_THRESHOLD);
+            const navSum = btcInFund.mul(BTC_TO_ETHER).mul(price).mul(2).div(totalShares);
+            const navR = navSum.sub(navB);
+            const navROverB = navR.mul(parseEther("1")).div(navB);
+            expect(navROverB).to.be.gt(LOWER_REBALANCE_THRESHOLD);
             await advanceOneDayAndSettle();
             expect(await fund.getRebalanceSize()).to.equal(0);
             const navs = await fund.historicalNavs(startDay);
-            expect(navs.navB).to.equal(navB);
+            expect(navs.navR).to.equal(navR);
         });
 
         it("Should trigger lower rebalance when price is low enough", async function () {
             const price = parseEther("750");
             await twapOracle.mock.getTwap.withArgs(startDay).returns(price);
-            const navM = btcInFund.mul(BTC_TO_ETHER).mul(price).div(totalShares);
-            const navB = navM.mul(2).sub(navA);
-            const navBOverA = navB.mul(parseEther("1")).div(navA);
-            expect(navBOverA).to.be.lt(LOWER_REBALANCE_THRESHOLD);
+            const navSum = btcInFund.mul(BTC_TO_ETHER).mul(price).mul(2).div(totalShares);
+            const navR = navSum.sub(navB);
+            const navROverB = navR.mul(parseEther("1")).div(navB);
+            expect(navROverB).to.be.lt(LOWER_REBALANCE_THRESHOLD);
             await advanceOneDayAndSettle();
             expect(await fund.getRebalanceSize()).to.equal(1);
             const navs = await fund.historicalNavs(startDay);
-            expect(navs.navB).to.equal(parseEther("1"));
+            expect(navs.navR).to.equal(parseEther("1"));
         });
     });
 
@@ -849,7 +853,7 @@ describe("FundV3", function () {
             await primaryMarket.call(
                 fund,
                 "primaryMarketBurn",
-                TRANCHE_M,
+                TRANCHE_Q,
                 addr1,
                 parseEther("1"),
                 0
@@ -867,50 +871,50 @@ describe("FundV3", function () {
             const navSum = parseEther("2")
                 .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
-            const navA = parseEther("1.001");
-            const navB = navSum.sub(navA);
+            const navB = parseEther("1.001");
+            const navR = navSum.sub(navB);
             const startNavs = await fund.extrapolateNav(parseEther("8000"));
             expect(startNavs.navSum).to.equal(navSum);
-            expect(startNavs.navA).to.equal(navA);
-            expect(startNavs.navBOrZero).to.equal(navB);
+            expect(startNavs.navB).to.equal(navB);
+            expect(startNavs.navROrZero).to.equal(navR);
             await advanceBlockAtTime(startDay + DAY - 1);
             const endNavs = await fund.extrapolateNav(parseEther("8000"));
             expect(endNavs.navSum).to.equal(navSum);
-            expect(endNavs.navA).to.equal(navA);
-            expect(endNavs.navBOrZero).to.equal(navB);
+            expect(endNavs.navB).to.equal(navB);
+            expect(endNavs.navROrZero).to.equal(navR);
         });
 
         it("Should use the price", async function () {
             await pmCreate(user1, parseBtc("1"), parseEther("1"));
             await advanceBlockAtTime(startDay);
 
-            const navA = parseEther("1.001");
+            const navB = parseEther("1.001");
             const navSum1000 = parseEther("2")
                 .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
-            const navB1000 = navSum1000.sub(navA);
+            const navR1000 = navSum1000.sub(navB);
             const navsAt1000 = await fund.extrapolateNav(parseEther("1000"));
             expect(navsAt1000.navSum).to.equal(navSum1000);
-            expect(navsAt1000.navA).to.equal(navA);
-            expect(navsAt1000.navBOrZero).to.equal(navB1000);
+            expect(navsAt1000.navB).to.equal(navB);
+            expect(navsAt1000.navROrZero).to.equal(navR1000);
 
             const navSum2000 = parseEther("4")
                 .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
-            const navB2000 = navSum2000.sub(navA);
+            const navR2000 = navSum2000.sub(navB);
             const navsAt2000 = await fund.extrapolateNav(parseEther("2000"));
             expect(navsAt2000.navSum).to.equal(navSum2000);
-            expect(navsAt2000.navA).to.equal(navA);
-            expect(navsAt2000.navBOrZero).to.equal(navB2000);
+            expect(navsAt2000.navB).to.equal(navB);
+            expect(navsAt2000.navROrZero).to.equal(navR2000);
 
             const navSum300 = parseEther("0.6")
                 .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
-            const navB300 = 0;
+            const navR300 = 0;
             const navsAt300 = await fund.extrapolateNav(parseEther("300"));
             expect(navsAt300.navSum).to.equal(navSum300);
-            expect(navsAt300.navA).to.equal(navA);
-            expect(navsAt300.navBOrZero).to.equal(navB300);
+            expect(navsAt300.navB).to.equal(navB);
+            expect(navsAt300.navROrZero).to.equal(navR300);
         });
 
         it("Should accrue protocol fee and interest", async function () {
@@ -920,23 +924,23 @@ describe("FundV3", function () {
             const navSum18h = parseEther("3")
                 .mul(40000 - DAILY_PROTOCOL_FEE_BPS * 3)
                 .div(40000);
-            const navA18h = parseEther("1.00075");
-            const navB18h = navSum18h.sub(navA18h);
+            const navB18h = parseEther("1.00075");
+            const navR18h = navSum18h.sub(navB18h);
             const navsAt18h = await fund.extrapolateNav(parseEther("1500"));
             expect(navsAt18h.navSum).to.equal(navSum18h);
-            expect(navsAt18h.navA).to.equal(navA18h);
-            expect(navsAt18h.navBOrZero).to.equal(navB18h);
+            expect(navsAt18h.navB).to.equal(navB18h);
+            expect(navsAt18h.navROrZero).to.equal(navR18h);
 
             await advanceBlockAtTime(startDay + DAY * 4);
             const navSum5d = parseEther("3")
                 .mul(10000 - DAILY_PROTOCOL_FEE_BPS * 5)
                 .div(10000);
-            const navA5d = parseEther("1.005");
-            const navB5d = navSum5d.sub(navA5d);
+            const navB5d = parseEther("1.005");
+            const navR5d = navSum5d.sub(navB5d);
             const navsAt5d = await fund.extrapolateNav(parseEther("1500"));
             expect(navsAt5d.navSum).to.equal(navSum5d);
-            expect(navsAt5d.navA).to.equal(navA5d);
-            expect(navsAt5d.navBOrZero).to.equal(navB5d);
+            expect(navsAt5d.navB).to.equal(navB5d);
+            expect(navsAt5d.navROrZero).to.equal(navR5d);
         });
     });
 
@@ -952,9 +956,9 @@ describe("FundV3", function () {
         f.fund = await Fund.connect(f.wallets.owner).deploy([
             f.btc.address,
             8,
-            f.shareM.address,
-            f.shareA.address,
+            f.shareQ.address,
             f.shareB.address,
+            f.shareR.address,
             f.primaryMarket.address,
             ethers.constants.AddressZero,
             0, // Zero protocol fee
@@ -988,7 +992,7 @@ describe("FundV3", function () {
             await advanceOneDayAndSettle();
             expect(await fund.getRebalanceSize()).to.equal(0);
             const navs = await fund.historicalNavs(startDay);
-            expect(navs.navB).to.equal(parseEther("2"));
+            expect(navs.navR).to.equal(parseEther("2"));
         });
 
         it("Should not trigger at exactly lower rebalance threshold", async function () {
@@ -996,7 +1000,7 @@ describe("FundV3", function () {
             await advanceOneDayAndSettle();
             expect(await fund.getRebalanceSize()).to.equal(0);
             const navs = await fund.historicalNavs(startDay);
-            expect(navs.navB).to.equal(parseEther("0.5"));
+            expect(navs.navR).to.equal(parseEther("0.5"));
         });
     });
 
@@ -1004,15 +1008,15 @@ describe("FundV3", function () {
         let outerFixture: Fixture<FixtureData>;
 
         // Initial balances
-        // User 1: 0.4 M + 100 A
-        // User 2:         200 A + 300 B
-        // Total:  0.4 M + 300 A + 300 B = 1 equivalent M
-        const INIT_P_1 = parseEther("0.4");
-        const INIT_A_1 = parseEther("100");
-        const INIT_B_1 = parseEther("0");
-        const INIT_P_2 = parseEther("0");
-        const INIT_A_2 = parseEther("200");
-        const INIT_B_2 = parseEther("300");
+        // User 1: 0.4 Q + 100 B
+        // User 2:         200 B + 300 R
+        // Total:  0.4 Q + 300 B + 300 R = 1 equivalent Q
+        const INIT_Q_1 = parseEther("0.4");
+        const INIT_B_1 = parseEther("100");
+        const INIT_R_1 = parseEther("0");
+        const INIT_Q_2 = parseEther("0");
+        const INIT_B_2 = parseEther("200");
+        const INIT_R_2 = parseEther("300");
         const INIT_BTC = parseBtc("1");
 
         async function rebalanceFixture(): Promise<FixtureData> {
@@ -1023,12 +1027,12 @@ describe("FundV3", function () {
             await f.fund.settle();
             const addr1 = f.wallets.user1.address;
             const addr2 = f.wallets.user2.address;
-            await f.primaryMarket.call(f.fund, "primaryMarketMint", TRANCHE_M, addr1, INIT_P_1, 0);
-            await f.primaryMarket.call(f.fund, "primaryMarketMint", TRANCHE_A, addr1, INIT_A_1, 0);
+            await f.primaryMarket.call(f.fund, "primaryMarketMint", TRANCHE_Q, addr1, INIT_Q_1, 0);
             await f.primaryMarket.call(f.fund, "primaryMarketMint", TRANCHE_B, addr1, INIT_B_1, 0);
-            await f.primaryMarket.call(f.fund, "primaryMarketMint", TRANCHE_M, addr2, INIT_P_2, 0);
-            await f.primaryMarket.call(f.fund, "primaryMarketMint", TRANCHE_A, addr2, INIT_A_2, 0);
+            await f.primaryMarket.call(f.fund, "primaryMarketMint", TRANCHE_R, addr1, INIT_R_1, 0);
+            await f.primaryMarket.call(f.fund, "primaryMarketMint", TRANCHE_Q, addr2, INIT_Q_2, 0);
             await f.primaryMarket.call(f.fund, "primaryMarketMint", TRANCHE_B, addr2, INIT_B_2, 0);
+            await f.primaryMarket.call(f.fund, "primaryMarketMint", TRANCHE_R, addr2, INIT_R_2, 0);
             await f.btc.mint(f.fund.address, INIT_BTC);
             return f;
         }
@@ -1053,23 +1057,23 @@ describe("FundV3", function () {
         }
 
         // NAV before rebalance: (1.1, 2.9)
-        // 1 A => 0.00005 M' + 1 A'
-        // 1 B => 0.00095 M'        + 1 B'
+        // 1 B => 0.00005 Q' + 1 B'
+        // 1 R => 0.00095 Q'        + 1 R'
         const preDefinedRebalance200 = () => mockRebalance(parseEther("2"));
 
         // NAV before rebalance: (1.1, 3.9)
-        // 1 A => 0.00004 M' + 1 A'
-        // 1 B => 0.00116 M'        + 1 B'
+        // 1 B => 0.00004 Q' + 1 B'
+        // 1 R => 0.00116 Q'        + 1 R'
         const preDefinedRebalance250 = () => mockRebalance(parseEther("2.5"));
 
         // NAV before rebalance: (1.1, 0.5)
-        // 1 A => 0.00075 M' + 0.5 A'
-        // 1 B =>                     + 0.5 B'
+        // 1 B => 0.00075 Q' + 0.5 B'
+        // 1 R =>                     + 0.5 R'
         const preDefinedRebalance080 = () => mockRebalance(parseEther("0.8"));
 
         // NAV before rebalance: (1.1, -0.3)
-        // 1 A => 0.002 M'
-        // 1 B => 0
+        // 1 B => 0.002 Q'
+        // 1 R => 0
         const preDefinedRebalance040 = () => mockRebalance(parseEther("0.4"));
 
         describe("Rebalance matrix", function () {
@@ -1078,25 +1082,25 @@ describe("FundV3", function () {
                 const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
                 expect(await fund.getRebalanceSize()).to.equal(1);
                 const navs = await fund.historicalNavs((await fund.currentDay()) - DAY);
-                expect(navs.navA).to.equal(parseEther("1"));
                 expect(navs.navB).to.equal(parseEther("1"));
+                expect(navs.navR).to.equal(parseEther("1"));
                 const rebalance = await fund.getRebalance(0);
-                expect(rebalance.ratioA2M).to.equal(parseEther("0.00005"));
-                expect(rebalance.ratioB2M).to.equal(parseEther("0.00095"));
-                expect(rebalance.ratioAB).to.equal(parseEther("1"));
+                expect(rebalance.ratioB2Q).to.equal(parseEther("0.00005"));
+                expect(rebalance.ratioR2Q).to.equal(parseEther("0.00095"));
+                expect(rebalance.ratioBR).to.equal(parseEther("1"));
                 expect(rebalance.timestamp).to.equal(settlementTimestamp);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(parseEther("0.405"));
-                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(parseEther("100"));
-                expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(0);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(parseEther("0.295"));
-                expect(await fund.trancheBalanceOf(TRANCHE_A, addr2)).to.equal(parseEther("200"));
-                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(parseEther("300"));
-                expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(parseEther("0.7"));
-                expect(await fund.trancheTotalSupply(TRANCHE_A)).to.equal(parseEther("300"));
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr1)).to.equal(parseEther("0.405"));
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(parseEther("100"));
+                expect(await fund.trancheBalanceOf(TRANCHE_R, addr1)).to.equal(0);
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr2)).to.equal(parseEther("0.295"));
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(parseEther("200"));
+                expect(await fund.trancheBalanceOf(TRANCHE_R, addr2)).to.equal(parseEther("300"));
+                expect(await fund.trancheTotalSupply(TRANCHE_Q)).to.equal(parseEther("0.7"));
                 expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(parseEther("300"));
+                expect(await fund.trancheTotalSupply(TRANCHE_R)).to.equal(parseEther("300"));
                 expect(await fund.splitRatio()).to.equal(parseEther("1000"));
-                expect(await fund.getEquivalentTotalM()).to.equal(parseEther("1"));
-                expect(await fund.getEquivalentTotalA()).to.equal(parseEther("1000"));
+                expect(await fund.getEquivalentTotalQ()).to.equal(parseEther("1"));
+                expect(await fund.getEquivalentTotalB()).to.equal(parseEther("1000"));
             });
 
             it("Lower rebalance", async function () {
@@ -1104,51 +1108,51 @@ describe("FundV3", function () {
                 const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
                 expect(await fund.getRebalanceSize()).to.equal(1);
                 const navs = await fund.historicalNavs((await fund.currentDay()) - DAY);
-                expect(navs.navA).to.equal(parseEther("1"));
                 expect(navs.navB).to.equal(parseEther("1"));
+                expect(navs.navR).to.equal(parseEther("1"));
                 const rebalance = await fund.getRebalance(0);
-                expect(rebalance.ratioA2M).to.equal(parseEther("0.00075"));
-                expect(rebalance.ratioB2M).to.equal(0);
-                expect(rebalance.ratioAB).to.equal(parseEther("0.5"));
+                expect(rebalance.ratioB2Q).to.equal(parseEther("0.00075"));
+                expect(rebalance.ratioR2Q).to.equal(0);
+                expect(rebalance.ratioBR).to.equal(parseEther("0.5"));
                 expect(rebalance.timestamp).to.equal(settlementTimestamp);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(parseEther("0.475"));
-                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(parseEther("50"));
-                expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(0);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(parseEther("0.15"));
-                expect(await fund.trancheBalanceOf(TRANCHE_A, addr2)).to.equal(parseEther("100"));
-                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(parseEther("150"));
-                expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(parseEther("0.625"));
-                expect(await fund.trancheTotalSupply(TRANCHE_A)).to.equal(parseEther("150"));
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr1)).to.equal(parseEther("0.475"));
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(parseEther("50"));
+                expect(await fund.trancheBalanceOf(TRANCHE_R, addr1)).to.equal(0);
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr2)).to.equal(parseEther("0.15"));
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(parseEther("100"));
+                expect(await fund.trancheBalanceOf(TRANCHE_R, addr2)).to.equal(parseEther("150"));
+                expect(await fund.trancheTotalSupply(TRANCHE_Q)).to.equal(parseEther("0.625"));
                 expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(parseEther("150"));
+                expect(await fund.trancheTotalSupply(TRANCHE_R)).to.equal(parseEther("150"));
                 expect(await fund.splitRatio()).to.equal(parseEther("400"));
-                expect(await fund.getEquivalentTotalM()).to.equal(parseEther("1"));
-                expect(await fund.getEquivalentTotalA()).to.equal(parseEther("400"));
+                expect(await fund.getEquivalentTotalQ()).to.equal(parseEther("1"));
+                expect(await fund.getEquivalentTotalB()).to.equal(parseEther("400"));
             });
 
-            it("Lower rebalance with negative NAV of Token B", async function () {
+            it("Lower rebalance with negative ROOK NAV", async function () {
                 await preDefinedRebalance040();
                 const settlementTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
                 expect(await fund.getRebalanceSize()).to.equal(1);
                 const navs = await fund.historicalNavs((await fund.currentDay()) - DAY);
-                expect(navs.navA).to.equal(parseEther("1"));
                 expect(navs.navB).to.equal(parseEther("1"));
+                expect(navs.navR).to.equal(parseEther("1"));
                 const rebalance = await fund.getRebalance(0);
-                expect(rebalance.ratioA2M).to.equal(parseEther("0.002"));
-                expect(rebalance.ratioB2M).to.equal(0);
-                expect(rebalance.ratioAB).to.equal(0);
+                expect(rebalance.ratioB2Q).to.equal(parseEther("0.002"));
+                expect(rebalance.ratioR2Q).to.equal(0);
+                expect(rebalance.ratioBR).to.equal(0);
                 expect(rebalance.timestamp).to.equal(settlementTimestamp);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(parseEther("0.6"));
-                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(0);
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr1)).to.equal(parseEther("0.6"));
                 expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(0);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(parseEther("0.4"));
-                expect(await fund.trancheBalanceOf(TRANCHE_A, addr2)).to.equal(0);
+                expect(await fund.trancheBalanceOf(TRANCHE_R, addr1)).to.equal(0);
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr2)).to.equal(parseEther("0.4"));
                 expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(0);
-                expect(await fund.trancheTotalSupply(TRANCHE_M)).to.equal(parseEther("1"));
-                expect(await fund.trancheTotalSupply(TRANCHE_A)).to.equal(0);
+                expect(await fund.trancheBalanceOf(TRANCHE_R, addr2)).to.equal(0);
+                expect(await fund.trancheTotalSupply(TRANCHE_Q)).to.equal(parseEther("1"));
                 expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(0);
+                expect(await fund.trancheTotalSupply(TRANCHE_R)).to.equal(0);
                 expect(await fund.splitRatio()).to.equal(parseEther("200"));
-                expect(await fund.getEquivalentTotalM()).to.equal(parseEther("1"));
-                expect(await fund.getEquivalentTotalA()).to.equal(parseEther("200"));
+                expect(await fund.getEquivalentTotalQ()).to.equal(parseEther("1"));
+                expect(await fund.getEquivalentTotalB()).to.equal(parseEther("200"));
             });
         });
 
@@ -1160,17 +1164,17 @@ describe("FundV3", function () {
                 const splitRatio = parseEther("2000");
                 expect(await fund.splitRatio()).to.equal(splitRatio);
                 await preDefinedRebalance040();
-                const [m, a, b] = await fund.doRebalance(
+                const [q, b, r] = await fund.doRebalance(
                     parseEther("10000"),
                     parseEther("100"),
                     parseEther("1"),
                     2
                 );
-                const mFromA = parseEther("10").mul(parseEther("1")).div(splitRatio).div(2);
-                const mFromB = parseEther("1.9").mul(parseEther("1")).div(splitRatio).div(2);
-                expect(m).to.equal(parseEther("10000").add(mFromA).add(mFromB));
-                expect(a).to.equal(parseEther("100"));
-                expect(b).to.equal(parseEther("1"));
+                const qFromB = parseEther("10").mul(parseEther("1")).div(splitRatio).div(2);
+                const qFromR = parseEther("1.9").mul(parseEther("1")).div(splitRatio).div(2);
+                expect(q).to.equal(parseEther("10000").add(qFromB).add(qFromR));
+                expect(b).to.equal(parseEther("100"));
+                expect(r).to.equal(parseEther("1"));
             });
 
             it("Should round down the result", async function () {
@@ -1188,18 +1192,18 @@ describe("FundV3", function () {
                 await preDefinedRebalance080();
                 await preDefinedRebalance250();
                 await preDefinedRebalance200();
-                const [m, a, b] = await fund.batchRebalance(
+                const [q, b, r] = await fund.batchRebalance(
                     parseEther("1000"),
                     parseEther("1000"),
                     parseEther("1000"),
                     1,
                     4
                 );
-                // Before rebalance: 1000 + 1000 / splitRatio(200) = 1005 equivalent M
-                // After rebalance: 1004.375 + 500 / splitRatio(800) = 1005 equivalent M
-                expect(m).to.equal(parseEther("1004.375"));
-                expect(a).to.equal(parseEther("500"));
+                // Before rebalance: 1000 + 1000 / splitRatio(200) = 1005 equivalent Q
+                // After rebalance: 1004.375 + 500 / splitRatio(800) = 1005 equivalent Q
+                expect(q).to.equal(parseEther("1004.375"));
                 expect(b).to.equal(parseEther("500"));
+                expect(r).to.equal(parseEther("500"));
             });
         });
 
@@ -1213,13 +1217,13 @@ describe("FundV3", function () {
                 expect(await fund.splitRatio()).to.equal(splitRatio);
                 await preDefinedRebalance250();
                 const rebalance = await fund.getRebalance(2);
-                expect(rebalance.ratioA2M).to.equal(
+                expect(rebalance.ratioB2Q).to.equal(
                     parseEther("0.1").mul(parseEther("1")).div(splitRatio).div(2)
                 );
-                expect(rebalance.ratioB2M).to.equal(
+                expect(rebalance.ratioR2Q).to.equal(
                     parseEther("1.9").mul(parseEther("1")).div(splitRatio).div(2)
                 );
-                expect(rebalance.ratioAB).to.equal(parseEther("1"));
+                expect(rebalance.ratioBR).to.equal(parseEther("1"));
                 expect(rebalance.timestamp).to.equal(settlementTimestamp);
             });
 
@@ -1229,9 +1233,9 @@ describe("FundV3", function () {
                 await preDefinedRebalance200();
                 await preDefinedRebalance250();
                 const rebalance = await fund.getRebalance(4);
-                expect(rebalance.ratioA2M).to.equal(0);
-                expect(rebalance.ratioB2M).to.equal(0);
-                expect(rebalance.ratioAB).to.equal(0);
+                expect(rebalance.ratioB2Q).to.equal(0);
+                expect(rebalance.ratioR2Q).to.equal(0);
+                expect(rebalance.ratioBR).to.equal(0);
                 expect(rebalance.timestamp).to.equal(0);
             });
         });
@@ -1266,32 +1270,32 @@ describe("FundV3", function () {
             it("transfer()", async function () {
                 await preDefinedRebalance080();
                 await preDefinedRebalance250();
-                const oldA1 = await fund.trancheBalanceOf(TRANCHE_A, addr1);
-                const oldB2 = await fund.trancheBalanceOf(TRANCHE_B, addr2);
+                const oldB1 = await fund.trancheBalanceOf(TRANCHE_B, addr1);
+                const oldR2 = await fund.trancheBalanceOf(TRANCHE_R, addr2);
                 await advanceOneDayAndSettle();
-                await shareM.call(fund, "shareTransfer", addr1, addr2, 1);
+                await shareQ.call(fund, "shareTransfer", addr1, addr2, 1);
                 expect(await fund.trancheBalanceVersion(addr1)).to.equal(2);
                 expect(await fund.trancheBalanceVersion(addr2)).to.equal(2);
-                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(oldA1);
-                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(oldB2);
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(oldB1);
+                expect(await fund.trancheBalanceOf(TRANCHE_R, addr2)).to.equal(oldR2);
             });
 
             it("primaryMarketMint()", async function () {
                 await preDefinedRebalance080();
                 await preDefinedRebalance250();
-                const oldA = await fund.trancheBalanceOf(TRANCHE_A, addr1);
-                await primaryMarket.call(fund, "primaryMarketMint", TRANCHE_M, addr1, 1, 2);
+                const oldB = await fund.trancheBalanceOf(TRANCHE_B, addr1);
+                await primaryMarket.call(fund, "primaryMarketMint", TRANCHE_Q, addr1, 1, 2);
                 expect(await fund.trancheBalanceVersion(addr1)).to.equal(2);
-                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
+                expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(oldB);
             });
 
             it("primaryMarketBurn()", async function () {
                 await preDefinedRebalance080();
                 await preDefinedRebalance250();
-                const oldB = await fund.trancheBalanceOf(TRANCHE_B, addr2);
-                await primaryMarket.call(fund, "primaryMarketBurn", TRANCHE_A, addr2, 1, 2);
+                const oldR = await fund.trancheBalanceOf(TRANCHE_R, addr2);
+                await primaryMarket.call(fund, "primaryMarketBurn", TRANCHE_B, addr2, 1, 2);
                 expect(await fund.trancheBalanceVersion(addr2)).to.equal(2);
-                expect(await fund.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(oldB);
+                expect(await fund.trancheBalanceOf(TRANCHE_R, addr2)).to.equal(oldR);
             });
         });
 
@@ -1302,55 +1306,55 @@ describe("FundV3", function () {
                 await preDefinedRebalance200();
                 await preDefinedRebalance040();
                 await preDefinedRebalance080();
-                const oldM = await fund.trancheBalanceOf(TRANCHE_M, addr1);
-                const oldA = await fund.trancheBalanceOf(TRANCHE_A, addr1);
+                const oldQ = await fund.trancheBalanceOf(TRANCHE_Q, addr1);
                 const oldB = await fund.trancheBalanceOf(TRANCHE_B, addr1);
+                const oldR = await fund.trancheBalanceOf(TRANCHE_R, addr1);
                 await fund.refreshBalance(addr1, 2);
                 expect(await fund.trancheBalanceVersion(addr1)).to.equal(2);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(oldM);
-                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr1)).to.equal(oldQ);
                 expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(oldB);
+                expect(await fund.trancheBalanceOf(TRANCHE_R, addr1)).to.equal(oldR);
                 await fund.refreshBalance(addr1, 5);
                 expect(await fund.trancheBalanceVersion(addr1)).to.equal(5);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(oldM);
-                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr1)).to.equal(oldQ);
                 expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(oldB);
+                expect(await fund.trancheBalanceOf(TRANCHE_R, addr1)).to.equal(oldR);
             });
 
             it("Zero targetVersion", async function () {
                 await preDefinedRebalance080();
                 await preDefinedRebalance250();
                 await preDefinedRebalance200();
-                const oldM = await fund.trancheBalanceOf(TRANCHE_M, addr1);
-                const oldA = await fund.trancheBalanceOf(TRANCHE_A, addr1);
+                const oldQ = await fund.trancheBalanceOf(TRANCHE_Q, addr1);
                 const oldB = await fund.trancheBalanceOf(TRANCHE_B, addr1);
+                const oldR = await fund.trancheBalanceOf(TRANCHE_R, addr1);
                 await fund.refreshBalance(addr1, 0);
                 expect(await fund.trancheBalanceVersion(addr1)).to.equal(3);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(oldM);
-                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr1)).to.equal(oldQ);
                 expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(oldB);
+                expect(await fund.trancheBalanceOf(TRANCHE_R, addr1)).to.equal(oldR);
             });
 
             it("Should make no change if targetVersion is older", async function () {
                 await preDefinedRebalance080();
                 await preDefinedRebalance250();
                 await preDefinedRebalance200();
-                const oldM = await fund.trancheBalanceOf(TRANCHE_M, addr1);
-                const oldA = await fund.trancheBalanceOf(TRANCHE_A, addr1);
+                const oldQ = await fund.trancheBalanceOf(TRANCHE_Q, addr1);
                 const oldB = await fund.trancheBalanceOf(TRANCHE_B, addr1);
+                const oldR = await fund.trancheBalanceOf(TRANCHE_R, addr1);
                 await fund.refreshBalance(addr1, 3);
                 await fund.refreshBalance(addr1, 1);
                 expect(await fund.trancheBalanceVersion(addr1)).to.equal(3);
-                expect(await fund.trancheBalanceOf(TRANCHE_M, addr1)).to.equal(oldM);
-                expect(await fund.trancheBalanceOf(TRANCHE_A, addr1)).to.equal(oldA);
+                expect(await fund.trancheBalanceOf(TRANCHE_Q, addr1)).to.equal(oldQ);
                 expect(await fund.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(oldB);
+                expect(await fund.trancheBalanceOf(TRANCHE_R, addr1)).to.equal(oldR);
             });
         });
     });
 
     describe("Settlement with strategy", function () {
         const DAILY_PROTOCOL_FEE_BPS = 1; // 0.01% per day TODO
-        const navA = parseEther("1.001");
+        const navB = parseEther("1.001");
 
         beforeEach(async function () {
             await fund
@@ -1367,7 +1371,7 @@ describe("FundV3", function () {
                 await fund.settle();
             }
             startDay += ROLE_UPDATE_MIN_DELAY;
-            // Create 10 Token M with 10 BTC on the first day.
+            // Create 10 QUEEN with 10 BTC on the first day.
             await pmCreate(user1, parseBtc("10"), parseEther("10"));
             // Transfer 9 BTC to the strategy
             await fund.connect(strategy).transferToStrategy(parseBtc("9"));
@@ -1498,12 +1502,12 @@ describe("FundV3", function () {
             const navSum = parseEther("2.1")
                 .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
-            const navB = navSum.sub(navA);
+            const navR = navSum.sub(navB);
             await advanceBlockAtTime(startDay);
             await fund.settle();
             const navs = await fund.historicalNavs(startDay);
-            expect(navs.navA).to.equal(navA);
             expect(navs.navB).to.equal(navB);
+            expect(navs.navR).to.equal(navR);
         });
 
         it("Should update NAV according to loss", async function () {
@@ -1512,12 +1516,12 @@ describe("FundV3", function () {
             const navSum = parseEther("1.8")
                 .mul(10000 - DAILY_PROTOCOL_FEE_BPS)
                 .div(10000);
-            const navB = navSum.sub(navA);
+            const navR = navSum.sub(navB);
             await advanceBlockAtTime(startDay);
             await fund.settle();
             const navs = await fund.historicalNavs(startDay);
-            expect(navs.navA).to.equal(navA);
             expect(navs.navB).to.equal(navB);
+            expect(navs.navR).to.equal(navR);
         });
     });
 });

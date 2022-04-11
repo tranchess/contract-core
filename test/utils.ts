@@ -1,9 +1,9 @@
 import { Wallet } from "ethers";
 import { ethers } from "hardhat";
 
-export const TRANCHE_M = 0;
-export const TRANCHE_A = 1;
-export const TRANCHE_B = 2;
+export const TRANCHE_Q = 0;
+export const TRANCHE_B = 1;
+export const TRANCHE_R = 2;
 export const HOUR = 3600;
 export const DAY = HOUR * 24;
 export const WEEK = DAY * 7;
