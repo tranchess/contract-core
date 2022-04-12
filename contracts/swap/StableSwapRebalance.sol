@@ -42,21 +42,21 @@ contract StableSwapRebalance is StableSwap {
 
     /// @dev Handle the rebalance immediately. Should be called before any swap operation.
     function handleRebalance() public override {
-        uint256 rebalanceVersion = IFundV3(fund).getRebalanceSize();
+        uint256 rebalanceVersion = fund.getRebalanceSize();
         uint256 baseBalance_ = baseBalance;
         uint256 currentVersion = currentRebalanceVersion;
 
         if (currentVersion < rebalanceVersion) {
             (uint256 amountQ, uint256 amountB, ) =
-                IFundV3(fund).batchRebalance(0, baseBalance_, 0, currentVersion, rebalanceVersion);
-            IFundV3(fund).refreshBalance(address(this), rebalanceVersion);
+                fund.batchRebalance(0, baseBalance_, 0, currentVersion, rebalanceVersion);
+            fund.refreshBalance(address(this), rebalanceVersion);
             uint256 amountU;
 
             if (baseBalance_ > amountB) {
                 // RatioBR < 1
                 uint256 quoteBalance_ = quoteBalance;
                 uint256 outB =
-                    IPrimaryMarketV3(IFundV3(fund).primaryMarket()).split(
+                    IPrimaryMarketV3(fund.primaryMarket()).split(
                         address(this),
                         amountQ,
                         rebalanceVersion
@@ -66,17 +66,17 @@ contract StableSwapRebalance is StableSwap {
                 baseBalance = newBalance0;
                 quoteBalance = quoteBalance_.sub(amountU);
                 IERC20(quoteAddress).safeTransfer(lpToken, amountU);
-                IERC20(IFundV3(fund).tokenR()).safeTransfer(lpToken, outB);
+                IERC20(fund.tokenR()).safeTransfer(lpToken, outB);
                 ILiquidityGauge(lpToken).snapshot(0, 0, outB, amountU, rebalanceVersion);
             } else if (baseBalance_ < amountB) {
                 // RatioBR > 1
                 amountB = amountB - baseBalance_;
-                IERC20(IFundV3(fund).tokenQ()).safeTransfer(lpToken, amountQ);
-                IERC20(IFundV3(fund).tokenB()).safeTransfer(lpToken, amountB);
+                IERC20(fund.tokenQ()).safeTransfer(lpToken, amountQ);
+                IERC20(fund.tokenB()).safeTransfer(lpToken, amountB);
                 ILiquidityGauge(lpToken).snapshot(amountQ, amountB, 0, 0, rebalanceVersion);
             } else {
                 // RatioBR == 1
-                IERC20(IFundV3(fund).tokenQ()).safeTransfer(lpToken, amountQ);
+                IERC20(fund.tokenQ()).safeTransfer(lpToken, amountQ);
                 ILiquidityGauge(lpToken).snapshot(amountQ, 0, 0, 0, rebalanceVersion);
             }
         }
@@ -85,13 +85,13 @@ contract StableSwapRebalance is StableSwap {
     }
 
     modifier checkActivity() override {
-        require(currentRebalanceVersion == IFundV3(fund).getRebalanceSize(), "Transaction too old");
+        require(currentRebalanceVersion == fund.getRebalanceSize(), "Transaction too old");
         _;
     }
 
     function checkOracle(Operation op) public view override returns (uint256 oracle) {
         (, int256 answer, , , ) = AggregatorV3Interface(chainlinkAggregator).latestRoundData();
-        (, uint256 navB, uint256 navR) = IFundV3(fund).extrapolateNav(uint256(answer));
+        (, uint256 navB, uint256 navR) = fund.extrapolateNav(uint256(answer));
         if (op == Operation.SWAP || op == Operation.ADD_LIQUIDITY) {
             require(navR >= navB.multiplyDecimal(tradingCurbThreshold), "Trading curb");
         }

@@ -34,26 +34,26 @@ contract StableSwapNoRebalance is StableSwap {
     {}
 
     function handleRebalance() public override {
-        uint256 rebalanceVersion = IFundV3(fund).getRebalanceSize();
+        uint256 rebalanceVersion = fund.getRebalanceSize();
         uint256 currentVersion = currentRebalanceVersion;
 
         if (currentVersion < rebalanceVersion) {
-            (baseBalance, , ) = IFundV3(fund).batchRebalance(
+            (baseBalance, , ) = fund.batchRebalance(
                 baseBalance,
                 0,
                 0,
                 currentVersion,
                 rebalanceVersion
             );
-            IFundV3(fund).refreshBalance(address(this), rebalanceVersion);
+            fund.refreshBalance(address(this), rebalanceVersion);
         }
     }
 
     function checkOracle(
         Operation /*op*/
     ) public view override returns (uint256 oracle) {
-        uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
-        uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
+        uint256 fundUnderlying = fund.getTotalUnderlying();
+        uint256 fundEquivalentTotalQ = fund.getEquivalentTotalQ();
         return fundUnderlying.divideDecimal(fundEquivalentTotalQ);
     }
 }

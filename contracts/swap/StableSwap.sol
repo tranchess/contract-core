@@ -35,7 +35,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     uint256 private constant MAX_ITERATION = 255;
 
     address public immutable lpToken;
-    address public immutable fund;
+    IFundV3 public immutable fund;
     uint256 public immutable baseTranche;
     address public override quoteAddress;
 
@@ -71,7 +71,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 adminFeeRate_
     ) public {
         lpToken = lpToken_;
-        fund = fund_;
+        fund = IFundV3(fund_);
         baseTranche = baseTranche_;
         quoteAddress = quoteAddress_;
 
@@ -88,7 +88,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     }
 
     function baseAddress() public view override returns (address) {
-        return IFundV3(fund).tokenShare(baseTranche);
+        return fund.tokenShare(baseTranche);
     }
 
     function allBalances() public view override returns (uint256, uint256) {
