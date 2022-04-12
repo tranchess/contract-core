@@ -2,24 +2,18 @@
 pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../interfaces/ISwapRouter.sol";
 import "../interfaces/ITrancheIndexV2.sol";
-
-interface IStakingV2 {
-    function deposit(
-        uint256 tranche,
-        uint256 amount,
-        address recipient
-    ) external;
-}
+import "../exchange/StakingV4.sol";
 
 /// @title Tranchess Swap Router
 /// @notice Router for stateless execution of swaps against Tranchess stable swaps
-contract SwapRouter is ISwapRouter, ITrancheIndexV2 {
+contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
     using SafeERC20 for IERC20;
 
-    mapping(address => mapping(address => IStableSwap)) swapMap;
+    mapping(address => mapping(address => IStableSwap)) private _swapMap;
 
     constructor() public {}
 
@@ -32,17 +26,17 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2 {
     {
         (address token0, address token1) =
             baseToken < quoteToken ? (baseToken, quoteToken) : (quoteToken, baseToken);
-        return swapMap[token0][token1];
+        return _swapMap[token0][token1];
     }
 
     function addSwap(
         address baseToken,
         address quoteToken,
         address swap
-    ) external returns (IStableSwap) {
+    ) external onlyOwner {
         (address token0, address token1) =
             baseToken < quoteToken ? (baseToken, quoteToken) : (quoteToken, baseToken);
-        swapMap[token0][token1] = IStableSwap(swap);
+        _swapMap[token0][token1] = IStableSwap(swap);
     }
 
     function addLiquidity(
@@ -66,11 +60,14 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2 {
         address[] calldata path,
         address to,
         address staking,
+        uint256[] calldata versions,
         uint256 deadline
     ) external virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
-        require(path.length >= 2, "invalid path");
+        require(path.length >= 2, "Invalid path");
+        require(versions.length == path.length - 1, "Invalid version");
         for (uint256 i = 0; i < path.length - 1; i++) {
-            IStableSwap(getSwap(path[i], path[i + 1])).handleRebalance();
+            uint256 rebalanceVersion = IStableSwap(getSwap(path[i], path[i + 1])).handleRebalance();
+            require(rebalanceVersion == versions[i], "Version mismatch");
         }
         amounts = getAmountsOut(amountIn, path);
         require(amounts[amounts.length - 1] >= amountOutMin, "Insufficient output");
@@ -83,7 +80,12 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2 {
             _swap(amounts, path, to);
         } else {
             _swap(amounts, path, address(this));
-            IStakingV2(staking).deposit(TRANCHE_B, amounts[amounts.length - 1], to);
+            StakingV4(staking).deposit(
+                TRANCHE_B,
+                amounts[amounts.length - 1],
+                to,
+                versions[versions.length - 1]
+            );
         }
     }
 
@@ -93,11 +95,14 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2 {
         address[] calldata path,
         address to,
         address staking,
+        uint256[] calldata versions,
         uint256 deadline
     ) external virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
-        require(path.length >= 2, "invalid path");
+        require(path.length >= 2, "Invalid path");
+        require(versions.length == path.length - 1, "Invalid version");
         for (uint256 i = 0; i < path.length - 1; i++) {
-            IStableSwap(getSwap(path[i], path[i + 1])).handleRebalance();
+            uint256 rebalanceVersion = IStableSwap(getSwap(path[i], path[i + 1])).handleRebalance();
+            require(rebalanceVersion == versions[i], "Version mismatch");
         }
         amounts = getAmountsIn(amountOut, path);
         require(amounts[0] <= amountInMax, "Excessive input");
@@ -110,7 +115,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2 {
             _swap(amounts, path, to);
         } else {
             _swap(amounts, path, address(this));
-            IStakingV2(staking).deposit(TRANCHE_B, amounts[0], to);
+            StakingV4(staking).deposit(TRANCHE_B, amountOut, to, versions[versions.length - 1]);
         }
     }
 

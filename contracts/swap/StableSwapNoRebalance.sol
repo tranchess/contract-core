@@ -33,8 +33,8 @@ contract StableSwapNoRebalance is StableSwap {
         )
     {}
 
-    function handleRebalance() public override {
-        uint256 rebalanceVersion = fund.getRebalanceSize();
+    function handleRebalance() public override returns (uint256 rebalanceVersion) {
+        rebalanceVersion = fund.getRebalanceSize();
         uint256 currentVersion = currentRebalanceVersion;
 
         if (currentVersion < rebalanceVersion) {

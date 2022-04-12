@@ -232,7 +232,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     }
 
     /// @dev Handle the rebalance immediately. Should be called before any swap operation.
-    function handleRebalance() public virtual override {}
+    function handleRebalance() public virtual override returns (uint256 rebalanceVersion) {}
 
     function swap(
         uint256 baseDeltaOut,

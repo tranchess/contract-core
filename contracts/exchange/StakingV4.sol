@@ -285,21 +285,22 @@ contract StakingV4 is ITrancheIndexV2, CoreUtility {
     /// @dev Stake share tokens.
     /// @param tranche Tranche of the share
     /// @param amount The amount to deposit
+    /// @param recipient Address that receives deposit
     /// @param version The current rebalance version
     function deposit(
         uint256 tranche,
         uint256 amount,
+        address recipient,
         uint256 version
     ) public {
-        // TODO recipient
         _checkpoint(version);
-        _userCheckpoint(msg.sender, version);
-        _balances[msg.sender][tranche] = _balances[msg.sender][tranche].add(amount);
+        _userCheckpoint(recipient, version);
+        _balances[recipient][tranche] = _balances[recipient][tranche].add(amount);
         _totalSupplies[tranche] = _totalSupplies[tranche].add(amount);
-        _updateWorkingBalance(msg.sender);
+        _updateWorkingBalance(recipient);
         // version is checked by the fund
         fund.trancheTransferFrom(tranche, msg.sender, address(this), amount, version);
-        emit Deposited(tranche, msg.sender, amount);
+        emit Deposited(tranche, recipient, amount);
     }
 
     /// @notice Unstake tranche tokens.
