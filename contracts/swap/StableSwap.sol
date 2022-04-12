@@ -15,7 +15,7 @@ import "../utils/AdvancedMath.sol";
 
 enum Operation {SWAP, ADD_LIQUIDITY, REMOVE_LIQUIDITY, VIEW}
 
-contract StableSwap is IStableSwap, ReentrancyGuard {
+abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
