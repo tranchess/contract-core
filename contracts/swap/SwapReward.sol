@@ -12,16 +12,21 @@ contract SwapReward is Ownable {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    address public swap;
+    address public liquidityGauge;
     address public rewardToken;
     uint256 public ratePerSecond;
     uint256 public startTimestamp;
     uint256 public endTimestamp;
     uint256 public lastTimestamp;
 
+    function initialize(address liquidityGauge_, address rewardToken_) external onlyOwner {
+        require(liquidityGauge == address(0));
+        liquidityGauge = liquidityGauge_;
+        rewardToken = rewardToken_;
+    }
+
     function updateReward(
         address caller,
-        address token,
         uint256 amount,
         uint256 start,
         uint256 interval
@@ -31,8 +36,6 @@ contract SwapReward is Ownable {
             "Last reward not yet expired"
         );
         require(caller != address(0));
-        swap = caller;
-        rewardToken = token;
         ratePerSecond = amount.div(interval);
         startTimestamp = start.max(block.timestamp);
         endTimestamp = start.add(interval);
@@ -45,12 +48,12 @@ contract SwapReward is Ownable {
     }
 
     function getReward() external {
-        require(msg.sender == swap);
+        require(msg.sender == liquidityGauge);
         uint256 currentTimestamp = endTimestamp.min(block.timestamp);
         uint256 reward = ratePerSecond.mul(currentTimestamp - lastTimestamp);
         lastTimestamp = currentTimestamp;
         if (reward > 0) {
-            IERC20(rewardToken).safeTransfer(swap, reward);
+            IERC20(rewardToken).safeTransfer(liquidityGauge, reward);
         }
     }
 }

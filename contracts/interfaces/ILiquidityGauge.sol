@@ -15,9 +15,22 @@ interface ILiquidityGauge {
 
     function burnFrom(address account, uint256 amount) external;
 
+    function workingSupply() external view returns (uint256);
+
     function workingBalanceOf(address account) external view returns (uint256);
 
     // ---------------------------- LP Token -----------------------------------
+
+    function claimableTokenAndAssetAndReward(address account)
+        external
+        returns (
+            uint256 amountToken,
+            uint256 amountReward,
+            uint256 amountM,
+            uint256 amountA,
+            uint256 amountB,
+            uint256 amountU
+        );
 
     function claimTokenAndAssetAndReward(address account) external;
 
