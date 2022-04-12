@@ -16,7 +16,7 @@ import {
     advanceBlockAtTime,
     setNextBlockTime,
     setAutomine,
-} from "../utils";
+} from "./utils";
 import {
     REWARD_WEIGHT_M,
     REWARD_WEIGHT_A,

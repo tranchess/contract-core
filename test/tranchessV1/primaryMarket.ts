@@ -13,7 +13,7 @@ import {
     DAY,
     FixtureWalletMap,
     advanceBlockAtTime,
-} from "../utils";
+} from "./utils";
 
 const REDEMPTION_FEE_BPS = 35;
 const SPLIT_FEE_BPS = 40;
