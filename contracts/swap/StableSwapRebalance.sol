@@ -11,10 +11,9 @@ contract StableSwapRebalance is StableSwap {
     address public immutable chainlinkAggregator;
 
     constructor(
-        address fund_,
-        address primaryMarket_,
         address lpToken_,
-        address baseAddress_,
+        address fund_,
+        uint256 baseTranche_,
         address quoteAddress_,
         uint256 initialAmpl_,
         uint256 futureAmpl_,
@@ -26,10 +25,9 @@ contract StableSwapRebalance is StableSwap {
     )
         public
         StableSwap(
-            fund_,
-            primaryMarket_,
             lpToken_,
-            baseAddress_,
+            fund_,
+            baseTranche_,
             quoteAddress_,
             initialAmpl_,
             futureAmpl_,
@@ -58,7 +56,11 @@ contract StableSwapRebalance is StableSwap {
                 // RatioBR < 1
                 uint256 quoteBalance_ = quoteBalance;
                 uint256 outB =
-                    IPrimaryMarketV3(primaryMarket).split(address(this), amountQ, rebalanceVersion);
+                    IPrimaryMarketV3(IFundV3(fund).primaryMarket()).split(
+                        address(this),
+                        amountQ,
+                        rebalanceVersion
+                    );
                 uint256 newBalance0 = amountB.add(outB);
                 amountU = quoteBalance_.mul(baseBalance_.sub(newBalance0)).div(baseBalance_);
                 baseBalance = newBalance0;

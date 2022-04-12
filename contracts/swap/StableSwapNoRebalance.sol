@@ -9,10 +9,9 @@ contract StableSwapNoRebalance is StableSwap {
     using SafeDecimalMath for uint256;
 
     constructor(
-        address fund_,
-        address primaryMarket_,
         address lpToken_,
-        address baseAddress_,
+        address fund_,
+        uint256 baseTranche_,
         address quoteAddress_,
         uint256 initialAmpl_,
         uint256 futureAmpl_,
@@ -22,10 +21,9 @@ contract StableSwapNoRebalance is StableSwap {
     )
         public
         StableSwap(
-            fund_,
-            primaryMarket_,
             lpToken_,
-            baseAddress_,
+            fund_,
+            baseTranche_,
             quoteAddress_,
             initialAmpl_,
             futureAmpl_,

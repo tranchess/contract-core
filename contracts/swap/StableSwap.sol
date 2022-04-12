@@ -34,17 +34,18 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     uint256 private constant MIN_DIFF = 2;
     uint256 private constant MAX_ITERATION = 255;
 
-    address public lpToken;
-    address public override baseAddress;
+    address public immutable lpToken;
+    address public immutable fund;
+    uint256 public immutable baseTranche;
     address public override quoteAddress;
-    uint256 public baseBalance; // bishop
-    uint256 public quoteBalance; // usd
+
+    uint256 public baseBalance;
+    uint256 public quoteBalance;
 
     uint256 public baseCumulativeLast;
     uint256 public quoteCumulativeLast;
     uint256 private blockTimestampLast;
 
-    address public fund;
     address public primaryMarket;
     uint256 public currentRebalanceVersion;
 
@@ -59,10 +60,9 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     uint256 public totalAdminFee;
 
     constructor(
-        address fund_,
-        address primaryMarket_,
         address lpToken_,
-        address baseAddress_,
+        address fund_,
+        uint256 baseTranche_,
         address quoteAddress_,
         uint256 initialAmpl_,
         uint256 futureAmpl_,
@@ -70,14 +70,13 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 feeRate_,
         uint256 adminFeeRate_
     ) public {
-        primaryMarket = primaryMarket_;
-        fund = fund_;
         lpToken = lpToken_;
-        baseAddress = baseAddress_;
+        fund = fund_;
+        baseTranche = baseTranche_;
         quoteAddress = quoteAddress_;
 
         uint256 rebalanceVersion = IFundV3(fund_).getRebalanceSize();
-        IFundV3(fund).refreshBalance(address(this), rebalanceVersion);
+        IFundV3(fund_).refreshBalance(address(this), rebalanceVersion);
         currentRebalanceVersion = rebalanceVersion;
 
         initialAmpl = initialAmpl_;
@@ -86,6 +85,10 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         feeCollector = feeCollector_;
         feeRate = feeRate_;
         adminFeeRate = adminFeeRate_;
+    }
+
+    function baseAddress() public view override returns (address) {
+        return IFundV3(fund).tokenShare(baseTranche);
     }
 
     function allBalances() public view override returns (uint256, uint256) {
@@ -249,10 +252,9 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 newQuoteBalance;
         uint256 fee;
         {
-            address baseAddress_ = baseAddress;
             address quoteAddress_ = quoteAddress;
-            require(to != baseAddress_ && to != quoteAddress_, "Invalid to address");
-            if (baseDeltaOut > 0) IERC20(baseAddress_).safeTransfer(to, baseDeltaOut); // optimistically transfer tokens
+            require(to != baseAddress() && to != quoteAddress_, "Invalid to address");
+            if (baseDeltaOut > 0) IERC20(baseAddress()).safeTransfer(to, baseDeltaOut); // optimistically transfer tokens
             if (quoteDeltaOut > 0) IERC20(quoteAddress_).safeTransfer(to, quoteDeltaOut); // optimistically transfer tokens
             if (data.length > 0)
                 ITranchessSwapCallee(to).tranchessSwapCallback(
@@ -261,7 +263,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
                     quoteDeltaOut,
                     data
                 );
-            newBaseBalance = IERC20(baseAddress_).balanceOf(address(this));
+            newBaseBalance = IERC20(baseAddress()).balanceOf(address(this));
             newQuoteBalance = IERC20(quoteAddress_).balanceOf(address(this)).sub(totalAdminFee);
             fee = quoteDeltaOut.mul(feeRate).div(uint256(1e18).sub(feeRate));
         }
@@ -310,7 +312,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         nonReentrant
         checkActivity()
     {
-        uint256 newBaseBalance = IERC20(baseAddress).balanceOf(address(this));
+        uint256 newBaseBalance = IERC20(baseAddress()).balanceOf(address(this));
         uint256 newQuoteBalance = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
         uint256 ampl = Ampl();
         uint256 fee;
@@ -394,7 +396,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         baseBalance = baseBalance.sub(baseDelta);
         quoteBalance = quoteBalance.sub(quoteDelta);
 
-        IERC20(baseAddress).safeTransfer(msg.sender, baseDelta);
+        IERC20(baseAddress()).safeTransfer(msg.sender, baseDelta);
         IERC20(quoteAddress).safeTransfer(msg.sender, quoteDelta);
 
         ILiquidityGauge(lpToken).burnFrom(msg.sender, burnAmount);
@@ -448,7 +450,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
 
         ILiquidityGauge(lpToken).burnFrom(msg.sender, burnAmount);
 
-        IERC20(baseAddress).safeTransfer(msg.sender, baseDelta);
+        IERC20(baseAddress()).safeTransfer(msg.sender, baseDelta);
         IERC20(quoteAddress).safeTransfer(msg.sender, quoteDelta);
 
         emit LiquidityImbalanceRemoved(
@@ -490,7 +492,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         quoteBalance = quoteBalance_.sub(liquidityFee.multiplyDecimal(adminFeeRate));
         ILiquidityGauge(lpToken).burnFrom(msg.sender, burnAmount);
 
-        IERC20(baseAddress).safeTransfer(msg.sender, baseDelta);
+        IERC20(baseAddress()).safeTransfer(msg.sender, baseDelta);
 
         emit LiquiditySingleRemoved(msg.sender, burnAmount, baseDelta);
 
@@ -536,7 +538,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
 
     // force balances to match reserves
     function skim(address to) external nonReentrant {
-        address baseAddress_ = baseAddress; // gas savings
+        address baseAddress_ = baseAddress(); // gas savings
         address quoteAddress_ = quoteAddress; // gas savings
         IERC20(baseAddress_).safeTransfer(
             to,
@@ -551,7 +553,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     // force reserves to match balances
     function sync() external nonReentrant {
         _update(baseBalance, quoteBalance);
-        uint256 newBaseBalance = IERC20(baseAddress).balanceOf(address(this));
+        uint256 newBaseBalance = IERC20(baseAddress()).balanceOf(address(this));
         uint256 newQuoteBalance = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
         baseBalance = newBaseBalance;
         quoteBalance = newQuoteBalance;
