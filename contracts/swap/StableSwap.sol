@@ -4,7 +4,6 @@ pragma solidity >=0.6.10 <0.8.0;
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@chainlink/contracts/src/v0.6/interfaces/AggregatorV3Interface.sol";
 
 import "../interfaces/IStableSwap.sol";
 import "../interfaces/ILiquidityGauge.sol";
