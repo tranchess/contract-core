@@ -23,14 +23,6 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     event RedemptionQueued(address indexed account, uint256 index, uint256 underlying);
     event RedemptionPopped(uint256 count, uint256 newHead);
     event RedemptionClaimed(address indexed account, uint256 index, uint256 underlying);
-    event Settled(
-        uint256 indexed day,
-        uint256 sharesToMint,
-        uint256 sharesToBurn,
-        uint256 creationUnderlying,
-        uint256 redemptionUnderlying,
-        uint256 fee
-    );
     event FundCapUpdated(uint256 newCap);
     event RedemptionFeeRateUpdated(uint256 newRedemptionFeeRate);
     event MergeFeeRateUpdated(uint256 newMergeFeeRate);
@@ -92,22 +84,22 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     /// @return shares Created Token M amount
     function getCreation(uint256 underlying) public view override returns (uint256 shares) {
         uint256 fundUnderlying = fund.getTotalUnderlying();
-        uint256 fundTotalShares = fund.getTotalShares();
+        uint256 fundEquivalentTotalM = fund.getEquivalentTotalM();
         require(fundUnderlying.add(underlying) <= fundCap, "Exceed fund cap");
-        if (fundTotalShares == 0) {
-            uint256 day = fund.currentDay();
-            uint256 underlyingPrice = fund.twapOracle().getTwap(day - 1 days);
-            (uint256 prevNavM, , ) = fund.historicalNavs(day - 1 days);
-            require(underlyingPrice != 0 && prevNavM != 0, "Zero NAV or underlying price");
-            shares = underlying.mul(underlyingPrice).mul(fund.underlyingDecimalMultiplier()).div(
-                prevNavM
-            );
+        if (fundEquivalentTotalM == 0) {
+            shares = underlying.mul(fund.underlyingDecimalMultiplier());
+            uint256 splitRatio = fund.splitRatio();
+            require(splitRatio != 0, "Fund is not initialized");
+            uint256 settledDay = fund.currentDay() - 1 days;
+            uint256 underlyingPrice = fund.twapOracle().getTwap(settledDay);
+            (uint256 navA, uint256 navB) = fund.historicalNavs(settledDay);
+            shares = shares.mul(underlyingPrice).div(splitRatio).divideDecimal(navA.add(navB));
         } else {
             require(
                 fundUnderlying != 0,
                 "Cannot create shares for fund with shares but no underlying"
             );
-            shares = underlying.mul(fundTotalShares).div(fundUnderlying);
+            shares = underlying.mul(fundEquivalentTotalM).div(fundUnderlying);
         }
     }
 
@@ -122,28 +114,29 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         returns (uint256 underlying)
     {
         // Assume:
-        //   minShares * fundUnderlying = a * fundTotalShares - b
-        // where a and b are integers and 0 <= b < fundTotalShares
+        //   minShares * fundUnderlying = a * fundEquivalentTotalM - b
+        // where a and b are integers and 0 <= b < fundEquivalentTotalM
         // Then
         //   underlying = a
         //   getCreation(underlying)
-        //     = floor(a * fundTotalShares / fundUnderlying)
-        //    >= floor((a * fundTotalShares - b) / fundUnderlying)
+        //     = floor(a * fundEquivalentTotalM / fundUnderlying)
+        //    >= floor((a * fundEquivalentTotalM - b) / fundUnderlying)
         //     = minShares
         //   getCreation(underlying - 1)
-        //     = floor((a * fundTotalShares - fundTotalShares) / fundUnderlying)
-        //     < (a * fundTotalShares - b) / fundUnderlying
+        //     = floor((a * fundEquivalentTotalM - fundEquivalentTotalM) / fundUnderlying)
+        //     < (a * fundEquivalentTotalM - b) / fundUnderlying
         //     = minShares
         uint256 fundUnderlying = fund.getTotalUnderlying();
-        uint256 fundTotalShares = fund.getTotalShares();
-        require(fundTotalShares > 0, "Cannot calculate creation for empty fund");
-        return minShares.mul(fundUnderlying).add(fundTotalShares - 1).div(fundTotalShares);
+        uint256 fundEquivalentTotalM = fund.getEquivalentTotalM();
+        require(fundEquivalentTotalM > 0, "Cannot calculate creation for empty fund");
+        return
+            minShares.mul(fundUnderlying).add(fundEquivalentTotalM - 1).div(fundEquivalentTotalM);
     }
 
     function _getRedemptionBeforeFee(uint256 shares) private view returns (uint256 underlying) {
         uint256 fundUnderlying = fund.getTotalUnderlying();
-        uint256 fundTotalShares = fund.getTotalShares();
-        underlying = shares.mul(fundUnderlying).div(fundTotalShares);
+        uint256 fundEquivalentTotalM = fund.getEquivalentTotalM();
+        underlying = shares.mul(fundUnderlying).div(fundEquivalentTotalM);
     }
 
     /// @notice Calculate the result of a redemption.
@@ -174,7 +167,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     {
         // Assume:
         //   minUnderlying * 1e18 = a * (1e18 - redemptionFeeRate) + b
-        //   a * fundTotalShares = c * fundUnderlying - d
+        //   a * fundEquivalentTotalM = c * fundUnderlying - d
         // where
         //   a, b, c, d are integers
         //   0 <= b < 1e18 - redemptionFeeRate
@@ -183,32 +176,36 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
         //   underlyingBeforeFee = a
         //   shares = c
         //   getRedemption(shares).underlying
-        //     = floor(c * fundUnderlying / fundTotalShares) -
-        //       - floor(floor(c * fundUnderlying / fundTotalShares) * redemptionFeeRate / 1e18)
-        //     = ceil(floor(c * fundUnderlying / fundTotalShares) * (1e18 - redemptionFeeRate) / 1e18)
-        //    >= ceil(floor((c * fundUnderlying - d) / fundTotalShares) * (1e18 - redemptionFeeRate) / 1e18)
+        //     = floor(c * fundUnderlying / fundEquivalentTotalM) -
+        //       - floor(floor(c * fundUnderlying / fundEquivalentTotalM) * redemptionFeeRate / 1e18)
+        //     = ceil(floor(c * fundUnderlying / fundEquivalentTotalM) * (1e18 - redemptionFeeRate) / 1e18)
+        //    >= ceil(floor((c * fundUnderlying - d) / fundEquivalentTotalM) * (1e18 - redemptionFeeRate) / 1e18)
         //     = ceil(a * (1e18 - redemptionFeeRate) / 1e18)
         //     = (a * (1e18 - redemptionFeeRate) + b) / 1e18        // because b < 1e18
         //     = minUnderlying
         uint256 fundUnderlying = fund.getTotalUnderlying();
-        uint256 fundTotalShares = fund.getTotalShares();
+        uint256 fundEquivalentTotalM = fund.getEquivalentTotalM();
         uint256 underlyingBeforeFee = minUnderlying.divideDecimal(1e18 - redemptionFeeRate);
-        return underlyingBeforeFee.mul(fundTotalShares).add(fundUnderlying - 1).div(fundUnderlying);
+        return
+            underlyingBeforeFee.mul(fundEquivalentTotalM).add(fundUnderlying - 1).div(
+                fundUnderlying
+            );
     }
 
     /// @notice Calculate the result of a split.
     /// @param inM Token M amount to be split
     /// @return outAB Received amount of Token A and Token B
     function getSplit(uint256 inM) public view override returns (uint256 outAB) {
-        return inM / 2;
+        return inM.multiplyDecimal(fund.splitRatio());
     }
 
-    /// @notice Calculate the amount of Token M that can be split into the given amount of
+    /// @notice Calculate the amount of Token M that can be split into at least the given amount of
     ///         Token A and Token B.
     /// @param minOutAB Received Token A and Token B amount
     /// @return inM Token M amount that should be split
     function getSplitForAB(uint256 minOutAB) external view override returns (uint256 inM) {
-        return minOutAB.mul(2);
+        uint256 splitRatio = fund.splitRatio();
+        return minOutAB.mul(1e18).add(splitRatio.sub(1)).div(splitRatio);
     }
 
     /// @notice Calculate the result of a merge.
@@ -216,7 +213,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     /// @return outM Received Token M amount
     /// @return feeM Token M amount charged as merge fee
     function getMerge(uint256 inAB) public view override returns (uint256 outM, uint256 feeM) {
-        uint256 outMBeforeFee = inAB.mul(2);
+        uint256 outMBeforeFee = inAB.divideDecimal(fund.splitRatio());
         feeM = outMBeforeFee.multiplyDecimal(mergeFeeRate);
         outM = outMBeforeFee.sub(feeM);
     }
@@ -229,18 +226,19 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     function getMergeForM(uint256 minOutM) external view override returns (uint256 inAB) {
         // Assume:
         //   minOutM * 1e18 = a * (1e18 - mergeFeeRate) + b
+        //   c = ceil(a * splitRatio / 1e18)
         // where a and b are integers and 0 <= b < 1e18 - mergeFeeRate
         // Then
         //   outMBeforeFee = a
-        //   inAB = ceil(a / 2)
+        //   inAB = c
         //   getMerge(inAB).outM
-        //     = inAB * 2 - floor(inAB * 2 * mergeFeeRate / 1e18)
-        //     = ceil(inAB * 2 * (1e18 - mergeFeeRate) / 1e18)
+        //     = c * 1e18 / splitRatio - floor(c * 1e18 / splitRatio * mergeFeeRate / 1e18)
+        //     = ceil(c * 1e18 / splitRatio * (1e18 - mergeFeeRate) / 1e18)
         //    >= ceil(a * (1e18 - mergeFeeRate) / 1e18)
         //     = (a * (1e18 - mergeFeeRate) + b) / 1e18         // because b < 1e18
         //     = minOutM
         uint256 outMBeforeFee = minOutM.divideDecimal(1e18 - mergeFeeRate);
-        inAB = outMBeforeFee.add(1) / 2;
+        inAB = outMBeforeFee.mul(fund.splitRatio()).add(1e18 - 1).div(1e18);
     }
 
     /// @notice Return index of the first queued redemption that cannot be claimed now.
@@ -565,27 +563,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndex, Ow
     }
 
     /// @dev Nothing to do for daily fund settlement.
-    function settle(
-        uint256 day,
-        uint256,
-        uint256,
-        uint256,
-        uint256
-    )
-        external
-        override
-        onlyFund
-        returns (
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256
-        )
-    {
-        emit Settled(day, 0, 0, 0, 0, 0);
-        return (0, 0, 0, 0, 0);
-    }
+    function settle(uint256 day) external override onlyFund {}
 
     function _updateFundCap(uint256 newCap) private {
         fundCap = newCap;

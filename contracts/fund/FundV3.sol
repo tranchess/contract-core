@@ -77,6 +77,10 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     ///         and ends at the same time of the next day (exclusive).
     uint256 public override currentDay;
 
+    /// @notice The amount of Token A received by splitting one Token M.
+    ///         This ratio changes on every rebalance.
+    uint256 public override splitRatio; // TODO need event?
+
     /// @notice Start timestamp of the current primary market activity window.
     uint256 public override fundActivityStartTime;
 
@@ -112,14 +116,17 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     /// @dev Rebalance version mapping for `_allowances`.
     mapping(address => mapping(address => uint256)) private _allowanceVersions;
 
-    /// @dev Mapping of trading day => NAV tuple.
-    mapping(uint256 => uint256[TRANCHE_COUNT]) private _historicalNavs;
+    /// @dev Mapping of trading day => NAV of Token A.
+    mapping(uint256 => uint256) private _historicalNavA;
 
-    /// @notice Mapping of trading day => total fund shares.
+    /// @dev Mapping of trading day => NAV of Token B.
+    mapping(uint256 => uint256) private _historicalNavB;
+
+    /// @notice Mapping of trading day => equivalent Token A supply.
     ///
-    ///         Key is the end timestamp of a trading day. Value is the total fund shares after
-    ///         settlement of that trading day, as if all Token A and B are merged.
-    mapping(uint256 => uint256) public override historicalTotalShares;
+    ///         Key is the end timestamp of a trading day. Value is the total supply of Token A,
+    ///         as if all Token M are split.
+    mapping(uint256 => uint256) public override historicalEquivalentTotalA;
 
     /// @notice Mapping of trading day => underlying assets in the fund.
     ///
@@ -133,15 +140,11 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     ///         after settlement of the last day of the previous trading week.
     mapping(uint256 => uint256) public historicalInterestRate;
 
-    address[] private obsoletePrimaryMarkets;
-    address[] private newPrimaryMarkets;
-
     /// @notice Amount of fee not transfered to the fee collector yet.
     uint256 public feeDebt;
 
-    /// @dev Mapping of primary market => Amount of redemption underlying that the fund owes
-    ///      the primary market
-    mapping(address => uint256) public redemptionDebts;
+    /// @notice Amount of redemption underlying that the fund owes the primary market
+    uint256 public redemptionDebt;
 
     /// @dev Sum of the fee debt and redemption debts of all primary markets.
     uint256 private _totalDebt;
@@ -186,18 +189,29 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _updateAprOracle(params.aprOracle);
         _updateBallot(params.ballot);
         _updateFeeCollector(params.feeCollector);
+        _updateActivityDelayTime(30 minutes);
+    }
 
+    function initialize(
+        uint256 newSplitRatio,
+        uint256 lastNavA,
+        uint256 lastNavB
+    ) external onlyOwner {
+        require(splitRatio == 0 && currentDay == 0, "Already initialized");
+        require(
+            newSplitRatio != 0 && lastNavA >= UNIT && !_shouldTriggerRebalance(lastNavA, lastNavB),
+            "Invalid parameters"
+        );
         currentDay = endOfDay(block.timestamp);
+        splitRatio = newSplitRatio;
         uint256 lastDay = currentDay - 1 days;
-        uint256 currentPrice = twapOracle.getTwap(lastDay);
-        require(currentPrice != 0, "Price not available");
-        _historicalNavs[lastDay][TRANCHE_M] = UNIT;
-        _historicalNavs[lastDay][TRANCHE_A] = UNIT;
-        _historicalNavs[lastDay][TRANCHE_B] = UNIT;
-        historicalInterestRate[_endOfWeek(lastDay)] = MAX_INTEREST_RATE.min(aprOracle.capture());
+        uint256 lastDayPrice = twapOracle.getTwap(lastDay);
+        require(lastDayPrice != 0, "Price not available"); // required to do the first creation
+        _historicalNavA[lastDay] = lastNavA;
+        _historicalNavB[lastDay] = lastNavB;
+        historicalInterestRate[lastDay] = MAX_INTEREST_RATE.min(aprOracle.capture()); // XXX
         fundActivityStartTime = lastDay;
         exchangeActivityStartTime = lastDay + 30 minutes;
-        _updateActivityDelayTime(12 hours);
     }
 
     /// @notice UTC time of a day when the fund settles.
@@ -278,10 +292,19 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         return _totalDebt;
     }
 
-    /// @notice Total shares of the fund, as if all Token A and B are merged.
-    function getTotalShares() public view override returns (uint256) {
+    /// @notice Equivalent Token A supply, as if all Token M are split.
+    function getEquivalentTotalA() public view override returns (uint256) {
+        return _totalSupplies[TRANCHE_M].multiplyDecimal(splitRatio).add(_totalSupplies[TRANCHE_A]);
+    }
+
+    /// @notice Equivalent Token M supply, as if all Token A and B are split.
+    function getEquivalentTotalM() public view override returns (uint256) {
         return
-            _totalSupplies[TRANCHE_M].add(_totalSupplies[TRANCHE_A]).add(_totalSupplies[TRANCHE_B]);
+            _totalSupplies[TRANCHE_A]
+                .add(_totalSupplies[TRANCHE_B])
+                .divideDecimal(splitRatio)
+                .div(2)
+                .add(_totalSupplies[TRANCHE_M]);
     }
 
     /// @notice Return the rebalance matrix at a given index. A zero struct is returned
@@ -305,118 +328,76 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         return _rebalanceSize;
     }
 
-    /// @notice Return NAV of Token M, A and B of the given trading day.
+    /// @notice Return NAV of Token A and B of the given trading day.
     /// @param day End timestamp of a trading day
-    /// @return NAV of Token M, A and B
+    /// @return navA NAV of Token A
+    /// @return navB NAV of Token B
     function historicalNavs(uint256 day)
         external
         view
         override
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
+        returns (uint256 navA, uint256 navB)
     {
-        return (
-            _historicalNavs[day][TRANCHE_M],
-            _historicalNavs[day][TRANCHE_A],
-            _historicalNavs[day][TRANCHE_B]
-        );
+        return (_historicalNavA[day], _historicalNavB[day]);
     }
 
-    /// @notice Estimate NAV of all tranches at a given timestamp, considering underlying price
-    ///         change, accrued protocol fee and accrued interest since the previous settlement.
+    /// @notice Estimate the current NAV of all tranches, considering underlying price change,
+    ///         accrued protocol fee and accrued interest since the previous settlement.
     ///
     ///         The extrapolation uses simple interest instead of daily compound interest in
     ///         calculating protocol fee and Token A's interest. There may be significant error
     ///         in the returned values when `timestamp` is far beyond the last settlement.
-    /// @param timestamp Timestamp to estimate
     /// @param price Price of the underlying asset (18 decimal places)
-    /// @return Estimated NAV of all tranches
-    function extrapolateNav(uint256 timestamp, uint256 price)
+    /// @return navSum Sum of the estimated NAV of Token A and B
+    /// @return navA Estimated NAV of Token A
+    /// @return navBOrZero Estimated NAV of Token B, or zero if the NAV is negative
+    function extrapolateNav(uint256 price)
         external
         view
         override
         returns (
-            uint256,
-            uint256,
-            uint256
+            uint256 navSum,
+            uint256 navA,
+            uint256 navBOrZero
         )
     {
-        // Find the last settled trading day before the given timestamp.
-        uint256 previousDay = currentDay - 1 days;
-        if (previousDay > timestamp) {
-            previousDay = endOfDay(timestamp) - 1 days;
-        }
-        uint256 previousShares = historicalTotalShares[previousDay];
-        uint256 navM = _extrapolateNavM(previousDay, previousShares, timestamp, price);
-        uint256 navA = _extrapolateNavA(previousDay, previousShares, timestamp);
-        uint256 navB = calculateNavB(navM, navA);
-        return (navM, navA, navB);
-    }
-
-    function _extrapolateNavM(
-        uint256 previousDay,
-        uint256 previousShares,
-        uint256 timestamp,
-        uint256 price
-    ) private view returns (uint256) {
-        uint256 navM;
-        if (previousShares == 0) {
-            // The fund is empty. Just return the previous recorded NAV.
-            navM = _historicalNavs[previousDay][TRANCHE_M];
-            if (navM == 0) {
-                // No NAV is recorded because the given timestamp is before the fund launches.
-                return UNIT;
-            } else {
-                return navM;
-            }
-        }
-        uint256 totalValue =
-            price.mul(historicalUnderlying[previousDay].mul(underlyingDecimalMultiplier));
-        uint256 accruedFee =
-            totalValue.multiplyDecimal(dailyProtocolFeeRate).mul(timestamp - previousDay).div(
+        uint256 settledDay = currentDay - 1 days;
+        uint256 underlying = getTotalUnderlying();
+        uint256 protocolFee =
+            underlying.multiplyDecimal(dailyProtocolFeeRate).mul(block.timestamp - settledDay).div(
                 1 days
             );
-        navM = (totalValue - accruedFee).div(previousShares);
-        return navM;
+        underlying = underlying.sub(protocolFee);
+        return
+            _extrapolateNav(block.timestamp, settledDay, price, getEquivalentTotalA(), underlying);
     }
 
-    function _extrapolateNavA(
-        uint256 previousDay,
-        uint256 previousShares,
-        uint256 timestamp
-    ) private view returns (uint256) {
-        uint256 navA = _historicalNavs[previousDay][TRANCHE_A];
-        if (previousShares == 0) {
-            // The fund is empty. Just return the previous recorded NAV.
-            if (navA == 0) {
-                // No NAV is recorded because the given timestamp is before the fund launches.
-                return UNIT;
-            } else {
-                return navA;
-            }
-        }
-
-        uint256 week = _endOfWeek(previousDay);
-        uint256 newNavA =
-            navA
-                .multiplyDecimal(
-                UNIT.sub(dailyProtocolFeeRate.mul(timestamp - previousDay).div(1 days))
-            )
-                .multiplyDecimal(
-                UNIT.add(historicalInterestRate[week].mul(timestamp - previousDay).div(1 days))
+    function _extrapolateNav(
+        uint256 timestamp,
+        uint256 settledDay,
+        uint256 price,
+        uint256 equivalentTotalA,
+        uint256 underlying
+    )
+        private
+        view
+        returns (
+            uint256 navSum,
+            uint256 navA,
+            uint256 navBOrZero
+        )
+    {
+        navA = _historicalNavA[settledDay];
+        if (equivalentTotalA > 0) {
+            navSum = price.mul(underlying.mul(underlyingDecimalMultiplier)).div(equivalentTotalA);
+            navA = navA.multiplyDecimal(
+                historicalInterestRate[settledDay].mul(timestamp - settledDay).div(1 days).add(UNIT)
             );
-        return newNavA > navA ? newNavA : navA;
-    }
-
-    function calculateNavB(uint256 navM, uint256 navA) public pure override returns (uint256) {
-        // Using unchecked multiplications because they are unlikely to overflow
-        if (navM * 2 >= navA) {
-            return navM * 2 - navA;
+            navBOrZero = navSum >= navA ? navSum - navA : 0;
         } else {
-            return 0;
+            // If the fund is empty, use NAV in the last day
+            navBOrZero = _historicalNavB[settledDay];
+            navSum = navA + navBOrZero;
         }
     }
 
@@ -446,10 +427,9 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         )
     {
         Rebalance storage rebalance = _rebalances[index];
-        newAmountM = amountM
-            .multiplyDecimal(rebalance.ratioM)
-            .add(amountA.multiplyDecimal(rebalance.ratioA2M))
-            .add(amountB.multiplyDecimal(rebalance.ratioB2M));
+        newAmountM = amountM.add(amountA.multiplyDecimal(rebalance.ratioA2M)).add(
+            amountB.multiplyDecimal(rebalance.ratioB2M)
+        );
         uint256 ratioAB = rebalance.ratioAB; // Gas saver
         newAmountA = amountA.multiplyDecimal(ratioAB);
         newAmountB = amountB.multiplyDecimal(ratioAB);
@@ -809,47 +789,30 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     ///         4. Capture new interest rate for Token A.
     function settle() external nonReentrant {
         uint256 day = currentDay;
-        uint256 currentWeek = _endOfWeek(day - 1 days);
+        require(day != 0, "Not initialized");
         require(block.timestamp >= day, "The current trading day does not end yet");
         uint256 price = twapOracle.getTwap(day);
         require(price != 0, "Underlying price for settlement is not ready yet");
 
         _collectFee();
 
-        _settlePrimaryMarket(day, price);
+        IPrimaryMarketV3(primaryMarket).settle(day);
 
         _payFeeDebt();
 
         // Calculate NAV
-        uint256 totalShares = getTotalShares();
+        uint256 equivalentTotalA = getEquivalentTotalA();
         uint256 underlying = getTotalUnderlying();
-        uint256 navA = _historicalNavs[day - 1 days][TRANCHE_A];
-        uint256 navM;
-        if (totalShares > 0) {
-            navM = price.mul(underlying.mul(underlyingDecimalMultiplier)).div(totalShares);
-            if (historicalTotalShares[day - 1 days] > 0) {
-                // Update NAV of Token A only when the fund is non-empty both before and after
-                // this settlement
-                uint256 newNavA =
-                    navA.multiplyDecimal(UNIT.sub(dailyProtocolFeeRate)).multiplyDecimal(
-                        historicalInterestRate[currentWeek].add(UNIT)
-                    );
-                if (navA < newNavA) {
-                    navA = newNavA;
-                }
-            }
-        } else {
-            // If the fund is empty, use NAV of Token M in the last day
-            navM = _historicalNavs[day - 1 days][TRANCHE_M];
-        }
-        uint256 navB = calculateNavB(navM, navA);
+        (uint256 navSum, uint256 navA, uint256 navB) =
+            _extrapolateNav(day, day - 1 days, price, equivalentTotalA, underlying);
 
         if (_shouldTriggerRebalance(navA, navB)) {
-            _triggerRebalance(day, navM, navA, navB);
-            navM = UNIT;
+            uint256 newSplitRatio = splitRatio.multiplyDecimal(navSum) / 2;
+            _triggerRebalance(day, navSum, navA, navB, newSplitRatio);
+            splitRatio = newSplitRatio;
             navA = UNIT;
             navB = UNIT;
-            totalShares = getTotalShares();
+            equivalentTotalA = getEquivalentTotalA();
             fundActivityStartTime = day + activityDelayTimeAfterRebalance;
             exchangeActivityStartTime = day + activityDelayTimeAfterRebalance;
         } else {
@@ -857,18 +820,17 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
             exchangeActivityStartTime = day + 30 minutes;
         }
 
-        if (day == currentWeek) {
-            historicalInterestRate[currentWeek + 1 weeks] = _updateInterestRate(currentWeek);
-        }
+        historicalInterestRate[day] = day == _endOfWeek(day - 1 days)
+            ? _updateInterestRate(day)
+            : historicalInterestRate[day - 1 days];
 
-        historicalTotalShares[day] = totalShares;
+        historicalEquivalentTotalA[day] = equivalentTotalA;
         historicalUnderlying[day] = underlying;
-        _historicalNavs[day][TRANCHE_M] = navM;
-        _historicalNavs[day][TRANCHE_A] = navA;
-        _historicalNavs[day][TRANCHE_B] = navB;
+        _historicalNavA[day] = navA;
+        _historicalNavB[day] = navB;
         currentDay = day + 1 days;
 
-        emit Settled(day, navM, navA, navB);
+        emit Settled(day, navA, navB);
     }
 
     function transferToStrategy(uint256 amount) external override onlyStrategy {
@@ -893,13 +855,13 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     }
 
     function primaryMarketAddDebt(uint256 amount, uint256 fee) external override onlyPrimaryMarket {
-        redemptionDebts[msg.sender] = redemptionDebts[msg.sender].add(amount);
+        redemptionDebt = redemptionDebt.add(amount);
         feeDebt = feeDebt.add(fee);
         _totalDebt = _totalDebt.add(amount).add(fee);
     }
 
     function primaryMarketPayDebt(uint256 amount) external override onlyPrimaryMarket {
-        redemptionDebts[msg.sender] = redemptionDebts[msg.sender].sub(amount);
+        redemptionDebt = redemptionDebt.sub(amount);
         _totalDebt = _totalDebt.sub(amount);
         IERC20(tokenUnderlying).safeTransfer(msg.sender, amount);
     }
@@ -1012,47 +974,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         }
     }
 
-    /// @dev Settle primary market operations in the PrimaryMarket contract.
-    function _settlePrimaryMarket(uint256 day, uint256 price) private {
-        uint256 totalShares = getTotalShares();
-        uint256 underlying = getTotalUnderlying();
-        uint256 prevNavM = _historicalNavs[day - 1 days][TRANCHE_M];
-        uint256 newTotalDebt = _totalDebt;
-        IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
-        (
-            uint256 sharesToMint,
-            uint256 sharesToBurn,
-            uint256 creationUnderlying,
-            uint256 redemptionUnderlying,
-            uint256 fee
-        ) = pm.settle(day, totalShares, underlying, price, prevNavM);
-        if (sharesToMint > sharesToBurn) {
-            _mint(TRANCHE_M, address(pm), sharesToMint - sharesToBurn);
-        } else if (sharesToBurn > sharesToMint) {
-            _burn(TRANCHE_M, address(pm), sharesToBurn - sharesToMint);
-        }
-        uint256 debt = redemptionDebts[address(pm)];
-        uint256 redemptionAndDebt = redemptionUnderlying.add(debt);
-        if (creationUnderlying > redemptionAndDebt) {
-            IERC20(tokenUnderlying).safeTransferFrom(
-                address(pm),
-                address(this),
-                creationUnderlying - redemptionAndDebt
-            );
-            redemptionDebts[address(pm)] = 0;
-            newTotalDebt -= debt;
-        } else {
-            uint256 newDebt = redemptionAndDebt - creationUnderlying;
-            redemptionDebts[address(pm)] = newDebt;
-            newTotalDebt = newTotalDebt.sub(debt).add(newDebt);
-        }
-        if (fee > 0) {
-            feeDebt = feeDebt.add(fee);
-            newTotalDebt = newTotalDebt.add(fee);
-        }
-        _totalDebt = newTotalDebt;
-    }
-
     function _payFeeDebt() private {
         uint256 total = _totalDebt;
         if (total == 0) {
@@ -1085,23 +1006,24 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     /// @dev Create a new rebalance that resets NAV of all tranches to 1. Total supplies are
     ///      rebalanced immediately.
     /// @param day Trading day that triggers this rebalance
-    /// @param navM NAV of Token M before this rebalance
+    /// @param navSum Sum of Token A and Token B's NAV
     /// @param navA NAV of Token A before this rebalance
     /// @param navBOrZero NAV of Token B before this rebalance or zero if the NAV is negative
+    /// @param newSplitRatio The new split ratio after this rebalance
     function _triggerRebalance(
         uint256 day,
-        uint256 navM,
+        uint256 navSum,
         uint256 navA,
-        uint256 navBOrZero
+        uint256 navBOrZero,
+        uint256 newSplitRatio
     ) private {
-        Rebalance memory rebalance = _calculateRebalance(navM, navA, navBOrZero);
+        Rebalance memory rebalance = _calculateRebalance(navSum, navA, navBOrZero, newSplitRatio);
         uint256 oldSize = _rebalanceSize;
         _rebalances[oldSize] = rebalance;
         _rebalanceSize = oldSize + 1;
         emit RebalanceTriggered(
             oldSize,
             day,
-            rebalance.ratioM,
             rebalance.ratioA2M,
             rebalance.ratioB2M,
             rebalance.ratioAB
@@ -1125,14 +1047,16 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     ///      Note that NAV of Token B can be negative before the rebalance when the underlying price
     ///      drops dramatically in a single trading day, in which case zero should be passed to
     ///      this function instead of the negative NAV.
-    /// @param navM NAV of Token M before the rebalance
+    /// @param navSum Sum of Token A and Token B's NAV
     /// @param navA NAV of Token A before the rebalance
     /// @param navBOrZero NAV of Token B before the rebalance or zero if the NAV is negative
+    /// @param newSplitRatio The new split ratio after this rebalance
     /// @return The rebalance matrix
     function _calculateRebalance(
-        uint256 navM,
+        uint256 navSum,
         uint256 navA,
-        uint256 navBOrZero
+        uint256 navBOrZero,
+        uint256 newSplitRatio
     ) private view returns (Rebalance memory) {
         uint256 ratioAB;
         uint256 ratioA2M;
@@ -1140,17 +1064,16 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         if (navBOrZero <= navA) {
             // Lower rebalance
             ratioAB = navBOrZero;
-            ratioA2M = (navM - navBOrZero) * 2;
+            ratioA2M = (navSum / 2 - navBOrZero).divideDecimal(newSplitRatio);
             ratioB2M = 0;
         } else {
             // Upper rebalance
             ratioAB = UNIT;
-            ratioA2M = navA - UNIT;
-            ratioB2M = navBOrZero - UNIT;
+            ratioA2M = (navA - UNIT).divideDecimal(newSplitRatio) / 2;
+            ratioB2M = (navBOrZero - UNIT).divideDecimal(newSplitRatio) / 2;
         }
         return
             Rebalance({
-                ratioM: navM,
                 ratioA2M: ratioA2M,
                 ratioB2M: ratioB2M,
                 ratioAB: ratioAB,
@@ -1270,7 +1193,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         Rebalance storage rebalance = _rebalances[index];
 
         /// @dev using saturating arithmetic to avoid unconscious overflow revert
-        newAllowanceM = allowanceM.saturatingMultiplyDecimal(rebalance.ratioM);
+        newAllowanceM = allowanceM;
         newAllowanceA = allowanceA.saturatingMultiplyDecimal(rebalance.ratioAB);
         newAllowanceB = allowanceB.saturatingMultiplyDecimal(rebalance.ratioAB);
     }

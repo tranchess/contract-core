@@ -87,8 +87,7 @@ contract StableSwapRebalance is StableSwap {
 
     function checkOracle(Operation op) public view override returns (uint256 oracle) {
         (, int256 answer, , , ) = AggregatorV3Interface(chainlinkAggregator).latestRoundData();
-        (, uint256 navA, uint256 navB) =
-            IFundV3(fund).extrapolateNav(block.timestamp, uint256(answer));
+        (, uint256 navA, uint256 navB) = IFundV3(fund).extrapolateNav(uint256(answer));
         if (op == Operation.SWAP || op == Operation.ADD_LIQUIDITY) {
             require(navB >= navA.multiplyDecimal(tradingCurbThreshold), "Trading curb");
         }

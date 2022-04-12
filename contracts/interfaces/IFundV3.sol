@@ -8,7 +8,7 @@ interface IFundV3 {
     /// @notice A linear transformation matrix that represents a rebalance.
     ///
     ///         ```
-    ///             [ ratioM          0        0 ]
+    ///             [        1        0        0 ]
     ///         R = [ ratioA2M  ratioAB        0 ]
     ///             [ ratioB2M        0  ratioAB ]
     ///         ```
@@ -19,7 +19,6 @@ interface IFundV3 {
     ///         [ m', a', b' ] = [ m, a, b ] * R
     ///         ```
     struct Rebalance {
-        uint256 ratioM;
         uint256 ratioA2M;
         uint256 ratioB2M;
         uint256 ratioAB;
@@ -98,6 +97,8 @@ interface IFundV3 {
 
     function currentDay() external view returns (uint256);
 
+    function splitRatio() external view returns (uint256);
+
     function fundActivityStartTime() external view returns (uint256);
 
     function exchangeActivityStartTime() external view returns (uint256);
@@ -111,11 +112,15 @@ interface IFundV3 {
 
     function isExchangeActive(uint256 timestamp) external view returns (bool);
 
-    function getTotalShares() external view returns (uint256);
+    function getEquivalentTotalA() external view returns (uint256);
 
-    function historicalTotalShares(uint256 timestamp) external view returns (uint256);
+    function getEquivalentTotalM() external view returns (uint256);
 
-    function historicalNavs(uint256 timestamp)
+    function historicalEquivalentTotalA(uint256 timestamp) external view returns (uint256);
+
+    function historicalNavs(uint256 timestamp) external view returns (uint256 navA, uint256 navB);
+
+    function extrapolateNav(uint256 price)
         external
         view
         returns (
@@ -123,17 +128,6 @@ interface IFundV3 {
             uint256,
             uint256
         );
-
-    function extrapolateNav(uint256 timestamp, uint256 price)
-        external
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        );
-
-    function calculateNavB(uint256 navM, uint256 navA) external pure returns (uint256);
 
     function doRebalance(
         uint256 amountM,
@@ -246,12 +240,11 @@ interface IFundV3 {
     event RebalanceTriggered(
         uint256 indexed index,
         uint256 indexed day,
-        uint256 ratioM,
         uint256 ratioA2M,
         uint256 ratioB2M,
         uint256 ratioAB
     );
-    event Settled(uint256 indexed day, uint256 navM, uint256 navA, uint256 navB);
+    event Settled(uint256 indexed day, uint256 navA, uint256 navB);
     event InterestRateUpdated(uint256 baseInterestRate, uint256 floatingInterestRate);
     event BalancesRebalanced(
         address indexed account,
