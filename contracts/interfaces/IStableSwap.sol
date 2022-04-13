@@ -63,7 +63,7 @@ interface IStableSwap {
         bool deposit
     ) external view returns (uint256);
 
-    function handleRebalance() external;
+    function handleRebalance() external returns (uint256 rebalanceVersion);
 
     function swap(
         uint256 baseDeltaOut,

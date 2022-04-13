@@ -148,8 +148,6 @@ describe("StableSwapRebalance", function () {
 
         const fund0 = await deployMockForName(owner, "IFundV3");
         const fund1 = await deployMockForName(owner, "IFundV3");
-        const primaryMarket0 = await deployMockForName(owner, "IPrimaryMarketV3");
-        const primaryMarket1 = await deployMockForName(owner, "IPrimaryMarketV3");
         await fund0.mock.currentDay.returns(0);
         await fund0.mock.extrapolateNav.returns(0, parseEther("1"), parseEther("1"));
         await fund0.mock.getRebalanceSize.returns(0);
@@ -308,6 +306,7 @@ describe("StableSwapRebalance", function () {
                     [tokens[1].address, tokens[0].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             ).to.be.revertedWith("Trading curb");
@@ -333,6 +332,7 @@ describe("StableSwapRebalance", function () {
                     [tokens[1].address, tokens[0].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             )
@@ -369,6 +369,7 @@ describe("StableSwapRebalance", function () {
                     [tokens[1].address, tokens[0].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             )
@@ -406,6 +407,7 @@ describe("StableSwapRebalance", function () {
                     [tokens[1].address, tokens[0].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             );
@@ -441,6 +443,7 @@ describe("StableSwapRebalance", function () {
                     [tokens[1].address, tokens[0].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             );
@@ -477,6 +480,7 @@ describe("StableSwapRebalance", function () {
                     [tokens[0].address, tokens[1].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             )
@@ -514,6 +518,7 @@ describe("StableSwapRebalance", function () {
                     [tokens[0].address, tokens[1].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             )
@@ -551,6 +556,7 @@ describe("StableSwapRebalance", function () {
                     [tokens[0].address, tokens[1].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             );
@@ -586,6 +592,7 @@ describe("StableSwapRebalance", function () {
                     [tokens[0].address, tokens[1].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             );
@@ -825,7 +832,6 @@ describe("StableSwapNoRebalance", function () {
         await votingEscrow.mock.getLockedBalance.returns([0, 0]);
 
         const fund0 = await deployMockForName(owner, "IFundV3");
-        const primaryMarket0 = await deployMockForName(owner, "IPrimaryMarketV3");
         await fund0.mock.currentDay.returns(0);
         await fund0.mock.getRebalanceSize.returns(0);
         await fund0.mock.refreshBalance.returns();
@@ -947,6 +953,7 @@ describe("StableSwapNoRebalance", function () {
                     [tokens[1].address, tokens[0].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             )
@@ -983,6 +990,7 @@ describe("StableSwapNoRebalance", function () {
                     [tokens[1].address, tokens[0].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             )
@@ -1020,6 +1028,7 @@ describe("StableSwapNoRebalance", function () {
                     [tokens[1].address, tokens[0].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             );
@@ -1055,6 +1064,7 @@ describe("StableSwapNoRebalance", function () {
                     [tokens[1].address, tokens[0].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             );
@@ -1091,6 +1101,7 @@ describe("StableSwapNoRebalance", function () {
                     [tokens[0].address, tokens[1].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             )
@@ -1128,6 +1139,7 @@ describe("StableSwapNoRebalance", function () {
                     [tokens[0].address, tokens[1].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             )
@@ -1165,6 +1177,7 @@ describe("StableSwapNoRebalance", function () {
                     [tokens[0].address, tokens[1].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             );
@@ -1200,6 +1213,7 @@ describe("StableSwapNoRebalance", function () {
                     [tokens[0].address, tokens[1].address],
                     addr1,
                     constants.AddressZero,
+                    [0],
                     deadline
                 )
             );

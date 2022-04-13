@@ -165,12 +165,12 @@ describe("StakingV4", function () {
 
         // Deposit initial shares
         await fund.mock.trancheTransferFrom.returns();
-        await staking.connect(user1).deposit(TRANCHE_Q, USER1_Q, 0);
-        await staking.connect(user1).deposit(TRANCHE_B, USER1_B, 0);
-        await staking.connect(user1).deposit(TRANCHE_R, USER1_R, 0);
-        await staking.connect(user2).deposit(TRANCHE_Q, USER2_Q, 0);
-        await staking.connect(user2).deposit(TRANCHE_B, USER2_B, 0);
-        await staking.connect(user2).deposit(TRANCHE_R, USER2_R, 0);
+        await staking.connect(user1).deposit(TRANCHE_Q, USER1_Q, user1.address, 0);
+        await staking.connect(user1).deposit(TRANCHE_B, USER1_B, user1.address, 0);
+        await staking.connect(user1).deposit(TRANCHE_R, USER1_R, user1.address, 0);
+        await staking.connect(user2).deposit(TRANCHE_Q, USER2_Q, user2.address, 0);
+        await staking.connect(user2).deposit(TRANCHE_B, USER2_B, user2.address, 0);
+        await staking.connect(user2).deposit(TRANCHE_R, USER2_R, user2.address, 0);
         const checkpointTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
         await fund.mock.trancheTransferFrom.revertsWithReason(
             "Mock on the method is not initialized"
@@ -208,7 +208,7 @@ describe("StakingV4", function () {
 
     describe("deposit()", function () {
         it("Should transfer shares and update balance", async function () {
-            await expect(() => staking.deposit(TRANCHE_Q, 10000, 0)).to.callMocks({
+            await expect(() => staking.deposit(TRANCHE_Q, 10000, addr1, 0)).to.callMocks({
                 func: fund.mock.trancheTransferFrom.withArgs(
                     TRANCHE_Q,
                     addr1,
@@ -219,7 +219,7 @@ describe("StakingV4", function () {
             });
             expect(await staking.trancheBalanceOf(TRANCHE_Q, addr1)).to.equal(USER1_Q.add(10000));
             expect(await staking.totalSupply(TRANCHE_Q)).to.equal(TOTAL_Q.add(10000));
-            await expect(() => staking.deposit(TRANCHE_B, 1000, 0)).to.callMocks({
+            await expect(() => staking.deposit(TRANCHE_B, 1000, addr1, 0)).to.callMocks({
                 func: fund.mock.trancheTransferFrom.withArgs(
                     TRANCHE_B,
                     addr1,
@@ -230,7 +230,7 @@ describe("StakingV4", function () {
             });
             expect(await staking.trancheBalanceOf(TRANCHE_B, addr1)).to.equal(USER1_B.add(1000));
             expect(await staking.totalSupply(TRANCHE_B)).to.equal(TOTAL_B.add(1000));
-            await expect(() => staking.deposit(TRANCHE_R, 100, 0)).to.callMocks({
+            await expect(() => staking.deposit(TRANCHE_R, 100, addr1, 0)).to.callMocks({
                 func: fund.mock.trancheTransferFrom.withArgs(
                     TRANCHE_R,
                     addr1,
@@ -245,13 +245,13 @@ describe("StakingV4", function () {
 
         it("Should emit an event", async function () {
             await fund.mock.trancheTransferFrom.returns();
-            await expect(staking.deposit(TRANCHE_Q, 10000, 0))
+            await expect(staking.deposit(TRANCHE_Q, 10000, addr1, 0))
                 .to.emit(staking, "Deposited")
                 .withArgs(TRANCHE_Q, addr1, 10000);
-            await expect(staking.deposit(TRANCHE_B, 1000, 0))
+            await expect(staking.deposit(TRANCHE_B, 1000, addr1, 0))
                 .to.emit(staking, "Deposited")
                 .withArgs(TRANCHE_B, addr1, 1000);
-            await expect(staking.deposit(TRANCHE_R, 100, 0))
+            await expect(staking.deposit(TRANCHE_R, 100, addr1, 0))
                 .to.emit(staking, "Deposited")
                 .withArgs(TRANCHE_R, addr1, 100);
         });
@@ -384,7 +384,7 @@ describe("StakingV4", function () {
         it("Should still update working balance when no locking action is taken", async function () {
             await staking.syncWithVotingEscrow(addr1);
             await fund.mock.trancheTransferFrom.returns();
-            await staking.connect(user2).deposit(TRANCHE_Q, TOTAL_WEIGHT, 0); // Weighted total supply doubles
+            await staking.connect(user2).deposit(TRANCHE_Q, TOTAL_WEIGHT, addr2, 0); // Weighted total supply doubles
             await staking.syncWithVotingEscrow(addr1);
             const workingBalance = await staking.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
@@ -475,7 +475,7 @@ describe("StakingV4", function () {
 
         it("Should update working balance on deposit()", async function () {
             await fund.mock.trancheTransferFrom.returns();
-            await staking.deposit(TRANCHE_Q, USER1_Q, 0);
+            await staking.deposit(TRANCHE_Q, USER1_Q, addr1, 0);
             const workingBalance = await staking.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
                 boostedWorkingBalance(
@@ -508,7 +508,7 @@ describe("StakingV4", function () {
         it("Should update working balance when reaching max boosting power of QUEEN", async function () {
             await fund.mock.trancheTransfer.returns();
             await fund.mock.trancheTransferFrom.returns();
-            await staking.connect(user2).deposit(TRANCHE_B, USER1_B, 0); // To keep weighted supply unchanged
+            await staking.connect(user2).deposit(TRANCHE_B, USER1_B, addr2, 0); // To keep weighted supply unchanged
             await staking.withdraw(TRANCHE_B, USER1_B, 0);
             expect(await staking.workingBalanceOf(addr1)).to.equal(
                 boostedWorkingBalance(
@@ -520,7 +520,7 @@ describe("StakingV4", function () {
                 )
             );
 
-            await staking.connect(user2).deposit(TRANCHE_R, USER1_R, 0); // To keep weighted supply unchanged
+            await staking.connect(user2).deposit(TRANCHE_R, USER1_R, addr2, 0); // To keep weighted supply unchanged
             await staking.withdraw(TRANCHE_R, USER1_R, 0);
             expect(await staking.workingBalanceOf(addr1)).to.equal(
                 boostedWorkingBalance(
@@ -532,7 +532,7 @@ describe("StakingV4", function () {
                 )
             );
 
-            await staking.connect(user2).deposit(TRANCHE_Q, USER1_Q.div(2), 0); // To keep weighted supply unchanged
+            await staking.connect(user2).deposit(TRANCHE_Q, USER1_Q.div(2), addr2, 0); // To keep weighted supply unchanged
             await staking.withdraw(TRANCHE_Q, USER1_Q.div(2), 0);
             expect(await staking.workingBalanceOf(addr1)).to.equal(
                 boostedWorkingBalance(
@@ -856,6 +856,7 @@ describe("StakingV4", function () {
             await staking.deposit(
                 TRANCHE_B,
                 TOTAL_WEIGHT.mul(REWARD_WEIGHT_Q).div(REWARD_WEIGHT_B),
+                addr1,
                 0
             );
 
@@ -970,9 +971,9 @@ describe("StakingV4", function () {
             const deposit3 = totalDeposit.sub(deposit1).sub(deposit2);
             await fund.mock.trancheTransferFrom.returns();
             await setAutomine(false);
-            await staking.deposit(TRANCHE_B, deposit1, 0);
-            await staking.deposit(TRANCHE_B, deposit2, 0);
-            await staking.deposit(TRANCHE_B, deposit3, 0);
+            await staking.deposit(TRANCHE_B, deposit1, addr1, 0);
+            await staking.deposit(TRANCHE_B, deposit2, addr1, 0);
+            await staking.deposit(TRANCHE_B, deposit3, addr1, 0);
             await advanceBlockAtTime(rewardStartTimestamp + 100);
             await setAutomine(true);
 
@@ -1036,11 +1037,11 @@ describe("StakingV4", function () {
 
             // User1 deposit some QUEEN
             await setNextBlockTime(rewardStartTimestamp + 2000);
-            await staking.deposit(TRANCHE_Q, parseEther("1"), 2);
+            await staking.deposit(TRANCHE_Q, parseEther("1"), addr1, 2);
 
             // User2 deposit some QUEEN
             await setNextBlockTime(rewardStartTimestamp + 3500);
-            await staking.connect(user2).deposit(TRANCHE_Q, parseEther("1"), 2);
+            await staking.connect(user2).deposit(TRANCHE_Q, parseEther("1"), addr2, 2);
             // Add rewards before user2's deposit
             user1Rewards = user1Rewards.add(parseEther("1").mul(1500));
 

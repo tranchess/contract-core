@@ -41,8 +41,8 @@ contract StableSwapRebalance is StableSwap {
     }
 
     /// @dev Handle the rebalance immediately. Should be called before any swap operation.
-    function handleRebalance() public override {
-        uint256 rebalanceVersion = fund.getRebalanceSize();
+    function handleRebalance() public override returns (uint256 rebalanceVersion) {
+        rebalanceVersion = fund.getRebalanceSize();
         uint256 baseBalance_ = baseBalance;
         uint256 currentVersion = currentRebalanceVersion;
 

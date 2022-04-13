@@ -31,6 +31,7 @@ interface ISwapRouter {
         address[] calldata path,
         address to,
         address staking,
+        uint256[] calldata versions,
         uint256 deadline
     ) external returns (uint256[] memory amounts);
 
@@ -40,6 +41,7 @@ interface ISwapRouter {
         address[] calldata path,
         address to,
         address staking,
+        uint256[] calldata versions,
         uint256 deadline
     ) external returns (uint256[] memory amounts);
 }
