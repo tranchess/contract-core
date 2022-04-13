@@ -9,29 +9,29 @@ interface IFundV3 {
     ///
     ///         ```
     ///             [        1        0        0 ]
-    ///         R = [ ratioA2M  ratioAB        0 ]
-    ///             [ ratioB2M        0  ratioAB ]
+    ///         R = [ ratioB2Q  ratioBR        0 ]
+    ///             [ ratioR2Q        0  ratioBR ]
     ///         ```
     ///
-    ///         Amounts of the three tranches `m`, `a` and `b` can be rebalanced by multiplying the matrix:
+    ///         Amounts of the three tranches `q`, `b` and `r` can be rebalanced by multiplying the matrix:
     ///
     ///         ```
-    ///         [ m', a', b' ] = [ m, a, b ] * R
+    ///         [ q', b', r' ] = [ q, b, r ] * R
     ///         ```
     struct Rebalance {
-        uint256 ratioA2M;
-        uint256 ratioB2M;
-        uint256 ratioAB;
+        uint256 ratioB2Q;
+        uint256 ratioR2Q;
+        uint256 ratioBR;
         uint256 timestamp;
     }
 
     function tokenUnderlying() external view returns (address);
 
-    function tokenM() external view returns (address);
-
-    function tokenA() external view returns (address);
+    function tokenQ() external view returns (address);
 
     function tokenB() external view returns (address);
+
+    function tokenR() external view returns (address);
 
     function underlyingDecimalMultiplier() external view returns (uint256);
 
@@ -112,13 +112,13 @@ interface IFundV3 {
 
     function isExchangeActive(uint256 timestamp) external view returns (bool);
 
-    function getEquivalentTotalA() external view returns (uint256);
+    function getEquivalentTotalB() external view returns (uint256);
 
-    function getEquivalentTotalM() external view returns (uint256);
+    function getEquivalentTotalQ() external view returns (uint256);
 
-    function historicalEquivalentTotalA(uint256 timestamp) external view returns (uint256);
+    function historicalEquivalentTotalB(uint256 timestamp) external view returns (uint256);
 
-    function historicalNavs(uint256 timestamp) external view returns (uint256 navA, uint256 navB);
+    function historicalNavs(uint256 timestamp) external view returns (uint256 navB, uint256 navR);
 
     function extrapolateNav(uint256 price)
         external
@@ -130,32 +130,32 @@ interface IFundV3 {
         );
 
     function doRebalance(
-        uint256 amountM,
-        uint256 amountA,
+        uint256 amountQ,
         uint256 amountB,
+        uint256 amountR,
         uint256 index
     )
         external
         view
         returns (
-            uint256 newAmountM,
-            uint256 newAmountA,
-            uint256 newAmountB
+            uint256 newAmountQ,
+            uint256 newAmountB,
+            uint256 newAmountR
         );
 
     function batchRebalance(
-        uint256 amountM,
-        uint256 amountA,
+        uint256 amountQ,
         uint256 amountB,
+        uint256 amountR,
         uint256 fromIndex,
         uint256 toIndex
     )
         external
         view
         returns (
-            uint256 newAmountM,
-            uint256 newAmountA,
-            uint256 newAmountB
+            uint256 newAmountQ,
+            uint256 newAmountB,
+            uint256 newAmountR
         );
 
     function refreshBalance(address account, uint256 targetVersion) external;
@@ -240,25 +240,25 @@ interface IFundV3 {
     event RebalanceTriggered(
         uint256 indexed index,
         uint256 indexed day,
-        uint256 ratioA2M,
-        uint256 ratioB2M,
-        uint256 ratioAB
+        uint256 ratioB2Q,
+        uint256 ratioR2Q,
+        uint256 ratioBR
     );
-    event Settled(uint256 indexed day, uint256 navA, uint256 navB);
+    event Settled(uint256 indexed day, uint256 navB, uint256 navR);
     event InterestRateUpdated(uint256 baseInterestRate, uint256 floatingInterestRate);
     event BalancesRebalanced(
         address indexed account,
         uint256 version,
-        uint256 balanceM,
-        uint256 balanceA,
-        uint256 balanceB
+        uint256 balanceQ,
+        uint256 balanceB,
+        uint256 balanceR
     );
     event AllowancesRebalanced(
         address indexed owner,
         address indexed spender,
         uint256 version,
-        uint256 allowanceM,
-        uint256 allowanceA,
-        uint256 allowanceB
+        uint256 allowanceQ,
+        uint256 allowanceB,
+        uint256 allowanceR
     );
 }

@@ -47,14 +47,14 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         tranchessRouter = ISwapRouter(tranchessRouter_);
     }
 
-    function buyTokenB(
+    function buyR(
         address primaryMarket,
         uint256 maxQuote,
         address recipient,
         address tokenQuote,
         RouterOption mode,
         uint256 version,
-        uint256 outAB
+        uint256 outR
     ) external {
         IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
         uint256 underlyingAmount;
@@ -62,8 +62,8 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         uint256 quoteAmount;
         {
             address tokenUnderlying = IFundV3(pm.fund()).tokenUnderlying();
-            uint256 inM = pm.getSplitForAB(outAB);
-            underlyingAmount = pm.getCreationForShares(inM);
+            uint256 inQ = pm.getSplitForB(outR);
+            underlyingAmount = pm.getCreationForQ(inQ);
             // Calculate the exact amount of quote asset to pay
             (totalQuoteAmount, mode) = _externalGetAmountsIn(
                 mode,
@@ -73,12 +73,12 @@ contract FlashSwapRouter is ITranchessSwapCallee {
             );
             // Arrange the stable swap path
             address[] memory tranchessPath = new address[](2);
-            tranchessPath[0] = pm.fund().tokenA();
+            tranchessPath[0] = pm.fund().tokenB();
             tranchessPath[1] = tokenQuote;
-            // Calculate the amount of quote asset for selling tokenA
-            quoteAmount = tranchessRouter.getAmountsOut(outAB, tranchessPath)[1];
+            // Calculate the amount of quote asset for selling BISHOP
+            quoteAmount = tranchessRouter.getAmountsOut(outR, tranchessPath)[1];
         }
-        IStableSwap tranchessPair = tranchessRouter.getSwap(pm.fund().tokenA(), tokenQuote);
+        IStableSwap tranchessPair = tranchessRouter.getSwap(pm.fund().tokenB(), tokenQuote);
         // Send the user's portion of the payment to Tranchess swap
         uint256 resultAmount = totalQuoteAmount.sub(quoteAmount);
         require(resultAmount <= maxQuote, "Insufficient input");
@@ -87,20 +87,20 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         tranchessPair.swap(0, quoteAmount, address(this), data);
     }
 
-    function sellTokenB(
+    function sellR(
         address primaryMarket,
         uint256 minQuote,
         address recipient,
         address tokenQuote,
         RouterOption mode,
         uint256 version,
-        uint256 inAB
+        uint256 inR
     ) external {
         IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
-        // Send the user's tokenB to this router
-        IERC20(pm.fund().tokenB()).safeTransferFrom(msg.sender, address(this), inAB);
+        // Send the user's ROOK to this router
+        IERC20(pm.fund().tokenR()).safeTransferFrom(msg.sender, address(this), inR);
         bytes memory data = abi.encode(primaryMarket, minQuote, recipient, version, mode);
-        tranchessRouter.getSwap(pm.fund().tokenA(), tokenQuote).swap(inAB, 0, address(this), data);
+        tranchessRouter.getSwap(pm.fund().tokenB(), tokenQuote).swap(inR, 0, address(this), data);
     }
 
     function tranchessSwapCallback(
@@ -119,7 +119,7 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
         address tokenQuote = IStableSwap(msg.sender).quoteAddress();
         require(
-            msg.sender == address(tranchessRouter.getSwap(tokenQuote, pm.fund().tokenA())),
+            msg.sender == address(tranchessRouter.getSwap(tokenQuote, pm.fund().tokenB())),
             "Tranchess Pair check failed"
         );
         if (baseDeltaOut > 0) {
@@ -129,13 +129,13 @@ contract FlashSwapRouter is ITranchessSwapCallee {
                 // Calculate the exact amount of quote asset to pay
                 address[] memory tranchessPath = new address[](2);
                 tranchessPath[0] = tokenQuote;
-                tranchessPath[1] = pm.fund().tokenA();
+                tranchessPath[1] = pm.fund().tokenB();
                 quoteAmount = tranchessRouter.getAmountsIn(baseDeltaOut, tranchessPath)[0];
             }
-            // Merge tokenA and tokenB into tokenM
-            uint256 outM = pm.merge(address(this), baseDeltaOut, version);
-            // Redeem tokenM for underlying
-            uint256 underlyingAmount = pm.redeem(address(this), outM, 0, version);
+            // Merge BISHOP and ROOK into QUEEN
+            uint256 outQ = pm.merge(address(this), baseDeltaOut, version);
+            // Redeem QUEEN for underlying
+            uint256 underlyingAmount = pm.redeem(address(this), outQ, 0, version);
             // Trade underlying for quote asset
             uint256 totalQuoteAmount =
                 _externalSwap(mode, underlyingAmount, 0, pm.fund().tokenUnderlying(), tokenQuote)[
@@ -157,15 +157,15 @@ contract FlashSwapRouter is ITranchessSwapCallee {
                     tokenQuote,
                     pm.fund().tokenUnderlying()
                 )[1];
-            // Create tokenM using the borrowed underlying
+            // Create QUEEN using the borrowed underlying
             IERC20(pm.fund().tokenUnderlying()).safeApprove(address(pm), underlyingAmount);
-            uint256 shares = pm.create(address(this), underlyingAmount, 0, version);
-            // Split tokenM into tokenA and tokenB
-            uint256 outAB = pm.split(address(this), shares, version);
-            // Send back tokenA to tranchess swap
-            IERC20(pm.fund().tokenA()).safeTransfer(msg.sender, outAB);
-            // Send tokenB to user
-            IERC20(pm.fund().tokenB()).safeTransfer(recipient, outAB);
+            uint256 outQ = pm.create(address(this), underlyingAmount, 0, version);
+            // Split QUEEN into BISHOP and ROOK
+            uint256 outB = pm.split(address(this), outQ, version);
+            // Send back BISHOP to tranchess swap
+            IERC20(pm.fund().tokenB()).safeTransfer(msg.sender, outB);
+            // Send ROOK to user
+            IERC20(pm.fund().tokenR()).safeTransfer(recipient, outB);
         }
     }
 

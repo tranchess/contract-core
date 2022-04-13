@@ -5,7 +5,7 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
-import "../../interfaces/ITrancheIndex.sol";
+import "../interfaces/ITrancheIndex.sol";
 import "../../interfaces/IChessSchedule.sol";
 import "../../utils/CoreUtility.sol";
 

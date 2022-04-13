@@ -14,7 +14,7 @@ import {
     WEEK,
     FixtureWalletMap,
     advanceBlockAtTime,
-} from "../utils";
+} from "./utils";
 
 const EPOCH = 1800; // 30 min
 const USDC_TO_ETHER = parseUnits("1", 12);

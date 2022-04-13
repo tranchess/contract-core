@@ -3,7 +3,7 @@ import { Contract, Wallet } from "ethers";
 import type { Fixture, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
-import { FixtureWalletMap } from "../utils";
+import { FixtureWalletMap } from "./utils";
 
 describe("LibOrderBook", function () {
     interface FixtureData {

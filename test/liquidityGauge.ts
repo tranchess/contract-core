@@ -111,9 +111,9 @@ describe("LiquidityGauge", function () {
             await MockToken.connect(owner).deploy("token", "token", 18),
             await MockToken.connect(owner).deploy("token", "token", 18),
         ];
-        await fund.mock.tokenM.returns(tokens[0].address);
-        await fund.mock.tokenA.returns(tokens[1].address);
-        await fund.mock.tokenB.returns(tokens[2].address);
+        await fund.mock.tokenQ.returns(tokens[0].address);
+        await fund.mock.tokenB.returns(tokens[1].address);
+        await fund.mock.tokenR.returns(tokens[2].address);
         await swap.mock.quoteAddress.returns(usdc.address);
 
         const SwapReward = await ethers.getContractFactory("SwapReward");

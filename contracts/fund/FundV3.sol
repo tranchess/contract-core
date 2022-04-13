@@ -45,10 +45,10 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     uint256 private constant STRATEGY_UPDATE_MIN_DELAY = 3 days;
     uint256 private constant STRATEGY_UPDATE_MAX_DELAY = 7 days;
 
-    /// @notice Upper bound of `NAV_B / NAV_A` to trigger a rebalance.
+    /// @notice Upper bound of `NAV_R / NAV_B` to trigger a rebalance.
     uint256 public immutable upperRebalanceThreshold;
 
-    /// @notice Lower bound of `NAV_B / NAV_A` to trigger a rebalance.
+    /// @notice Lower bound of `NAV_R / NAV_B` to trigger a rebalance.
     uint256 public immutable lowerRebalanceThreshold;
 
     /// @notice Address of the underlying token.
@@ -77,7 +77,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     ///         and ends at the same time of the next day (exclusive).
     uint256 public override currentDay;
 
-    /// @notice The amount of Token A received by splitting one Token M.
+    /// @notice The amount of BISHOP received by splitting one QUEEN.
     ///         This ratio changes on every rebalance.
     uint256 public override splitRatio; // TODO need event?
 
@@ -116,17 +116,17 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     /// @dev Rebalance version mapping for `_allowances`.
     mapping(address => mapping(address => uint256)) private _allowanceVersions;
 
-    /// @dev Mapping of trading day => NAV of Token A.
-    mapping(uint256 => uint256) private _historicalNavA;
-
-    /// @dev Mapping of trading day => NAV of Token B.
+    /// @dev Mapping of trading day => NAV of BISHOP.
     mapping(uint256 => uint256) private _historicalNavB;
 
-    /// @notice Mapping of trading day => equivalent Token A supply.
+    /// @dev Mapping of trading day => NAV of ROOK.
+    mapping(uint256 => uint256) private _historicalNavR;
+
+    /// @notice Mapping of trading day => equivalent BISHOP supply.
     ///
-    ///         Key is the end timestamp of a trading day. Value is the total supply of Token A,
-    ///         as if all Token M are split.
-    mapping(uint256 => uint256) public override historicalEquivalentTotalA;
+    ///         Key is the end timestamp of a trading day. Value is the total supply of BISHOP,
+    ///         as if all QUEEN are split.
+    mapping(uint256 => uint256) public override historicalEquivalentTotalB;
 
     /// @notice Mapping of trading day => underlying assets in the fund.
     ///
@@ -134,7 +134,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     ///         the fund after settlement of that trading day.
     mapping(uint256 => uint256) public override historicalUnderlying;
 
-    /// @notice Mapping of trading week => interest rate of Token A.
+    /// @notice Mapping of trading week => interest rate of BISHOP.
     ///
     ///         Key is the end timestamp of a trading week. Value is the interest rate captured
     ///         after settlement of the last day of the previous trading week.
@@ -154,9 +154,9 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     struct ConstructorParameters {
         address tokenUnderlying;
         uint256 underlyingDecimals;
-        address tokenM;
-        address tokenA;
+        address tokenQ;
         address tokenB;
+        address tokenR;
         address primaryMarket;
         address strategy;
         uint256 dailyProtocolFeeRate;
@@ -172,9 +172,9 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         public
         Ownable()
         FundRolesV2(
-            params.tokenM,
-            params.tokenA,
+            params.tokenQ,
             params.tokenB,
+            params.tokenR,
             params.primaryMarket,
             params.strategy
         )
@@ -194,12 +194,12 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
 
     function initialize(
         uint256 newSplitRatio,
-        uint256 lastNavA,
-        uint256 lastNavB
+        uint256 lastNavB,
+        uint256 lastNavR
     ) external onlyOwner {
         require(splitRatio == 0 && currentDay == 0, "Already initialized");
         require(
-            newSplitRatio != 0 && lastNavA >= UNIT && !_shouldTriggerRebalance(lastNavA, lastNavB),
+            newSplitRatio != 0 && lastNavB >= UNIT && !_shouldTriggerRebalance(lastNavB, lastNavR),
             "Invalid parameters"
         );
         currentDay = endOfDay(block.timestamp);
@@ -207,8 +207,8 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         uint256 lastDay = currentDay - 1 days;
         uint256 lastDayPrice = twapOracle.getTwap(lastDay);
         require(lastDayPrice != 0, "Price not available"); // required to do the first creation
-        _historicalNavA[lastDay] = lastNavA;
         _historicalNavB[lastDay] = lastNavB;
+        _historicalNavR[lastDay] = lastNavR;
         historicalInterestRate[lastDay] = MAX_INTEREST_RATE.min(aprOracle.capture()); // XXX
         fundActivityStartTime = lastDay;
         exchangeActivityStartTime = lastDay + 30 minutes;
@@ -239,16 +239,16 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         return _endOfWeek(timestamp);
     }
 
-    function tokenM() external view override returns (address) {
-        return _tokenM;
-    }
-
-    function tokenA() external view override returns (address) {
-        return _tokenA;
+    function tokenQ() external view override returns (address) {
+        return _tokenQ;
     }
 
     function tokenB() external view override returns (address) {
         return _tokenB;
+    }
+
+    function tokenR() external view override returns (address) {
+        return _tokenR;
     }
 
     /// @notice Return the status of the fund contract.
@@ -292,19 +292,19 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         return _totalDebt;
     }
 
-    /// @notice Equivalent Token A supply, as if all Token M are split.
-    function getEquivalentTotalA() public view override returns (uint256) {
-        return _totalSupplies[TRANCHE_M].multiplyDecimal(splitRatio).add(_totalSupplies[TRANCHE_A]);
+    /// @notice Equivalent BISHOP supply, as if all QUEEN are split.
+    function getEquivalentTotalB() public view override returns (uint256) {
+        return _totalSupplies[TRANCHE_Q].multiplyDecimal(splitRatio).add(_totalSupplies[TRANCHE_B]);
     }
 
-    /// @notice Equivalent Token M supply, as if all Token A and B are split.
-    function getEquivalentTotalM() public view override returns (uint256) {
+    /// @notice Equivalent QUEEN supply, as if all BISHOP and ROOK are merged.
+    function getEquivalentTotalQ() public view override returns (uint256) {
         return
-            _totalSupplies[TRANCHE_A]
-                .add(_totalSupplies[TRANCHE_B])
+            _totalSupplies[TRANCHE_B]
+                .add(_totalSupplies[TRANCHE_R])
                 .divideDecimal(splitRatio)
                 .div(2)
-                .add(_totalSupplies[TRANCHE_M]);
+                .add(_totalSupplies[TRANCHE_Q]);
     }
 
     /// @notice Return the rebalance matrix at a given index. A zero struct is returned
@@ -328,37 +328,37 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         return _rebalanceSize;
     }
 
-    /// @notice Return NAV of Token A and B of the given trading day.
+    /// @notice Return NAV of BISHOP and ROOK of the given trading day.
     /// @param day End timestamp of a trading day
-    /// @return navA NAV of Token A
-    /// @return navB NAV of Token B
+    /// @return navB NAV of BISHOP
+    /// @return navR NAV of ROOK
     function historicalNavs(uint256 day)
         external
         view
         override
-        returns (uint256 navA, uint256 navB)
+        returns (uint256 navB, uint256 navR)
     {
-        return (_historicalNavA[day], _historicalNavB[day]);
+        return (_historicalNavB[day], _historicalNavR[day]);
     }
 
     /// @notice Estimate the current NAV of all tranches, considering underlying price change,
     ///         accrued protocol fee and accrued interest since the previous settlement.
     ///
     ///         The extrapolation uses simple interest instead of daily compound interest in
-    ///         calculating protocol fee and Token A's interest. There may be significant error
+    ///         calculating protocol fee and BISHOP's interest. There may be significant error
     ///         in the returned values when `timestamp` is far beyond the last settlement.
     /// @param price Price of the underlying asset (18 decimal places)
-    /// @return navSum Sum of the estimated NAV of Token A and B
-    /// @return navA Estimated NAV of Token A
-    /// @return navBOrZero Estimated NAV of Token B, or zero if the NAV is negative
+    /// @return navSum Sum of the estimated NAV of BISHOP and ROOK
+    /// @return navB Estimated NAV of BISHOP
+    /// @return navROrZero Estimated NAV of ROOK, or zero if the NAV is negative
     function extrapolateNav(uint256 price)
         external
         view
         override
         returns (
             uint256 navSum,
-            uint256 navA,
-            uint256 navBOrZero
+            uint256 navB,
+            uint256 navROrZero
         )
     {
         uint256 settledDay = currentDay - 1 days;
@@ -369,88 +369,88 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
             );
         underlying = underlying.sub(protocolFee);
         return
-            _extrapolateNav(block.timestamp, settledDay, price, getEquivalentTotalA(), underlying);
+            _extrapolateNav(block.timestamp, settledDay, price, getEquivalentTotalB(), underlying);
     }
 
     function _extrapolateNav(
         uint256 timestamp,
         uint256 settledDay,
         uint256 price,
-        uint256 equivalentTotalA,
+        uint256 equivalentTotalB,
         uint256 underlying
     )
         private
         view
         returns (
             uint256 navSum,
-            uint256 navA,
-            uint256 navBOrZero
+            uint256 navB,
+            uint256 navROrZero
         )
     {
-        navA = _historicalNavA[settledDay];
-        if (equivalentTotalA > 0) {
-            navSum = price.mul(underlying.mul(underlyingDecimalMultiplier)).div(equivalentTotalA);
-            navA = navA.multiplyDecimal(
+        navB = _historicalNavB[settledDay];
+        if (equivalentTotalB > 0) {
+            navSum = price.mul(underlying.mul(underlyingDecimalMultiplier)).div(equivalentTotalB);
+            navB = navB.multiplyDecimal(
                 historicalInterestRate[settledDay].mul(timestamp - settledDay).div(1 days).add(UNIT)
             );
-            navBOrZero = navSum >= navA ? navSum - navA : 0;
+            navROrZero = navSum >= navB ? navSum - navB : 0;
         } else {
             // If the fund is empty, use NAV in the last day
-            navBOrZero = _historicalNavB[settledDay];
-            navSum = navA + navBOrZero;
+            navROrZero = _historicalNavR[settledDay];
+            navSum = navB + navROrZero;
         }
     }
 
     /// @notice Transform share amounts according to the rebalance at a given index.
     ///         This function performs no bounds checking on the given index. A non-existent
     ///         rebalance transforms anything to a zero vector.
-    /// @param amountM Amount of Token M before the rebalance
-    /// @param amountA Amount of Token A before the rebalance
-    /// @param amountB Amount of Token B before the rebalance
+    /// @param amountQ Amount of QUEEN before the rebalance
+    /// @param amountB Amount of BISHOP before the rebalance
+    /// @param amountR Amount of ROOK before the rebalance
     /// @param index Rebalance index
-    /// @return newAmountM Amount of Token M after the rebalance
-    /// @return newAmountA Amount of Token A after the rebalance
-    /// @return newAmountB Amount of Token B after the rebalance
+    /// @return newAmountQ Amount of QUEEN after the rebalance
+    /// @return newAmountB Amount of BISHOP after the rebalance
+    /// @return newAmountR Amount of ROOK after the rebalance
     function doRebalance(
-        uint256 amountM,
-        uint256 amountA,
+        uint256 amountQ,
         uint256 amountB,
+        uint256 amountR,
         uint256 index
     )
         public
         view
         override
         returns (
-            uint256 newAmountM,
-            uint256 newAmountA,
-            uint256 newAmountB
+            uint256 newAmountQ,
+            uint256 newAmountB,
+            uint256 newAmountR
         )
     {
         Rebalance storage rebalance = _rebalances[index];
-        newAmountM = amountM.add(amountA.multiplyDecimal(rebalance.ratioA2M)).add(
-            amountB.multiplyDecimal(rebalance.ratioB2M)
+        newAmountQ = amountQ.add(amountB.multiplyDecimal(rebalance.ratioB2Q)).add(
+            amountR.multiplyDecimal(rebalance.ratioR2Q)
         );
-        uint256 ratioAB = rebalance.ratioAB; // Gas saver
-        newAmountA = amountA.multiplyDecimal(ratioAB);
-        newAmountB = amountB.multiplyDecimal(ratioAB);
+        uint256 ratioBR = rebalance.ratioBR; // Gas saver
+        newAmountB = amountB.multiplyDecimal(ratioBR);
+        newAmountR = amountR.multiplyDecimal(ratioBR);
     }
 
     /// @notice Transform share amounts according to rebalances in a given index range,
     ///         This function performs no bounds checking on the given indices. The original amounts
     ///         are returned if `fromIndex` is no less than `toIndex`. A zero vector is returned
     ///         if `toIndex` is greater than the number of existing rebalances.
-    /// @param amountM Amount of Token M before the rebalance
-    /// @param amountA Amount of Token A before the rebalance
-    /// @param amountB Amount of Token B before the rebalance
+    /// @param amountQ Amount of QUEEN before the rebalance
+    /// @param amountB Amount of BISHOP before the rebalance
+    /// @param amountR Amount of ROOK before the rebalance
     /// @param fromIndex Starting of the rebalance index range, inclusive
     /// @param toIndex End of the rebalance index range, exclusive
-    /// @return newAmountM Amount of Token M after the rebalance
-    /// @return newAmountA Amount of Token A after the rebalance
-    /// @return newAmountB Amount of Token B after the rebalance
+    /// @return newAmountQ Amount of QUEEN after the rebalance
+    /// @return newAmountB Amount of BISHOP after the rebalance
+    /// @return newAmountR Amount of ROOK after the rebalance
     function batchRebalance(
-        uint256 amountM,
-        uint256 amountA,
+        uint256 amountQ,
         uint256 amountB,
+        uint256 amountR,
         uint256 fromIndex,
         uint256 toIndex
     )
@@ -458,17 +458,17 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         view
         override
         returns (
-            uint256 newAmountM,
-            uint256 newAmountA,
-            uint256 newAmountB
+            uint256 newAmountQ,
+            uint256 newAmountB,
+            uint256 newAmountR
         )
     {
         for (uint256 i = fromIndex; i < toIndex; i++) {
-            (amountM, amountA, amountB) = doRebalance(amountM, amountA, amountB, i);
+            (amountQ, amountB, amountR) = doRebalance(amountQ, amountB, amountR, i);
         }
-        newAmountM = amountM;
-        newAmountA = amountA;
+        newAmountQ = amountQ;
         newAmountB = amountB;
+        newAmountR = amountR;
     }
 
     /// @notice Transform share balance to a given rebalance version, or to the latest version
@@ -504,29 +504,29 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         override
         returns (uint256)
     {
-        uint256 amountM = _balances[account][TRANCHE_M];
-        uint256 amountA = _balances[account][TRANCHE_A];
+        uint256 amountQ = _balances[account][TRANCHE_Q];
         uint256 amountB = _balances[account][TRANCHE_B];
+        uint256 amountR = _balances[account][TRANCHE_R];
 
-        if (tranche == TRANCHE_M) {
-            if (amountM == 0 && amountA == 0 && amountB == 0) return 0;
-        } else if (tranche == TRANCHE_A) {
-            if (amountA == 0) return 0;
-        } else {
+        if (tranche == TRANCHE_Q) {
+            if (amountQ == 0 && amountB == 0 && amountR == 0) return 0;
+        } else if (tranche == TRANCHE_B) {
             if (amountB == 0) return 0;
+        } else {
+            if (amountR == 0) return 0;
         }
 
         uint256 size = _rebalanceSize; // Gas saver
         for (uint256 i = _balanceVersions[account]; i < size; i++) {
-            (amountM, amountA, amountB) = doRebalance(amountM, amountA, amountB, i);
+            (amountQ, amountB, amountR) = doRebalance(amountQ, amountB, amountR, i);
         }
 
-        if (tranche == TRANCHE_M) {
-            return amountM;
-        } else if (tranche == TRANCHE_A) {
-            return amountA;
-        } else {
+        if (tranche == TRANCHE_Q) {
+            return amountQ;
+        } else if (tranche == TRANCHE_B) {
             return amountB;
+        } else {
+            return amountR;
         }
     }
 
@@ -542,16 +542,16 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
             uint256
         )
     {
-        uint256 amountM = _balances[account][TRANCHE_M];
-        uint256 amountA = _balances[account][TRANCHE_A];
+        uint256 amountQ = _balances[account][TRANCHE_Q];
         uint256 amountB = _balances[account][TRANCHE_B];
+        uint256 amountR = _balances[account][TRANCHE_R];
 
         uint256 size = _rebalanceSize; // Gas saver
         for (uint256 i = _balanceVersions[account]; i < size; i++) {
-            (amountM, amountA, amountB) = doRebalance(amountM, amountA, amountB, i);
+            (amountQ, amountB, amountR) = doRebalance(amountQ, amountB, amountR, i);
         }
 
-        return (amountM, amountA, amountB);
+        return (amountQ, amountB, amountR);
     }
 
     function trancheBalanceVersion(address account) external view override returns (uint256) {
@@ -563,34 +563,34 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         address owner,
         address spender
     ) external view override returns (uint256) {
-        uint256 allowanceM = _allowances[owner][spender][TRANCHE_M];
-        uint256 allowanceA = _allowances[owner][spender][TRANCHE_A];
+        uint256 allowanceQ = _allowances[owner][spender][TRANCHE_Q];
         uint256 allowanceB = _allowances[owner][spender][TRANCHE_B];
+        uint256 allowanceR = _allowances[owner][spender][TRANCHE_R];
 
-        if (tranche == TRANCHE_M) {
-            if (allowanceM == 0) return 0;
-        } else if (tranche == TRANCHE_A) {
-            if (allowanceA == 0) return 0;
-        } else {
+        if (tranche == TRANCHE_Q) {
+            if (allowanceQ == 0) return 0;
+        } else if (tranche == TRANCHE_B) {
             if (allowanceB == 0) return 0;
+        } else {
+            if (allowanceR == 0) return 0;
         }
 
         uint256 size = _rebalanceSize; // Gas saver
         for (uint256 i = _allowanceVersions[owner][spender]; i < size; i++) {
-            (allowanceM, allowanceA, allowanceB) = _rebalanceAllowance(
-                allowanceM,
-                allowanceA,
+            (allowanceQ, allowanceB, allowanceR) = _rebalanceAllowance(
+                allowanceQ,
                 allowanceB,
+                allowanceR,
                 i
             );
         }
 
-        if (tranche == TRANCHE_M) {
-            return allowanceM;
-        } else if (tranche == TRANCHE_A) {
-            return allowanceA;
-        } else {
+        if (tranche == TRANCHE_Q) {
+            return allowanceQ;
+        } else if (tranche == TRANCHE_B) {
             return allowanceB;
+        } else {
+            return allowanceR;
         }
     }
 
@@ -784,9 +784,9 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     ///         to the fund.
     ///
     ///         1. Charge protocol fee of the day.
-    ///         2. Settle all pending creations and redemptions from all primary markets.
+    ///         2. Settle all pending creations and redemptions from the primary market.
     ///         3. Calculate NAV of the day and trigger rebalance if necessary.
-    ///         4. Capture new interest rate for Token A.
+    ///         4. Capture new interest rate for BISHOP.
     function settle() external nonReentrant {
         uint256 day = currentDay;
         require(day != 0, "Not initialized");
@@ -801,18 +801,18 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _payFeeDebt();
 
         // Calculate NAV
-        uint256 equivalentTotalA = getEquivalentTotalA();
+        uint256 equivalentTotalB = getEquivalentTotalB();
         uint256 underlying = getTotalUnderlying();
-        (uint256 navSum, uint256 navA, uint256 navB) =
-            _extrapolateNav(day, day - 1 days, price, equivalentTotalA, underlying);
+        (uint256 navSum, uint256 navB, uint256 navR) =
+            _extrapolateNav(day, day - 1 days, price, equivalentTotalB, underlying);
 
-        if (_shouldTriggerRebalance(navA, navB)) {
+        if (_shouldTriggerRebalance(navB, navR)) {
             uint256 newSplitRatio = splitRatio.multiplyDecimal(navSum) / 2;
-            _triggerRebalance(day, navSum, navA, navB, newSplitRatio);
+            _triggerRebalance(day, navSum, navB, navR, newSplitRatio);
             splitRatio = newSplitRatio;
-            navA = UNIT;
             navB = UNIT;
-            equivalentTotalA = getEquivalentTotalA();
+            navR = UNIT;
+            equivalentTotalB = getEquivalentTotalB();
             fundActivityStartTime = day + activityDelayTimeAfterRebalance;
             exchangeActivityStartTime = day + activityDelayTimeAfterRebalance;
         } else {
@@ -824,13 +824,13 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
             ? _updateInterestRate(day)
             : historicalInterestRate[day - 1 days];
 
-        historicalEquivalentTotalA[day] = equivalentTotalA;
+        historicalEquivalentTotalB[day] = equivalentTotalB;
         historicalUnderlying[day] = underlying;
-        _historicalNavA[day] = navA;
         _historicalNavB[day] = navB;
+        _historicalNavR[day] = navR;
         currentDay = day + 1 days;
 
-        emit Settled(day, navA, navB);
+        emit Settled(day, navB, navR);
     }
 
     function transferToStrategy(uint256 amount) external override onlyStrategy {
@@ -993,90 +993,90 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     }
 
     /// @dev Check whether a new rebalance should be triggered. Rebalance is triggered if
-    ///      NAV of Token B over NAV of Token A is greater than the upper threshold or
+    ///      ROOK's NAV over BISHOP's NAV is greater than the upper threshold or
     ///      less than the lower threshold.
-    /// @param navA NAV of Token A before the rebalance
-    /// @param navBOrZero NAV of Token B before the rebalance or zero if the NAV is negative
+    /// @param navB BISHOP's NAV before the rebalance
+    /// @param navROrZero ROOK's NAV before the rebalance or zero if the NAV is negative
     /// @return Whether a new rebalance should be triggered
-    function _shouldTriggerRebalance(uint256 navA, uint256 navBOrZero) private view returns (bool) {
-        uint256 bOverA = navBOrZero.divideDecimal(navA);
-        return bOverA < lowerRebalanceThreshold || bOverA > upperRebalanceThreshold;
+    function _shouldTriggerRebalance(uint256 navB, uint256 navROrZero) private view returns (bool) {
+        uint256 rOverB = navROrZero.divideDecimal(navB);
+        return rOverB < lowerRebalanceThreshold || rOverB > upperRebalanceThreshold;
     }
 
     /// @dev Create a new rebalance that resets NAV of all tranches to 1. Total supplies are
     ///      rebalanced immediately.
     /// @param day Trading day that triggers this rebalance
-    /// @param navSum Sum of Token A and Token B's NAV
-    /// @param navA NAV of Token A before this rebalance
-    /// @param navBOrZero NAV of Token B before this rebalance or zero if the NAV is negative
+    /// @param navSum Sum of BISHOP and ROOK's NAV
+    /// @param navB BISHOP's NAV before this rebalance
+    /// @param navROrZero ROOK's NAV before this rebalance or zero if the NAV is negative
     /// @param newSplitRatio The new split ratio after this rebalance
     function _triggerRebalance(
         uint256 day,
         uint256 navSum,
-        uint256 navA,
-        uint256 navBOrZero,
+        uint256 navB,
+        uint256 navROrZero,
         uint256 newSplitRatio
     ) private {
-        Rebalance memory rebalance = _calculateRebalance(navSum, navA, navBOrZero, newSplitRatio);
+        Rebalance memory rebalance = _calculateRebalance(navSum, navB, navROrZero, newSplitRatio);
         uint256 oldSize = _rebalanceSize;
         _rebalances[oldSize] = rebalance;
         _rebalanceSize = oldSize + 1;
         emit RebalanceTriggered(
             oldSize,
             day,
-            rebalance.ratioA2M,
-            rebalance.ratioB2M,
-            rebalance.ratioAB
+            rebalance.ratioB2Q,
+            rebalance.ratioR2Q,
+            rebalance.ratioBR
         );
 
         (
-            _totalSupplies[TRANCHE_M],
-            _totalSupplies[TRANCHE_A],
-            _totalSupplies[TRANCHE_B]
-        ) = doRebalance(
-            _totalSupplies[TRANCHE_M],
-            _totalSupplies[TRANCHE_A],
+            _totalSupplies[TRANCHE_Q],
             _totalSupplies[TRANCHE_B],
+            _totalSupplies[TRANCHE_R]
+        ) = doRebalance(
+            _totalSupplies[TRANCHE_Q],
+            _totalSupplies[TRANCHE_B],
+            _totalSupplies[TRANCHE_R],
             oldSize
         );
         _refreshBalance(address(this), oldSize + 1);
     }
 
-    /// @dev Create a new rebalance matrix that resets given NAVs to (1, 1, 1).
+    /// @dev Create a new rebalance matrix that resets given NAVs to (1, 1).
     ///
-    ///      Note that NAV of Token B can be negative before the rebalance when the underlying price
+    ///      Note that ROOK's NAV can be negative before the rebalance when the underlying price
     ///      drops dramatically in a single trading day, in which case zero should be passed to
     ///      this function instead of the negative NAV.
-    /// @param navSum Sum of Token A and Token B's NAV
-    /// @param navA NAV of Token A before the rebalance
-    /// @param navBOrZero NAV of Token B before the rebalance or zero if the NAV is negative
+    /// @param navSum Sum of BISHOP and ROOK's NAV
+    /// @param navB BISHOP's NAV before the rebalance
+    /// @param navROrZero ROOK's NAV before the rebalance or zero if the NAV is negative
     /// @param newSplitRatio The new split ratio after this rebalance
     /// @return The rebalance matrix
     function _calculateRebalance(
         uint256 navSum,
-        uint256 navA,
-        uint256 navBOrZero,
+        uint256 navB,
+        uint256 navROrZero,
         uint256 newSplitRatio
     ) private view returns (Rebalance memory) {
-        uint256 ratioAB;
-        uint256 ratioA2M;
-        uint256 ratioB2M;
-        if (navBOrZero <= navA) {
+        uint256 ratioBR;
+        uint256 ratioB2Q;
+        uint256 ratioR2Q;
+        if (navROrZero <= navB) {
             // Lower rebalance
-            ratioAB = navBOrZero;
-            ratioA2M = (navSum / 2 - navBOrZero).divideDecimal(newSplitRatio);
-            ratioB2M = 0;
+            ratioBR = navROrZero;
+            ratioB2Q = (navSum / 2 - navROrZero).divideDecimal(newSplitRatio);
+            ratioR2Q = 0;
         } else {
             // Upper rebalance
-            ratioAB = UNIT;
-            ratioA2M = (navA - UNIT).divideDecimal(newSplitRatio) / 2;
-            ratioB2M = (navBOrZero - UNIT).divideDecimal(newSplitRatio) / 2;
+            ratioBR = UNIT;
+            ratioB2Q = (navB - UNIT).divideDecimal(newSplitRatio) / 2;
+            ratioR2Q = (navROrZero - UNIT).divideDecimal(newSplitRatio) / 2;
         }
         return
             Rebalance({
-                ratioA2M: ratioA2M,
-                ratioB2M: ratioB2M,
-                ratioAB: ratioAB,
+                ratioB2Q: ratioB2Q,
+                ratioR2Q: ratioR2Q,
+                ratioBR: ratioBR,
                 timestamp: block.timestamp
             });
     }
@@ -1105,24 +1105,24 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         }
 
         uint256[TRANCHE_COUNT] storage balanceTuple = _balances[account];
-        uint256 balanceM = balanceTuple[TRANCHE_M];
-        uint256 balanceA = balanceTuple[TRANCHE_A];
+        uint256 balanceQ = balanceTuple[TRANCHE_Q];
         uint256 balanceB = balanceTuple[TRANCHE_B];
+        uint256 balanceR = balanceTuple[TRANCHE_R];
         _balanceVersions[account] = targetVersion;
 
-        if (balanceM == 0 && balanceA == 0 && balanceB == 0) {
+        if (balanceQ == 0 && balanceB == 0 && balanceR == 0) {
             // Fast path for an empty account
             return;
         }
 
         for (uint256 i = oldVersion; i < targetVersion; i++) {
-            (balanceM, balanceA, balanceB) = doRebalance(balanceM, balanceA, balanceB, i);
+            (balanceQ, balanceB, balanceR) = doRebalance(balanceQ, balanceB, balanceR, i);
         }
-        balanceTuple[TRANCHE_M] = balanceM;
-        balanceTuple[TRANCHE_A] = balanceA;
+        balanceTuple[TRANCHE_Q] = balanceQ;
         balanceTuple[TRANCHE_B] = balanceB;
+        balanceTuple[TRANCHE_R] = balanceR;
 
-        emit BalancesRebalanced(account, targetVersion, balanceM, balanceA, balanceB);
+        emit BalancesRebalanced(account, targetVersion, balanceQ, balanceB, balanceR);
     }
 
     /// @dev Transform allowance to a given rebalance version, or to the latest version
@@ -1144,58 +1144,58 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         }
 
         uint256[TRANCHE_COUNT] storage allowanceTuple = _allowances[owner][spender];
-        uint256 allowanceM = allowanceTuple[TRANCHE_M];
-        uint256 allowanceA = allowanceTuple[TRANCHE_A];
+        uint256 allowanceQ = allowanceTuple[TRANCHE_Q];
         uint256 allowanceB = allowanceTuple[TRANCHE_B];
+        uint256 allowanceR = allowanceTuple[TRANCHE_R];
         _allowanceVersions[owner][spender] = targetVersion;
 
-        if (allowanceM == 0 && allowanceA == 0 && allowanceB == 0) {
+        if (allowanceQ == 0 && allowanceB == 0 && allowanceR == 0) {
             // Fast path for an empty allowance
             return;
         }
 
         for (uint256 i = oldVersion; i < targetVersion; i++) {
-            (allowanceM, allowanceA, allowanceB) = _rebalanceAllowance(
-                allowanceM,
-                allowanceA,
+            (allowanceQ, allowanceB, allowanceR) = _rebalanceAllowance(
+                allowanceQ,
                 allowanceB,
+                allowanceR,
                 i
             );
         }
-        allowanceTuple[TRANCHE_M] = allowanceM;
-        allowanceTuple[TRANCHE_A] = allowanceA;
+        allowanceTuple[TRANCHE_Q] = allowanceQ;
         allowanceTuple[TRANCHE_B] = allowanceB;
+        allowanceTuple[TRANCHE_R] = allowanceR;
 
         emit AllowancesRebalanced(
             owner,
             spender,
             targetVersion,
-            allowanceM,
-            allowanceA,
-            allowanceB
+            allowanceQ,
+            allowanceB,
+            allowanceR
         );
     }
 
     function _rebalanceAllowance(
-        uint256 allowanceM,
-        uint256 allowanceA,
+        uint256 allowanceQ,
         uint256 allowanceB,
+        uint256 allowanceR,
         uint256 index
     )
         private
         view
         returns (
-            uint256 newAllowanceM,
-            uint256 newAllowanceA,
-            uint256 newAllowanceB
+            uint256 newAllowanceQ,
+            uint256 newAllowanceB,
+            uint256 newAllowanceR
         )
     {
         Rebalance storage rebalance = _rebalances[index];
 
         /// @dev using saturating arithmetic to avoid unconscious overflow revert
-        newAllowanceM = allowanceM;
-        newAllowanceA = allowanceA.saturatingMultiplyDecimal(rebalance.ratioAB);
-        newAllowanceB = allowanceB.saturatingMultiplyDecimal(rebalance.ratioAB);
+        newAllowanceQ = allowanceQ;
+        newAllowanceB = allowanceB.saturatingMultiplyDecimal(rebalance.ratioBR);
+        newAllowanceR = allowanceR.saturatingMultiplyDecimal(rebalance.ratioBR);
     }
 
     modifier onlyCurrentVersion(uint256 version) {

@@ -15,7 +15,7 @@ import {
     SETTLEMENT_TIME,
     FixtureWalletMap,
     advanceBlockAtTime,
-} from "../utils";
+} from "./utils";
 
 const UPPER_REBALANCE_THRESHOLD = parseEther("2");
 const LOWER_REBALANCE_THRESHOLD = parseEther("0.5");

@@ -55,7 +55,7 @@ contract StableSwapNoRebalance is StableSwap {
         Operation /*op*/
     ) public view override returns (uint256 oracle) {
         uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
-        uint256 fundEquivalentTotalM = IFundV3(fund).getEquivalentTotalM();
-        return fundUnderlying.divideDecimal(fundEquivalentTotalM);
+        uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
+        return fundUnderlying.divideDecimal(fundEquivalentTotalQ);
     }
 }

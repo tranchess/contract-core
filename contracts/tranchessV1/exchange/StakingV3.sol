@@ -14,7 +14,7 @@ import "../../utils/ManagedPausable.sol";
 import "../interfaces/IFund.sol";
 import "../../interfaces/IChessController.sol";
 import "../../interfaces/IChessSchedule.sol";
-import "../../interfaces/ITrancheIndex.sol";
+import "../interfaces/ITrancheIndex.sol";
 import "../interfaces/IPrimaryMarketV2.sol";
 import "../../interfaces/IVotingEscrow.sol";
 

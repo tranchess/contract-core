@@ -6,7 +6,7 @@ const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "../mock";
-import { TRANCHE_M, TRANCHE_A, TRANCHE_B, DAY, FixtureWalletMap } from "../utils";
+import { TRANCHE_M, TRANCHE_A, TRANCHE_B, DAY, FixtureWalletMap } from "./utils";
 
 const REDEMPTION_FEE_BPS = 35;
 const SPLIT_FEE_BPS = 40;

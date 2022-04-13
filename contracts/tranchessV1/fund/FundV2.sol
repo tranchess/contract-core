@@ -17,7 +17,7 @@ import "../../interfaces/ITwapOracle.sol";
 import "../../interfaces/IAprOracle.sol";
 import "../../interfaces/IBallot.sol";
 import "../../interfaces/IVotingEscrow.sol";
-import "../../interfaces/ITrancheIndex.sol";
+import "../interfaces/ITrancheIndex.sol";
 
 import "./FundRoles.sol";
 

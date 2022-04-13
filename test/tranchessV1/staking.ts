@@ -16,7 +16,7 @@ import {
     advanceBlockAtTime,
     setNextBlockTime,
     setAutomine,
-} from "../utils";
+} from "./utils";
 
 const REWARD_WEIGHT_M = 3;
 const REWARD_WEIGHT_A = 4;

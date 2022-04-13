@@ -14,7 +14,7 @@ import "../utils/ManagedPausable.sol";
 import "../interfaces/IFundV3.sol";
 import "../interfaces/IChessController.sol";
 import "../interfaces/IChessSchedule.sol";
-import "../interfaces/ITrancheIndex.sol";
+import "../interfaces/ITrancheIndexV2.sol";
 import "../interfaces/IVotingEscrow.sol";
 
 /// @notice Chess locking snapshot used in calculating working balance of an account.
@@ -25,7 +25,7 @@ struct VESnapshot {
     IVotingEscrow.LockedBalance veLocked;
 }
 
-contract StakingV4 is ITrancheIndex, CoreUtility {
+contract StakingV4 is ITrancheIndexV2, CoreUtility {
     /// @dev Reserved storage slots for future sibling contract upgrades
     uint256[32] private _reservedSlots;
 
@@ -39,14 +39,14 @@ contract StakingV4 is ITrancheIndex, CoreUtility {
 
     uint256 private constant MAX_ITERATIONS = 500;
 
-    uint256 private constant REWARD_WEIGHT_A = 4;
-    uint256 private constant REWARD_WEIGHT_B = 2;
-    uint256 private constant REWARD_WEIGHT_M = 3;
+    uint256 private constant REWARD_WEIGHT_B = 4;
+    uint256 private constant REWARD_WEIGHT_R = 2;
+    uint256 private constant REWARD_WEIGHT_Q = 3;
     uint256 private constant MAX_BOOSTING_FACTOR = 3e18;
     uint256 private constant MAX_BOOSTING_FACTOR_MINUS_ONE = MAX_BOOSTING_FACTOR - 1e18;
 
-    /// @dev Maximum fraction of veCHESS that can be used to boost Token M.
-    uint256 private constant MAX_BOOSTING_POWER_M = 0.5e18;
+    /// @dev Maximum fraction of veCHESS that can be used to boost QUEEN.
+    uint256 private constant MAX_BOOSTING_POWER_Q = 0.5e18;
 
     IFundV3 public immutable fund;
 
@@ -118,78 +118,78 @@ contract StakingV4 is ITrancheIndex, CoreUtility {
     }
 
     /// @notice Return weight of given balance with respect to rewards.
-    /// @param amountM Amount of Token M
-    /// @param amountA Amount of Token A
-    /// @param amountB Amount of Token B
+    /// @param amountQ Amount of QUEEN
+    /// @param amountB Amount of BISHOP
+    /// @param amountR Amount of ROOK
     /// @return Rewarding weight of the balance
     function weightedBalance(
-        uint256 amountM,
-        uint256 amountA,
-        uint256 amountB
+        uint256 amountQ,
+        uint256 amountB,
+        uint256 amountR
     ) public pure returns (uint256) {
         return
-            amountM.mul(REWARD_WEIGHT_M).add(amountA.mul(REWARD_WEIGHT_A)).add(
-                amountB.mul(REWARD_WEIGHT_B)
-            ) / REWARD_WEIGHT_M;
+            amountQ.mul(REWARD_WEIGHT_Q).add(amountB.mul(REWARD_WEIGHT_B)).add(
+                amountR.mul(REWARD_WEIGHT_R)
+            ) / REWARD_WEIGHT_Q;
     }
 
     function totalSupply(uint256 tranche) external view returns (uint256) {
-        uint256 totalSupplyM = _totalSupplies[TRANCHE_M];
-        uint256 totalSupplyA = _totalSupplies[TRANCHE_A];
+        uint256 totalSupplyQ = _totalSupplies[TRANCHE_Q];
         uint256 totalSupplyB = _totalSupplies[TRANCHE_B];
+        uint256 totalSupplyR = _totalSupplies[TRANCHE_R];
 
         uint256 version = _totalSupplyVersion;
         uint256 rebalanceSize = _fundRebalanceSize();
         if (version < rebalanceSize) {
-            (totalSupplyM, totalSupplyA, totalSupplyB) = _fundBatchRebalance(
-                totalSupplyM,
-                totalSupplyA,
+            (totalSupplyQ, totalSupplyB, totalSupplyR) = _fundBatchRebalance(
+                totalSupplyQ,
                 totalSupplyB,
+                totalSupplyR,
                 version,
                 rebalanceSize
             );
         }
 
-        if (tranche == TRANCHE_M) {
-            return totalSupplyM;
-        } else if (tranche == TRANCHE_A) {
-            return totalSupplyA;
-        } else {
+        if (tranche == TRANCHE_Q) {
+            return totalSupplyQ;
+        } else if (tranche == TRANCHE_B) {
             return totalSupplyB;
+        } else {
+            return totalSupplyR;
         }
     }
 
     function trancheBalanceOf(uint256 tranche, address account) external view returns (uint256) {
-        uint256 amountM = _balances[account][TRANCHE_M];
-        uint256 amountA = _balances[account][TRANCHE_A];
+        uint256 amountQ = _balances[account][TRANCHE_Q];
         uint256 amountB = _balances[account][TRANCHE_B];
+        uint256 amountR = _balances[account][TRANCHE_R];
 
-        if (tranche == TRANCHE_M) {
-            if (amountM == 0 && amountA == 0 && amountB == 0) return 0;
-        } else if (tranche == TRANCHE_A) {
-            if (amountA == 0) return 0;
-        } else {
+        if (tranche == TRANCHE_Q) {
+            if (amountQ == 0 && amountB == 0 && amountR == 0) return 0;
+        } else if (tranche == TRANCHE_B) {
             if (amountB == 0) return 0;
+        } else {
+            if (amountR == 0) return 0;
         }
 
         uint256 version = _balanceVersions[account];
         uint256 rebalanceSize = _fundRebalanceSize();
         if (version < rebalanceSize) {
-            (amountM, amountA, amountB) = _fundBatchRebalance(
-                amountM,
-                amountA,
+            (amountQ, amountB, amountR) = _fundBatchRebalance(
+                amountQ,
                 amountB,
+                amountR,
                 version,
                 rebalanceSize
             );
         }
 
-        if (tranche == TRANCHE_M) {
-            return amountM;
-        } else if (tranche == TRANCHE_A) {
-            return amountA;
-        } else {
+        if (tranche == TRANCHE_Q) {
+            return amountQ;
+        } else if (tranche == TRANCHE_B) {
             return amountB;
+        } else {
+            return amountR;
         }
     }
 
@@ -201,15 +201,15 @@ contract StakingV4 is ITrancheIndex, CoreUtility {
         uint256 version = _totalSupplyVersion;
         uint256 rebalanceSize = _fundRebalanceSize();
         if (version < rebalanceSize) {
-            (uint256 totalSupplyM, uint256 totalSupplyA, uint256 totalSupplyB) =
+            (uint256 totalSupplyQ, uint256 totalSupplyB, uint256 totalSupplyR) =
                 _fundBatchRebalance(
-                    _totalSupplies[TRANCHE_M],
-                    _totalSupplies[TRANCHE_A],
+                    _totalSupplies[TRANCHE_Q],
                     _totalSupplies[TRANCHE_B],
+                    _totalSupplies[TRANCHE_R],
                     version,
                     rebalanceSize
                 );
-            return weightedBalance(totalSupplyM, totalSupplyA, totalSupplyB);
+            return weightedBalance(totalSupplyQ, totalSupplyB, totalSupplyR);
         } else {
             return _workingSupply;
         }
@@ -221,19 +221,19 @@ contract StakingV4 is ITrancheIndex, CoreUtility {
         uint256 workingBalance = _workingBalances[account]; // gas saver
         if (version < rebalanceSize || workingBalance == 0) {
             uint256[TRANCHE_COUNT] storage balance = _balances[account];
-            uint256 amountM = balance[TRANCHE_M];
-            uint256 amountA = balance[TRANCHE_A];
+            uint256 amountQ = balance[TRANCHE_Q];
             uint256 amountB = balance[TRANCHE_B];
+            uint256 amountR = balance[TRANCHE_R];
             if (version < rebalanceSize) {
-                (amountM, amountA, amountB) = _fundBatchRebalance(
-                    amountM,
-                    amountA,
+                (amountQ, amountB, amountR) = _fundBatchRebalance(
+                    amountQ,
                     amountB,
+                    amountR,
                     version,
                     rebalanceSize
                 );
             }
-            return weightedBalance(amountM, amountA, amountB);
+            return weightedBalance(amountQ, amountB, amountR);
         } else {
             return workingBalance;
         }
@@ -248,9 +248,9 @@ contract StakingV4 is ITrancheIndex, CoreUtility {
     }
 
     function _fundDoRebalance(
-        uint256 amountM,
-        uint256 amountA,
+        uint256 amountQ,
         uint256 amountB,
+        uint256 amountR,
         uint256 index
     )
         internal
@@ -261,13 +261,13 @@ contract StakingV4 is ITrancheIndex, CoreUtility {
             uint256
         )
     {
-        return fund.doRebalance(amountM, amountA, amountB, index);
+        return fund.doRebalance(amountQ, amountB, amountR, index);
     }
 
     function _fundBatchRebalance(
-        uint256 amountM,
-        uint256 amountA,
+        uint256 amountQ,
         uint256 amountB,
+        uint256 amountR,
         uint256 fromIndex,
         uint256 toIndex
     )
@@ -279,7 +279,7 @@ contract StakingV4 is ITrancheIndex, CoreUtility {
             uint256
         )
     {
-        return fund.batchRebalance(amountM, amountA, amountB, fromIndex, toIndex);
+        return fund.batchRebalance(amountQ, amountB, amountR, fromIndex, toIndex);
     }
 
     /// @dev Stake share tokens.
@@ -410,9 +410,9 @@ contract StakingV4 is ITrancheIndex, CoreUtility {
             rebalanceTimestamp = type(uint256).max;
         }
         uint256 rate = _rate;
-        uint256 totalSupplyM = _totalSupplies[TRANCHE_M];
-        uint256 totalSupplyA = _totalSupplies[TRANCHE_A];
+        uint256 totalSupplyQ = _totalSupplies[TRANCHE_Q];
         uint256 totalSupplyB = _totalSupplies[TRANCHE_B];
+        uint256 totalSupplyR = _totalSupplies[TRANCHE_R];
         uint256 weight = _workingSupply;
         uint256 timestamp_ = timestamp; // avoid stack too deep
 
@@ -434,16 +434,16 @@ contract StakingV4 is ITrancheIndex, CoreUtility {
                 _historicalIntegralSize = oldSize + 1;
 
                 integral = 0;
-                (totalSupplyM, totalSupplyA, totalSupplyB) = _fundDoRebalance(
-                    totalSupplyM,
-                    totalSupplyA,
+                (totalSupplyQ, totalSupplyB, totalSupplyR) = _fundDoRebalance(
+                    totalSupplyQ,
                     totalSupplyB,
+                    totalSupplyR,
                     version
                 );
 
                 version++;
                 // Reset total weight boosting after the first rebalance
-                weight = weightedBalance(totalSupplyM, totalSupplyA, totalSupplyB);
+                weight = weightedBalance(totalSupplyQ, totalSupplyB, totalSupplyR);
 
                 if (version < rebalanceSize) {
                     rebalanceTimestamp = fund.getRebalanceTimestamp(version);
@@ -466,9 +466,9 @@ contract StakingV4 is ITrancheIndex, CoreUtility {
             _rate = rate;
         }
         if (_totalSupplyVersion != rebalanceSize) {
-            _totalSupplies[TRANCHE_M] = totalSupplyM;
-            _totalSupplies[TRANCHE_A] = totalSupplyA;
+            _totalSupplies[TRANCHE_Q] = totalSupplyQ;
             _totalSupplies[TRANCHE_B] = totalSupplyB;
+            _totalSupplies[TRANCHE_R] = totalSupplyR;
             _totalSupplyVersion = rebalanceSize;
             // Reset total working weight before any boosting if rebalance ever triggered
             _workingSupply = weight;
@@ -515,26 +515,26 @@ contract StakingV4 is ITrancheIndex, CoreUtility {
         uint256 weight = _workingBalances[account];
         if (weight == 0) {
             // Loading available and locked is repeated to avoid "stake too deep" error.
-            weight = weightedBalance(balance[TRANCHE_M], balance[TRANCHE_A], balance[TRANCHE_B]);
+            weight = weightedBalance(balance[TRANCHE_Q], balance[TRANCHE_B], balance[TRANCHE_R]);
             if (weight > 0) {
                 // The contract was just upgraded from an old version without boosting
                 _workingBalances[account] = weight;
             }
         }
-        uint256 balanceM = balance[TRANCHE_M];
-        uint256 balanceA = balance[TRANCHE_A];
+        uint256 balanceQ = balance[TRANCHE_Q];
         uint256 balanceB = balance[TRANCHE_B];
+        uint256 balanceR = balance[TRANCHE_R];
         for (uint256 i = oldVersion; i < targetVersion; i++) {
             rewards = rewards.add(
                 weight.multiplyDecimalPrecise(_historicalIntegrals[i].sub(userIntegral))
             );
-            if (balanceM != 0 || balanceA != 0 || balanceB != 0) {
-                (balanceM, balanceA, balanceB) = _fundDoRebalance(balanceM, balanceA, balanceB, i);
+            if (balanceQ != 0 || balanceB != 0 || balanceR != 0) {
+                (balanceQ, balanceB, balanceR) = _fundDoRebalance(balanceQ, balanceB, balanceR, i);
             }
             userIntegral = 0;
 
             // Reset per-user weight boosting after the first rebalance
-            weight = weightedBalance(balanceM, balanceA, balanceB);
+            weight = weightedBalance(balanceQ, balanceB, balanceR);
         }
         rewards = rewards.add(weight.multiplyDecimalPrecise(integral.sub(userIntegral)));
         address account_ = account; // Fix the "stack too deep" error
@@ -542,9 +542,9 @@ contract StakingV4 is ITrancheIndex, CoreUtility {
         _userIntegrals[account_] = integral;
 
         if (oldVersion < targetVersion) {
-            balance[TRANCHE_M] = balanceM;
-            balance[TRANCHE_A] = balanceA;
+            balance[TRANCHE_Q] = balanceQ;
             balance[TRANCHE_B] = balanceB;
+            balance[TRANCHE_R] = balanceR;
             _balanceVersions[account_] = targetVersion;
             _workingBalances[account_] = weight;
         }
@@ -558,30 +558,30 @@ contract StakingV4 is ITrancheIndex, CoreUtility {
     function _updateWorkingBalance(address account) private {
         uint256 weightedSupply =
             weightedBalance(
-                _totalSupplies[TRANCHE_M],
-                _totalSupplies[TRANCHE_A],
-                _totalSupplies[TRANCHE_B]
+                _totalSupplies[TRANCHE_Q],
+                _totalSupplies[TRANCHE_B],
+                _totalSupplies[TRANCHE_R]
             );
         uint256[TRANCHE_COUNT] storage balance = _balances[account];
         // Assume weightedBalance(x, 0, 0) always equal to x
-        uint256 weightedM = balance[TRANCHE_M];
-        uint256 weightedAB = weightedBalance(0, balance[TRANCHE_A], balance[TRANCHE_B]);
+        uint256 weightedQ = balance[TRANCHE_Q];
+        uint256 weightedBR = weightedBalance(0, balance[TRANCHE_B], balance[TRANCHE_R]);
 
-        uint256 newWorkingBalance = weightedAB.add(weightedM);
+        uint256 newWorkingBalance = weightedBR.add(weightedQ);
         uint256 veProportion = _veSnapshots[account].veProportion;
         if (veProportion > 0 && _veSnapshots[account].veLocked.unlockTime > block.timestamp) {
             uint256 boostingPower = weightedSupply.multiplyDecimal(veProportion);
-            if (boostingPower <= weightedAB) {
+            if (boostingPower <= weightedBR) {
                 newWorkingBalance = newWorkingBalance.add(
                     boostingPower.multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
                 );
             } else {
-                uint256 boostingPowerM =
-                    (boostingPower - weightedAB)
-                        .min(boostingPower.multiplyDecimal(MAX_BOOSTING_POWER_M))
-                        .min(weightedM);
+                uint256 boostingPowerQ =
+                    (boostingPower - weightedBR)
+                        .min(boostingPower.multiplyDecimal(MAX_BOOSTING_POWER_Q))
+                        .min(weightedQ);
                 newWorkingBalance = newWorkingBalance.add(
-                    weightedAB.add(boostingPowerM).multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
+                    weightedBR.add(boostingPowerQ).multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
                 );
             }
         }
