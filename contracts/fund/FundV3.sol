@@ -133,8 +133,8 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
 
     /// @notice Mapping of trading week => interest rate of BISHOP.
     ///
-    ///         Key is the end timestamp of a trading week. Value is the interest rate captured
-    ///         after settlement of the last day of the previous trading week.
+    ///         Key is the end timestamp of a trading day. Value is the interest rate captured
+    ///         after settlement of that day, which will be effective in the following trading day.
     mapping(uint256 => uint256) public historicalInterestRate;
 
     /// @notice Amount of fee not transfered to the fee collector yet.
