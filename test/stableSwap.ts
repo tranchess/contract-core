@@ -7,7 +7,7 @@ const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
 import { defaultAbiCoder } from "ethers/lib/utils";
-import { TRANCHE_B } from "./utils";
+import { TRANCHE_Q, TRANCHE_B } from "./utils";
 
 const UNIT = BigNumber.from(10).pow(18);
 const n = BigNumber.from("2");
@@ -837,7 +837,7 @@ describe("StableSwapNoRebalance", function () {
             await MockToken.connect(owner).deploy("token", "token", 18),
             await MockToken.connect(owner).deploy("token", "token", 18),
         ];
-        await fund0.mock.tokenShare.withArgs(TRANCHE_B).returns(tokens[0].address);
+        await fund0.mock.tokenShare.withArgs(TRANCHE_Q).returns(tokens[0].address);
         await tokens[0].connect(owner).mint(user1.address, parseEther("1000"));
         await tokens[1].connect(owner).mint(user1.address, parseEther("1000"));
         await tokens[0].connect(owner).mint(user2.address, parseEther("1000"));
@@ -870,7 +870,7 @@ describe("StableSwapNoRebalance", function () {
         const stableSwap0 = await StableSwapNoRebalance.connect(owner).deploy(
             lpToken0.address,
             fund0.address,
-            TRANCHE_B,
+            TRANCHE_Q,
             tokens[1].address,
             A,
             A,
