@@ -356,9 +356,17 @@ describe("FundV3", function () {
 
             it("Should save proposed change", async function () {
                 await fund.connect(owner).proposePrimaryMarketUpdate(newPm.address);
-                expect(await fund.proposedPrimaryMarket()).to.equal(newPm.address);
+                const primaryMarketProposal = await fund.primaryMarketUpdateProposal();
+                expect(primaryMarketProposal[0]).to.equal(newPm.address);
+                expect(primaryMarketProposal[1]).to.equal(
+                    (await ethers.provider.getBlock("latest")).timestamp
+                );
                 await fund.connect(owner).proposeStrategyUpdate(strategy.address);
-                expect(await fund.proposedStrategy()).to.equal(strategy.address);
+                const strategyProposal = await fund.strategyUpdateProposal();
+                expect(strategyProposal[0]).to.equal(strategy.address);
+                expect(strategyProposal[1]).to.equal(
+                    (await ethers.provider.getBlock("latest")).timestamp
+                );
             });
 
             it("Should emit event on proposal", async function () {
@@ -450,11 +458,13 @@ describe("FundV3", function () {
                 await fund.connect(owner).applyPrimaryMarketUpdate(newPm.address);
                 await fund.connect(owner).applyStrategyUpdate(strategy.address);
                 expect(await fund.primaryMarket()).to.equal(newPm.address);
-                expect(await fund.proposedPrimaryMarket()).to.equal(ethers.constants.AddressZero);
-                expect(await fund.proposedPrimaryMarketTimestamp()).to.equal(0);
+                const primaryMarketProposal = await fund.primaryMarketUpdateProposal();
+                expect(primaryMarketProposal[0]).to.equal(ethers.constants.AddressZero);
+                expect(primaryMarketProposal[1]).to.equal(0);
                 expect(await fund.strategy()).to.equal(strategy.address);
-                expect(await fund.proposedStrategy()).to.equal(ethers.constants.AddressZero);
-                expect(await fund.proposedStrategyTimestamp()).to.equal(0);
+                const strategyProposal = await fund.strategyUpdateProposal();
+                expect(strategyProposal[0]).to.equal(ethers.constants.AddressZero);
+                expect(strategyProposal[1]).to.equal(0);
             });
         });
 

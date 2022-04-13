@@ -33,6 +33,16 @@ interface IFundV3 {
 
     function tokenR() external view returns (address);
 
+    function tokenShare(uint256 tranche) external view returns (address);
+
+    function primaryMarket() external view returns (address);
+
+    function primaryMarketUpdateProposal() external view returns (address, uint256);
+
+    function strategy() external view returns (address);
+
+    function strategyUpdateProposal() external view returns (address, uint256);
+
     function underlyingDecimalMultiplier() external view returns (uint256);
 
     function twapOracle() external view returns (ITwapOracle);

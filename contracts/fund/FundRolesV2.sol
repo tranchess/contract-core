@@ -27,13 +27,13 @@ abstract contract FundRolesV2 is ITrancheIndexV2 {
     address internal immutable _tokenB;
     address internal immutable _tokenR;
 
-    address public primaryMarket;
-    address public proposedPrimaryMarket;
-    uint256 public proposedPrimaryMarketTimestamp;
+    address internal _primaryMarket;
+    address internal _proposedPrimaryMarket;
+    uint256 internal _proposedPrimaryMarketTimestamp;
 
-    address public strategy;
-    address public proposedStrategy;
-    uint256 public proposedStrategyTimestamp;
+    address internal _strategy;
+    address internal _proposedStrategy;
+    uint256 internal _proposedStrategyTimestamp;
 
     constructor(
         address tokenQ_,
@@ -45,8 +45,8 @@ abstract contract FundRolesV2 is ITrancheIndexV2 {
         _tokenQ = tokenQ_;
         _tokenB = tokenB_;
         _tokenR = tokenR_;
-        primaryMarket = primaryMarket_;
-        strategy = strategy_;
+        _primaryMarket = primaryMarket_;
+        _strategy = strategy_;
         emit PrimaryMarketUpdated(address(0), primaryMarket_);
         emit StrategyUpdated(address(0), strategy_);
     }
@@ -76,14 +76,14 @@ abstract contract FundRolesV2 is ITrancheIndexV2 {
     }
 
     modifier onlyPrimaryMarket() {
-        require(msg.sender == primaryMarket, "Only primary market");
+        require(msg.sender == _primaryMarket, "Only primary market");
         _;
     }
 
     function _proposePrimaryMarketUpdate(address newPrimaryMarket) internal {
-        require(newPrimaryMarket != primaryMarket);
-        proposedPrimaryMarket = newPrimaryMarket;
-        proposedPrimaryMarketTimestamp = block.timestamp;
+        require(newPrimaryMarket != _primaryMarket);
+        _proposedPrimaryMarket = newPrimaryMarket;
+        _proposedPrimaryMarketTimestamp = block.timestamp;
         emit PrimaryMarketUpdateProposed(
             newPrimaryMarket,
             block.timestamp + ROLE_UPDATE_MIN_DELAY,
@@ -92,27 +92,27 @@ abstract contract FundRolesV2 is ITrancheIndexV2 {
     }
 
     function _applyPrimaryMarketUpdate(address newPrimaryMarket) internal {
-        require(proposedPrimaryMarket == newPrimaryMarket, "Proposed address mismatch");
+        require(_proposedPrimaryMarket == newPrimaryMarket, "Proposed address mismatch");
         require(
-            block.timestamp >= proposedPrimaryMarketTimestamp + ROLE_UPDATE_MIN_DELAY &&
-                block.timestamp < proposedPrimaryMarketTimestamp + ROLE_UPDATE_MAX_DELAY,
+            block.timestamp >= _proposedPrimaryMarketTimestamp + ROLE_UPDATE_MIN_DELAY &&
+                block.timestamp < _proposedPrimaryMarketTimestamp + ROLE_UPDATE_MAX_DELAY,
             "Not ready to update"
         );
-        emit PrimaryMarketUpdated(primaryMarket, newPrimaryMarket);
-        primaryMarket = newPrimaryMarket;
-        proposedPrimaryMarket = address(0);
-        proposedPrimaryMarketTimestamp = 0;
+        emit PrimaryMarketUpdated(_primaryMarket, newPrimaryMarket);
+        _primaryMarket = newPrimaryMarket;
+        _proposedPrimaryMarket = address(0);
+        _proposedPrimaryMarketTimestamp = 0;
     }
 
     modifier onlyStrategy() {
-        require(msg.sender == strategy, "Only strategy");
+        require(msg.sender == _strategy, "Only strategy");
         _;
     }
 
     function _proposeStrategyUpdate(address newStrategy) internal {
-        require(newStrategy != strategy);
-        proposedStrategy = newStrategy;
-        proposedStrategyTimestamp = block.timestamp;
+        require(newStrategy != _strategy);
+        _proposedStrategy = newStrategy;
+        _proposedStrategyTimestamp = block.timestamp;
         emit StrategyUpdateProposed(
             newStrategy,
             block.timestamp + ROLE_UPDATE_MIN_DELAY,
@@ -121,15 +121,15 @@ abstract contract FundRolesV2 is ITrancheIndexV2 {
     }
 
     function _applyStrategyUpdate(address newStrategy) internal {
-        require(proposedStrategy == newStrategy, "Proposed address mismatch");
+        require(_proposedStrategy == newStrategy, "Proposed address mismatch");
         require(
-            block.timestamp >= proposedStrategyTimestamp + ROLE_UPDATE_MIN_DELAY &&
-                block.timestamp < proposedStrategyTimestamp + ROLE_UPDATE_MAX_DELAY,
+            block.timestamp >= _proposedStrategyTimestamp + ROLE_UPDATE_MIN_DELAY &&
+                block.timestamp < _proposedStrategyTimestamp + ROLE_UPDATE_MAX_DELAY,
             "Not ready to update"
         );
-        emit StrategyUpdated(strategy, newStrategy);
-        strategy = newStrategy;
-        proposedStrategy = address(0);
-        proposedStrategyTimestamp = 0;
+        emit StrategyUpdated(_strategy, newStrategy);
+        _strategy = newStrategy;
+        _proposedStrategy = address(0);
+        _proposedStrategyTimestamp = 0;
     }
 }

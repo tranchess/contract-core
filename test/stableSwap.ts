@@ -7,6 +7,7 @@ const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
 import { defaultAbiCoder } from "ethers/lib/utils";
+import { TRANCHE_Q, TRANCHE_B } from "./utils";
 
 const UNIT = BigNumber.from(10).pow(18);
 const n = BigNumber.from("2");
@@ -164,6 +165,8 @@ describe("StableSwapRebalance", function () {
             await MockToken.connect(owner).deploy("token", "token", 18),
             await MockToken.connect(owner).deploy("token", "token", 18),
         ];
+        await fund0.mock.tokenShare.withArgs(TRANCHE_B).returns(tokens[0].address);
+        await fund1.mock.tokenShare.withArgs(TRANCHE_B).returns(tokens[2].address);
         await tokens[0].connect(owner).mint(user1.address, parseEther("1000"));
         await tokens[1].connect(owner).mint(user1.address, parseEther("1000"));
         await tokens[2].connect(owner).mint(user1.address, parseEther("1000"));
@@ -205,10 +208,9 @@ describe("StableSwapRebalance", function () {
 
         const StableSwapRebalance = await ethers.getContractFactory("StableSwapRebalance");
         const stableSwap0 = await StableSwapRebalance.connect(owner).deploy(
-            fund0.address,
-            primaryMarket0.address,
             lpToken0.address,
-            tokens[0].address,
+            fund0.address,
+            TRANCHE_B,
             tokens[1].address,
             A,
             A,
@@ -219,10 +221,9 @@ describe("StableSwapRebalance", function () {
             parseEther("0.35")
         );
         const stableSwap1 = await StableSwapRebalance.connect(owner).deploy(
-            fund1.address,
-            primaryMarket1.address,
             lpToken1.address,
-            tokens[2].address,
+            fund1.address,
+            TRANCHE_B,
             tokens[1].address,
             A,
             A,
@@ -836,6 +837,7 @@ describe("StableSwapNoRebalance", function () {
             await MockToken.connect(owner).deploy("token", "token", 18),
             await MockToken.connect(owner).deploy("token", "token", 18),
         ];
+        await fund0.mock.tokenShare.withArgs(TRANCHE_Q).returns(tokens[0].address);
         await tokens[0].connect(owner).mint(user1.address, parseEther("1000"));
         await tokens[1].connect(owner).mint(user1.address, parseEther("1000"));
         await tokens[0].connect(owner).mint(user2.address, parseEther("1000"));
@@ -866,10 +868,9 @@ describe("StableSwapNoRebalance", function () {
 
         const StableSwapNoRebalance = await ethers.getContractFactory("StableSwapNoRebalance");
         const stableSwap0 = await StableSwapNoRebalance.connect(owner).deploy(
-            fund0.address,
-            primaryMarket0.address,
             lpToken0.address,
-            tokens[0].address,
+            fund0.address,
+            TRANCHE_Q,
             tokens[1].address,
             A,
             A,
@@ -1446,6 +1447,7 @@ describe("Flashloan", function () {
         await usd.connect(owner).mint(user1.address, parseEther("1000"));
 
         const fund = await deployMockForName(owner, "FundV3");
+        await fund.mock.tokenShare.withArgs(TRANCHE_B).returns(tokens[0].address);
         await fund.mock.tokenUnderlying.returns(btc.address);
         await fund.mock.underlyingDecimalMultiplier.returns(1e10);
         await fund.mock.isPrimaryMarketActive.returns(true);
@@ -1497,10 +1499,9 @@ describe("Flashloan", function () {
         );
         const StableSwapRebalance = await ethers.getContractFactory("StableSwapRebalance");
         const stableSwap0 = await StableSwapRebalance.connect(owner).deploy(
-            fund.address,
-            primaryMarket.address,
             lpToken0.address,
-            tokens[0].address,
+            fund.address,
+            TRANCHE_B,
             usd.address,
             A,
             A,

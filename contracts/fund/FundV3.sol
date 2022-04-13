@@ -251,6 +251,26 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         return _tokenR;
     }
 
+    function tokenShare(uint256 tranche) external view override returns (address) {
+        return _getShare(tranche);
+    }
+
+    function primaryMarket() external view override returns (address) {
+        return _primaryMarket;
+    }
+
+    function primaryMarketUpdateProposal() external view override returns (address, uint256) {
+        return (_proposedPrimaryMarket, _proposedPrimaryMarketTimestamp);
+    }
+
+    function strategy() external view override returns (address) {
+        return _strategy;
+    }
+
+    function strategyUpdateProposal() external view override returns (address, uint256) {
+        return (_proposedStrategy, _proposedStrategyTimestamp);
+    }
+
     /// @notice Return the status of the fund contract.
     /// @param timestamp Timestamp to assess
     /// @return True if the fund contract is active
@@ -268,7 +288,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         override
         returns (bool)
     {
-        return pm == primaryMarket && timestamp >= fundActivityStartTime && timestamp < currentDay;
+        return pm == _primaryMarket && timestamp >= fundActivityStartTime && timestamp < currentDay;
     }
 
     /// @notice Return the status of the exchange. Unlike the primary market, exchange is
@@ -796,7 +816,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
 
         _collectFee();
 
-        IPrimaryMarketV3(primaryMarket).settle(day);
+        IPrimaryMarketV3(_primaryMarket).settle(day);
 
         _payFeeDebt();
 
@@ -835,12 +855,12 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
 
     function transferToStrategy(uint256 amount) external override onlyStrategy {
         _strategyUnderlying = _strategyUnderlying.add(amount);
-        IERC20(tokenUnderlying).safeTransfer(strategy, amount);
+        IERC20(tokenUnderlying).safeTransfer(_strategy, amount);
     }
 
     function transferFromStrategy(uint256 amount) external override onlyStrategy {
         _strategyUnderlying = _strategyUnderlying.sub(amount);
-        IERC20(tokenUnderlying).safeTransferFrom(strategy, address(this), amount);
+        IERC20(tokenUnderlying).safeTransferFrom(_strategy, address(this), amount);
         _payFeeDebt();
     }
 
@@ -885,7 +905,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
 
     function applyPrimaryMarketUpdate(address newPrimaryMarket) external onlyOwner {
         require(
-            IPrimaryMarketV3(primaryMarket).canBeRemovedFromFund(),
+            IPrimaryMarketV3(_primaryMarket).canBeRemovedFromFund(),
             "Cannot update primary market"
         );
         _applyPrimaryMarketUpdate(newPrimaryMarket);
