@@ -298,37 +298,6 @@ describe("FundV3", function () {
         });
     });
 
-    describe("isExchangeActive()", function () {
-        it("Should return the activity window without rebalance", async function () {
-            expect(await fund.exchangeActivityStartTime()).to.equal(startDay - DAY + HOUR / 2);
-            expect(await fund.isExchangeActive(startDay - DAY + HOUR * 12 + HOUR / 2)).to.equal(
-                true
-            );
-
-            await twapOracle.mock.getTwap.returns(parseEther("1000"));
-            await advanceOneDayAndSettle();
-
-            expect(await fund.exchangeActivityStartTime()).to.equal(startDay + HOUR / 2);
-            expect(await fund.isExchangeActive(startDay + HOUR * 12 + HOUR / 2)).to.equal(true);
-        });
-
-        it("Should return the activity window with rebalance", async function () {
-            await twapOracle.mock.getTwap.returns(parseEther("1510"));
-            await pmCreate(user1, parseBtc("1"), parseEther("500"));
-            await advanceOneDayAndSettle();
-
-            expect(await fund.exchangeActivityStartTime()).to.equal(
-                startDay + POST_REBALANCE_DELAY_TIME
-            );
-            expect(await fund.isExchangeActive(startDay + POST_REBALANCE_DELAY_TIME - 1)).to.equal(
-                false
-            );
-            expect(await fund.isExchangeActive(startDay + POST_REBALANCE_DELAY_TIME)).to.equal(
-                true
-            );
-        });
-    });
-
     describe("FundRoles", function () {
         describe("Primary market and strategy", function () {
             let newPm: MockContract;

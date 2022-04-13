@@ -84,9 +84,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     /// @notice Start timestamp of the current primary market activity window.
     uint256 public override fundActivityStartTime;
 
-    /// @notice Start timestamp of the current exchange activity window.
-    uint256 public override exchangeActivityStartTime;
-
     uint256 public activityDelayTimeAfterRebalance;
 
     /// @dev Historical rebalances. Rebalances are often accessed in loops with bounds checking.
@@ -136,8 +133,8 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
 
     /// @notice Mapping of trading week => interest rate of BISHOP.
     ///
-    ///         Key is the end timestamp of a trading week. Value is the interest rate captured
-    ///         after settlement of the last day of the previous trading week.
+    ///         Key is the end timestamp of a trading day. Value is the interest rate captured
+    ///         after settlement of that day, which will be effective in the following trading day.
     mapping(uint256 => uint256) public historicalInterestRate;
 
     /// @notice Amount of fee not transfered to the fee collector yet.
@@ -211,7 +208,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _historicalNavR[lastDay] = lastNavR;
         historicalInterestRate[lastDay] = MAX_INTEREST_RATE.min(aprOracle.capture()); // XXX
         fundActivityStartTime = lastDay;
-        exchangeActivityStartTime = lastDay + 30 minutes;
     }
 
     /// @notice UTC time of a day when the fund settles.
@@ -289,14 +285,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         returns (bool)
     {
         return pm == _primaryMarket && timestamp >= fundActivityStartTime && timestamp < currentDay;
-    }
-
-    /// @notice Return the status of the exchange. Unlike the primary market, exchange is
-    ///         anonymous to fund
-    /// @param timestamp Timestamp to assess
-    /// @return True if the exchange contract is active
-    function isExchangeActive(uint256 timestamp) public view override returns (bool) {
-        return (timestamp >= exchangeActivityStartTime && timestamp < (currentDay - 60 minutes));
     }
 
     function getTotalUnderlying() public view override returns (uint256) {
@@ -834,10 +822,8 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
             navR = UNIT;
             equivalentTotalB = getEquivalentTotalB();
             fundActivityStartTime = day + activityDelayTimeAfterRebalance;
-            exchangeActivityStartTime = day + activityDelayTimeAfterRebalance;
         } else {
             fundActivityStartTime = day;
-            exchangeActivityStartTime = day + 30 minutes;
         }
 
         historicalInterestRate[day] = day == _endOfWeek(day - 1 days)
