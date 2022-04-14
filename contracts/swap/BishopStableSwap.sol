@@ -4,16 +4,16 @@ pragma solidity >=0.6.10 <0.8.0;
 import "@chainlink/contracts/src/v0.6/interfaces/AggregatorV3Interface.sol";
 
 import "../interfaces/IPrimaryMarketV3.sol";
+import "../interfaces/ITrancheIndexV2.sol";
 import "./StableSwap.sol";
 
-contract StableSwapRebalance is StableSwap {
+contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
     uint256 public immutable tradingCurbThreshold;
     address public immutable chainlinkAggregator;
 
     constructor(
         address lpToken_,
         address fund_,
-        uint256 baseTranche_,
         address quoteAddress_,
         uint256 initialAmpl_,
         uint256 futureAmpl_,
@@ -27,7 +27,7 @@ contract StableSwapRebalance is StableSwap {
         StableSwap(
             lpToken_,
             fund_,
-            baseTranche_,
+            TRANCHE_B,
             quoteAddress_,
             initialAmpl_,
             futureAmpl_,

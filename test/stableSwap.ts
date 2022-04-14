@@ -100,7 +100,7 @@ function getQuote(
     return solveQuadratic(a, b, negC);
 }
 
-describe("StableSwapRebalance", function () {
+describe("BishopStableSwap", function () {
     interface FixtureWalletMap {
         readonly [name: string]: Wallet;
     }
@@ -204,11 +204,10 @@ describe("StableSwapRebalance", function () {
         const SwapRouter = await ethers.getContractFactory("SwapRouter");
         const swapRouter = await SwapRouter.connect(owner).deploy();
 
-        const StableSwapRebalance = await ethers.getContractFactory("StableSwapRebalance");
-        const stableSwap0 = await StableSwapRebalance.connect(owner).deploy(
+        const BishopStableSwap = await ethers.getContractFactory("BishopStableSwap");
+        const stableSwap0 = await BishopStableSwap.connect(owner).deploy(
             lpToken0.address,
             fund0.address,
-            TRANCHE_B,
             tokens[1].address,
             A,
             A,
@@ -218,10 +217,9 @@ describe("StableSwapRebalance", function () {
             aggregator.address,
             parseEther("0.35")
         );
-        const stableSwap1 = await StableSwapRebalance.connect(owner).deploy(
+        const stableSwap1 = await BishopStableSwap.connect(owner).deploy(
             lpToken1.address,
             fund1.address,
-            TRANCHE_B,
             tokens[1].address,
             A,
             A,
@@ -792,7 +790,7 @@ describe("StableSwapRebalance", function () {
     });
 });
 
-describe("StableSwapNoRebalance", function () {
+describe("QueenStableSwap", function () {
     interface FixtureWalletMap {
         readonly [name: string]: Wallet;
     }
@@ -872,11 +870,10 @@ describe("StableSwapNoRebalance", function () {
         const SwapRouter = await ethers.getContractFactory("SwapRouter");
         const swapRouter = await SwapRouter.connect(owner).deploy();
 
-        const StableSwapNoRebalance = await ethers.getContractFactory("StableSwapNoRebalance");
-        const stableSwap0 = await StableSwapNoRebalance.connect(owner).deploy(
+        const QueenStableSwap = await ethers.getContractFactory("QueenStableSwap");
+        const stableSwap0 = await QueenStableSwap.connect(owner).deploy(
             lpToken0.address,
             fund0.address,
-            TRANCHE_Q,
             tokens[1].address,
             A,
             A,
@@ -1511,11 +1508,10 @@ describe("Flashloan", function () {
             votingEscrow.address,
             swapReward.address
         );
-        const StableSwapRebalance = await ethers.getContractFactory("StableSwapRebalance");
-        const stableSwap0 = await StableSwapRebalance.connect(owner).deploy(
+        const BishopStableSwap = await ethers.getContractFactory("BishopStableSwap");
+        const stableSwap0 = await BishopStableSwap.connect(owner).deploy(
             lpToken0.address,
             fund.address,
-            TRANCHE_B,
             usd.address,
             A,
             A,
@@ -1578,7 +1574,7 @@ describe("Flashloan", function () {
 
     describe("tranchessSwapCallback()", function () {
         it("Should revert if call is not tranchess pair", async function () {
-            const stableSwap1 = await deployMockForName(user1, "StableSwapRebalance");
+            const stableSwap1 = await deployMockForName(user1, "BishopStableSwap");
             await stableSwap1.mock.quoteAddress.returns(usd.address);
             await fund.mock.tokenB.returns(tokens[0].address);
             await expect(
@@ -1597,7 +1593,7 @@ describe("Flashloan", function () {
         });
 
         it("Should revert if it's bidirectional", async function () {
-            const stableSwap1 = await deployMockForName(user1, "StableSwapRebalance");
+            const stableSwap1 = await deployMockForName(user1, "BishopStableSwap");
             await stableSwap1.mock.quoteAddress.returns(usd.address);
             await fund.mock.tokenB.returns(tokens[0].address);
             await swapRouter.addSwap(tokens[0].address, usd.address, stableSwap1.address);
