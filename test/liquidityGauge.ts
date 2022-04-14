@@ -94,7 +94,7 @@ describe("LiquidityGauge", function () {
         const fund = await deployMockForName(owner, "IFundV3");
         await fund.mock.getRebalanceSize.returns(0);
 
-        const swap = await deployMockForName(owner, "StableSwapRebalance");
+        const swap = await deployMockForName(owner, "BishopStableSwap");
 
         const chessSchedule = await deployMockForName(owner, "IChessSchedule");
         await chessSchedule.mock.getRate.returns(0);

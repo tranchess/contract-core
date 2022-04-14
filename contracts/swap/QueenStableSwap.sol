@@ -2,16 +2,16 @@
 pragma solidity >=0.6.10 <0.8.0;
 
 import "../interfaces/IFundV3.sol";
+import "../interfaces/ITrancheIndexV2.sol";
 import "../utils/SafeDecimalMath.sol";
 import "./StableSwap.sol";
 
-contract StableSwapNoRebalance is StableSwap {
+contract QueenStableSwap is StableSwap, ITrancheIndexV2 {
     using SafeDecimalMath for uint256;
 
     constructor(
         address lpToken_,
         address fund_,
-        uint256 baseTranche_,
         address quoteAddress_,
         uint256 initialAmpl_,
         uint256 futureAmpl_,
@@ -23,7 +23,7 @@ contract StableSwapNoRebalance is StableSwap {
         StableSwap(
             lpToken_,
             fund_,
-            baseTranche_,
+            TRANCHE_Q,
             quoteAddress_,
             initialAmpl_,
             futureAmpl_,
