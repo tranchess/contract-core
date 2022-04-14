@@ -63,32 +63,45 @@ interface IStableSwap {
         bool deposit
     ) external view returns (uint256);
 
-    function handleRebalance() external returns (uint256 rebalanceVersion);
-
     function swap(
+        uint256 version,
         uint256 baseDeltaOut,
         uint256 quoteDeltaOut,
         address to,
         bytes calldata data
     ) external;
 
-    function addLiquidity(address to, uint256 minMintAmount) external;
+    function addLiquidity(
+        uint256 version,
+        address to,
+        uint256 minMintAmount
+    ) external;
 
     function removeLiquidity(
+        uint256 version,
         uint256 minBaseDelta,
         uint256 minQuoteDelta,
         uint256 burnAmount
     ) external returns (uint256 baseDelta, uint256 quoteDelta);
 
     function removeLiquidityImbalance(
+        uint256 version,
         uint256 baseDelta,
         uint256 quoteDelta,
         uint256 maxBurnAmount
     ) external returns (uint256 burnAmount);
 
-    function removeBaseLiquidity(uint256 burnAmount, uint256 minAmount) external returns (uint256);
+    function removeBaseLiquidity(
+        uint256 version,
+        uint256 burnAmount,
+        uint256 minAmount
+    ) external returns (uint256);
 
-    function removeQuoteLiquidity(uint256 burnAmount, uint256 minAmount) external returns (uint256);
+    function removeQuoteLiquidity(
+        uint256 version,
+        uint256 burnAmount,
+        uint256 minAmount
+    ) external returns (uint256);
 
     event LiquidityAdded(
         address indexed account,

@@ -45,13 +45,13 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         uint256 baseDelta,
         uint256 quoteDelta,
         uint256 minMintAmount,
+        uint256 version,
         uint256 deadline
     ) external virtual override checkDeadline(deadline) {
         IStableSwap swap = getSwap(baseToken, quoteToken);
-        swap.handleRebalance();
         IERC20(baseToken).safeTransferFrom(msg.sender, address(swap), baseDelta);
         IERC20(quoteToken).safeTransferFrom(msg.sender, address(swap), quoteDelta);
-        swap.addLiquidity(msg.sender, minMintAmount);
+        swap.addLiquidity(version, msg.sender, minMintAmount);
     }
 
     function swapExactTokensForTokens(
@@ -65,10 +65,6 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
     ) external virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
         require(versions.length == path.length - 1, "Invalid version");
-        for (uint256 i = 0; i < path.length - 1; i++) {
-            uint256 rebalanceVersion = IStableSwap(getSwap(path[i], path[i + 1])).handleRebalance();
-            require(rebalanceVersion == versions[i], "Version mismatch");
-        }
         amounts = getAmountsOut(amountIn, path);
         require(amounts[amounts.length - 1] >= amountOutMin, "Insufficient output");
         IERC20(path[0]).safeTransferFrom(
@@ -77,9 +73,9 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
             amounts[0]
         );
         if (staking == address(0)) {
-            _swap(amounts, path, to);
+            _swap(amounts, path, versions, to);
         } else {
-            _swap(amounts, path, address(this));
+            _swap(amounts, path, versions, address(this));
             StakingV4(staking).deposit(
                 TRANCHE_B,
                 amounts[amounts.length - 1],
@@ -100,10 +96,6 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
     ) external virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
         require(versions.length == path.length - 1, "Invalid version");
-        for (uint256 i = 0; i < path.length - 1; i++) {
-            uint256 rebalanceVersion = IStableSwap(getSwap(path[i], path[i + 1])).handleRebalance();
-            require(rebalanceVersion == versions[i], "Version mismatch");
-        }
         amounts = getAmountsIn(amountOut, path);
         require(amounts[0] <= amountInMax, "Excessive input");
         IERC20(path[0]).safeTransferFrom(
@@ -112,9 +104,9 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
             amounts[0]
         );
         if (staking == address(0)) {
-            _swap(amounts, path, to);
+            _swap(amounts, path, versions, to);
         } else {
-            _swap(amounts, path, address(this));
+            _swap(amounts, path, versions, address(this));
             StakingV4(staking).deposit(TRANCHE_B, amountOut, to, versions[versions.length - 1]);
         }
     }
@@ -160,6 +152,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
     function _swap(
         uint256[] memory amounts,
         address[] memory path,
+        uint256[] calldata versions,
         address to
     ) internal virtual {
         for (uint256 i = 0; i < path.length - 1; i++) {
@@ -167,9 +160,9 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
             address recipient =
                 i < path.length - 2 ? address(getSwap(path[i + 1], path[i + 2])) : to;
             if (path[i] == swap.baseAddress()) {
-                swap.swap(0, amounts[i + 1], recipient, new bytes(0));
+                swap.swap(versions[i], 0, amounts[i + 1], recipient, new bytes(0));
             } else {
-                swap.swap(amounts[i + 1], 0, recipient, new bytes(0));
+                swap.swap(versions[i], amounts[i + 1], 0, recipient, new bytes(0));
             }
         }
     }

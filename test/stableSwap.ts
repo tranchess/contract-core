@@ -247,6 +247,7 @@ describe("BishopStableSwap", function () {
                 parseEther("10"),
                 parseEther("10"),
                 BigNumber.from("0"),
+                0,
                 deadline
             );
         await swapRouter
@@ -257,6 +258,7 @@ describe("BishopStableSwap", function () {
                 parseEther("10"),
                 parseEther("10"),
                 BigNumber.from("0"),
+                0,
                 deadline
             );
 
@@ -618,6 +620,7 @@ describe("BishopStableSwap", function () {
                     parseEther("1"),
                     parseEther("1"),
                     parseEther("0"),
+                    0,
                     deadline
                 )
             ).to.be.revertedWith("Trading curb");
@@ -634,6 +637,7 @@ describe("BishopStableSwap", function () {
                 parseEther("1"),
                 parseEther("1"),
                 parseEther("0"),
+                0,
                 deadline
             );
             const afterLP = await lpToken0.balanceOf(addr1);
@@ -656,6 +660,7 @@ describe("BishopStableSwap", function () {
                     parseEther("1"),
                     parseEther("1"),
                     parseEther("0"),
+                    0,
                     deadline
                 );
         });
@@ -664,7 +669,7 @@ describe("BishopStableSwap", function () {
             const beforeLP = await lpToken0.balanceOf(addr2);
             await stableSwap0
                 .connect(user2)
-                .removeLiquidity(parseEther("1"), parseEther("1"), parseEther("2"));
+                .removeLiquidity(0, parseEther("1"), parseEther("1"), parseEther("2"));
             const afterLP = await lpToken0.balanceOf(addr2);
             expect(beforeLP.sub(afterLP)).to.equal(parseEther("2"));
         });
@@ -690,7 +695,7 @@ describe("BishopStableSwap", function () {
 
             const beforeToken = await tokens[0].balanceOf(addr2);
             const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeBaseLiquidity(burnAmount, parseEther("0"));
+            await stableSwap0.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[0].balanceOf(addr2);
             const afterLP = await lpToken0.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(baseDelta);
@@ -719,7 +724,7 @@ describe("BishopStableSwap", function () {
             await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
             const beforeToken = await tokens[0].balanceOf(addr2);
             const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeBaseLiquidity(burnAmount, parseEther("0"));
+            await stableSwap0.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[0].balanceOf(addr2);
             const afterLP = await lpToken0.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(baseDelta);
@@ -750,7 +755,7 @@ describe("BishopStableSwap", function () {
             await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
             const beforeToken = await tokens[1].balanceOf(addr2);
             const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeQuoteLiquidity(burnAmount, parseEther("0"));
+            await stableSwap0.connect(user2).removeQuoteLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[1].balanceOf(addr2);
             const afterLP = await lpToken0.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(quoteDelta);
@@ -781,7 +786,7 @@ describe("BishopStableSwap", function () {
             await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
             const beforeToken = await tokens[1].balanceOf(addr2);
             const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeQuoteLiquidity(burnAmount, parseEther("0"));
+            await stableSwap0.connect(user2).removeQuoteLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[1].balanceOf(addr2);
             const afterLP = await lpToken0.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(quoteDelta);
@@ -896,6 +901,7 @@ describe("QueenStableSwap", function () {
                 parseEther("10"),
                 parseEther("10"),
                 BigNumber.from("0"),
+                0,
                 deadline
             );
 
@@ -1238,6 +1244,7 @@ describe("QueenStableSwap", function () {
                 parseEther("1"),
                 parseEther("1"),
                 parseEther("0"),
+                0,
                 deadline
             );
             const afterLP = await lpToken0.balanceOf(addr1);
@@ -1260,6 +1267,7 @@ describe("QueenStableSwap", function () {
                     parseEther("1"),
                     parseEther("1"),
                     parseEther("0"),
+                    0,
                     deadline
                 );
         });
@@ -1268,7 +1276,7 @@ describe("QueenStableSwap", function () {
             const beforeLP = await lpToken0.balanceOf(addr2);
             await stableSwap0
                 .connect(user2)
-                .removeLiquidity(parseEther("1"), parseEther("1"), parseEther("2"));
+                .removeLiquidity(0, parseEther("1"), parseEther("1"), parseEther("2"));
             const afterLP = await lpToken0.balanceOf(addr2);
             expect(beforeLP.sub(afterLP)).to.equal(parseEther("2"));
         });
@@ -1294,7 +1302,7 @@ describe("QueenStableSwap", function () {
 
             const beforeToken = await tokens[0].balanceOf(addr2);
             const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeBaseLiquidity(burnAmount, parseEther("0"));
+            await stableSwap0.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[0].balanceOf(addr2);
             const afterLP = await lpToken0.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(baseDelta);
@@ -1323,7 +1331,7 @@ describe("QueenStableSwap", function () {
             await fund0.mock.getTotalUnderlying.returns(oracle);
             const beforeToken = await tokens[0].balanceOf(addr2);
             const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeBaseLiquidity(burnAmount, parseEther("0"));
+            await stableSwap0.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[0].balanceOf(addr2);
             const afterLP = await lpToken0.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(baseDelta);
@@ -1354,7 +1362,7 @@ describe("QueenStableSwap", function () {
             await fund0.mock.getTotalUnderlying.returns(oracle);
             const beforeToken = await tokens[1].balanceOf(addr2);
             const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeQuoteLiquidity(burnAmount, parseEther("0"));
+            await stableSwap0.connect(user2).removeQuoteLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[1].balanceOf(addr2);
             const afterLP = await lpToken0.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(quoteDelta);
@@ -1385,7 +1393,7 @@ describe("QueenStableSwap", function () {
             await fund0.mock.getTotalUnderlying.returns(oracle);
             const beforeToken = await tokens[1].balanceOf(addr2);
             const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeQuoteLiquidity(burnAmount, parseEther("0"));
+            await stableSwap0.connect(user2).removeQuoteLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[1].balanceOf(addr2);
             const afterLP = await lpToken0.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(quoteDelta);
@@ -1536,6 +1544,7 @@ describe("Flashloan", function () {
                 parseEther("10"),
                 parseEther("10"),
                 BigNumber.from("0"),
+                0,
                 deadline
             );
 

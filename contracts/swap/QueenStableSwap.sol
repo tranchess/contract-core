@@ -33,20 +33,29 @@ contract QueenStableSwap is StableSwap, ITrancheIndexV2 {
         )
     {}
 
-    function handleRebalance() public override returns (uint256 rebalanceVersion) {
-        rebalanceVersion = fund.getRebalanceSize();
-        uint256 currentVersion = currentRebalanceVersion;
+    function _getRebalanceResult(uint256)
+        internal
+        view
+        override
+        returns (
+            uint256 newBase,
+            uint256 newQuote,
+            uint256 excessiveQ,
+            uint256 excessiveB,
+            uint256 excessiveR,
+            uint256 excessiveQuote,
+            bool isRebalanced
+        )
+    {
+        return (baseBalance, quoteBalance, 0, 0, 0, 0, false);
+    }
 
-        if (currentVersion < rebalanceVersion) {
-            (baseBalance, , ) = fund.batchRebalance(
-                baseBalance,
-                0,
-                0,
-                currentVersion,
-                rebalanceVersion
-            );
-            fund.refreshBalance(address(this), rebalanceVersion);
-        }
+    function _handleRebalance(uint256)
+        internal
+        override
+        returns (uint256 newBase, uint256 newQuote)
+    {
+        return (baseBalance, quoteBalance);
     }
 
     function checkOracle(

@@ -47,7 +47,6 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     uint256 private blockTimestampLast;
 
     address public primaryMarket;
-    uint256 public currentRebalanceVersion;
 
     uint256 public initialAmpl;
     uint256 public futureAmpl;
@@ -74,10 +73,6 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         fund = IFundV3(fund_);
         baseTranche = baseTranche_;
         quoteAddress = quoteAddress_;
-
-        uint256 rebalanceVersion = IFundV3(fund_).getRebalanceSize();
-        IFundV3(fund_).refreshBalance(address(this), rebalanceVersion);
-        currentRebalanceVersion = rebalanceVersion;
 
         initialAmpl = initialAmpl_;
         futureAmpl = futureAmpl_;
@@ -116,7 +111,8 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
 
     function getCurrentD() public view override returns (uint256 D) {
         uint256 oracle = checkOracle(Operation.VIEW);
-        D = _getD(baseBalance, quoteBalance, Ampl(), oracle);
+        (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        D = _getD(base, quote, Ampl(), oracle);
     }
 
     function getD(
@@ -138,9 +134,11 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
             uint256 adminFee
         )
     {
-        uint256 newBaseBalance = baseBalance.add(baseDelta);
-        uint256 newQuoteBalance = _getQuoteBalance(newBaseBalance);
-        quoteDelta = quoteBalance.sub(newQuoteBalance).sub(1); // -1 just in case there were some rounding errors
+        (uint256 oldBase, uint256 oldQuote, , , , , ) =
+            _getRebalanceResult(fund.getRebalanceSize());
+        uint256 newBase = oldBase.add(baseDelta);
+        uint256 newQuote = _getQuoteBalance(newBase);
+        quoteDelta = oldQuote.sub(newQuote).sub(1); // -1 just in case there were some rounding errors
         fee = quoteDelta.multiplyDecimal(feeRate);
         adminFee = fee.multiplyDecimal(adminFeeRate);
         quoteDelta = quoteDelta.sub(fee);
@@ -156,9 +154,11 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
             uint256 adminFee
         )
     {
-        uint256 newBaseBalance = baseBalance.sub(baseDelta);
-        uint256 newQuoteBalance = _getQuoteBalance(newBaseBalance);
-        quoteDelta = newQuoteBalance.sub(quoteBalance).add(1); // 1 just in case there were some rounding errors
+        (uint256 oldBase, uint256 oldQuote, , , , , ) =
+            _getRebalanceResult(fund.getRebalanceSize());
+        uint256 newBase = oldBase.sub(baseDelta);
+        uint256 newQuote = _getQuoteBalance(newBase);
+        quoteDelta = newQuote.sub(oldQuote).add(1); // 1 just in case there were some rounding errors
         fee = quoteDelta.mul(feeRate).div(uint256(1e18).sub(feeRate));
         adminFee = fee.multiplyDecimal(adminFeeRate);
         quoteDelta = quoteDelta.add(fee);
@@ -174,11 +174,13 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
             uint256 adminFee
         )
     {
+        (uint256 oldBase, uint256 oldQuote, , , , , ) =
+            _getRebalanceResult(fund.getRebalanceSize());
         fee = quoteDelta.multiplyDecimal(feeRate);
         adminFee = fee.multiplyDecimal(adminFeeRate);
-        uint256 newQuoteBalance = quoteBalance.add(quoteDelta.sub(fee));
-        uint256 newBaseBalance = _getBaseBalance(newQuoteBalance);
-        baseDelta = baseBalance.sub(newBaseBalance).sub(1); // just in case there were rounding error
+        uint256 newQuote = oldQuote.add(quoteDelta.sub(fee));
+        uint256 newBase = _getBaseBalance(newQuote);
+        baseDelta = oldBase.sub(newBase).sub(1); // just in case there were rounding error
     }
 
     function getBaseDeltaIn(uint256 quoteDelta)
@@ -191,11 +193,13 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
             uint256 adminFee
         )
     {
+        (uint256 oldBase, uint256 oldQuote, , , , , ) =
+            _getRebalanceResult(fund.getRebalanceSize());
         fee = quoteDelta.mul(feeRate).div(uint256(1e18).sub(feeRate));
         adminFee = fee.multiplyDecimal(adminFeeRate);
-        uint256 newQuoteBalance = quoteBalance.sub(quoteDelta.add(fee));
-        uint256 newBaseBalance = _getBaseBalance(newQuoteBalance);
-        baseDelta = newBaseBalance.sub(baseBalance).add(1); // just in case there were rounding error
+        uint256 newQuote = oldQuote.sub(quoteDelta.add(fee));
+        uint256 newBase = _getBaseBalance(newQuote);
+        baseDelta = newBase.sub(oldBase).add(1); // just in case there were rounding error
     }
 
     /// @dev Average asset value per LP token
@@ -216,8 +220,8 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 newBaseBalance;
         uint256 newQuoteBalance;
-        uint256 baseBalance_ = baseBalance;
-        uint256 quoteBalance_ = quoteBalance;
+        (uint256 baseBalance_, uint256 quoteBalance_, , , , , ) =
+            _getRebalanceResult(fund.getRebalanceSize());
         uint256 oracle = checkOracle(Operation.VIEW);
         uint256 D0 = _getD(baseBalance_, quoteBalance_, ampl, oracle);
 
@@ -231,17 +235,15 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         return difference.mul(lpSupply).div(D0);
     }
 
-    /// @dev Handle the rebalance immediately. Should be called before any swap operation.
-    function handleRebalance() public virtual override returns (uint256 rebalanceVersion) {}
-
     function swap(
+        uint256 version,
         uint256 baseDeltaOut,
         uint256 quoteDeltaOut,
         address to,
         bytes calldata data
-    ) external override nonReentrant checkActivity() {
+    ) external override nonReentrant checkVersion(version) {
         require(baseDeltaOut > 0 || quoteDeltaOut > 0, "Insufficient output");
-        (uint256 baseBalance_, uint256 quoteBalance_) = allBalances();
+        (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
         require(
             baseDeltaOut < baseBalance_ && quoteDeltaOut < quoteBalance_,
             "Insufficient liquidity"
@@ -306,12 +308,11 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     /// @dev Add liquidity.
     /// @param to Recipient
     /// @param minMintAmount Least amount of LP token to mint
-    function addLiquidity(address to, uint256 minMintAmount)
-        external
-        override
-        nonReentrant
-        checkActivity()
-    {
+    function addLiquidity(
+        uint256 version,
+        address to,
+        uint256 minMintAmount
+    ) external override nonReentrant checkVersion(version) {
         uint256 newBaseBalance = IERC20(baseAddress()).balanceOf(address(this));
         uint256 newQuoteBalance = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
         uint256 ampl = Ampl();
@@ -322,7 +323,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 oracle;
         {
-            (uint256 baseBalance_, uint256 quoteBalance_) = allBalances();
+            (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
             _update(baseBalance_, quoteBalance_);
             baseDelta = newBaseBalance > baseBalance_ ? newBaseBalance - baseBalance_ : 0;
             quoteDelta = newQuoteBalance > quoteBalance_ ? newQuoteBalance - quoteBalance_ : 0;
@@ -379,14 +380,20 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     /// @param minQuoteDelta Least amount of quote asset to withdraw
     /// @param burnAmount Exact amount of LP token to burn
     function removeLiquidity(
+        uint256 version,
         uint256 minBaseDelta,
         uint256 minQuoteDelta,
         uint256 burnAmount
-    ) public override nonReentrant returns (uint256 baseDelta, uint256 quoteDelta) {
-        handleRebalance();
+    )
+        public
+        override
+        nonReentrant
+        checkVersion(version)
+        returns (uint256 baseDelta, uint256 quoteDelta)
+    {
         uint256 lpSupply = IERC20(lpToken).totalSupply();
 
-        (uint256 baseBalance_, uint256 quoteBalance_) = allBalances();
+        (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
         _update(baseBalance_, quoteBalance_);
         baseDelta = baseBalance_.mul(burnAmount).div(lpSupply);
         quoteDelta = quoteBalance_.mul(burnAmount).div(lpSupply);
@@ -409,20 +416,19 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     /// @param quoteDelta Exact amount of quote asset to withdraw
     /// @param maxBurnAmount Most amount of LP token to burn
     function removeLiquidityImbalance(
+        uint256 version,
         uint256 baseDelta,
         uint256 quoteDelta,
         uint256 maxBurnAmount
-    ) public override nonReentrant returns (uint256 burnAmount) {
-        handleRebalance();
+    ) public override nonReentrant checkVersion(version) returns (uint256 burnAmount) {
         uint256 ampl = Ampl();
         uint256 newBaseBalance;
         uint256 newQuoteBalance;
-        uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 D0;
         uint256 oracle;
         uint256 idealBalance;
         {
-            (uint256 baseBalance_, uint256 quoteBalance_) = allBalances();
+            (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
             oracle = checkOracle(Operation.VIEW);
             D0 = _getD(baseBalance_, quoteBalance_, ampl, oracle);
             _update(baseBalance_, quoteBalance_);
@@ -444,7 +450,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
 
         uint256 D2 = _getD(newBaseBalance, newQuoteBalance, ampl, oracle);
 
-        burnAmount = D0.sub(D2).mul(lpSupply).div(D0).add(1);
+        burnAmount = D0.sub(D2).mul(IERC20(lpToken).totalSupply()).div(D0).add(1);
         require(burnAmount > 1, "Stable: no tokens burned");
         require(burnAmount <= maxBurnAmount, "Stable: exceed slippage tolerance interval");
 
@@ -466,16 +472,14 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     /// @dev Remove base liquidity only.
     /// @param burnAmount Exact amount of LP token to burn
     /// @param minAmount Lesat amount of base asset to withdrawl
-    function removeBaseLiquidity(uint256 burnAmount, uint256 minAmount)
-        public
-        override
-        nonReentrant
-        returns (uint256)
-    {
-        handleRebalance();
+    function removeBaseLiquidity(
+        uint256 version,
+        uint256 burnAmount,
+        uint256 minAmount
+    ) public override nonReentrant checkVersion(version) returns (uint256) {
         uint256 ampl = Ampl();
         uint256 oracle = checkOracle(Operation.VIEW);
-        (uint256 baseBalance_, uint256 quoteBalance_) = allBalances();
+        (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
         uint256 D0 = _getD(baseBalance_, quoteBalance_, ampl, oracle);
 
         uint256 lpSupply = IERC20(lpToken).totalSupply();
@@ -502,21 +506,18 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     /// @dev Remove quote liquidity only.
     /// @param burnAmount Exact amount of LP token to burn
     /// @param minAmount Lesat amount of quote asset to withdrawl
-    function removeQuoteLiquidity(uint256 burnAmount, uint256 minAmount)
-        public
-        override
-        nonReentrant
-        returns (uint256)
-    {
-        handleRebalance();
-        uint256 ampl = Ampl();
+    function removeQuoteLiquidity(
+        uint256 version,
+        uint256 burnAmount,
+        uint256 minAmount
+    ) public override nonReentrant checkVersion(version) returns (uint256) {
         uint256 oracle = checkOracle(Operation.VIEW);
-        (uint256 baseBalance_, uint256 quoteBalance_) = allBalances();
+        (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
         uint256 D0 = _getD(baseBalance_, quoteBalance_, Ampl(), oracle);
 
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 D1 = D0.sub(D0.mul(burnAmount).div(lpSupply));
-        uint256 newQuoteBalance = _getQuote(ampl, baseBalance, oracle, D1);
+        uint256 newQuoteBalance = _getQuote(Ampl(), baseBalance, oracle, D1);
 
         _update(baseBalance_, quoteBalance_);
         uint256 liquidityFee =
@@ -540,19 +541,21 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     function skim(address to) external nonReentrant {
         address baseAddress_ = baseAddress(); // gas savings
         address quoteAddress_ = quoteAddress; // gas savings
+        (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(fund.getRebalanceSize());
         IERC20(baseAddress_).safeTransfer(
             to,
-            IERC20(baseAddress_).balanceOf(address(this)).sub(baseBalance)
+            IERC20(baseAddress_).balanceOf(address(this)).sub(baseBalance_)
         );
         IERC20(quoteAddress_).safeTransfer(
             to,
-            IERC20(quoteAddress_).balanceOf(address(this)).sub(totalAdminFee).sub(quoteBalance)
+            IERC20(quoteAddress_).balanceOf(address(this)).sub(totalAdminFee).sub(quoteBalance_)
         );
     }
 
     // force reserves to match balances
     function sync() external nonReentrant {
-        _update(baseBalance, quoteBalance);
+        (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(fund.getRebalanceSize());
+        _update(baseBalance_, quoteBalance_);
         uint256 newBaseBalance = IERC20(baseAddress()).balanceOf(address(this));
         uint256 newQuoteBalance = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
         baseBalance = newBaseBalance;
@@ -673,7 +676,48 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         return AdvancedMath.sqrt(delta).add(b2).sub(b1).mul(5e17).div(a);
     }
 
-    modifier checkActivity() virtual {_;}
+    /// @dev Check if the user-specified version is correct.
+    modifier checkVersion(uint256 version) virtual {_;}
+
+    /// @dev Compute the new base and quote amount after rebalanced to the latest version.
+    ///      If any tokens should be distributed to LP holders, their amounts are also returned.
+    ///
+    ///      The latest rebalance version is passed in a parameter and it is caller's responsibility
+    ///      to pass the correct version.
+    /// @param latestVersion The latest rebalance version
+    /// @return newBase Amount of base tokens after rebalance
+    /// @return newQuote Amount of quote tokens after rebalance
+    /// @return excessiveQ Amount of QUEEN that should be distributed to LP holders due to rebalance
+    /// @return excessiveB Amount of BISHOP that should be distributed to LP holders due to rebalance
+    /// @return excessiveR Amount of ROOK that should be distributed to LP holders due to rebalance
+    /// @return excessiveQuote Amount of quote tokens that should be distributed to LP holders due to rebalance
+    /// @return isRebalanced Whether the stored base and quote amount are rebalanced
+    function _getRebalanceResult(uint256 latestVersion)
+        internal
+        view
+        virtual
+        returns (
+            uint256 newBase,
+            uint256 newQuote,
+            uint256 excessiveQ,
+            uint256 excessiveB,
+            uint256 excessiveR,
+            uint256 excessiveQuote,
+            bool isRebalanced
+        );
+
+    /// @dev Update the stored base and quote balance to the latest rebalance version and distribute
+    ///      any excessive tokens to LP holders.
+    ///
+    ///      The latest rebalance version is passed in a parameter and it is caller's responsibility
+    ///      to pass the correct version.
+    /// @param latestVersion The latest rebalance version
+    /// @return newBase Amount of stored base tokens after rebalance
+    /// @return newQuote Amount of stored quote tokens after rebalance
+    function _handleRebalance(uint256 latestVersion)
+        internal
+        virtual
+        returns (uint256 newBase, uint256 newQuote);
 
     function checkOracle(
         Operation /*op*/
