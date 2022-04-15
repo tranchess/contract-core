@@ -46,8 +46,6 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     uint256 public quoteCumulativeLast;
     uint256 private blockTimestampLast;
 
-    address public primaryMarket;
-
     uint256 public initialAmpl;
     uint256 public futureAmpl;
     uint256 public initialTime;
