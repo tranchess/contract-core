@@ -10,14 +10,14 @@ interface IStableSwap {
 
     function virtualPrice() external view returns (uint256);
 
-    function getCurrentD() external view returns (uint256 D);
+    function getCurrentD() external view returns (uint256);
 
     function getD(
         uint256 base,
         uint256 quote,
         uint256 ampl,
         uint256 navB
-    ) external view returns (uint256 D);
+    ) external view returns (uint256);
 
     function getQuoteDeltaOut(uint256 baseDelta)
         external
@@ -106,7 +106,7 @@ interface IStableSwap {
         uint256 baseDelta,
         uint256 quoteDelta,
         uint256 fee,
-        uint256 D1,
+        uint256 d1,
         uint256 newTokenSupply
     );
     event LiquidityRemoved(
