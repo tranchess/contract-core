@@ -8,8 +8,6 @@ interface IStableSwap {
 
     function allBalances() external view returns (uint256, uint256);
 
-    function Ampl() external view returns (uint256);
-
     function virtualPrice() external view returns (uint256);
 
     function getCurrentD() external view returns (uint256 D);

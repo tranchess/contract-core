@@ -88,7 +88,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         return (baseBalance, quoteBalance);
     }
 
-    function Ampl() public view override returns (uint256) {
+    function getAmpl() public view returns (uint256) {
         if (block.timestamp < futureTime) {
             uint256 deltaAmpl =
                 futureAmpl > initialAmpl
@@ -110,7 +110,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     function getCurrentD() public view override returns (uint256 D) {
         uint256 oracle = checkOracle(Operation.VIEW);
         (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
-        D = _getD(base, quote, Ampl(), oracle);
+        D = _getD(base, quote, getAmpl(), oracle);
     }
 
     function getD(
@@ -214,7 +214,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 quoteDelta,
         bool deposit
     ) public view override returns (uint256) {
-        uint256 ampl = Ampl();
+        uint256 ampl = getAmpl();
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 newBaseBalance;
         uint256 newQuoteBalance;
@@ -278,7 +278,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         require(baseDeltaIn > 0 || quoteDeltaIn > 0, "Insufficient input");
         {
             fee = fee.add(quoteDeltaIn.multiplyDecimal(feeRate));
-            uint256 ampl = Ampl();
+            uint256 ampl = getAmpl();
             uint256 newQuoteBalanceAdjusted = newQuoteBalance.sub(fee);
             uint256 oracle = checkOracle(Operation.SWAP);
             uint256 newD = _getD(newBaseBalance, newQuoteBalanceAdjusted, ampl, oracle);
@@ -313,7 +313,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     ) external override nonReentrant checkVersion(version) {
         uint256 newBaseBalance = IERC20(baseAddress()).balanceOf(address(this));
         uint256 newQuoteBalance = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
-        uint256 ampl = Ampl();
+        uint256 ampl = getAmpl();
         uint256 fee;
         uint256 baseDelta;
         uint256 quoteDelta;
@@ -419,7 +419,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 quoteDelta,
         uint256 maxBurnAmount
     ) public override nonReentrant checkVersion(version) returns (uint256 burnAmount) {
-        uint256 ampl = Ampl();
+        uint256 ampl = getAmpl();
         uint256 newBaseBalance;
         uint256 newQuoteBalance;
         uint256 D0;
@@ -475,7 +475,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 burnAmount,
         uint256 minAmount
     ) public override nonReentrant checkVersion(version) returns (uint256) {
-        uint256 ampl = Ampl();
+        uint256 ampl = getAmpl();
         uint256 oracle = checkOracle(Operation.VIEW);
         (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
         uint256 D0 = _getD(baseBalance_, quoteBalance_, ampl, oracle);
@@ -511,11 +511,11 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     ) public override nonReentrant checkVersion(version) returns (uint256) {
         uint256 oracle = checkOracle(Operation.VIEW);
         (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
-        uint256 D0 = _getD(baseBalance_, quoteBalance_, Ampl(), oracle);
+        uint256 D0 = _getD(baseBalance_, quoteBalance_, getAmpl(), oracle);
 
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 D1 = D0.sub(D0.mul(burnAmount).div(lpSupply));
-        uint256 newQuoteBalance = _getQuote(Ampl(), baseBalance, oracle, D1);
+        uint256 newQuoteBalance = _getQuote(getAmpl(), baseBalance, oracle, D1);
 
         _update(baseBalance_, quoteBalance_);
         uint256 liquidityFee =
@@ -625,7 +625,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         returns (uint256 newBaseBalance)
     {
         // Calculate new asset balances
-        uint256 ampl = Ampl();
+        uint256 ampl = getAmpl();
         uint256 oracle = checkOracle(Operation.VIEW);
         uint256 D = _getD(baseBalance, quoteBalance, ampl, oracle);
         newBaseBalance = _getBase(ampl, newQuoteBalance, oracle, D);
@@ -637,7 +637,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         returns (uint256 newQuoteBalance)
     {
         // Calculate new quote asset
-        uint256 ampl = Ampl();
+        uint256 ampl = getAmpl();
         uint256 oracle = checkOracle(Operation.VIEW);
         uint256 D = _getD(baseBalance, quoteBalance, ampl, oracle);
         newQuoteBalance = _getQuote(ampl, newBaseBalance, oracle, D);
