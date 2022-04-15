@@ -320,9 +320,7 @@ describe("BishopStableSwap", function () {
 
             expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
             expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect((await stableSwap0.getBaseDeltaOut(amount)).baseDelta).to.equal(dy);
-            expect((await stableSwap0.getBaseDeltaOut(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getBaseDeltaOut(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getBaseOut(amount)).to.equal(dy);
 
             await tokens[1].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -357,9 +355,7 @@ describe("BishopStableSwap", function () {
 
             expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
             expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect((await stableSwap0.getQuoteDeltaIn(amount)).quoteDelta).to.equal(dx);
-            expect((await stableSwap0.getQuoteDeltaIn(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getQuoteDeltaIn(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getQuoteIn(amount)).to.equal(dx);
 
             await tokens[1].connect(user1).approve(swapRouter.address, dx);
             await expect(
@@ -395,9 +391,7 @@ describe("BishopStableSwap", function () {
             const oracle = parseEther("1.2");
             await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
 
-            expect((await stableSwap0.getBaseDeltaOut(amount)).baseDelta).to.equal(dy);
-            expect((await stableSwap0.getBaseDeltaOut(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getBaseDeltaOut(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getBaseOut(amount)).to.equal(dy);
 
             await tokens[1].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -431,9 +425,7 @@ describe("BishopStableSwap", function () {
             const oracle = parseEther("0.8");
             await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
 
-            expect((await stableSwap0.getBaseDeltaOut(amount)).baseDelta).to.equal(dy);
-            expect((await stableSwap0.getBaseDeltaOut(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getBaseDeltaOut(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getBaseOut(amount)).to.equal(dy);
 
             await tokens[1].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -468,9 +460,7 @@ describe("BishopStableSwap", function () {
 
             expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
             expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).quoteDelta).to.equal(dy);
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getQuoteOut(amount)).to.equal(dy);
 
             await tokens[0].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -506,9 +496,7 @@ describe("BishopStableSwap", function () {
 
             expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
             expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect((await stableSwap0.getBaseDeltaIn(amount)).baseDelta).to.equal(dx);
-            expect((await stableSwap0.getBaseDeltaIn(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getBaseDeltaIn(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getBaseIn(amount)).to.equal(dx);
 
             await tokens[0].connect(user1).approve(swapRouter.address, dx);
             await expect(
@@ -544,9 +532,7 @@ describe("BishopStableSwap", function () {
             const oracle = parseEther("1.2");
             await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
 
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).quoteDelta).to.equal(dy);
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getQuoteOut(amount)).to.equal(dy);
 
             await tokens[0].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -580,9 +566,7 @@ describe("BishopStableSwap", function () {
             const oracle = parseEther("0.8");
             await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
 
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).quoteDelta).to.equal(dy);
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getQuoteOut(amount)).to.equal(dy);
 
             await tokens[0].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -944,9 +928,7 @@ describe("QueenStableSwap", function () {
 
             expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
             expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect((await stableSwap0.getBaseDeltaOut(amount)).baseDelta).to.equal(dy);
-            expect((await stableSwap0.getBaseDeltaOut(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getBaseDeltaOut(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getBaseOut(amount)).to.equal(dy);
 
             await tokens[1].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -981,9 +963,7 @@ describe("QueenStableSwap", function () {
 
             expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
             expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect((await stableSwap0.getQuoteDeltaIn(amount)).quoteDelta).to.equal(dx);
-            expect((await stableSwap0.getQuoteDeltaIn(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getQuoteDeltaIn(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getQuoteIn(amount)).to.equal(dx);
 
             await tokens[1].connect(user1).approve(swapRouter.address, dx);
             await expect(
@@ -1019,9 +999,7 @@ describe("QueenStableSwap", function () {
             const oracle = parseEther("1.2");
             await fund0.mock.getTotalUnderlying.returns(oracle);
 
-            expect((await stableSwap0.getBaseDeltaOut(amount)).baseDelta).to.equal(dy);
-            expect((await stableSwap0.getBaseDeltaOut(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getBaseDeltaOut(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getBaseOut(amount)).to.equal(dy);
 
             await tokens[1].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -1055,9 +1033,7 @@ describe("QueenStableSwap", function () {
             const oracle = parseEther("0.8");
             await fund0.mock.getTotalUnderlying.returns(oracle);
 
-            expect((await stableSwap0.getBaseDeltaOut(amount)).baseDelta).to.equal(dy);
-            expect((await stableSwap0.getBaseDeltaOut(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getBaseDeltaOut(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getBaseOut(amount)).to.equal(dy);
 
             await tokens[1].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -1092,9 +1068,7 @@ describe("QueenStableSwap", function () {
 
             expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
             expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).quoteDelta).to.equal(dy);
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getQuoteOut(amount)).to.equal(dy);
 
             await tokens[0].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -1130,9 +1104,7 @@ describe("QueenStableSwap", function () {
 
             expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
             expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect((await stableSwap0.getBaseDeltaIn(amount)).baseDelta).to.equal(dx);
-            expect((await stableSwap0.getBaseDeltaIn(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getBaseDeltaIn(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getBaseIn(amount)).to.equal(dx);
 
             await tokens[0].connect(user1).approve(swapRouter.address, dx);
             await expect(
@@ -1168,9 +1140,7 @@ describe("QueenStableSwap", function () {
             const oracle = parseEther("1.2");
             await fund0.mock.getTotalUnderlying.returns(oracle);
 
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).quoteDelta).to.equal(dy);
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getQuoteOut(amount)).to.equal(dy);
 
             await tokens[0].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -1204,9 +1174,7 @@ describe("QueenStableSwap", function () {
             const oracle = parseEther("0.8");
             await fund0.mock.getTotalUnderlying.returns(oracle);
 
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).quoteDelta).to.equal(dy);
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).fee).to.equal(fee);
-            expect((await stableSwap0.getQuoteDeltaOut(amount)).adminFee).to.equal(adminFee);
+            expect(await stableSwap0.getQuoteOut(amount)).to.equal(dy);
 
             await tokens[0].connect(user1).approve(swapRouter.address, amount);
             await expect(

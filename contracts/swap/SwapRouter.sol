@@ -123,9 +123,9 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
             IStableSwap swap = getSwap(path[i], path[i + 1]);
             require(address(swap) != address(0));
             if (path[i] == swap.baseAddress()) {
-                (amounts[i + 1], , ) = swap.getQuoteDeltaOut(amounts[i]);
+                amounts[i + 1] = swap.getQuoteOut(amounts[i]);
             } else {
-                (amounts[i + 1], , ) = swap.getBaseDeltaOut(amounts[i]);
+                amounts[i + 1] = swap.getBaseOut(amounts[i]);
             }
         }
     }
@@ -142,9 +142,9 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
             IStableSwap swap = getSwap(path[i - 1], path[i]);
             require(address(swap) != address(0));
             if (path[i] == swap.baseAddress()) {
-                (amounts[i - 1], , ) = swap.getQuoteDeltaIn(amounts[i]);
+                amounts[i - 1] = swap.getQuoteIn(amounts[i]);
             } else {
-                (amounts[i - 1], , ) = swap.getBaseDeltaIn(amounts[i]);
+                amounts[i - 1] = swap.getBaseIn(amounts[i]);
             }
         }
     }

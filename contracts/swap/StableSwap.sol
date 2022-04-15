@@ -122,82 +122,42 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         return _getD(base, quote, ampl, oracle);
     }
 
-    function getQuoteDeltaOut(uint256 baseDelta)
-        public
-        view
-        override
-        returns (
-            uint256 quoteDelta,
-            uint256 fee,
-            uint256 adminFee
-        )
-    {
+    function getQuoteOut(uint256 baseIn) external view override returns (uint256 quoteOut) {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
-        uint256 newBase = oldBase.add(baseDelta);
+        uint256 newBase = oldBase.add(baseIn);
         uint256 newQuote = _getQuoteBalance(newBase);
-        quoteDelta = oldQuote.sub(newQuote).sub(1); // -1 just in case there were some rounding errors
-        fee = quoteDelta.multiplyDecimal(feeRate);
-        adminFee = fee.multiplyDecimal(adminFeeRate);
-        quoteDelta = quoteDelta.sub(fee);
+        quoteOut = oldQuote.sub(newQuote).sub(1); // -1 just in case there were some rounding errors
+        uint256 fee = quoteOut.multiplyDecimal(feeRate);
+        quoteOut = quoteOut.sub(fee);
     }
 
-    function getQuoteDeltaIn(uint256 baseDelta)
-        public
-        view
-        override
-        returns (
-            uint256 quoteDelta,
-            uint256 fee,
-            uint256 adminFee
-        )
-    {
+    function getQuoteIn(uint256 baseOut) external view override returns (uint256 quoteIn) {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
-        uint256 newBase = oldBase.sub(baseDelta);
+        uint256 newBase = oldBase.sub(baseOut);
         uint256 newQuote = _getQuoteBalance(newBase);
-        quoteDelta = newQuote.sub(oldQuote).add(1); // 1 just in case there were some rounding errors
-        fee = quoteDelta.mul(feeRate).div(uint256(1e18).sub(feeRate));
-        adminFee = fee.multiplyDecimal(adminFeeRate);
-        quoteDelta = quoteDelta.add(fee);
+        quoteIn = newQuote.sub(oldQuote).add(1); // 1 just in case there were some rounding errors
+        uint256 fee = quoteIn.mul(feeRate).div(uint256(1e18).sub(feeRate));
+        quoteIn = quoteIn.add(fee);
     }
 
-    function getBaseDeltaOut(uint256 quoteDelta)
-        public
-        view
-        override
-        returns (
-            uint256 baseDelta,
-            uint256 fee,
-            uint256 adminFee
-        )
-    {
+    function getBaseOut(uint256 quoteIn) external view override returns (uint256 baseOut) {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
-        fee = quoteDelta.multiplyDecimal(feeRate);
-        adminFee = fee.multiplyDecimal(adminFeeRate);
-        uint256 newQuote = oldQuote.add(quoteDelta.sub(fee));
+        uint256 fee = quoteIn.multiplyDecimal(feeRate);
+        uint256 newQuote = oldQuote.add(quoteIn.sub(fee));
         uint256 newBase = _getBaseBalance(newQuote);
-        baseDelta = oldBase.sub(newBase).sub(1); // just in case there were rounding error
+        baseOut = oldBase.sub(newBase).sub(1); // just in case there were rounding error
     }
 
-    function getBaseDeltaIn(uint256 quoteDelta)
-        public
-        view
-        override
-        returns (
-            uint256 baseDelta,
-            uint256 fee,
-            uint256 adminFee
-        )
-    {
+    function getBaseIn(uint256 quoteOut) external view override returns (uint256 baseIn) {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
-        fee = quoteDelta.mul(feeRate).div(uint256(1e18).sub(feeRate));
-        adminFee = fee.multiplyDecimal(adminFeeRate);
-        uint256 newQuote = oldQuote.sub(quoteDelta.add(fee));
+        uint256 fee = quoteOut.mul(feeRate).div(uint256(1e18).sub(feeRate));
+        uint256 newQuote = oldQuote.sub(quoteOut.add(fee));
         uint256 newBase = _getBaseBalance(newQuote);
-        baseDelta = newBase.sub(oldBase).add(1); // just in case there were rounding error
+        baseIn = newBase.sub(oldBase).add(1); // just in case there were rounding error
     }
 
     /// @dev Average asset value per LP token

@@ -19,41 +19,13 @@ interface IStableSwap {
         uint256 navB
     ) external view returns (uint256);
 
-    function getQuoteDeltaOut(uint256 baseDelta)
-        external
-        view
-        returns (
-            uint256 quoteDelta,
-            uint256 fee,
-            uint256 adminFee
-        );
+    function getQuoteOut(uint256 baseIn) external view returns (uint256 quoteOut);
 
-    function getQuoteDeltaIn(uint256 baseDelta)
-        external
-        view
-        returns (
-            uint256 quoteDelta,
-            uint256 fee,
-            uint256 adminFee
-        );
+    function getQuoteIn(uint256 baseOut) external view returns (uint256 quoteIn);
 
-    function getBaseDeltaOut(uint256 quoteDelta)
-        external
-        view
-        returns (
-            uint256 baseDelta,
-            uint256 fee,
-            uint256 adminFee
-        );
+    function getBaseOut(uint256 quoteIn) external view returns (uint256 baseOut);
 
-    function getBaseDeltaIn(uint256 quoteDelta)
-        external
-        view
-        returns (
-            uint256 baseDelta,
-            uint256 fee,
-            uint256 adminFee
-        );
+    function getBaseIn(uint256 quoteOut) external view returns (uint256 baseIn);
 
     function calculateTokenAmount(
         uint256 baseDelta,
