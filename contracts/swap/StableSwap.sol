@@ -22,11 +22,13 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
 
     event Swap(
         address indexed sender,
-        uint256 baseOut,
-        uint256 quoteOut,
+        address indexed recipient,
         uint256 baseIn,
         uint256 quoteIn,
-        address indexed to
+        uint256 baseOut,
+        uint256 quoteOut,
+        uint256 fee,
+        uint256 adminFee
     );
 
     event Sync(uint256 baseBalance, uint256 quoteBalance);
@@ -192,54 +194,74 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         return difference.mul(lpSupply).div(d0);
     }
 
-    function swap(
+    function buy(
         uint256 version,
         uint256 baseOut,
-        uint256 quoteOut,
-        address to,
+        address recipient,
         bytes calldata data
     ) external override nonReentrant checkVersion(version) {
-        require(baseOut > 0 || quoteOut > 0, "Insufficient output");
-        (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
-        require(baseOut < baseBalance_ && quoteOut < quoteBalance_, "Insufficient liquidity");
-        _update(baseBalance_, quoteBalance_);
-
-        uint256 newBaseBalance;
-        uint256 newQuoteBalance;
-        uint256 fee;
-        {
-            address quoteAddress_ = quoteAddress;
-            require(to != baseAddress() && to != quoteAddress_, "Invalid to address");
-            if (baseOut > 0) IERC20(baseAddress()).safeTransfer(to, baseOut); // optimistically transfer tokens
-            if (quoteOut > 0) IERC20(quoteAddress_).safeTransfer(to, quoteOut); // optimistically transfer tokens
-            if (data.length > 0)
-                ITranchessSwapCallee(to).tranchessSwapCallback(msg.sender, baseOut, quoteOut, data);
-            newBaseBalance = IERC20(baseAddress()).balanceOf(address(this));
-            newQuoteBalance = IERC20(quoteAddress_).balanceOf(address(this)).sub(totalAdminFee);
-            fee = quoteOut.mul(feeRate).div(uint256(1e18).sub(feeRate));
+        require(baseOut > 0, "Zero output");
+        (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
+        require(baseOut < oldBase, "Insufficient liquidity");
+        _update(oldBase, oldQuote);
+        // Optimistically transfer tokens.
+        IERC20(baseAddress()).safeTransfer(recipient, baseOut);
+        if (data.length > 0) {
+            ITranchessSwapCallee(msg.sender).tranchessSwapCallback(baseOut, 0, data);
         }
-        uint256 baseIn =
-            newBaseBalance > baseBalance_ - baseOut ? newBaseBalance - (baseBalance_ - baseOut) : 0;
-        uint256 quoteIn =
-            newQuoteBalance > quoteBalance_ - quoteOut
-                ? newQuoteBalance - (quoteBalance_ - quoteOut)
-                : 0;
-        require(baseIn > 0 || quoteIn > 0, "Insufficient input");
+        uint256 newQuote = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
+        uint256 quoteIn = newQuote.sub(oldQuote);
+        uint256 fee = quoteIn.multiplyDecimal(feeRate);
         {
-            fee = fee.add(quoteIn.multiplyDecimal(feeRate));
             uint256 ampl = getAmpl();
-            uint256 newQuoteBalanceAdjusted = newQuoteBalance.sub(fee);
             uint256 oracle = checkOracle(Operation.SWAP);
-            uint256 newD = _getD(newBaseBalance, newQuoteBalanceAdjusted, ampl, oracle);
-            uint256 oldD = _getD(baseBalance_, quoteBalance_, ampl, oracle);
-            // A D curve never intersects with other D curves, so D is strictly monotone given a nonnegative x.
+            uint256 oldD = _getD(oldBase, oldQuote, ampl, oracle);
+            uint256 newD = _getD(oldBase - baseOut, newQuote.sub(fee), ampl, oracle);
             require(newD >= oldD, "Invariant mismatch");
         }
-        emit Swap(msg.sender, baseOut, quoteOut, baseIn, quoteIn, to);
-        fee = fee.multiplyDecimal(adminFeeRate);
-        baseBalance = newBaseBalance;
-        quoteBalance = newQuoteBalance.sub(fee);
-        totalAdminFee = totalAdminFee.add(fee);
+        uint256 adminFee = fee.multiplyDecimal(adminFeeRate);
+        baseBalance = oldBase - baseOut;
+        quoteBalance = newQuote.sub(adminFee);
+        totalAdminFee = totalAdminFee.add(adminFee);
+        emit Swap(msg.sender, recipient, 0, quoteIn, baseOut, 0, fee, adminFee);
+    }
+
+    function sell(
+        uint256 version,
+        uint256 quoteOut,
+        address recipient,
+        bytes calldata data
+    ) external override nonReentrant checkVersion(version) {
+        require(quoteOut > 0, "Zero output");
+        (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
+        _update(oldBase, oldQuote);
+        // Optimistically transfer tokens.
+        IERC20(quoteAddress).safeTransfer(recipient, quoteOut);
+        if (data.length > 0) {
+            ITranchessSwapCallee(msg.sender).tranchessSwapCallback(0, quoteOut, data);
+        }
+        uint256 newBase = IERC20(baseAddress()).balanceOf(address(this));
+        uint256 baseIn = newBase.sub(oldBase);
+        uint256 fee;
+        {
+            uint256 feeRate_ = feeRate;
+            fee = quoteOut.mul(feeRate_).div(uint256(1e18).sub(feeRate_));
+        }
+        require(quoteOut.add(fee) < oldQuote, "Insufficient liquidity");
+        {
+            uint256 newQuote = oldQuote - quoteOut;
+            uint256 ampl = getAmpl();
+            uint256 oracle = checkOracle(Operation.SWAP);
+            uint256 oldD = _getD(oldBase, oldQuote, ampl, oracle);
+            uint256 newD = _getD(newBase, newQuote - fee, ampl, oracle);
+            require(newD >= oldD, "Invariant mismatch");
+        }
+        uint256 adminFee = fee.multiplyDecimal(adminFeeRate);
+        baseBalance = newBase;
+        quoteBalance = oldQuote - quoteOut - adminFee;
+        totalAdminFee = totalAdminFee.add(adminFee);
+        uint256 quoteOut_ = quoteOut;
+        emit Swap(msg.sender, recipient, baseIn, 0, 0, quoteOut_, fee, adminFee);
     }
 
     function _update(uint256 oldBaseBalance, uint256 oldQuoteBalance) private {

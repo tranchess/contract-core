@@ -33,11 +33,17 @@ interface IStableSwap {
         bool deposit
     ) external view returns (uint256);
 
-    function swap(
+    function buy(
         uint256 version,
-        uint256 baseDeltaOut,
-        uint256 quoteDeltaOut,
-        address to,
+        uint256 baseOut,
+        address recipient,
+        bytes calldata data
+    ) external;
+
+    function sell(
+        uint256 version,
+        uint256 quoteOut,
+        address recipient,
         bytes calldata data
     ) external;
 

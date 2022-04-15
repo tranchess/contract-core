@@ -94,7 +94,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
         bytes memory data =
             abi.encode(primaryMarketOrRouter, underlyingAmount, recipient, version, mode);
         IERC20(tokenQuote).safeTransferFrom(msg.sender, address(this), resultAmount);
-        tranchessPair.swap(version, 0, quoteAmount, address(this), data);
+        tranchessPair.sell(version, quoteAmount, address(this), data);
     }
 
     function sellR(
@@ -110,17 +110,15 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
         // Send the user's ROOK to this router
         pm.fund().trancheTransferFrom(TRANCHE_R, msg.sender, address(this), inR, version);
         bytes memory data = abi.encode(primaryMarketOrRouter, minQuote, recipient, version, mode);
-        tranchessRouter.getSwap(pm.fund().tokenB(), tokenQuote).swap(
+        tranchessRouter.getSwap(pm.fund().tokenB(), tokenQuote).buy(
             version,
             inR,
-            0,
             address(this),
             data
         );
     }
 
     function tranchessSwapCallback(
-        address, /*sender*/
         uint256 baseDeltaOut,
         uint256 quoteDeltaOut,
         bytes calldata data

@@ -1563,7 +1563,6 @@ describe("Flash Swap", function () {
                 stableSwap1.call(
                     flashSwapRouter,
                     "tranchessSwapCallback",
-                    addr1,
                     parseEther("1"),
                     0,
                     defaultAbiCoder.encode(
@@ -1583,7 +1582,6 @@ describe("Flash Swap", function () {
                 stableSwap1.call(
                     flashSwapRouter,
                     "tranchessSwapCallback",
-                    addr1,
                     parseEther("1"),
                     parseEther("1"),
                     defaultAbiCoder.encode(
