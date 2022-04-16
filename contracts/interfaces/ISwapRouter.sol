@@ -22,6 +22,7 @@ interface ISwapRouter {
         uint256 baseDelta,
         uint256 quoteDelta,
         uint256 minMintAmount,
+        uint256 version,
         uint256 deadline
     ) external;
 

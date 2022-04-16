@@ -11,6 +11,8 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
     uint256 public immutable tradingCurbThreshold;
     address public immutable chainlinkAggregator;
 
+    uint256 public currentVersion;
+
     constructor(
         address lpToken_,
         address fund_,
@@ -38,55 +40,106 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
     {
         tradingCurbThreshold = tradingCurbThreshold_;
         chainlinkAggregator = chainlinkAggregator_;
+        currentVersion = IFundV3(fund_).getRebalanceSize();
     }
 
-    /// @dev Handle the rebalance immediately. Should be called before any swap operation.
-    function handleRebalance() public override returns (uint256 rebalanceVersion) {
-        rebalanceVersion = fund.getRebalanceSize();
-        uint256 baseBalance_ = baseBalance;
-        uint256 currentVersion = currentRebalanceVersion;
-
-        if (currentVersion < rebalanceVersion) {
-            (uint256 amountQ, uint256 amountB, ) =
-                fund.batchRebalance(0, baseBalance_, 0, currentVersion, rebalanceVersion);
-            fund.refreshBalance(address(this), rebalanceVersion);
-            uint256 amountU;
-
-            if (baseBalance_ > amountB) {
-                // RatioBR < 1
-                uint256 quoteBalance_ = quoteBalance;
-                uint256 outB =
-                    IPrimaryMarketV3(fund.primaryMarket()).split(
-                        address(this),
-                        amountQ,
-                        rebalanceVersion
-                    );
-                uint256 newBalance0 = amountB.add(outB);
-                amountU = quoteBalance_.mul(baseBalance_.sub(newBalance0)).div(baseBalance_);
-                baseBalance = newBalance0;
-                quoteBalance = quoteBalance_.sub(amountU);
-                IERC20(quoteAddress).safeTransfer(lpToken, amountU);
-                IERC20(fund.tokenR()).safeTransfer(lpToken, outB);
-                ILiquidityGauge(lpToken).snapshot(0, 0, outB, amountU, rebalanceVersion);
-            } else if (baseBalance_ < amountB) {
-                // RatioBR > 1
-                amountB = amountB - baseBalance_;
-                IERC20(fund.tokenQ()).safeTransfer(lpToken, amountQ);
-                IERC20(fund.tokenB()).safeTransfer(lpToken, amountB);
-                ILiquidityGauge(lpToken).snapshot(amountQ, amountB, 0, 0, rebalanceVersion);
-            } else {
-                // RatioBR == 1
-                IERC20(fund.tokenQ()).safeTransfer(lpToken, amountQ);
-                ILiquidityGauge(lpToken).snapshot(amountQ, 0, 0, 0, rebalanceVersion);
-            }
-        }
-
-        currentRebalanceVersion = rebalanceVersion;
-    }
-
-    modifier checkActivity() override {
-        require(currentRebalanceVersion == fund.getRebalanceSize(), "Transaction too old");
+    /// @dev Make sure the user-specified version is the latest rebalance version.
+    modifier checkVersion(uint256 version) override {
+        require(version == fund.getRebalanceSize(), "Obsolete rebalance version");
         _;
+    }
+
+    function _getRebalanceResult(uint256 latestVersion)
+        internal
+        view
+        override
+        returns (
+            uint256 newBase,
+            uint256 newQuote,
+            uint256 excessiveQ,
+            uint256 excessiveB,
+            uint256 excessiveR,
+            uint256 excessiveQuote,
+            bool isRebalanced
+        )
+    {
+        if (latestVersion == currentVersion) {
+            return (baseBalance, quoteBalance, 0, 0, 0, 0, false);
+        }
+        isRebalanced = true;
+
+        uint256 oldBaseBalance = baseBalance;
+        uint256 oldQuoteBalance = quoteBalance;
+        (excessiveQ, newBase, ) = fund.batchRebalance(
+            0,
+            oldBaseBalance,
+            0,
+            currentVersion,
+            latestVersion
+        );
+        if (newBase < oldBaseBalance) {
+            // We split all QUEEN from rebalance if the amount of BISHOP is smaller than before.
+            // In almost all cases, the total amount of BISHOP after the split is still smaller
+            // than before.
+            excessiveR = IPrimaryMarketV3(fund.primaryMarket()).getSplit(excessiveQ);
+            newBase = newBase.add(excessiveR);
+            excessiveQ = 0;
+        }
+        if (newBase < oldBaseBalance) {
+            // If BISHOP amount is still smaller than before, we remove quote tokens proportionally.
+            newQuote = oldQuoteBalance.mul(newBase).div(oldBaseBalance);
+            excessiveQuote = oldQuoteBalance - newQuote;
+        } else {
+            // In most cases when we reach here, the BISHOP amount remains the same (ratioBR = 1).
+            newQuote = oldQuoteBalance;
+            excessiveB = newBase - oldBaseBalance;
+            newBase = oldBaseBalance;
+        }
+    }
+
+    function _handleRebalance(uint256 latestVersion)
+        internal
+        override
+        returns (uint256 newBase, uint256 newQuote)
+    {
+        uint256 excessiveQ;
+        uint256 excessiveB;
+        uint256 excessiveR;
+        uint256 excessiveQuote;
+        bool isRebalanced;
+        (
+            newBase,
+            newQuote,
+            excessiveQ,
+            excessiveB,
+            excessiveR,
+            excessiveQuote,
+            isRebalanced
+        ) = _getRebalanceResult(latestVersion);
+        if (isRebalanced) {
+            baseBalance = newBase;
+            quoteBalance = newQuote;
+            currentVersion = latestVersion;
+            if (excessiveQ > 0) {
+                fund.trancheTransfer(TRANCHE_Q, lpToken, excessiveQ, latestVersion);
+            }
+            if (excessiveB > 0) {
+                fund.trancheTransfer(TRANCHE_B, lpToken, excessiveB, latestVersion);
+            }
+            if (excessiveR > 0) {
+                fund.trancheTransfer(TRANCHE_R, lpToken, excessiveR, latestVersion);
+            }
+            if (excessiveQuote > 0) {
+                IERC20(quoteAddress).safeTransfer(lpToken, excessiveQuote);
+            }
+            ILiquidityGauge(lpToken).snapshot(
+                excessiveQ,
+                excessiveB,
+                excessiveR,
+                excessiveQuote,
+                latestVersion
+            );
+        }
     }
 
     function checkOracle(Operation op) public view override returns (uint256 oracle) {

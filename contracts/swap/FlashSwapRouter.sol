@@ -84,7 +84,7 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         require(resultAmount <= maxQuote, "Insufficient input");
         bytes memory data = abi.encode(primaryMarket, underlyingAmount, recipient, version, mode);
         IERC20(tokenQuote).safeTransferFrom(msg.sender, address(this), resultAmount);
-        tranchessPair.swap(0, quoteAmount, address(this), data);
+        tranchessPair.swap(version, 0, quoteAmount, address(this), data);
     }
 
     function sellR(
@@ -100,7 +100,13 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         // Send the user's ROOK to this router
         IERC20(pm.fund().tokenR()).safeTransferFrom(msg.sender, address(this), inR);
         bytes memory data = abi.encode(primaryMarket, minQuote, recipient, version, mode);
-        tranchessRouter.getSwap(pm.fund().tokenB(), tokenQuote).swap(inR, 0, address(this), data);
+        tranchessRouter.getSwap(pm.fund().tokenB(), tokenQuote).swap(
+            version,
+            inR,
+            0,
+            address(this),
+            data
+        );
     }
 
     function tranchessSwapCallback(
