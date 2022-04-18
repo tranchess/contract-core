@@ -51,7 +51,8 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         IStableSwap swap = getSwap(baseToken, quoteToken);
         IERC20(baseToken).safeTransferFrom(msg.sender, address(swap), baseDelta);
         IERC20(quoteToken).safeTransferFrom(msg.sender, address(swap), quoteDelta);
-        swap.addLiquidity(version, msg.sender, minMintAmount);
+        uint256 mintAmount = swap.addLiquidity(version, msg.sender);
+        require(mintAmount >= minMintAmount, "Insufficient output");
     }
 
     function swapExactTokensForTokens(

@@ -252,71 +252,66 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         blockTimestampLast = block.timestamp;
     }
 
-    /// @dev Add liquidity.
-    /// @param to Recipient
-    /// @param minMintAmount Least amount of LP token to mint
-    function addLiquidity(
-        uint256 version,
-        address to,
-        uint256 minMintAmount
-    ) external override nonReentrant checkVersion(version) {
-        uint256 newBaseBalance = IERC20(baseAddress()).balanceOf(address(this));
-        uint256 newQuoteBalance = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
+    /// @notice Add liquidity. This function should be called by a smart contract, which transfers
+    ///         base and quote tokens to this contract in the same transaction.
+    /// @param version The latest rebalance version
+    /// @param recipient Recipient of minted LP tokens
+    /// @param lpOut Amount of minted LP tokens
+    function addLiquidity(uint256 version, address recipient)
+        external
+        override
+        nonReentrant
+        checkVersion(version)
+        returns (uint256 lpOut)
+    {
+        (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
+        _update(oldBase, oldQuote);
+        uint256 newBase = IERC20(baseAddress()).balanceOf(address(this));
+        uint256 newQuote = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
         uint256 ampl = getAmpl();
-        uint256 fee;
-        uint256 baseIn;
-        uint256 quoteIn;
-        uint256 d0;
+        uint256 oracle = checkOracle(Operation.ADD_LIQUIDITY);
         uint256 lpSupply = IERC20(lpToken).totalSupply();
-        uint256 oracle;
-        {
-            (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
-            _update(baseBalance_, quoteBalance_);
-            baseIn = newBaseBalance > baseBalance_ ? newBaseBalance - baseBalance_ : 0;
-            quoteIn = newQuoteBalance > quoteBalance_ ? newQuoteBalance - quoteBalance_ : 0;
-
-            // Initial invariant
-            oracle = checkOracle(Operation.ADD_LIQUIDITY);
-            d0 = lpSupply == 0 ? 0 : _getD(baseBalance_, quoteBalance_, ampl, oracle);
-        }
-
         if (lpSupply == 0) {
-            require(baseIn > 0 && quoteIn > 0, "Stable: input amount has to be a positive value");
+            require(newBase > 0 && newQuote > 0, "Zero initial balance");
+            baseBalance = newBase;
+            quoteBalance = newQuote;
+            uint256 d1 = _getD(newBase, newQuote, ampl, oracle);
+            ILiquidityGauge(lpToken).mint(recipient, d1);
+            emit LiquidityAdded(msg.sender, recipient, newBase, newQuote, d1, 0, 0);
+            return d1;
         }
-
-        // Invariant after change
-        uint256 d2;
-        uint256 mintAmount;
+        uint256 fee;
+        uint256 adminFee;
         {
-            uint256 d1 = _getD(newBaseBalance, newQuoteBalance, ampl, oracle);
-            require(d1 > d0, "Stable: D1 should be higher than D0");
-
-            d2 = d1;
-            if (lpSupply > 0) {
-                baseBalance = newBaseBalance;
-                uint256 idealBalance = (d1 * quoteBalance) / d0;
+            // Initial invariant
+            uint256 d0 = _getD(oldBase, oldQuote, ampl, oracle);
+            {
+                // New invariant before charging fee
+                uint256 d1 = _getD(newBase, newQuote, ampl, oracle);
+                uint256 idealQuote = d1.mul(oldQuote) / d0;
                 uint256 difference =
-                    idealBalance > newQuoteBalance
-                        ? idealBalance.sub(newQuoteBalance)
-                        : newQuoteBalance.sub(idealBalance);
-
+                    idealQuote > newQuote ? idealQuote - newQuote : newQuote - idealQuote;
                 fee = difference.multiplyDecimal(feeRate);
-                quoteBalance = newQuoteBalance.sub(fee.multiplyDecimal(adminFeeRate));
-                newQuoteBalance = newQuoteBalance.sub(fee);
-                d2 = _getD(newBaseBalance, newQuoteBalance, ampl, oracle);
-            } else {
-                baseBalance = newBaseBalance;
-                quoteBalance = newQuoteBalance;
             }
-
-            mintAmount = lpSupply == 0 ? d1 : lpSupply.mul(d2.sub(d0)).div(d0);
-            require(mintAmount >= minMintAmount, "Stable: exceed slippage tolerance interval");
+            adminFee = fee.multiplyDecimal(adminFeeRate);
+            totalAdminFee = totalAdminFee.add(adminFee);
+            baseBalance = newBase;
+            quoteBalance = newQuote.sub(adminFee);
+            // New invariant after charging fee
+            uint256 d2 = _getD(newBase, newQuote.sub(fee), ampl, oracle);
+            require(d2 > d0, "No liquidity is added");
+            lpOut = lpSupply.mul(d2.sub(d0)).div(d0);
         }
-
-        // Mint pool tokens
-        ILiquidityGauge(lpToken).mint(to, mintAmount);
-
-        emit LiquidityAdded(msg.sender, baseIn, quoteIn, fee, d2, lpSupply.add(mintAmount));
+        ILiquidityGauge(lpToken).mint(recipient, lpOut);
+        emit LiquidityAdded(
+            msg.sender,
+            recipient,
+            newBase - oldBase,
+            newQuote - oldQuote,
+            lpOut,
+            fee,
+            adminFee
+        );
     }
 
     /// @dev Remove liquidity proportionally.

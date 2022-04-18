@@ -41,11 +41,7 @@ interface IStableSwap {
         bytes calldata data
     ) external;
 
-    function addLiquidity(
-        uint256 version,
-        address to,
-        uint256 minMintAmount
-    ) external;
+    function addLiquidity(uint256 version, address recipient) external returns (uint256);
 
     function removeLiquidity(
         uint256 version,
@@ -74,12 +70,13 @@ interface IStableSwap {
     ) external returns (uint256);
 
     event LiquidityAdded(
-        address indexed account,
-        uint256 baseDelta,
-        uint256 quoteDelta,
+        address indexed sender,
+        address indexed recipient,
+        uint256 baseIn,
+        uint256 quoteIn,
+        uint256 lpOut,
         uint256 fee,
-        uint256 d1,
-        uint256 newTokenSupply
+        uint256 adminFee
     );
     event LiquidityRemoved(
         address indexed account,
