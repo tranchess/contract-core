@@ -69,7 +69,13 @@ contract QueenSwapRouter is ITrancheIndexV2, IPrimaryMarketV3 {
         uint256 balanceQ = IERC20(path[0]).balanceOf(address(this));
         if (balanceQ < inQ) {
             // Retain the rest of QUEEN
-            IERC20(path[0]).safeTransferFrom(msg.sender, address(this), inQ - balanceQ);
+            storedFund.trancheTransferFrom(
+                TRANCHE_Q,
+                msg.sender,
+                address(this),
+                inQ - balanceQ,
+                version
+            );
         }
         underlying = _redeem(
             storedFund.primaryMarket(),
@@ -91,7 +97,7 @@ contract QueenSwapRouter is ITrancheIndexV2, IPrimaryMarketV3 {
         address[] memory path = new address[](2);
         path[0] = storedFund.tokenQ();
         path[1] = storedFund.tokenUnderlying();
-        IERC20(path[0]).safeTransferFrom(msg.sender, address(this), inQ);
+        storedFund.trancheTransferFrom(TRANCHE_Q, msg.sender, address(this), inQ, version);
         underlying = _redeem(
             storedFund.primaryMarket(),
             path,
@@ -158,7 +164,7 @@ contract QueenSwapRouter is ITrancheIndexV2, IPrimaryMarketV3 {
 
         if (pmAmount < swapAmount) {
             // Swap path
-            IERC20(path[0]).safeApprove(address(swapRouter_), inQ);
+            pm.fund().trancheApprove(TRANCHE_Q, address(swapRouter_), inQ, version);
             uint256[] memory versions = new uint256[](1);
             versions[0] = version;
             underlying = swapRouter_.swapExactTokensForTokens(

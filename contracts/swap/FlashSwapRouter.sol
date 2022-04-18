@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "../interfaces/ITranchessSwapCallee.sol";
 import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/ISwapRouter.sol";
+import "../interfaces/ITrancheIndexV2.sol";
 
 /// @title Tranchess Flash Swap Router
 /// @notice Router for stateless execution of flash swaps against Tranchess stable swaps
@@ -33,7 +34,7 @@ interface IPancakeRouter01 {
     ) external returns (uint256[] memory amounts);
 }
 
-contract FlashSwapRouter is ITranchessSwapCallee {
+contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -69,7 +70,7 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         uint256 totalQuoteAmount;
         uint256 quoteAmount;
         {
-            address tokenUnderlying = IFundV3(pm.fund()).tokenUnderlying();
+            address tokenUnderlying = pm.fund().tokenUnderlying();
             uint256 inQ = pm.getSplitForB(outR);
             underlyingAmount = pm.getCreationForQ(inQ);
             // Calculate the exact amount of quote asset to pay
@@ -107,7 +108,7 @@ contract FlashSwapRouter is ITranchessSwapCallee {
     ) external {
         IPrimaryMarketV3 pm = getPrimaryMarket(primaryMarketOrRouter);
         // Send the user's ROOK to this router
-        IERC20(pm.fund().tokenR()).safeTransferFrom(msg.sender, address(this), inR);
+        pm.fund().trancheTransferFrom(TRANCHE_R, msg.sender, address(this), inR, version);
         bytes memory data = abi.encode(primaryMarketOrRouter, minQuote, recipient, version, mode);
         tranchessRouter.getSwap(pm.fund().tokenB(), tokenQuote).swap(
             version,
@@ -153,7 +154,7 @@ contract FlashSwapRouter is ITranchessSwapCallee {
             if (address(pm) != primaryMarketOrRouter) {
                 // If primaryMarketOrRouter is a QUEEN Router, transfer QUEEN to
                 // the router for redemption
-                IERC20(pm.fund().tokenQ()).safeTransfer(primaryMarketOrRouter, outQ);
+                pm.fund().trancheTransfer(TRANCHE_Q, primaryMarketOrRouter, outQ, version);
             }
             uint256 underlyingAmount =
                 IPrimaryMarketV3(primaryMarketOrRouter).redeem(address(this), outQ, 0, version);
@@ -179,7 +180,10 @@ contract FlashSwapRouter is ITranchessSwapCallee {
                     pm.fund().tokenUnderlying()
                 )[1];
             // Create QUEEN using the borrowed underlying
-            IERC20(pm.fund().tokenUnderlying()).safeApprove(address(pm), underlyingAmount);
+            IERC20(pm.fund().tokenUnderlying()).safeApprove(
+                primaryMarketOrRouter,
+                underlyingAmount
+            );
             uint256 outQ =
                 IPrimaryMarketV3(primaryMarketOrRouter).create(
                     address(this),
@@ -190,9 +194,9 @@ contract FlashSwapRouter is ITranchessSwapCallee {
             // Split QUEEN into BISHOP and ROOK
             uint256 outB = pm.split(address(this), outQ, version);
             // Send back BISHOP to tranchess swap
-            IERC20(pm.fund().tokenB()).safeTransfer(msg.sender, outB);
+            pm.fund().trancheTransfer(TRANCHE_B, msg.sender, outB, version);
             // Send ROOK to user
-            IERC20(pm.fund().tokenR()).safeTransfer(recipient, outB);
+            pm.fund().trancheTransfer(TRANCHE_R, recipient, outB, version);
         }
     }
 
