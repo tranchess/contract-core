@@ -47,8 +47,16 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         tranchessRouter = ISwapRouter(tranchessRouter_);
     }
 
+    function getPrimaryMarket(address primaryMarketOrRouter)
+        public
+        view
+        returns (IPrimaryMarketV3)
+    {
+        return IPrimaryMarketV3(IPrimaryMarketV3(primaryMarketOrRouter).fund().primaryMarket());
+    }
+
     function buyR(
-        address primaryMarket,
+        address primaryMarketOrRouter,
         uint256 maxQuote,
         address recipient,
         address tokenQuote,
@@ -56,7 +64,7 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         uint256 version,
         uint256 outR
     ) external {
-        IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
+        IPrimaryMarketV3 pm = getPrimaryMarket(primaryMarketOrRouter);
         uint256 underlyingAmount;
         uint256 totalQuoteAmount;
         uint256 quoteAmount;
@@ -82,13 +90,14 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         // Send the user's portion of the payment to Tranchess swap
         uint256 resultAmount = totalQuoteAmount.sub(quoteAmount);
         require(resultAmount <= maxQuote, "Insufficient input");
-        bytes memory data = abi.encode(primaryMarket, underlyingAmount, recipient, version, mode);
+        bytes memory data =
+            abi.encode(primaryMarketOrRouter, underlyingAmount, recipient, version, mode);
         IERC20(tokenQuote).safeTransferFrom(msg.sender, address(this), resultAmount);
         tranchessPair.swap(version, 0, quoteAmount, address(this), data);
     }
 
     function sellR(
-        address primaryMarket,
+        address primaryMarketOrRouter,
         uint256 minQuote,
         address recipient,
         address tokenQuote,
@@ -96,10 +105,10 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         uint256 version,
         uint256 inR
     ) external {
-        IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
+        IPrimaryMarketV3 pm = getPrimaryMarket(primaryMarketOrRouter);
         // Send the user's ROOK to this router
         IERC20(pm.fund().tokenR()).safeTransferFrom(msg.sender, address(this), inR);
-        bytes memory data = abi.encode(primaryMarket, minQuote, recipient, version, mode);
+        bytes memory data = abi.encode(primaryMarketOrRouter, minQuote, recipient, version, mode);
         tranchessRouter.getSwap(pm.fund().tokenB(), tokenQuote).swap(
             version,
             inR,
@@ -116,13 +125,13 @@ contract FlashSwapRouter is ITranchessSwapCallee {
         bytes calldata data
     ) external override {
         (
-            address primaryMarket,
+            address primaryMarketOrRouter,
             uint256 expectAmount,
             address recipient,
             uint256 version,
             RouterOption mode
         ) = abi.decode(data, (address, uint256, address, uint256, RouterOption));
-        IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
+        IPrimaryMarketV3 pm = getPrimaryMarket(primaryMarketOrRouter);
         address tokenQuote = IStableSwap(msg.sender).quoteAddress();
         require(
             msg.sender == address(tranchessRouter.getSwap(tokenQuote, pm.fund().tokenB())),
@@ -141,7 +150,13 @@ contract FlashSwapRouter is ITranchessSwapCallee {
             // Merge BISHOP and ROOK into QUEEN
             uint256 outQ = pm.merge(address(this), baseDeltaOut, version);
             // Redeem QUEEN for underlying
-            uint256 underlyingAmount = pm.redeem(address(this), outQ, 0, version);
+            if (address(pm) != primaryMarketOrRouter) {
+                // If primaryMarketOrRouter is a QUEEN Router, transfer QUEEN to
+                // the router for redemption
+                IERC20(pm.fund().tokenQ()).safeTransfer(primaryMarketOrRouter, outQ);
+            }
+            uint256 underlyingAmount =
+                IPrimaryMarketV3(primaryMarketOrRouter).redeem(address(this), outQ, 0, version);
             // Trade underlying for quote asset
             uint256 totalQuoteAmount =
                 _externalSwap(mode, underlyingAmount, 0, pm.fund().tokenUnderlying(), tokenQuote)[
@@ -165,7 +180,13 @@ contract FlashSwapRouter is ITranchessSwapCallee {
                 )[1];
             // Create QUEEN using the borrowed underlying
             IERC20(pm.fund().tokenUnderlying()).safeApprove(address(pm), underlyingAmount);
-            uint256 outQ = pm.create(address(this), underlyingAmount, 0, version);
+            uint256 outQ =
+                IPrimaryMarketV3(primaryMarketOrRouter).create(
+                    address(this),
+                    underlyingAmount,
+                    0,
+                    version
+                );
             // Split QUEEN into BISHOP and ROOK
             uint256 outB = pm.split(address(this), outQ, version);
             // Send back BISHOP to tranchess swap

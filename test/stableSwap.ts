@@ -1370,7 +1370,7 @@ describe("QueenStableSwap", function () {
     });
 });
 
-describe("Flashloan", function () {
+describe("Flash Swap", function () {
     const REDEMPTION_FEE_BPS = 35;
     const MERGE_FEE_BPS = 45;
     const TOTAL_UNDERLYING = parseBtc("10");
@@ -1453,6 +1453,7 @@ describe("Flashloan", function () {
             parseEther("0.0001").mul(MERGE_FEE_BPS),
             BigNumber.from(1).shl(256).sub(1)
         );
+        await fund.mock.primaryMarket.returns(primaryMarket.address);
 
         const chessSchedule = await deployMockForName(owner, "ChessSchedule");
         const chessController = await deployMockForName(owner, "ChessController");

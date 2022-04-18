@@ -7,92 +7,161 @@ import "../interfaces/ISwapRouter.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "../interfaces/IFundV3.sol";
 import "../interfaces/IPrimaryMarketV3.sol";
-import "../exchange/StakingV4.sol";
 import "../interfaces/IWrappedERC20.sol";
 
 /// @title Tranchess Queen Swap Router
 /// @notice Router for stateless execution of Queen exchange
-contract QueenSwapRouter is ITrancheIndexV2 {
+contract QueenSwapRouter is ITrancheIndexV2, IPrimaryMarketV3 {
     using SafeERC20 for IERC20;
+
+    ISwapRouter public immutable swapRouter;
+    IFundV3 public immutable override fund;
+
+    constructor(address swapRouter_, address fund_) public {
+        swapRouter = ISwapRouter(swapRouter_);
+        fund = IFundV3(fund_);
+    }
 
     /// @notice Receive unwrapped transfer from the wrapped token.
     receive() external payable {}
 
     function create(
-        address primaryMarket,
-        address swapRouter,
-        uint256 version,
+        address recipient,
         uint256 underlying,
         uint256 minOutQ,
-        address recipient,
-        address staking
-    ) external payable returns (uint256 outQ) {
-        IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
-        IFundV3 fund = IPrimaryMarketV3(primaryMarket).fund();
-        // Wrap token and retain underlying payment
-        IWrappedERC20(fund.tokenUnderlying()).deposit{value: msg.value}();
-        IERC20(fund.tokenUnderlying()).safeTransferFrom(msg.sender, address(this), underlying);
-        underlying += msg.value;
-        // Get out amount from swap
+        uint256 version
+    ) external override returns (uint256 outQ) {
+        IFundV3 storedFund = fund;
         address[] memory path = new address[](2);
-        path[0] = fund.tokenUnderlying();
-        path[1] = fund.tokenQ();
-        uint256 swapAmount = ISwapRouter(swapRouter).getAmountsOut(underlying, path)[1];
+        path[0] = storedFund.tokenUnderlying();
+        path[1] = storedFund.tokenQ();
+        IERC20(path[0]).safeTransferFrom(msg.sender, address(this), underlying);
+        outQ = _create(storedFund.primaryMarket(), path, recipient, underlying, minOutQ, version);
+    }
+
+    function wrapAndCreate(
+        address recipient,
+        uint256 minOutQ,
+        uint256 version
+    ) external payable override returns (uint256 outQ) {
+        IFundV3 storedFund = fund;
+        address[] memory path = new address[](2);
+        path[0] = storedFund.tokenUnderlying();
+        path[1] = storedFund.tokenQ();
+        IWrappedERC20(path[0]).deposit{value: msg.value}();
+        outQ = _create(storedFund.primaryMarket(), path, recipient, msg.value, minOutQ, version);
+    }
+
+    /// @dev Unlike normal redeem, a user could send QUEEN before calling this redeem().
+    ///      The contract first measures how much it has received, then ask to transfer
+    ///      the rest from the user.
+    function redeem(
+        address recipient,
+        uint256 inQ,
+        uint256 minUnderlying,
+        uint256 version
+    ) external override returns (uint256 underlying) {
+        IFundV3 storedFund = fund;
+        address[] memory path = new address[](2);
+        path[0] = storedFund.tokenQ();
+        path[1] = storedFund.tokenUnderlying();
+        // QUEEN balance of this contract is preferred
+        uint256 balanceQ = IERC20(path[0]).balanceOf(address(this));
+        if (balanceQ < inQ) {
+            // Retain the rest of QUEEN
+            IERC20(path[0]).safeTransferFrom(msg.sender, address(this), inQ - balanceQ);
+        }
+        underlying = _redeem(
+            storedFund.primaryMarket(),
+            path,
+            recipient,
+            inQ,
+            minUnderlying,
+            version
+        );
+    }
+
+    function redeemAndUnwrap(
+        address recipient,
+        uint256 inQ,
+        uint256 minUnderlying,
+        uint256 version
+    ) external override returns (uint256 underlying) {
+        IFundV3 storedFund = fund;
+        address[] memory path = new address[](2);
+        path[0] = storedFund.tokenQ();
+        path[1] = storedFund.tokenUnderlying();
+        IERC20(path[0]).safeTransferFrom(msg.sender, address(this), inQ);
+        underlying = _redeem(
+            storedFund.primaryMarket(),
+            path,
+            address(this),
+            inQ,
+            minUnderlying,
+            version
+        );
+        IWrappedERC20(path[1]).withdraw(underlying);
+        (bool success, ) = recipient.call{value: underlying}("");
+        require(success, "Transfer failed");
+    }
+
+    function _create(
+        address primaryMarket,
+        address[] memory path,
+        address recipient,
+        uint256 underlying,
+        uint256 minOutQ,
+        uint256 version
+    ) private returns (uint256 outQ) {
+        ISwapRouter swapRouter_ = swapRouter;
+        IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
+        // Get out amount from swap
+        uint256 swapAmount = swapRouter_.getAmountsOut(underlying, path)[1];
         // Get out amount from primary market
         uint256 pmAmount = pm.getCreation(underlying);
 
         if (pmAmount < swapAmount) {
             // Swap path
-            IERC20(path[0]).safeApprove(swapRouter, underlying);
+            IERC20(path[0]).safeApprove(address(swapRouter_), underlying);
             uint256[] memory versions = new uint256[](1);
             versions[0] = version;
-            outQ = ISwapRouter(swapRouter).swapExactTokensForTokens(
+            outQ = swapRouter_.swapExactTokensForTokens(
                 underlying,
                 minOutQ,
                 path,
                 recipient,
-                staking,
+                address(0),
                 versions,
                 block.timestamp
             )[1];
         } else {
             // Primary market path
             IERC20(path[0]).safeApprove(address(pm), underlying);
-            if (staking != address(0)) {
-                outQ = pm.create(address(this), underlying, minOutQ, version);
-                IERC20(path[1]).safeApprove(staking, outQ);
-                StakingV4(staking).deposit(TRANCHE_Q, outQ, recipient, version);
-            } else {
-                outQ = pm.create(recipient, underlying, minOutQ, version);
-            }
+            outQ = pm.create(recipient, underlying, minOutQ, version);
         }
     }
 
-    function redeem(
+    function _redeem(
         address primaryMarket,
-        address swapRouter,
-        uint256 version,
+        address[] memory path,
+        address recipient,
         uint256 inQ,
         uint256 minUnderlying,
-        address recipient
-    ) external returns (uint256 underlying) {
+        uint256 version
+    ) private returns (uint256 underlying) {
+        ISwapRouter swapRouter_ = swapRouter;
         IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
-        IFundV3 fund = pm.fund();
         // Get out amount from swap
-        address[] memory path = new address[](2);
-        path[0] = fund.tokenQ();
-        path[1] = fund.tokenUnderlying();
-        uint256 swapAmount = ISwapRouter(swapRouter).getAmountsOut(inQ, path)[1];
+        uint256 swapAmount = swapRouter_.getAmountsOut(inQ, path)[1];
         // Get out amount from primary market
         (uint256 pmAmount, ) = pm.getRedemption(inQ);
-        // Retain queen payment
-        IERC20(path[0]).safeTransferFrom(msg.sender, address(this), inQ);
+
         if (pmAmount < swapAmount) {
             // Swap path
-            IERC20(path[0]).safeApprove(swapRouter, inQ);
+            IERC20(path[0]).safeApprove(address(swapRouter_), inQ);
             uint256[] memory versions = new uint256[](1);
             versions[0] = version;
-            underlying = ISwapRouter(swapRouter).swapExactTokensForTokens(
+            underlying = swapRouter_.swapExactTokensForTokens(
                 inQ,
                 minUnderlying,
                 path,
@@ -105,5 +174,83 @@ contract QueenSwapRouter is ITrancheIndexV2 {
             // Primary market path
             underlying = pm.redeem(recipient, inQ, minUnderlying, version);
         }
+    }
+
+    // ------------------------ Unsupported Functions --------------------------
+    function getCreationForQ(uint256) external view override returns (uint256) {
+        revert("Not Supported");
+    }
+
+    function getSplitForB(uint256) external view override returns (uint256) {
+        revert("Not Supported");
+    }
+
+    function getCreation(uint256) external view override returns (uint256) {
+        revert("Not Supported");
+    }
+
+    function getRedemption(uint256) external view override returns (uint256, uint256) {
+        revert("Not Supported");
+    }
+
+    function getRedemptionForUnderlying(uint256) external view override returns (uint256) {
+        revert("Not Supported");
+    }
+
+    function getSplit(uint256) external view override returns (uint256) {
+        revert("Not Supported");
+    }
+
+    function getMerge(uint256) external view override returns (uint256, uint256) {
+        revert("Not Supported");
+    }
+
+    function getMergeForQ(uint256) external view override returns (uint256) {
+        revert("Not Supported");
+    }
+
+    function canBeRemovedFromFund() external view override returns (bool) {
+        revert("Not Supported");
+    }
+
+    function split(
+        address,
+        uint256,
+        uint256
+    ) external override returns (uint256) {
+        revert("Not Supported");
+    }
+
+    function merge(
+        address,
+        uint256,
+        uint256
+    ) external override returns (uint256) {
+        revert("Not Supported");
+    }
+
+    function queueRedemption(
+        address,
+        uint256,
+        uint256,
+        uint256
+    ) external override returns (uint256, uint256) {
+        revert("Not Supported");
+    }
+
+    function claimRedemptions(address, uint256[] calldata) external override returns (uint256) {
+        revert("Not Supported");
+    }
+
+    function claimRedemptionsAndUnwrap(address, uint256[] calldata)
+        external
+        override
+        returns (uint256)
+    {
+        revert("Not Supported");
+    }
+
+    function settle(uint256) external override {
+        revert("Not Supported");
     }
 }
