@@ -22,10 +22,10 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
 
     event Swap(
         address indexed sender,
-        uint256 baseDeltaOut,
-        uint256 quoteDeltaOut,
-        uint256 baseDeltaIn,
-        uint256 quoteDeltaIn,
+        uint256 baseOut,
+        uint256 quoteOut,
+        uint256 baseIn,
+        uint256 quoteIn,
         address indexed to
     );
 
@@ -45,8 +45,6 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     uint256 public baseCumulativeLast;
     uint256 public quoteCumulativeLast;
     uint256 private blockTimestampLast;
-
-    address public primaryMarket;
 
     uint256 public initialAmpl;
     uint256 public futureAmpl;
@@ -90,7 +88,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         return (baseBalance, quoteBalance);
     }
 
-    function Ampl() public view override returns (uint256) {
+    function getAmpl() public view returns (uint256) {
         if (block.timestamp < futureTime) {
             uint256 deltaAmpl =
                 futureAmpl > initialAmpl
@@ -109,10 +107,10 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         }
     }
 
-    function getCurrentD() public view override returns (uint256 D) {
+    function getCurrentD() public view override returns (uint256) {
         uint256 oracle = checkOracle(Operation.VIEW);
         (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
-        D = _getD(base, quote, Ampl(), oracle);
+        return _getD(base, quote, getAmpl(), oracle);
     }
 
     function getD(
@@ -120,94 +118,53 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 quote,
         uint256 ampl,
         uint256 oracle
-    ) external view override returns (uint256 D) {
+    ) external view override returns (uint256) {
         return _getD(base, quote, ampl, oracle);
     }
 
-    function getQuoteDeltaOut(uint256 baseDelta)
-        public
-        view
-        override
-        returns (
-            uint256 quoteDelta,
-            uint256 fee,
-            uint256 adminFee
-        )
-    {
+    function getQuoteOut(uint256 baseIn) external view override returns (uint256 quoteOut) {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
-        uint256 newBase = oldBase.add(baseDelta);
+        uint256 newBase = oldBase.add(baseIn);
         uint256 newQuote = _getQuoteBalance(newBase);
-        quoteDelta = oldQuote.sub(newQuote).sub(1); // -1 just in case there were some rounding errors
-        fee = quoteDelta.multiplyDecimal(feeRate);
-        adminFee = fee.multiplyDecimal(adminFeeRate);
-        quoteDelta = quoteDelta.sub(fee);
+        quoteOut = oldQuote.sub(newQuote).sub(1); // -1 just in case there were some rounding errors
+        uint256 fee = quoteOut.multiplyDecimal(feeRate);
+        quoteOut = quoteOut.sub(fee);
     }
 
-    function getQuoteDeltaIn(uint256 baseDelta)
-        public
-        view
-        override
-        returns (
-            uint256 quoteDelta,
-            uint256 fee,
-            uint256 adminFee
-        )
-    {
+    function getQuoteIn(uint256 baseOut) external view override returns (uint256 quoteIn) {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
-        uint256 newBase = oldBase.sub(baseDelta);
+        uint256 newBase = oldBase.sub(baseOut);
         uint256 newQuote = _getQuoteBalance(newBase);
-        quoteDelta = newQuote.sub(oldQuote).add(1); // 1 just in case there were some rounding errors
-        fee = quoteDelta.mul(feeRate).div(uint256(1e18).sub(feeRate));
-        adminFee = fee.multiplyDecimal(adminFeeRate);
-        quoteDelta = quoteDelta.add(fee);
+        quoteIn = newQuote.sub(oldQuote).add(1); // 1 just in case there were some rounding errors
+        uint256 fee = quoteIn.mul(feeRate).div(uint256(1e18).sub(feeRate));
+        quoteIn = quoteIn.add(fee);
     }
 
-    function getBaseDeltaOut(uint256 quoteDelta)
-        public
-        view
-        override
-        returns (
-            uint256 baseDelta,
-            uint256 fee,
-            uint256 adminFee
-        )
-    {
+    function getBaseOut(uint256 quoteIn) external view override returns (uint256 baseOut) {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
-        fee = quoteDelta.multiplyDecimal(feeRate);
-        adminFee = fee.multiplyDecimal(adminFeeRate);
-        uint256 newQuote = oldQuote.add(quoteDelta.sub(fee));
+        uint256 fee = quoteIn.multiplyDecimal(feeRate);
+        uint256 newQuote = oldQuote.add(quoteIn.sub(fee));
         uint256 newBase = _getBaseBalance(newQuote);
-        baseDelta = oldBase.sub(newBase).sub(1); // just in case there were rounding error
+        baseOut = oldBase.sub(newBase).sub(1); // just in case there were rounding error
     }
 
-    function getBaseDeltaIn(uint256 quoteDelta)
-        public
-        view
-        override
-        returns (
-            uint256 baseDelta,
-            uint256 fee,
-            uint256 adminFee
-        )
-    {
+    function getBaseIn(uint256 quoteOut) external view override returns (uint256 baseIn) {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
-        fee = quoteDelta.mul(feeRate).div(uint256(1e18).sub(feeRate));
-        adminFee = fee.multiplyDecimal(adminFeeRate);
-        uint256 newQuote = oldQuote.sub(quoteDelta.add(fee));
+        uint256 fee = quoteOut.mul(feeRate).div(uint256(1e18).sub(feeRate));
+        uint256 newQuote = oldQuote.sub(quoteOut.add(fee));
         uint256 newBase = _getBaseBalance(newQuote);
-        baseDelta = newBase.sub(oldBase).add(1); // just in case there were rounding error
+        baseIn = newBase.sub(oldBase).add(1); // just in case there were rounding error
     }
 
     /// @dev Average asset value per LP token
     function virtualPrice() public view override returns (uint256) {
-        uint256 D = getCurrentD();
+        uint256 d = getCurrentD();
         uint256 lpSupply = IERC20(lpToken).totalSupply();
-
-        return D.divideDecimal(lpSupply);
+        return d.divideDecimal(lpSupply);
     }
 
     /// @dev Estimate the amount of LP to mint/burn with a specified supply/withdraw distribution
@@ -216,38 +173,35 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 quoteDelta,
         bool deposit
     ) public view override returns (uint256) {
-        uint256 ampl = Ampl();
+        uint256 ampl = getAmpl();
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 newBaseBalance;
         uint256 newQuoteBalance;
         (uint256 baseBalance_, uint256 quoteBalance_, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
         uint256 oracle = checkOracle(Operation.VIEW);
-        uint256 D0 = _getD(baseBalance_, quoteBalance_, ampl, oracle);
+        uint256 d0 = _getD(baseBalance_, quoteBalance_, ampl, oracle);
 
         newBaseBalance = deposit ? baseBalance_.add(baseDelta) : baseBalance_.sub(baseDelta);
         newQuoteBalance = deposit ? quoteBalance_.add(quoteDelta) : quoteBalance_.sub(quoteDelta);
 
-        uint256 D1 = _getD(newBaseBalance, newQuoteBalance, ampl, oracle);
+        uint256 d1 = _getD(newBaseBalance, newQuoteBalance, ampl, oracle);
 
-        uint256 difference = deposit ? D1.sub(D0) : D0.sub(D1);
+        uint256 difference = deposit ? d1.sub(d0) : d0.sub(d1);
 
-        return difference.mul(lpSupply).div(D0);
+        return difference.mul(lpSupply).div(d0);
     }
 
     function swap(
         uint256 version,
-        uint256 baseDeltaOut,
-        uint256 quoteDeltaOut,
+        uint256 baseOut,
+        uint256 quoteOut,
         address to,
         bytes calldata data
     ) external override nonReentrant checkVersion(version) {
-        require(baseDeltaOut > 0 || quoteDeltaOut > 0, "Insufficient output");
+        require(baseOut > 0 || quoteOut > 0, "Insufficient output");
         (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
-        require(
-            baseDeltaOut < baseBalance_ && quoteDeltaOut < quoteBalance_,
-            "Insufficient liquidity"
-        );
+        require(baseOut < baseBalance_ && quoteOut < quoteBalance_, "Insufficient liquidity");
         _update(baseBalance_, quoteBalance_);
 
         uint256 newBaseBalance;
@@ -256,31 +210,24 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         {
             address quoteAddress_ = quoteAddress;
             require(to != baseAddress() && to != quoteAddress_, "Invalid to address");
-            if (baseDeltaOut > 0) IERC20(baseAddress()).safeTransfer(to, baseDeltaOut); // optimistically transfer tokens
-            if (quoteDeltaOut > 0) IERC20(quoteAddress_).safeTransfer(to, quoteDeltaOut); // optimistically transfer tokens
+            if (baseOut > 0) IERC20(baseAddress()).safeTransfer(to, baseOut); // optimistically transfer tokens
+            if (quoteOut > 0) IERC20(quoteAddress_).safeTransfer(to, quoteOut); // optimistically transfer tokens
             if (data.length > 0)
-                ITranchessSwapCallee(to).tranchessSwapCallback(
-                    msg.sender,
-                    baseDeltaOut,
-                    quoteDeltaOut,
-                    data
-                );
+                ITranchessSwapCallee(to).tranchessSwapCallback(msg.sender, baseOut, quoteOut, data);
             newBaseBalance = IERC20(baseAddress()).balanceOf(address(this));
             newQuoteBalance = IERC20(quoteAddress_).balanceOf(address(this)).sub(totalAdminFee);
-            fee = quoteDeltaOut.mul(feeRate).div(uint256(1e18).sub(feeRate));
+            fee = quoteOut.mul(feeRate).div(uint256(1e18).sub(feeRate));
         }
-        uint256 baseDeltaIn =
-            newBaseBalance > baseBalance_ - baseDeltaOut
-                ? newBaseBalance - (baseBalance_ - baseDeltaOut)
+        uint256 baseIn =
+            newBaseBalance > baseBalance_ - baseOut ? newBaseBalance - (baseBalance_ - baseOut) : 0;
+        uint256 quoteIn =
+            newQuoteBalance > quoteBalance_ - quoteOut
+                ? newQuoteBalance - (quoteBalance_ - quoteOut)
                 : 0;
-        uint256 quoteDeltaIn =
-            newQuoteBalance > quoteBalance_ - quoteDeltaOut
-                ? newQuoteBalance - (quoteBalance_ - quoteDeltaOut)
-                : 0;
-        require(baseDeltaIn > 0 || quoteDeltaIn > 0, "Insufficient input");
+        require(baseIn > 0 || quoteIn > 0, "Insufficient input");
         {
-            fee = fee.add(quoteDeltaIn.multiplyDecimal(feeRate));
-            uint256 ampl = Ampl();
+            fee = fee.add(quoteIn.multiplyDecimal(feeRate));
+            uint256 ampl = getAmpl();
             uint256 newQuoteBalanceAdjusted = newQuoteBalance.sub(fee);
             uint256 oracle = checkOracle(Operation.SWAP);
             uint256 newD = _getD(newBaseBalance, newQuoteBalanceAdjusted, ampl, oracle);
@@ -288,7 +235,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
             // A D curve never intersects with other D curves, so D is strictly monotone given a nonnegative x.
             require(newD >= oldD, "Invariant mismatch");
         }
-        emit Swap(msg.sender, baseDeltaOut, quoteDeltaOut, baseDeltaIn, quoteDeltaIn, to);
+        emit Swap(msg.sender, baseOut, quoteOut, baseIn, quoteIn, to);
         fee = fee.multiplyDecimal(adminFeeRate);
         baseBalance = newBaseBalance;
         quoteBalance = newQuoteBalance.sub(fee);
@@ -315,42 +262,39 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     ) external override nonReentrant checkVersion(version) {
         uint256 newBaseBalance = IERC20(baseAddress()).balanceOf(address(this));
         uint256 newQuoteBalance = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
-        uint256 ampl = Ampl();
+        uint256 ampl = getAmpl();
         uint256 fee;
-        uint256 baseDelta;
-        uint256 quoteDelta;
-        uint256 D0;
+        uint256 baseIn;
+        uint256 quoteIn;
+        uint256 d0;
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 oracle;
         {
             (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
             _update(baseBalance_, quoteBalance_);
-            baseDelta = newBaseBalance > baseBalance_ ? newBaseBalance - baseBalance_ : 0;
-            quoteDelta = newQuoteBalance > quoteBalance_ ? newQuoteBalance - quoteBalance_ : 0;
+            baseIn = newBaseBalance > baseBalance_ ? newBaseBalance - baseBalance_ : 0;
+            quoteIn = newQuoteBalance > quoteBalance_ ? newQuoteBalance - quoteBalance_ : 0;
 
             // Initial invariant
             oracle = checkOracle(Operation.ADD_LIQUIDITY);
-            D0 = lpSupply == 0 ? 0 : _getD(baseBalance_, quoteBalance_, ampl, oracle);
+            d0 = lpSupply == 0 ? 0 : _getD(baseBalance_, quoteBalance_, ampl, oracle);
         }
 
         if (lpSupply == 0) {
-            require(
-                baseDelta > 0 && quoteDelta > 0,
-                "Stable: input amount has to be a positive value"
-            );
+            require(baseIn > 0 && quoteIn > 0, "Stable: input amount has to be a positive value");
         }
 
         // Invariant after change
-        uint256 D2;
+        uint256 d2;
         uint256 mintAmount;
         {
-            uint256 D1 = _getD(newBaseBalance, newQuoteBalance, ampl, oracle);
-            require(D1 > D0, "Stable: D1 should be higher than D0");
+            uint256 d1 = _getD(newBaseBalance, newQuoteBalance, ampl, oracle);
+            require(d1 > d0, "Stable: D1 should be higher than D0");
 
-            D2 = D1;
+            d2 = d1;
             if (lpSupply > 0) {
                 baseBalance = newBaseBalance;
-                uint256 idealBalance = (D1 * quoteBalance) / D0;
+                uint256 idealBalance = (d1 * quoteBalance) / d0;
                 uint256 difference =
                     idealBalance > newQuoteBalance
                         ? idealBalance.sub(newQuoteBalance)
@@ -359,83 +303,83 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
                 fee = difference.multiplyDecimal(feeRate);
                 quoteBalance = newQuoteBalance.sub(fee.multiplyDecimal(adminFeeRate));
                 newQuoteBalance = newQuoteBalance.sub(fee);
-                D2 = _getD(newBaseBalance, newQuoteBalance, ampl, oracle);
+                d2 = _getD(newBaseBalance, newQuoteBalance, ampl, oracle);
             } else {
                 baseBalance = newBaseBalance;
                 quoteBalance = newQuoteBalance;
             }
 
-            mintAmount = lpSupply == 0 ? D1 : lpSupply.mul(D2.sub(D0)).div(D0);
+            mintAmount = lpSupply == 0 ? d1 : lpSupply.mul(d2.sub(d0)).div(d0);
             require(mintAmount >= minMintAmount, "Stable: exceed slippage tolerance interval");
         }
 
         // Mint pool tokens
         ILiquidityGauge(lpToken).mint(to, mintAmount);
 
-        emit LiquidityAdded(msg.sender, baseDelta, quoteDelta, fee, D2, lpSupply.add(mintAmount));
+        emit LiquidityAdded(msg.sender, baseIn, quoteIn, fee, d2, lpSupply.add(mintAmount));
     }
 
     /// @dev Remove liquidity proportionally.
-    /// @param minBaseDelta Least amount of base asset to withdraw
-    /// @param minQuoteDelta Least amount of quote asset to withdraw
+    /// @param minBaseOut Least amount of base asset to withdraw
+    /// @param minQuoteOut Least amount of quote asset to withdraw
     /// @param burnAmount Exact amount of LP token to burn
     function removeLiquidity(
         uint256 version,
-        uint256 minBaseDelta,
-        uint256 minQuoteDelta,
+        uint256 minBaseOut,
+        uint256 minQuoteOut,
         uint256 burnAmount
     )
         public
         override
         nonReentrant
         checkVersion(version)
-        returns (uint256 baseDelta, uint256 quoteDelta)
+        returns (uint256 baseOut, uint256 quoteOut)
     {
         uint256 lpSupply = IERC20(lpToken).totalSupply();
 
         (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
         _update(baseBalance_, quoteBalance_);
-        baseDelta = baseBalance_.mul(burnAmount).div(lpSupply);
-        quoteDelta = quoteBalance_.mul(burnAmount).div(lpSupply);
-        require(baseDelta >= minBaseDelta, "Stable: drop below least tolerance amount");
-        require(quoteDelta >= minQuoteDelta, "Stable: drop below least tolerance amount");
+        baseOut = baseBalance_.mul(burnAmount).div(lpSupply);
+        quoteOut = quoteBalance_.mul(burnAmount).div(lpSupply);
+        require(baseOut >= minBaseOut, "Stable: drop below least tolerance amount");
+        require(quoteOut >= minQuoteOut, "Stable: drop below least tolerance amount");
 
-        baseBalance = baseBalance.sub(baseDelta);
-        quoteBalance = quoteBalance.sub(quoteDelta);
+        baseBalance = baseBalance.sub(baseOut);
+        quoteBalance = quoteBalance.sub(quoteOut);
 
-        IERC20(baseAddress()).safeTransfer(msg.sender, baseDelta);
-        IERC20(quoteAddress).safeTransfer(msg.sender, quoteDelta);
+        IERC20(baseAddress()).safeTransfer(msg.sender, baseOut);
+        IERC20(quoteAddress).safeTransfer(msg.sender, quoteOut);
 
         ILiquidityGauge(lpToken).burnFrom(msg.sender, burnAmount);
 
-        emit LiquidityRemoved(msg.sender, baseDelta, quoteDelta, 0, lpSupply.sub(burnAmount));
+        emit LiquidityRemoved(msg.sender, baseOut, quoteOut, 0, lpSupply.sub(burnAmount));
     }
 
     /// @dev Remove liquidity arbitrarily.
-    /// @param baseDelta Exact amount of base asset to withdraw
-    /// @param quoteDelta Exact amount of quote asset to withdraw
+    /// @param baseOut Exact amount of base asset to withdraw
+    /// @param quoteOut Exact amount of quote asset to withdraw
     /// @param maxBurnAmount Most amount of LP token to burn
     function removeLiquidityImbalance(
         uint256 version,
-        uint256 baseDelta,
-        uint256 quoteDelta,
+        uint256 baseOut,
+        uint256 quoteOut,
         uint256 maxBurnAmount
     ) public override nonReentrant checkVersion(version) returns (uint256 burnAmount) {
-        uint256 ampl = Ampl();
+        uint256 ampl = getAmpl();
         uint256 newBaseBalance;
         uint256 newQuoteBalance;
-        uint256 D0;
+        uint256 d0;
         uint256 oracle;
         uint256 idealBalance;
         {
             (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
             oracle = checkOracle(Operation.VIEW);
-            D0 = _getD(baseBalance_, quoteBalance_, ampl, oracle);
+            d0 = _getD(baseBalance_, quoteBalance_, ampl, oracle);
             _update(baseBalance_, quoteBalance_);
-            newBaseBalance = baseBalance_.sub(baseDelta);
-            newQuoteBalance = quoteBalance_.sub(quoteDelta);
-            uint256 D1 = _getD(newBaseBalance, newQuoteBalance, ampl, oracle);
-            idealBalance = (D1 * quoteBalance_) / D0;
+            newBaseBalance = baseBalance_.sub(baseOut);
+            newQuoteBalance = quoteBalance_.sub(quoteOut);
+            uint256 d1 = _getD(newBaseBalance, newQuoteBalance, ampl, oracle);
+            idealBalance = (d1 * quoteBalance_) / d0;
         }
 
         uint256 difference =
@@ -448,23 +392,23 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         quoteBalance = newQuoteBalance.sub(fee.multiplyDecimal(adminFeeRate));
         newQuoteBalance = newQuoteBalance.sub(fee);
 
-        uint256 D2 = _getD(newBaseBalance, newQuoteBalance, ampl, oracle);
+        uint256 d2 = _getD(newBaseBalance, newQuoteBalance, ampl, oracle);
 
-        burnAmount = D0.sub(D2).mul(IERC20(lpToken).totalSupply()).div(D0).add(1);
+        burnAmount = d0.sub(d2).mul(IERC20(lpToken).totalSupply()).div(d0).add(1);
         require(burnAmount > 1, "Stable: no tokens burned");
         require(burnAmount <= maxBurnAmount, "Stable: exceed slippage tolerance interval");
 
         ILiquidityGauge(lpToken).burnFrom(msg.sender, burnAmount);
 
-        IERC20(baseAddress()).safeTransfer(msg.sender, baseDelta);
-        IERC20(quoteAddress).safeTransfer(msg.sender, quoteDelta);
+        IERC20(baseAddress()).safeTransfer(msg.sender, baseOut);
+        IERC20(quoteAddress).safeTransfer(msg.sender, quoteOut);
 
         emit LiquidityImbalanceRemoved(
             msg.sender,
-            baseDelta,
-            quoteDelta,
+            baseOut,
+            quoteOut,
             fee,
-            D2,
+            d2,
             IERC20(lpToken).totalSupply()
         );
     }
@@ -477,30 +421,30 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 burnAmount,
         uint256 minAmount
     ) public override nonReentrant checkVersion(version) returns (uint256) {
-        uint256 ampl = Ampl();
+        uint256 ampl = getAmpl();
         uint256 oracle = checkOracle(Operation.VIEW);
         (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
-        uint256 D0 = _getD(baseBalance_, quoteBalance_, ampl, oracle);
+        uint256 d0 = _getD(baseBalance_, quoteBalance_, ampl, oracle);
 
         uint256 lpSupply = IERC20(lpToken).totalSupply();
-        uint256 D1 = D0.sub(D0.mul(burnAmount).div(lpSupply));
+        uint256 d1 = d0.sub(d0.mul(burnAmount).div(lpSupply));
 
         _update(baseBalance_, quoteBalance_);
         uint256 liquidityFee =
-            quoteBalance_.sub(quoteBalance_.mul(D1).div(D0)).multiplyDecimal(feeRate);
-        uint256 baseDelta =
-            baseBalance_.sub(_getBase(ampl, quoteBalance_.sub(liquidityFee), oracle, D1)).sub(1);
-        require(baseDelta >= minAmount, "Stable: not enough tokens to removed");
+            quoteBalance_.sub(quoteBalance_.mul(d1).div(d0)).multiplyDecimal(feeRate);
+        uint256 baseOut =
+            baseBalance_.sub(_getBase(ampl, quoteBalance_.sub(liquidityFee), oracle, d1)).sub(1);
+        require(baseOut >= minAmount, "Stable: not enough tokens to removed");
 
-        baseBalance = baseBalance_.sub(baseDelta);
+        baseBalance = baseBalance_.sub(baseOut);
         quoteBalance = quoteBalance_.sub(liquidityFee.multiplyDecimal(adminFeeRate));
         ILiquidityGauge(lpToken).burnFrom(msg.sender, burnAmount);
 
-        IERC20(baseAddress()).safeTransfer(msg.sender, baseDelta);
+        IERC20(baseAddress()).safeTransfer(msg.sender, baseOut);
 
-        emit LiquiditySingleRemoved(msg.sender, burnAmount, baseDelta);
+        emit LiquiditySingleRemoved(msg.sender, burnAmount, baseOut);
 
-        return baseDelta;
+        return baseOut;
     }
 
     /// @dev Remove quote liquidity only.
@@ -513,28 +457,26 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     ) public override nonReentrant checkVersion(version) returns (uint256) {
         uint256 oracle = checkOracle(Operation.VIEW);
         (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(version);
-        uint256 D0 = _getD(baseBalance_, quoteBalance_, Ampl(), oracle);
+        uint256 d0 = _getD(baseBalance_, quoteBalance_, getAmpl(), oracle);
 
         uint256 lpSupply = IERC20(lpToken).totalSupply();
-        uint256 D1 = D0.sub(D0.mul(burnAmount).div(lpSupply));
-        uint256 newQuoteBalance = _getQuote(Ampl(), baseBalance, oracle, D1);
+        uint256 d1 = d0.sub(d0.mul(burnAmount).div(lpSupply));
+        uint256 newQuoteBalance = _getQuote(getAmpl(), baseBalance, oracle, d1);
 
         _update(baseBalance_, quoteBalance_);
         uint256 liquidityFee =
-            quoteBalance_.mul(D1).div(D0).sub(newQuoteBalance).multiplyDecimal(feeRate);
-        uint256 quoteDelta = quoteBalance_.sub(newQuoteBalance).sub(liquidityFee).sub(1);
-        require(quoteDelta >= minAmount, "Stable: not enough tokens to removed");
+            quoteBalance_.mul(d1).div(d0).sub(newQuoteBalance).multiplyDecimal(feeRate);
+        uint256 quoteOut = quoteBalance_.sub(newQuoteBalance).sub(liquidityFee).sub(1);
+        require(quoteOut >= minAmount, "Stable: not enough tokens to removed");
 
-        quoteBalance = quoteBalance_.sub(
-            quoteDelta.add(liquidityFee.multiplyDecimal(adminFeeRate))
-        );
+        quoteBalance = quoteBalance_.sub(quoteOut.add(liquidityFee.multiplyDecimal(adminFeeRate)));
         ILiquidityGauge(lpToken).burnFrom(msg.sender, burnAmount);
 
-        IERC20(quoteAddress).safeTransfer(msg.sender, quoteDelta);
+        IERC20(quoteAddress).safeTransfer(msg.sender, quoteOut);
 
-        emit LiquiditySingleRemoved(msg.sender, burnAmount, quoteDelta);
+        emit LiquiditySingleRemoved(msg.sender, burnAmount, quoteOut);
 
-        return quoteDelta;
+        return quoteOut;
     }
 
     // force balances to match reserves
@@ -573,7 +515,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 quote,
         uint256 ampl,
         uint256 oracle
-    ) private pure returns (uint256 D) {
+    ) private pure returns (uint256) {
         // Solve D^3 + kxy(4A - 1)·D - 16Akxy(y + kx) = 0
         uint256 product = base.multiplyDecimal(quote);
         uint256 p = product.mul(16 * ampl - 4).multiplyDecimal(oracle);
@@ -589,16 +531,16 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 ampl,
         uint256 newQuoteBalance,
         uint256 oracle,
-        uint256 D
+        uint256 d
     ) private pure returns (uint256 newBaseBalance) {
         // Solve 16Ayk^2·x^2 + 4ky(4Ay - 4AD + D)·x - D^3 = 0
         uint256 a = (16 * ampl * newQuoteBalance).multiplyDecimal(oracle).multiplyDecimal(oracle);
         uint256 b1 =
-            (D.multiplyDecimal(newQuoteBalance * 4) +
+            (d.multiplyDecimal(newQuoteBalance * 4) +
                 newQuoteBalance.mul(16 * ampl).multiplyDecimal(newQuoteBalance))
                 .multiplyDecimal(oracle);
-        uint256 b2 = D.multiplyDecimal(16 * ampl * newQuoteBalance).multiplyDecimal(oracle);
-        uint256 negC = D.multiplyDecimal(D).multiplyDecimal(D);
+        uint256 b2 = d.multiplyDecimal(16 * ampl * newQuoteBalance).multiplyDecimal(oracle);
+        uint256 negC = d.multiplyDecimal(d).multiplyDecimal(d);
         newBaseBalance = solveQuadratic(a, b1, b2, negC);
     }
 
@@ -606,18 +548,18 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 ampl,
         uint256 newBaseBalance,
         uint256 oracle,
-        uint256 D
+        uint256 d
     ) private pure returns (uint256 newQuoteBalance) {
         // Solve 16Axk·y^2 + 4kx(4Akx - 4AD + D)·y - D^3 = 0
         uint256 a = (16 * ampl * newBaseBalance).multiplyDecimal(oracle);
         uint256 b1 =
-            (D.multiplyDecimal(newBaseBalance * 4) +
+            (d.multiplyDecimal(newBaseBalance * 4) +
                 newBaseBalance.mul(16 * ampl).multiplyDecimal(newBaseBalance).multiplyDecimal(
                     oracle
                 ))
                 .multiplyDecimal(oracle);
-        uint256 b2 = D.multiplyDecimal(16 * ampl * newBaseBalance).multiplyDecimal(oracle);
-        uint256 negC = D.multiplyDecimal(D).multiplyDecimal(D);
+        uint256 b2 = d.multiplyDecimal(16 * ampl * newBaseBalance).multiplyDecimal(oracle);
+        uint256 negC = d.multiplyDecimal(d).multiplyDecimal(d);
         newQuoteBalance = solveQuadratic(a, b1, b2, negC);
     }
 
@@ -627,10 +569,10 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         returns (uint256 newBaseBalance)
     {
         // Calculate new asset balances
-        uint256 ampl = Ampl();
+        uint256 ampl = getAmpl();
         uint256 oracle = checkOracle(Operation.VIEW);
-        uint256 D = _getD(baseBalance, quoteBalance, ampl, oracle);
-        newBaseBalance = _getBase(ampl, newQuoteBalance, oracle, D);
+        uint256 d = _getD(baseBalance, quoteBalance, ampl, oracle);
+        newBaseBalance = _getBase(ampl, newQuoteBalance, oracle, d);
     }
 
     function _getQuoteBalance(uint256 newBaseBalance)
@@ -639,10 +581,10 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         returns (uint256 newQuoteBalance)
     {
         // Calculate new quote asset
-        uint256 ampl = Ampl();
+        uint256 ampl = getAmpl();
         uint256 oracle = checkOracle(Operation.VIEW);
-        uint256 D = _getD(baseBalance, quoteBalance, ampl, oracle);
-        newQuoteBalance = _getQuote(ampl, newBaseBalance, oracle, D);
+        uint256 d = _getD(baseBalance, quoteBalance, ampl, oracle);
+        newQuoteBalance = _getQuote(ampl, newBaseBalance, oracle, d);
     }
 
     function solveDepressedCubic(uint256 p, uint256 negQ) public pure returns (uint256) {
