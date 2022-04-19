@@ -829,9 +829,11 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
             fundActivityStartTime = day;
         }
 
-        historicalInterestRate[day] = day == _endOfWeek(day - 1 days)
-            ? _updateInterestRate(day)
-            : historicalInterestRate[day - 1 days];
+        uint256 interestRate =
+            day == _endOfWeek(day - 1 days)
+                ? _updateInterestRate(day)
+                : historicalInterestRate[day - 1 days];
+        historicalInterestRate[day] = interestRate;
 
         historicalEquivalentTotalB[day] = equivalentTotalB;
         historicalUnderlying[day] = underlying;
@@ -839,7 +841,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _historicalNavR[day] = navR;
         currentDay = day + 1 days;
 
-        emit Settled(day, navB, navR);
+        emit Settled(day, underlying, navB, navR, interestRate);
     }
 
     function transferToStrategy(uint256 amount) external override onlyStrategy {

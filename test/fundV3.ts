@@ -709,7 +709,13 @@ describe("FundV3", function () {
             await advanceBlockAtTime(startDay);
             await expect(fund.settle())
                 .to.emit(fund, "Settled")
-                .withArgs(startDay, parseEther("1"), parseEther("1"));
+                .withArgs(
+                    startDay,
+                    parseEther("0"),
+                    parseEther("1"),
+                    parseEther("1"),
+                    parseEther("0.001")
+                );
             expect(await fund.currentDay()).to.equal(startDay + DAY);
             expect(await fund.getRebalanceSize()).to.equal(0);
             const navs = await fund.historicalNavs(startDay);
@@ -741,8 +747,11 @@ describe("FundV3", function () {
                 .mul(2)
                 .div(totalShares);
             const navR = navSum.sub(navB);
+            const interestRate = parseEther("0.001");
             await advanceBlockAtTime(startDay);
-            await expect(fund.settle()).to.emit(fund, "Settled").withArgs(startDay, navB, navR);
+            await expect(fund.settle())
+                .to.emit(fund, "Settled")
+                .withArgs(startDay, btcInFund, navB, navR, interestRate);
             expect(await fund.currentDay()).to.equal(startDay + DAY);
             expect(await fund.getRebalanceSize()).to.equal(0);
             const navs = await fund.historicalNavs(startDay);

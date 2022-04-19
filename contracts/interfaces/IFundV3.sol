@@ -250,7 +250,7 @@ interface IFundV3 {
         uint256 ratioR2Q,
         uint256 ratioBR
     );
-    event Settled(uint256 indexed day, uint256 navB, uint256 navR);
+    event Settled(uint256 indexed day, uint256 underlying, uint256 navB, uint256 navR, uint256 interestRate);
     event InterestRateUpdated(uint256 baseInterestRate, uint256 floatingInterestRate);
     event BalancesRebalanced(
         address indexed account,
