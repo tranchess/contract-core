@@ -37,6 +37,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     event BallotUpdated(address newBallot);
     event FeeCollectorUpdated(address newFeeCollector);
     event ActivityDelayTimeUpdated(uint256 delayTime);
+    event SplitRatioUpdated(uint256 newSplitRatio);
 
     uint256 private constant UNIT = 1e18;
     uint256 private constant MAX_INTEREST_RATE = 0.2e18; // 20% daily
@@ -79,7 +80,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
 
     /// @notice The amount of BISHOP received by splitting one QUEEN.
     ///         This ratio changes on every rebalance.
-    uint256 public override splitRatio; // TODO need event?
+    uint256 public override splitRatio;
 
     /// @notice Start timestamp of the current primary market activity window.
     uint256 public override fundActivityStartTime;
@@ -201,6 +202,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         );
         currentDay = endOfDay(block.timestamp);
         splitRatio = newSplitRatio;
+        emit SplitRatioUpdated(newSplitRatio);
         uint256 lastDay = currentDay - 1 days;
         uint256 lastDayPrice = twapOracle.getTwap(lastDay);
         require(lastDayPrice != 0, "Price not available"); // required to do the first creation
@@ -818,6 +820,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
             uint256 newSplitRatio = splitRatio.multiplyDecimal(navSum) / 2;
             _triggerRebalance(day, navSum, navB, navR, newSplitRatio);
             splitRatio = newSplitRatio;
+            emit SplitRatioUpdated(newSplitRatio);
             navB = UNIT;
             navR = UNIT;
             equivalentTotalB = getEquivalentTotalB();
