@@ -32,6 +32,7 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
 
     address[65535] private _pools;
     uint256 public poolSize;
+    uint256 public disabledPoolSize;
 
     /// @notice Locked balance of an account, which is synchronized with `VotingEscrow` when
     ///         `syncWithVotingEscrow()` is called
@@ -43,6 +44,9 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
     /// @notice Mapping of pool => unlockTime => CHESS amount voted to the pool that will be
     ///         unlocked at unlockTime
     mapping(address => mapping(uint256 => uint256)) public poolScheduledUnlock;
+
+    /// @notice Mapping of pool => status of the pool
+    mapping(uint256 => bool) public disabledPools;
 
     constructor(address votingEscrow_) public {
         votingEscrow = IVotingEscrow(votingEscrow_);
@@ -63,6 +67,17 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
         _pools[size] = newPool;
         poolSize = size + 1;
         emit PoolAdded(newPool);
+    }
+
+    function togglePool(uint256 index) external onlyOwner {
+        require(index < poolSize, "Invalid index");
+        if (disabledPools[index]) {
+            disabledPools[index] = false;
+            disabledPoolSize--;
+        } else {
+            disabledPools[index] = true;
+            disabledPoolSize++;
+        }
     }
 
     function balanceOf(address account) external view returns (uint256) {
@@ -115,10 +130,14 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
         override
         returns (uint256[] memory weights, address[] memory pools)
     {
-        uint256 size = poolSize;
-        pools = new address[](size);
-        for (uint256 i = 0; i < size; i++) {
-            pools[i] = _pools[i];
+        uint256 poolSize_ = poolSize;
+        uint256 size = 0;
+        pools = new address[](poolSize_ - disabledPoolSize);
+        for (uint256 i = 0; i < poolSize_; i++) {
+            address pool = _pools[i];
+            if (!disabledPools[i]) {
+                pools[size++] = pool;
+            }
         }
 
         uint256[] memory sums = new uint256[](size);

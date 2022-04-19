@@ -378,4 +378,75 @@ describe("ControllerBallot", function () {
             );
         });
     });
+
+    describe("togglePool()", function () {
+        beforeEach(async function () {
+            await ballot.connect(owner).togglePool(1);
+        });
+
+        it("Should return the even weights when no one has voted", async function () {
+            const weights = (await ballot.count(startWeek)).weights;
+            expect(weights[0]).to.equal(parseEther("1").div(2));
+            expect(weights[1]).to.equal(parseEther("1").div(2));
+        });
+
+        it("Should return the pools", async function () {
+            expect((await ballot.count(startWeek)).pools).to.eql([pool0, pool2]);
+        });
+
+        it("Should return the weights with two voters", async function () {
+            const unlockTime = startWeek + WEEK * 100;
+            await votingEscrow.mock.getLockedBalance.returns([parseEther("1"), unlockTime]);
+            await ballot.cast([parseEther("1"), 0, 0]);
+            await ballot.connect(user2).cast([0, parseEther("1"), 0]);
+
+            const weightsW0 = (await ballot.count(startWeek)).weights;
+            expect(weightsW0[0]).to.equal(parseEther("1"));
+            expect(weightsW0[1]).to.equal(0);
+
+            const weightsW99 = (await ballot.count(startWeek + WEEK * 99)).weights;
+            expect(weightsW99[0]).to.equal(parseEther("1"));
+            expect(weightsW99[1]).to.equal(0);
+
+            const weightsW100 = (await ballot.count(startWeek + WEEK * 100)).weights;
+            expect(weightsW100[0]).to.equal(parseEther("1").div(2));
+            expect(weightsW100[1]).to.equal(parseEther("1").div(2));
+        });
+
+        it("Should return the weights with three voters", async function () {
+            await votingEscrow.mock.getLockedBalance
+                .withArgs(addr1)
+                .returns([parseEther("1"), startWeek + WEEK * 40]);
+            await votingEscrow.mock.getLockedBalance
+                .withArgs(addr2)
+                .returns([parseEther("3"), startWeek + WEEK * 50]);
+            await votingEscrow.mock.getLockedBalance
+                .withArgs(addr3)
+                .returns([parseEther("1"), startWeek + WEEK * 60]);
+
+            await ballot.cast([parseEther("0.6"), parseEther("0.3"), parseEther("0.1")]);
+            await ballot.connect(user2).cast([0, parseEther("1"), 0]);
+            await ballot.connect(user3).cast([parseEther("0.2"), parseEther("0.8"), 0]);
+
+            const totalW0 = 40 * 0.7 + 60 * 0.2;
+            const sum0W0 = parseEther((40 * 0.6 + 60 * 0.2).toString()).div(totalW0);
+            const sum1W0 = parseEther((40 * 0.1).toString()).div(totalW0);
+            const weightsW0 = (await ballot.count(startWeek)).weights;
+            expect(weightsW0[0]).to.equal(sum0W0);
+            expect(weightsW0[1]).to.equal(sum1W0);
+
+            const totalW10 = 30 * 0.7 + 50 * 0.2;
+            const sum0W10 = parseEther((30 * 0.6 + 50 * 0.2).toString()).div(totalW10);
+            const sum1W10 = parseEther((30 * 0.1).toString()).div(totalW10);
+            const weightsW10 = (await ballot.count(startWeek + WEEK * 10)).weights;
+            expect(weightsW10[0]).to.equal(sum0W10);
+            expect(weightsW10[1]).to.equal(sum1W10);
+
+            const totalW45 = 15 * 0.2;
+            const sum0W45 = parseEther((15 * 0.2).toString()).div(totalW45);
+            const weightsW45 = (await ballot.count(startWeek + WEEK * 45)).weights;
+            expect(weightsW45[0]).to.equal(sum0W45);
+            expect(weightsW45[1]).to.equal(0);
+        });
+    });
 });
