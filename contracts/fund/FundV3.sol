@@ -38,6 +38,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     event FeeCollectorUpdated(address newFeeCollector);
     event ActivityDelayTimeUpdated(uint256 delayTime);
     event SplitRatioUpdated(uint256 newSplitRatio);
+    event FeeDebtPaid(uint256 amount);
 
     uint256 private constant UNIT = 1e18;
     uint256 private constant MAX_INTEREST_RATE = 0.2e18; // 20% daily
@@ -1000,6 +1001,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
             feeDebt = fee - amount;
             _totalDebt = total - amount;
             IERC20(tokenUnderlying).safeTransfer(feeCollector, amount);
+            emit FeeDebtPaid(amount);
         }
     }
 
