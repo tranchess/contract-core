@@ -364,7 +364,7 @@ describe("PrimaryMarketV3", function () {
             await fund.mock.primaryMarketAddDebt.returns();
             await expect(primaryMarket.merge(addr2, inB, 0))
                 .to.emit(primaryMarket, "Merged")
-                .withArgs(addr2, outQ, inB, inB);
+                .withArgs(addr2, outQ, inB, inB, feeQ);
         });
     });
 
@@ -660,10 +660,10 @@ describe("PrimaryMarketV3", function () {
                 await btc.mint(fund.address, TOTAL_UNDERLYING);
                 await expect(primaryMarket.popRedemptionQueue(2))
                     .to.emit(primaryMarket, "RedemptionPopped")
-                    .withArgs(2, 2);
+                    .withArgs(2, 2, outPrefixSum[1]);
                 await expect(primaryMarket.popRedemptionQueue(2))
                     .to.emit(primaryMarket, "RedemptionPopped")
-                    .withArgs(2, 4);
+                    .withArgs(2, 4, outPrefixSum[3].sub(outPrefixSum[1]));
             });
         });
 
