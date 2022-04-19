@@ -16,10 +16,14 @@ contract QueenSwapRouter is ITrancheIndexV2, IPrimaryMarketV3 {
 
     ISwapRouter public immutable swapRouter;
     IFundV3 public immutable override fund;
+    address private immutable _tokenUnderlying;
+    address private immutable _tokenQ;
 
     constructor(address swapRouter_, address fund_) public {
         swapRouter = ISwapRouter(swapRouter_);
         fund = IFundV3(fund_);
+        _tokenUnderlying = IFundV3(fund_).tokenUnderlying();
+        _tokenQ = IFundV3(fund_).tokenQ();
     }
 
     /// @notice Receive unwrapped transfer from the wrapped token.
@@ -31,12 +35,8 @@ contract QueenSwapRouter is ITrancheIndexV2, IPrimaryMarketV3 {
         uint256 minOutQ,
         uint256 version
     ) external override returns (uint256 outQ) {
-        IFundV3 storedFund = fund;
-        address[] memory path = new address[](2);
-        path[0] = storedFund.tokenUnderlying();
-        path[1] = storedFund.tokenQ();
-        IERC20(path[0]).safeTransferFrom(msg.sender, address(this), underlying);
-        outQ = _create(storedFund.primaryMarket(), path, recipient, underlying, minOutQ, version);
+        IERC20(_tokenUnderlying).safeTransferFrom(msg.sender, address(this), underlying);
+        outQ = _create(fund.primaryMarket(), recipient, underlying, minOutQ, version);
     }
 
     function wrapAndCreate(
@@ -44,12 +44,8 @@ contract QueenSwapRouter is ITrancheIndexV2, IPrimaryMarketV3 {
         uint256 minOutQ,
         uint256 version
     ) external payable override returns (uint256 outQ) {
-        IFundV3 storedFund = fund;
-        address[] memory path = new address[](2);
-        path[0] = storedFund.tokenUnderlying();
-        path[1] = storedFund.tokenQ();
-        IWrappedERC20(path[0]).deposit{value: msg.value}();
-        outQ = _create(storedFund.primaryMarket(), path, recipient, msg.value, minOutQ, version);
+        IWrappedERC20(_tokenUnderlying).deposit{value: msg.value}();
+        outQ = _create(fund.primaryMarket(), recipient, msg.value, minOutQ, version);
     }
 
     /// @dev Unlike normal redeem, a user could send QUEEN before calling this redeem().
@@ -61,30 +57,13 @@ contract QueenSwapRouter is ITrancheIndexV2, IPrimaryMarketV3 {
         uint256 minUnderlying,
         uint256 version
     ) external override returns (uint256 underlying) {
-        IFundV3 storedFund = fund;
-        address[] memory path = new address[](2);
-        path[0] = storedFund.tokenQ();
-        path[1] = storedFund.tokenUnderlying();
         // QUEEN balance of this contract is preferred
-        uint256 balanceQ = IERC20(path[0]).balanceOf(address(this));
+        uint256 balanceQ = IERC20(_tokenQ).balanceOf(address(this));
         if (balanceQ < inQ) {
             // Retain the rest of QUEEN
-            storedFund.trancheTransferFrom(
-                TRANCHE_Q,
-                msg.sender,
-                address(this),
-                inQ - balanceQ,
-                version
-            );
+            fund.trancheTransferFrom(TRANCHE_Q, msg.sender, address(this), inQ - balanceQ, version);
         }
-        underlying = _redeem(
-            storedFund.primaryMarket(),
-            path,
-            recipient,
-            inQ,
-            minUnderlying,
-            version
-        );
+        underlying = _redeem(fund.primaryMarket(), recipient, inQ, minUnderlying, version);
     }
 
     function redeemAndUnwrap(
@@ -93,27 +72,15 @@ contract QueenSwapRouter is ITrancheIndexV2, IPrimaryMarketV3 {
         uint256 minUnderlying,
         uint256 version
     ) external override returns (uint256 underlying) {
-        IFundV3 storedFund = fund;
-        address[] memory path = new address[](2);
-        path[0] = storedFund.tokenQ();
-        path[1] = storedFund.tokenUnderlying();
-        storedFund.trancheTransferFrom(TRANCHE_Q, msg.sender, address(this), inQ, version);
-        underlying = _redeem(
-            storedFund.primaryMarket(),
-            path,
-            address(this),
-            inQ,
-            minUnderlying,
-            version
-        );
-        IWrappedERC20(path[1]).withdraw(underlying);
+        fund.trancheTransferFrom(TRANCHE_Q, msg.sender, address(this), inQ, version);
+        underlying = _redeem(fund.primaryMarket(), address(this), inQ, minUnderlying, version);
+        IWrappedERC20(_tokenUnderlying).withdraw(underlying);
         (bool success, ) = recipient.call{value: underlying}("");
         require(success, "Transfer failed");
     }
 
     function _create(
         address primaryMarket,
-        address[] memory path,
         address recipient,
         uint256 underlying,
         uint256 minOutQ,
@@ -122,6 +89,9 @@ contract QueenSwapRouter is ITrancheIndexV2, IPrimaryMarketV3 {
         ISwapRouter swapRouter_ = swapRouter;
         IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
         // Get out amount from swap
+        address[] memory path = new address[](2);
+        path[0] = _tokenUnderlying;
+        path[1] = _tokenQ;
         uint256 swapAmount = swapRouter_.getAmountsOut(underlying, path)[1];
         // Get out amount from primary market
         uint256 pmAmount = pm.getCreation(underlying);
@@ -149,7 +119,6 @@ contract QueenSwapRouter is ITrancheIndexV2, IPrimaryMarketV3 {
 
     function _redeem(
         address primaryMarket,
-        address[] memory path,
         address recipient,
         uint256 inQ,
         uint256 minUnderlying,
@@ -158,6 +127,9 @@ contract QueenSwapRouter is ITrancheIndexV2, IPrimaryMarketV3 {
         ISwapRouter swapRouter_ = swapRouter;
         IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
         // Get out amount from swap
+        address[] memory path = new address[](2);
+        path[0] = _tokenQ;
+        path[1] = _tokenUnderlying;
         uint256 swapAmount = swapRouter_.getAmountsOut(inQ, path)[1];
         // Get out amount from primary market
         (uint256 pmAmount, ) = pm.getRedemption(inQ);
