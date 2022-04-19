@@ -841,7 +841,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         _historicalNavR[day] = navR;
         currentDay = day + 1 days;
 
-        emit Settled(day, underlying, navB, navR, interestRate);
+        emit Settled(day, navB, navR, interestRate);
     }
 
     function transferToStrategy(uint256 amount) external override onlyStrategy {

@@ -707,15 +707,10 @@ describe("FundV3", function () {
         it("Should keep previous NAV when nothing happened", async function () {
             await twapOracle.mock.getTwap.returns(parseEther("1100"));
             await advanceBlockAtTime(startDay);
+            const interestRate = parseEther("0.001");
             await expect(fund.settle())
                 .to.emit(fund, "Settled")
-                .withArgs(
-                    startDay,
-                    parseEther("0"),
-                    parseEther("1"),
-                    parseEther("1"),
-                    parseEther("0.001")
-                );
+                .withArgs(startDay, parseEther("1"), parseEther("1"), interestRate);
             expect(await fund.currentDay()).to.equal(startDay + DAY);
             expect(await fund.getRebalanceSize()).to.equal(0);
             const navs = await fund.historicalNavs(startDay);
@@ -751,7 +746,7 @@ describe("FundV3", function () {
             await advanceBlockAtTime(startDay);
             await expect(fund.settle())
                 .to.emit(fund, "Settled")
-                .withArgs(startDay, btcInFund, navB, navR, interestRate);
+                .withArgs(startDay, navB, navR, interestRate);
             expect(await fund.currentDay()).to.equal(startDay + DAY);
             expect(await fund.getRebalanceSize()).to.equal(0);
             const navs = await fund.historicalNavs(startDay);
