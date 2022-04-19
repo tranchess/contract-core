@@ -19,7 +19,13 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     event Created(address indexed account, uint256 underlying, uint256 outQ);
     event Redeemed(address indexed account, uint256 inQ, uint256 underlying, uint256 fee);
     event Split(address indexed account, uint256 inQ, uint256 outB, uint256 outR);
-    event Merged(address indexed account, uint256 outQ, uint256 inB, uint256 inR, uint256 feeQ);
+    event Merged(
+        address indexed account,
+        uint256 outQ,
+        uint256 inB,
+        uint256 inR,
+        uint256 underlying
+    );
     event RedemptionQueued(address indexed account, uint256 index, uint256 underlying);
     event RedemptionPopped(uint256 count, uint256 newHead, uint256 requiredUnderlying);
     event RedemptionClaimed(address indexed account, uint256 index, uint256 underlying);
@@ -552,8 +558,9 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         fund.primaryMarketBurn(TRANCHE_B, msg.sender, inB, version);
         fund.primaryMarketBurn(TRANCHE_R, msg.sender, inB, version);
         fund.primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
-        fund.primaryMarketAddDebt(0, _getRedemptionBeforeFee(feeQ));
-        emit Merged(recipient, outQ, inB, inB, feeQ);
+        uint256 feeUnderlying = _getRedemptionBeforeFee(feeQ);
+        fund.primaryMarketAddDebt(0, feeUnderlying);
+        emit Merged(recipient, outQ, inB, inB, feeUnderlying);
     }
 
     /// @dev Nothing to do for daily fund settlement.

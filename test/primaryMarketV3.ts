@@ -364,7 +364,7 @@ describe("PrimaryMarketV3", function () {
             await fund.mock.primaryMarketAddDebt.returns();
             await expect(primaryMarket.merge(addr2, inB, 0))
                 .to.emit(primaryMarket, "Merged")
-                .withArgs(addr2, outQ, inB, inB, feeQ);
+                .withArgs(addr2, outQ, inB, inB, feeBtc);
         });
     });
 
