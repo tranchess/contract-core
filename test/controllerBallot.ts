@@ -384,6 +384,15 @@ describe("ControllerBallot", function () {
             await ballot.connect(owner).togglePool(1);
         });
 
+        it("Should emit event", async function () {
+            await expect(ballot.connect(owner).togglePool(1))
+                .to.emit(ballot, "PoolToggled")
+                .withArgs(pool1, false);
+            await expect(ballot.connect(owner).togglePool(1))
+                .to.emit(ballot, "PoolToggled")
+                .withArgs(pool1, true);
+        });
+
         it("Should return the even weights when no one has voted", async function () {
             const weights = (await ballot.count(startWeek)).weights;
             expect(weights[0]).to.equal(parseEther("1").div(2));

@@ -17,6 +17,7 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
     using SafeDecimalMath for uint256;
 
     event PoolAdded(address pool);
+    event PoolToggled(address indexed pool, bool isDisabled);
     event Voted(
         address indexed account,
         uint256 oldAmount,
@@ -78,6 +79,7 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
             disabledPools[index] = true;
             disabledPoolSize++;
         }
+        emit PoolToggled(_pools[index], disabledPools[index]);
     }
 
     function balanceOf(address account) external view returns (uint256) {
@@ -131,13 +133,12 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
         returns (uint256[] memory weights, address[] memory pools)
     {
         uint256 poolSize_ = poolSize;
-        uint256 size = 0;
-        pools = new address[](poolSize_ - disabledPoolSize);
-        for (uint256 i = 0; i < poolSize_; i++) {
+        uint256 size = poolSize_ - disabledPoolSize;
+        pools = new address[](size);
+        uint256 j = 0;
+        for (uint256 i = 0; i < poolSize_ && j < size; i++) {
             address pool = _pools[i];
-            if (!disabledPools[i]) {
-                pools[size++] = pool;
-            }
+            if (!disabledPools[i]) pools[j++] = pool;
         }
 
         uint256[] memory sums = new uint256[](size);
