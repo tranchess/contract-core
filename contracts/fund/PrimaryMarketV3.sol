@@ -24,7 +24,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 outQ,
         uint256 inB,
         uint256 inR,
-        uint256 underlying
+        uint256 feeUnderlying
     );
     event RedemptionQueued(address indexed account, uint256 index, uint256 underlying);
     event RedemptionPopped(uint256 count, uint256 newHead, uint256 requiredUnderlying);
