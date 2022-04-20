@@ -7,7 +7,7 @@ const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
 import { defaultAbiCoder } from "ethers/lib/utils";
-import { TRANCHE_Q, TRANCHE_B } from "./utils";
+import { TRANCHE_Q, TRANCHE_B, TRANCHE_R } from "./utils";
 
 const UNIT = BigNumber.from(10).pow(18);
 const n = BigNumber.from("2");
@@ -1370,7 +1370,7 @@ describe("QueenStableSwap", function () {
     });
 });
 
-describe("Flashloan", function () {
+describe("Flash Swap", function () {
     const REDEMPTION_FEE_BPS = 35;
     const MERGE_FEE_BPS = 45;
     const TOTAL_UNDERLYING = parseBtc("10");
@@ -1391,6 +1391,7 @@ describe("Flashloan", function () {
         readonly usd: Contract;
         readonly tokens: Contract[];
         readonly swapRouter: Contract;
+        readonly stableSwap0: Contract;
         readonly flashSwapRouter: Contract;
     }
 
@@ -1410,6 +1411,7 @@ describe("Flashloan", function () {
     let btc: Contract;
     let usd: Contract;
     let swapRouter: Contract;
+    let stableSwap0: Contract;
     let flashSwapRouter: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
@@ -1453,6 +1455,7 @@ describe("Flashloan", function () {
             parseEther("0.0001").mul(MERGE_FEE_BPS),
             BigNumber.from(1).shl(256).sub(1)
         );
+        await fund.mock.primaryMarket.returns(primaryMarket.address);
 
         const chessSchedule = await deployMockForName(owner, "ChessSchedule");
         const chessController = await deployMockForName(owner, "ChessController");
@@ -1526,6 +1529,7 @@ describe("Flashloan", function () {
             usd,
             tokens,
             swapRouter,
+            stableSwap0,
             flashSwapRouter: flashSwapRouter.connect(user1),
         };
     }
@@ -1539,6 +1543,7 @@ describe("Flashloan", function () {
         user1 = fixtureData.wallets.user1;
         addr1 = user1.address;
         swapRouter = fixtureData.swapRouter;
+        stableSwap0 = fixtureData.stableSwap0;
         flashSwapRouter = fixtureData.flashSwapRouter;
         pancakeRouter = fixtureData.pancakeRouter;
         pancakeSwapRouter = fixtureData.pancakeSwapRouter;
@@ -1609,6 +1614,10 @@ describe("Flashloan", function () {
             await fund.mock.tokenUnderlying.returns(btc.address);
             await fund.mock.tokenB.returns(tokens[0].address);
             await fund.mock.tokenR.returns(tokens[1].address);
+            await fund.mock.trancheTransfer
+                .withArgs(TRANCHE_B, stableSwap0.address, outR, 0)
+                .returns();
+            await fund.mock.trancheTransfer.withArgs(TRANCHE_R, addr1, outR, 0).returns();
             await fund.mock.primaryMarketMint
                 .withArgs(0, flashSwapRouter.address, createdQ, 0)
                 .returns();
@@ -1625,21 +1634,23 @@ describe("Flashloan", function () {
             await pancakeRouter.mock.swapExactTokensForTokens.returns([0, parseBtc("0.002")]);
 
             await btc.mint(flashSwapRouter.address, parseBtc("1"));
-            await tokens[0].mint(flashSwapRouter.address, outR);
-            await tokens[1].mint(flashSwapRouter.address, outR);
-            await usd.connect(user1).approve(flashSwapRouter.address, parseEther("1"));
+            await tokens[0].mint(stableSwap0.address, outR);
+            await usd
+                .connect(user1)
+                .approve(flashSwapRouter.address, BigNumber.from("30572571899722170"));
+            await usd.mint(
+                stableSwap0.address,
+                parseEther("1").sub(BigNumber.from("30572571899722170"))
+            );
 
             const beforeQuote = await usd.balanceOf(user1.address);
-            const beforeR = await tokens[1].balanceOf(user1.address);
 
             await flashSwapRouter
                 .connect(user1)
                 .buyR(primaryMarket.address, parseEther("1"), addr1, usd.address, 1, 0, outR);
 
             const afterQuote = await usd.balanceOf(user1.address);
-            const afterR = await tokens[1].balanceOf(user1.address);
             expect(afterQuote.sub(beforeQuote)).to.equal(BigNumber.from("-30572571899722170"));
-            expect(afterR.sub(beforeR)).to.equal(outR);
         });
     });
 
@@ -1650,6 +1661,9 @@ describe("Flashloan", function () {
             await fund.mock.tokenUnderlying.returns(btc.address);
             await fund.mock.tokenB.returns(tokens[0].address);
             await fund.mock.tokenR.returns(tokens[1].address);
+            await fund.mock.trancheTransferFrom
+                .withArgs(TRANCHE_R, addr1, flashSwapRouter.address, inR, 0)
+                .returns();
             await fund.mock.primaryMarketBurn
                 .withArgs(1, flashSwapRouter.address, inR, 0)
                 .returns();
@@ -1694,6 +1708,9 @@ describe("Flashloan", function () {
             await fund.mock.tokenUnderlying.returns(btc.address);
             await fund.mock.tokenB.returns(tokens[0].address);
             await fund.mock.tokenR.returns(tokens[1].address);
+            await fund.mock.trancheTransferFrom
+                .withArgs(TRANCHE_R, addr1, flashSwapRouter.address, inR, 0)
+                .returns();
             await fund.mock.primaryMarketBurn
                 .withArgs(1, flashSwapRouter.address, inR, 0)
                 .returns();
@@ -1722,21 +1739,17 @@ describe("Flashloan", function () {
             await pancakeRouter.mock.getAmountsIn.returns([parseEther("1"), 0]);
             await pancakeRouter.mock.swapExactTokensForTokens.returns([0, quoteAmount]);
 
-            await tokens[1].mint(addr1, inR);
-            await tokens[1].connect(user1).approve(flashSwapRouter.address, inR);
+            await tokens[1].mint(flashSwapRouter.address, inR);
             await usd.mint(flashSwapRouter.address, quoteAmount);
 
             const beforeQuote = await usd.balanceOf(user1.address);
-            const beforeR = await tokens[1].balanceOf(user1.address);
 
             await flashSwapRouter
                 .connect(user1)
                 .sellR(primaryMarket.address, parseEther("0"), addr1, usd.address, 1, 0, inR);
 
             const afterQuote = await usd.balanceOf(user1.address);
-            const afterR = await tokens[1].balanceOf(user1.address);
             expect(afterQuote.sub(beforeQuote)).to.equal(BigNumber.from("968462902096752591"));
-            expect(beforeR.sub(afterR)).to.equal(inR);
         });
     });
 });
