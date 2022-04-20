@@ -97,11 +97,10 @@ describe("PrimaryMarketV3", function () {
         const inBtc = parseBtc("1");
         const outQ = inBtc.mul(EQUIVALENT_TOTAL_Q).div(TOTAL_UNDERLYING);
 
-        it("Should check activeness", async function () {
+        it("Should not check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
-            await expect(primaryMarket.create(addr1, inBtc, 0, 0)).to.be.revertedWith(
-                "Only when active"
-            );
+            await fund.mock.primaryMarketMint.returns();
+            await primaryMarket.create(addr1, inBtc, 0, 0);
         });
 
         it("Should transfer underlying from msg.sender", async function () {
@@ -197,11 +196,11 @@ describe("PrimaryMarketV3", function () {
             .div(10000);
         const outBtc = inQ.mul(TOTAL_UNDERLYING).div(EQUIVALENT_TOTAL_Q).sub(feeBtc);
 
-        it("Should check activeness", async function () {
+        it("Should not check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
-            await expect(primaryMarket.redeem(addr1, inQ, 0, 0)).to.be.revertedWith(
-                "Only when active"
-            );
+            await fund.mock.primaryMarketBurn.returns();
+            await fund.mock.primaryMarketTransferUnderlying.returns();
+            await primaryMarket.redeem(addr2, inQ, 0, 999);
         });
 
         it("Should burn QUEEN and transfer underlying", async function () {
@@ -267,9 +266,11 @@ describe("PrimaryMarketV3", function () {
         const inQ = parseEther("10");
         const outB = inQ.mul(SPLIT_RATIO).div(parseEther("1"));
 
-        it("Should check activeness", async function () {
+        it("Should not check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
-            await expect(primaryMarket.split(addr1, inQ, 0)).to.be.revertedWith("Only when active");
+            await fund.mock.primaryMarketBurn.returns();
+            await fund.mock.primaryMarketMint.returns();
+            await primaryMarket.split(addr2, inQ, 999);
         });
 
         it("Should burn and mint tranche tokens and add fee debt", async function () {
@@ -318,9 +319,12 @@ describe("PrimaryMarketV3", function () {
         const outQ = outQBeforeFee.sub(feeQ);
         const feeBtc = feeQ.mul(TOTAL_UNDERLYING).div(EQUIVALENT_TOTAL_Q);
 
-        it("Should check activeness", async function () {
+        it("Should not check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
-            await expect(primaryMarket.merge(addr1, inB, 0)).to.be.revertedWith("Only when active");
+            await fund.mock.primaryMarketBurn.returns();
+            await fund.mock.primaryMarketMint.returns();
+            await fund.mock.primaryMarketAddDebt.returns();
+            await primaryMarket.merge(addr2, inB, 999);
         });
 
         it("Should burn and mint tranche tokens and add fee debt", async function () {
@@ -377,11 +381,11 @@ describe("PrimaryMarketV3", function () {
             .div(10000);
         const outBtc = inQ.mul(TOTAL_UNDERLYING).div(EQUIVALENT_TOTAL_Q).sub(feeBtc);
 
-        it("Should check activeness", async function () {
+        it("Should not check activeness", async function () {
             await fund.mock.isPrimaryMarketActive.returns(false);
-            await expect(primaryMarket.queueRedemption(addr1, inQ, 0, 0)).to.be.revertedWith(
-                "Only when active"
-            );
+            await fund.mock.primaryMarketBurn.returns();
+            await fund.mock.primaryMarketAddDebt.returns();
+            await primaryMarket.queueRedemption(addr2, inQ, 0, 999);
         });
 
         it("Should burn QUEEN and add debt", async function () {
