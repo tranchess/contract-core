@@ -766,7 +766,7 @@ describe("FundV3", function () {
             );
         });
 
-        it.only("Should success even if feeCollector.checkpoint() reverts", async function () {
+        it("Should success even if feeCollector.checkpoint() reverts", async function () {
             const feeCollector = await deployMockForName(owner, "FeeDistributor");
             await fund.connect(owner).updateFeeCollector(feeCollector.address);
             await feeCollector.mock.checkpoint.reverts();

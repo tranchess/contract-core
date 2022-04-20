@@ -246,6 +246,9 @@ interface IFundV3 {
     event RebalanceTriggered(
         uint256 indexed index,
         uint256 indexed day,
+        uint256 navSum,
+        uint256 navB,
+        uint256 navROrZero,
         uint256 ratioB2Q,
         uint256 ratioR2Q,
         uint256 ratioBR

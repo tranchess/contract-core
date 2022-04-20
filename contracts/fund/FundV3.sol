@@ -1040,6 +1040,9 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         emit RebalanceTriggered(
             oldSize,
             day,
+            navSum,
+            navB,
+            navROrZero,
             rebalance.ratioB2Q,
             rebalance.ratioR2Q,
             rebalance.ratioBR
