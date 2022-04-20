@@ -766,6 +766,23 @@ describe("FundV3", function () {
             );
         });
 
+        it("Should success even if feeCollector.checkpoint() reverts", async function () {
+            const feeCollector = await deployMockForName(owner, "FeeDistributor");
+            expect(await fund.connect(owner).updateFeeCollector(feeCollector.address))
+                .to.emit(fund, "FeeCollectorUpdated")
+                .withArgs(feeCollector.address);
+            await feeCollector.mock.checkpoint.reverts();
+            const pmFee = parseBtc("0.1");
+            await primaryMarket.call(fund, "primaryMarketAddDebt", 0, pmFee);
+            const newProtocolFee = parseBtc("10").sub(pmFee).mul(DAILY_PROTOCOL_FEE_BPS).div(10000);
+            const fee = newProtocolFee.add(pmFee);
+            await expect(() => advanceOneDayAndSettle()).to.changeTokenBalances(
+                btc,
+                [feeCollector, fund],
+                [fee, fee.mul(-1)]
+            );
+        });
+
         it("Should not trigger upper rebalance when price is not high enough", async function () {
             const price = parseEther("1500");
             await twapOracle.mock.getTwap.withArgs(startDay).returns(price);
