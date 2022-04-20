@@ -555,10 +555,10 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     ) external override onlyActive returns (uint256 outQ) {
         uint256 feeQ;
         (outQ, feeQ) = getMerge(inB);
+        uint256 feeUnderlying = _getRedemptionBeforeFee(feeQ);
         fund.primaryMarketBurn(TRANCHE_B, msg.sender, inB, version);
         fund.primaryMarketBurn(TRANCHE_R, msg.sender, inB, version);
         fund.primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
-        uint256 feeUnderlying = _getRedemptionBeforeFee(feeQ);
         fund.primaryMarketAddDebt(0, feeUnderlying);
         emit Merged(recipient, outQ, inB, inB, feeUnderlying);
     }
