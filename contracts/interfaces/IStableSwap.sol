@@ -45,17 +45,10 @@ interface IStableSwap {
 
     function removeLiquidity(
         uint256 version,
-        uint256 minBaseDelta,
-        uint256 minQuoteDelta,
-        uint256 burnAmount
+        uint256 lpIn,
+        uint256 minBaseOut,
+        uint256 minQuoteOut
     ) external returns (uint256 baseDelta, uint256 quoteDelta);
-
-    function removeLiquidityImbalance(
-        uint256 version,
-        uint256 baseDelta,
-        uint256 quoteDelta,
-        uint256 maxBurnAmount
-    ) external returns (uint256 burnAmount);
 
     function removeBaseLiquidity(
         uint256 version,
@@ -80,18 +73,10 @@ interface IStableSwap {
     );
     event LiquidityRemoved(
         address indexed account,
-        uint256 baseAmount,
-        uint256 quoteAmount,
+        uint256 lpIn,
+        uint256 baseOut,
+        uint256 quotOut,
         uint256 fee,
-        uint256 lpSupply
+        uint256 adminFee
     );
-    event LiquidityImbalanceRemoved(
-        address indexed account,
-        uint256 baseDelta,
-        uint256 quoteDelta,
-        uint256 fee,
-        uint256 invariant,
-        uint256 lpSupply
-    );
-    event LiquiditySingleRemoved(address indexed account, uint256 amount, uint256 dy);
 }

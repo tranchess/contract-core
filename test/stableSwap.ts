@@ -653,7 +653,7 @@ describe("BishopStableSwap", function () {
             const beforeLP = await lpToken0.balanceOf(addr2);
             await stableSwap0
                 .connect(user2)
-                .removeLiquidity(0, parseEther("1"), parseEther("1"), parseEther("2"));
+                .removeLiquidity(0, parseEther("2"), parseEther("1"), parseEther("1"));
             const afterLP = await lpToken0.balanceOf(addr2);
             expect(beforeLP.sub(afterLP)).to.equal(parseEther("2"));
         });
@@ -1244,7 +1244,7 @@ describe("QueenStableSwap", function () {
             const beforeLP = await lpToken0.balanceOf(addr2);
             await stableSwap0
                 .connect(user2)
-                .removeLiquidity(0, parseEther("1"), parseEther("1"), parseEther("2"));
+                .removeLiquidity(0, parseEther("2"), parseEther("1"), parseEther("1"));
             const afterLP = await lpToken0.balanceOf(addr2);
             expect(beforeLP.sub(afterLP)).to.equal(parseEther("2"));
         });
