@@ -55,7 +55,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     address public immutable lpToken;
     IFundV3 public immutable fund;
     uint256 public immutable baseTranche;
-    address public override quoteAddress;
+    address public immutable override quoteAddress;
 
     uint256 public baseBalance;
     uint256 public quoteBalance;
