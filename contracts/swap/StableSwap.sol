@@ -423,30 +423,31 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         emit LiquidityRemoved(msg.sender, lpIn, 0, quoteOut, fee, adminFee);
     }
 
-    // force balances to match reserves
-    function skim(address to) external nonReentrant {
+    /// @notice Force balances to match stored values.
+    function skim(address recipient) external nonReentrant {
         address baseAddress_ = baseAddress(); // gas savings
         address quoteAddress_ = quoteAddress; // gas savings
-        (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(fund.getRebalanceSize());
+        (uint256 oldBase, uint256 oldQuote) = _handleRebalance(fund.getRebalanceSize());
+        _update(oldBase, oldQuote);
         IERC20(baseAddress_).safeTransfer(
-            to,
-            IERC20(baseAddress_).balanceOf(address(this)).sub(baseBalance_)
+            recipient,
+            IERC20(baseAddress_).balanceOf(address(this)).sub(oldBase)
         );
         IERC20(quoteAddress_).safeTransfer(
-            to,
-            IERC20(quoteAddress_).balanceOf(address(this)).sub(totalAdminFee).sub(quoteBalance_)
+            recipient,
+            IERC20(quoteAddress_).balanceOf(address(this)).sub(totalAdminFee).sub(oldQuote)
         );
     }
 
-    // force reserves to match balances
+    /// @notice Force stored values to match balances.
     function sync() external nonReentrant {
-        (uint256 baseBalance_, uint256 quoteBalance_) = _handleRebalance(fund.getRebalanceSize());
-        _update(baseBalance_, quoteBalance_);
-        uint256 newBaseBalance = IERC20(baseAddress()).balanceOf(address(this));
-        uint256 newQuoteBalance = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
-        baseBalance = newBaseBalance;
-        quoteBalance = newQuoteBalance;
-        emit Sync(newBaseBalance, newQuoteBalance);
+        (uint256 oldBase, uint256 oldQuote) = _handleRebalance(fund.getRebalanceSize());
+        _update(oldBase, oldQuote);
+        uint256 newBase = IERC20(baseAddress()).balanceOf(address(this));
+        uint256 newQuote = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
+        baseBalance = newBase;
+        quoteBalance = newQuote;
+        emit Sync(newBase, newQuote);
     }
 
     function collectFee() external {
