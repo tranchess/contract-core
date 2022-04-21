@@ -126,7 +126,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         }
     }
 
-    function getCurrentD() public view override returns (uint256) {
+    function getCurrentD() external view override returns (uint256) {
         uint256 oracle = checkOracle(Operation.VIEW);
         (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
         return _getD(base, quote, getAmpl(), oracle);
@@ -189,13 +189,6 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 d = _getD(oldBase, oldQuote, ampl, oracle);
         uint256 newBase = _getBase(ampl, newQuote, oracle, d);
         baseIn = newBase.sub(oldBase).add(1); // just in case there were rounding error
-    }
-
-    /// @dev Average asset value per LP token
-    function virtualPrice() public view override returns (uint256) {
-        uint256 d = getCurrentD();
-        uint256 lpSupply = IERC20(lpToken).totalSupply();
-        return d.divideDecimal(lpSupply);
     }
 
     function buy(
