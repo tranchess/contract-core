@@ -48,17 +48,17 @@ interface IStableSwap {
         uint256 lpIn,
         uint256 minBaseOut,
         uint256 minQuoteOut
-    ) external returns (uint256 baseDelta, uint256 quoteDelta);
+    ) external returns (uint256 baseOut, uint256 quoteOut);
 
     function removeBaseLiquidity(
         uint256 version,
-        uint256 burnAmount,
-        uint256 minAmount
-    ) external returns (uint256);
+        uint256 lpIn,
+        uint256 minBaseOut
+    ) external returns (uint256 baseOut);
 
     function removeQuoteLiquidity(
         uint256 version,
-        uint256 burnAmount,
-        uint256 minAmount
-    ) external returns (uint256);
+        uint256 lpIn,
+        uint256 minQuoteOut
+    ) external returns (uint256 quoteOut);
 }
