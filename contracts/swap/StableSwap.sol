@@ -145,7 +145,10 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
         uint256 newBase = oldBase.add(baseIn);
-        uint256 newQuote = _getQuoteBalance(newBase);
+        uint256 ampl = getAmpl();
+        uint256 oracle = checkOracle(Operation.VIEW);
+        uint256 d = _getD(oldBase, oldQuote, ampl, oracle);
+        uint256 newQuote = _getQuote(ampl, newBase, oracle, d);
         quoteOut = oldQuote.sub(newQuote).sub(1); // -1 just in case there were some rounding errors
         uint256 fee = quoteOut.multiplyDecimal(feeRate);
         quoteOut = quoteOut.sub(fee);
@@ -155,7 +158,10 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
         uint256 newBase = oldBase.sub(baseOut);
-        uint256 newQuote = _getQuoteBalance(newBase);
+        uint256 ampl = getAmpl();
+        uint256 oracle = checkOracle(Operation.VIEW);
+        uint256 d = _getD(oldBase, oldQuote, ampl, oracle);
+        uint256 newQuote = _getQuote(ampl, newBase, oracle, d);
         quoteIn = newQuote.sub(oldQuote).add(1); // 1 just in case there were some rounding errors
         uint256 fee = quoteIn.mul(feeRate).div(uint256(1e18).sub(feeRate));
         quoteIn = quoteIn.add(fee);
@@ -166,7 +172,10 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
             _getRebalanceResult(fund.getRebalanceSize());
         uint256 fee = quoteIn.multiplyDecimal(feeRate);
         uint256 newQuote = oldQuote.add(quoteIn.sub(fee));
-        uint256 newBase = _getBaseBalance(newQuote);
+        uint256 ampl = getAmpl();
+        uint256 oracle = checkOracle(Operation.VIEW);
+        uint256 d = _getD(oldBase, oldQuote, ampl, oracle);
+        uint256 newBase = _getBase(ampl, newQuote, oracle, d);
         baseOut = oldBase.sub(newBase).sub(1); // just in case there were rounding error
     }
 
@@ -175,7 +184,10 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
             _getRebalanceResult(fund.getRebalanceSize());
         uint256 fee = quoteOut.mul(feeRate).div(uint256(1e18).sub(feeRate));
         uint256 newQuote = oldQuote.sub(quoteOut.add(fee));
-        uint256 newBase = _getBaseBalance(newQuote);
+        uint256 ampl = getAmpl();
+        uint256 oracle = checkOracle(Operation.VIEW);
+        uint256 d = _getD(oldBase, oldQuote, ampl, oracle);
+        uint256 newBase = _getBase(ampl, newQuote, oracle, d);
         baseIn = newBase.sub(oldBase).add(1); // just in case there were rounding error
     }
 
@@ -528,30 +540,6 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 b2 = d.multiplyDecimal(16 * ampl * newBaseBalance).multiplyDecimal(oracle);
         uint256 negC = d.multiplyDecimal(d).multiplyDecimal(d);
         newQuoteBalance = solveQuadratic(a, b1, b2, negC);
-    }
-
-    function _getBaseBalance(uint256 newQuoteBalance)
-        private
-        view
-        returns (uint256 newBaseBalance)
-    {
-        // Calculate new asset balances
-        uint256 ampl = getAmpl();
-        uint256 oracle = checkOracle(Operation.VIEW);
-        uint256 d = _getD(baseBalance, quoteBalance, ampl, oracle);
-        newBaseBalance = _getBase(ampl, newQuoteBalance, oracle, d);
-    }
-
-    function _getQuoteBalance(uint256 newBaseBalance)
-        private
-        view
-        returns (uint256 newQuoteBalance)
-    {
-        // Calculate new quote asset
-        uint256 ampl = getAmpl();
-        uint256 oracle = checkOracle(Operation.VIEW);
-        uint256 d = _getD(baseBalance, quoteBalance, ampl, oracle);
-        newQuoteBalance = _getQuote(ampl, newBaseBalance, oracle, d);
     }
 
     function solveDepressedCubic(uint256 p, uint256 negQ) public pure returns (uint256) {
