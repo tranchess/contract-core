@@ -20,6 +20,23 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
+    event LiquidityAdded(
+        address indexed sender,
+        address indexed recipient,
+        uint256 baseIn,
+        uint256 quoteIn,
+        uint256 lpOut,
+        uint256 fee,
+        uint256 adminFee
+    );
+    event LiquidityRemoved(
+        address indexed account,
+        uint256 lpIn,
+        uint256 baseOut,
+        uint256 quotOut,
+        uint256 fee,
+        uint256 adminFee
+    );
     event Swap(
         address indexed sender,
         address indexed recipient,
@@ -30,7 +47,6 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 fee,
         uint256 adminFee
     );
-
     event Sync(uint256 baseBalance, uint256 quoteBalance);
 
     uint256 private constant MIN_DIFF = 2;

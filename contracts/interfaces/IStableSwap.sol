@@ -67,22 +67,4 @@ interface IStableSwap {
         uint256 burnAmount,
         uint256 minAmount
     ) external returns (uint256);
-
-    event LiquidityAdded(
-        address indexed sender,
-        address indexed recipient,
-        uint256 baseIn,
-        uint256 quoteIn,
-        uint256 lpOut,
-        uint256 fee,
-        uint256 adminFee
-    );
-    event LiquidityRemoved(
-        address indexed account,
-        uint256 lpIn,
-        uint256 baseOut,
-        uint256 quotOut,
-        uint256 fee,
-        uint256 adminFee
-    );
 }
