@@ -58,9 +58,9 @@ contract QueenStableSwap is StableSwap, ITrancheIndexV2 {
         return (baseBalance, quoteBalance);
     }
 
-    function checkOracle(
+    function getOraclePrice(
         Operation /*op*/
-    ) public view override returns (uint256 oracle) {
+    ) public view override returns (uint256) {
         uint256 fundUnderlying = fund.getTotalUnderlying();
         uint256 fundEquivalentTotalQ = fund.getEquivalentTotalQ();
         return fundUnderlying.divideDecimal(fundEquivalentTotalQ);
