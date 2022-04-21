@@ -103,7 +103,8 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     }
 
     function allBalances() public view override returns (uint256, uint256) {
-        return (baseBalance, quoteBalance);
+        (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        return (base, quote);
     }
 
     function getAmpl() public view returns (uint256) {
