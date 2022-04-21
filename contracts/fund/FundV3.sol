@@ -670,8 +670,10 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         address recipient,
         uint256 amount
     ) public override {
-        require(isFundActive(block.timestamp), "Transfer is inactive");
         uint256 tranche = _getTranche(msg.sender);
+        if (tranche != TRANCHE_Q) {
+            require(isFundActive(block.timestamp), "Transfer is inactive");
+        }
         _refreshBalance(sender, _rebalanceSize);
         _refreshBalance(recipient, _rebalanceSize);
         _transfer(tranche, sender, recipient, amount);
