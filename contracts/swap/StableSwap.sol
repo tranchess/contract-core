@@ -13,8 +13,6 @@ import "../interfaces/ITranchessSwapCallee.sol";
 import "../utils/SafeDecimalMath.sol";
 import "../utils/AdvancedMath.sol";
 
-enum Operation {SWAP, ADD_LIQUIDITY, REMOVE_LIQUIDITY, VIEW}
-
 abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
@@ -127,9 +125,8 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     }
 
     function getCurrentD() external view override returns (uint256) {
-        uint256 oraclePrice = getOraclePrice(Operation.VIEW);
         (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
-        return _getD(base, quote, getAmpl(), oraclePrice);
+        return _getD(base, quote, getAmpl(), getOraclePrice());
     }
 
     function getD(
@@ -146,7 +143,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
             _getRebalanceResult(fund.getRebalanceSize());
         uint256 newBase = oldBase.add(baseIn);
         uint256 ampl = getAmpl();
-        uint256 oraclePrice = getOraclePrice(Operation.VIEW);
+        uint256 oraclePrice = getOraclePrice();
         uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
         uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d);
         quoteOut = oldQuote.sub(newQuote).sub(1); // -1 just in case there were some rounding errors
@@ -159,7 +156,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
             _getRebalanceResult(fund.getRebalanceSize());
         uint256 newBase = oldBase.sub(baseOut);
         uint256 ampl = getAmpl();
-        uint256 oraclePrice = getOraclePrice(Operation.VIEW);
+        uint256 oraclePrice = getOraclePrice();
         uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
         uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d);
         quoteIn = newQuote.sub(oldQuote).add(1); // 1 just in case there were some rounding errors
@@ -173,7 +170,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 fee = quoteIn.multiplyDecimal(feeRate);
         uint256 newQuote = oldQuote.add(quoteIn.sub(fee));
         uint256 ampl = getAmpl();
-        uint256 oraclePrice = getOraclePrice(Operation.VIEW);
+        uint256 oraclePrice = getOraclePrice();
         uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
         uint256 newBase = _getBase(ampl, newQuote, oraclePrice, d);
         baseOut = oldBase.sub(newBase).sub(1); // just in case there were rounding error
@@ -185,7 +182,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 fee = quoteOut.mul(feeRate).div(uint256(1e18).sub(feeRate));
         uint256 newQuote = oldQuote.sub(quoteOut.add(fee));
         uint256 ampl = getAmpl();
-        uint256 oraclePrice = getOraclePrice(Operation.VIEW);
+        uint256 oraclePrice = getOraclePrice();
         uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
         uint256 newBase = _getBase(ampl, newQuote, oraclePrice, d);
         baseIn = newBase.sub(oldBase).add(1); // just in case there were rounding error
@@ -211,7 +208,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 fee = quoteIn.multiplyDecimal(feeRate);
         {
             uint256 ampl = getAmpl();
-            uint256 oraclePrice = getOraclePrice(Operation.SWAP);
+            uint256 oraclePrice = getOraclePrice();
             uint256 oldD = _getD(oldBase, oldQuote, ampl, oraclePrice);
             uint256 newD = _getD(oldBase - baseOut, newQuote.sub(fee), ampl, oraclePrice);
             require(newD >= oldD, "Invariant mismatch");
@@ -248,7 +245,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         {
             uint256 newQuote = oldQuote - quoteOut;
             uint256 ampl = getAmpl();
-            uint256 oraclePrice = getOraclePrice(Operation.SWAP);
+            uint256 oraclePrice = getOraclePrice();
             uint256 oldD = _getD(oldBase, oldQuote, ampl, oraclePrice);
             uint256 newD = _getD(newBase, newQuote - fee, ampl, oraclePrice);
             require(newD >= oldD, "Invariant mismatch");
@@ -288,7 +285,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 newBase = IERC20(baseAddress()).balanceOf(address(this));
         uint256 newQuote = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
         uint256 ampl = getAmpl();
-        uint256 oraclePrice = getOraclePrice(Operation.ADD_LIQUIDITY);
+        uint256 oraclePrice = getOraclePrice();
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         if (lpSupply == 0) {
             require(newBase > 0 && newQuote > 0, "Zero initial balance");
@@ -376,7 +373,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         _update(oldBase, oldQuote);
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 ampl = getAmpl();
-        uint256 oraclePrice = getOraclePrice(Operation.VIEW);
+        uint256 oraclePrice = getOraclePrice();
         uint256 d1;
         {
             uint256 d0 = _getD(oldBase, oldQuote, ampl, oraclePrice);
@@ -407,7 +404,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         _update(oldBase, oldQuote);
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 ampl = getAmpl();
-        uint256 oraclePrice = getOraclePrice(Operation.VIEW);
+        uint256 oraclePrice = getOraclePrice();
         uint256 d1;
         {
             uint256 d0 = _getD(oldBase, oldQuote, ampl, oraclePrice);
@@ -585,9 +582,5 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         virtual
         returns (uint256 newBase, uint256 newQuote);
 
-    function getOraclePrice(
-        Operation /*op*/
-    ) public view virtual returns (uint256) {
-        return 1e18;
-    }
+    function getOraclePrice() public view virtual override returns (uint256);
 }

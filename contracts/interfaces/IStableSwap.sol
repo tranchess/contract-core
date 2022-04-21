@@ -8,6 +8,8 @@ interface IStableSwap {
 
     function allBalances() external view returns (uint256, uint256);
 
+    function getOraclePrice() external view returns (uint256);
+
     function getCurrentD() external view returns (uint256);
 
     function getD(

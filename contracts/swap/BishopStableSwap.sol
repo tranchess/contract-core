@@ -142,12 +142,10 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
         }
     }
 
-    function getOraclePrice(Operation op) public view override returns (uint256) {
+    function getOraclePrice() public view override returns (uint256) {
         (, int256 answer, , , ) = AggregatorV3Interface(chainlinkAggregator).latestRoundData();
         (, uint256 navB, uint256 navR) = fund.extrapolateNav(uint256(answer));
-        if (op == Operation.SWAP || op == Operation.ADD_LIQUIDITY) {
-            require(navR >= navB.multiplyDecimal(tradingCurbThreshold), "Trading curb");
-        }
+        require(navR >= navB.multiplyDecimal(tradingCurbThreshold), "Trading curb");
         return navB;
     }
 }
