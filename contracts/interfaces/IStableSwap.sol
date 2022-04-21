@@ -27,12 +27,6 @@ interface IStableSwap {
 
     function getBaseIn(uint256 quoteOut) external view returns (uint256 baseIn);
 
-    function calculateTokenAmount(
-        uint256 baseDelta,
-        uint256 quoteDelta,
-        bool deposit
-    ) external view returns (uint256);
-
     function buy(
         uint256 version,
         uint256 baseOut,

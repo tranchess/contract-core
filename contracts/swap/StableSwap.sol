@@ -198,31 +198,6 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         return d.divideDecimal(lpSupply);
     }
 
-    /// @dev Estimate the amount of LP to mint/burn with a specified supply/withdraw distribution
-    function calculateTokenAmount(
-        uint256 baseDelta,
-        uint256 quoteDelta,
-        bool deposit
-    ) public view override returns (uint256) {
-        uint256 ampl = getAmpl();
-        uint256 lpSupply = IERC20(lpToken).totalSupply();
-        uint256 newBaseBalance;
-        uint256 newQuoteBalance;
-        (uint256 baseBalance_, uint256 quoteBalance_, , , , , ) =
-            _getRebalanceResult(fund.getRebalanceSize());
-        uint256 oracle = checkOracle(Operation.VIEW);
-        uint256 d0 = _getD(baseBalance_, quoteBalance_, ampl, oracle);
-
-        newBaseBalance = deposit ? baseBalance_.add(baseDelta) : baseBalance_.sub(baseDelta);
-        newQuoteBalance = deposit ? quoteBalance_.add(quoteDelta) : quoteBalance_.sub(quoteDelta);
-
-        uint256 d1 = _getD(newBaseBalance, newQuoteBalance, ampl, oracle);
-
-        uint256 difference = deposit ? d1.sub(d0) : d0.sub(d1);
-
-        return difference.mul(lpSupply).div(d0);
-    }
-
     function buy(
         uint256 version,
         uint256 baseOut,
