@@ -134,7 +134,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 quote,
         uint256 ampl,
         uint256 oraclePrice
-    ) external view override returns (uint256) {
+    ) external pure override returns (uint256) {
         return _getD(base, quote, ampl, oraclePrice);
     }
 

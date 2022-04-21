@@ -17,7 +17,7 @@ interface IStableSwap {
         uint256 quote,
         uint256 ampl,
         uint256 navB
-    ) external view returns (uint256);
+    ) external pure returns (uint256);
 
     function getQuoteOut(uint256 baseIn) external view returns (uint256 quoteOut);
 
