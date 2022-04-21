@@ -215,7 +215,21 @@ describe("FundV3", function () {
             await shareQ.call(fund, "shareTransfer", addr1, addr2, 0);
         });
 
-        // TODO: Should revert transfer B/R when inactive
+        it("Should transfer B/R reverts when inactive", async function () {
+            await twapOracle.mock.getTwap.returns(parseEther("1510"));
+            await pmCreate(user1, parseBtc("1"), parseEther("500"));
+            await advanceOneDayAndSettle();
+
+            expect(await fund.isFundActive(startDay + POST_REBALANCE_DELAY_TIME - 1)).to.equal(
+                false
+            );
+            await expect(shareB.call(fund, "shareTransfer", addr1, addr2, 0)).to.be.revertedWith(
+                "Transfer is inactive"
+            );
+            await expect(shareR.call(fund, "shareTransfer", addr1, addr2, 0)).to.be.revertedWith(
+                "Transfer is inactive"
+            );
+        });
 
         it("Should return the activity window without rebalance", async function () {
             expect(await fund.fundActivityStartTime()).to.equal(startDay - DAY);
