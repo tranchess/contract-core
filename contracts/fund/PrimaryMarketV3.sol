@@ -383,7 +383,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 underlying,
         uint256 minOutQ,
         uint256 version
-    ) private onlyActive returns (uint256 outQ) {
+    ) private returns (uint256 outQ) {
         outQ = getCreation(underlying);
         require(outQ >= minOutQ && outQ > 0, "Min QUEEN created");
         fund.primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
@@ -395,7 +395,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 inQ,
         uint256 minUnderlying,
         uint256 version
-    ) private onlyActive returns (uint256 underlying) {
+    ) private returns (uint256 underlying) {
         fund.primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         _popRedemptionQueue(0);
         uint256 fee;
@@ -424,7 +424,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 inQ,
         uint256 minUnderlying,
         uint256 version
-    ) external override onlyActive nonReentrant returns (uint256 underlying, uint256 index) {
+    ) external override nonReentrant returns (uint256 underlying, uint256 index) {
         fund.primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         uint256 fee;
         (underlying, fee) = getRedemption(inQ);
@@ -540,7 +540,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         address recipient,
         uint256 inQ,
         uint256 version
-    ) external override onlyActive returns (uint256 outB) {
+    ) external override returns (uint256 outB) {
         outB = getSplit(inQ);
         fund.primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         fund.primaryMarketMint(TRANCHE_B, recipient, outB, version);
@@ -552,7 +552,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         address recipient,
         uint256 inB,
         uint256 version
-    ) external override onlyActive returns (uint256 outQ) {
+    ) external override returns (uint256 outQ) {
         uint256 feeQ;
         (outQ, feeQ) = getMerge(inB);
         uint256 feeUnderlying = _getRedemptionBeforeFee(feeQ);
@@ -597,11 +597,6 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
 
     /// @notice Receive unwrapped transfer from the wrapped token.
     receive() external payable {}
-
-    modifier onlyActive() {
-        require(fund.isPrimaryMarketActive(address(this), block.timestamp), "Only when active");
-        _;
-    }
 
     modifier onlyFund() {
         require(msg.sender == address(fund), "Only fund");

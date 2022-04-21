@@ -204,7 +204,7 @@ describe("FundV3", function () {
 
     // TODO move to rebalance session
     describe("isFundActive()", function () {
-        it("Should revert transfer when inactive", async function () {
+        it("Should transfer Q when inactive", async function () {
             await twapOracle.mock.getTwap.returns(parseEther("1510"));
             await pmCreate(user1, parseBtc("1"), parseEther("500"));
             await advanceOneDayAndSettle();
@@ -212,7 +212,21 @@ describe("FundV3", function () {
             expect(await fund.isFundActive(startDay + POST_REBALANCE_DELAY_TIME - 1)).to.equal(
                 false
             );
-            await expect(shareQ.call(fund, "shareTransfer", addr1, addr2, 0)).to.be.revertedWith(
+            await shareQ.call(fund, "shareTransfer", addr1, addr2, 0);
+        });
+
+        it("Should transfer B/R reverts when inactive", async function () {
+            await twapOracle.mock.getTwap.returns(parseEther("1510"));
+            await pmCreate(user1, parseBtc("1"), parseEther("500"));
+            await advanceOneDayAndSettle();
+
+            expect(await fund.isFundActive(startDay + POST_REBALANCE_DELAY_TIME - 1)).to.equal(
+                false
+            );
+            await expect(shareB.call(fund, "shareTransfer", addr1, addr2, 0)).to.be.revertedWith(
+                "Transfer is inactive"
+            );
+            await expect(shareR.call(fund, "shareTransfer", addr1, addr2, 0)).to.be.revertedWith(
                 "Transfer is inactive"
             );
         });
@@ -245,56 +259,6 @@ describe("FundV3", function () {
                 false
             );
             expect(await fund.isFundActive(startDay + POST_REBALANCE_DELAY_TIME)).to.equal(true);
-        });
-    });
-
-    describe("isPrimaryMarketActive()", function () {
-        it("Should return inactive for non-primaryMarket contracts", async function () {
-            expect(await fund.fundActivityStartTime()).to.equal(startDay - DAY);
-            expect(await fund.currentDay()).to.equal(startDay);
-            expect(await fund.isPrimaryMarketActive(addr1, startDay - DAY + HOUR * 12)).to.equal(
-                false
-            );
-        });
-
-        it("Should return the activity window without rebalance", async function () {
-            expect(await fund.fundActivityStartTime()).to.equal(startDay - DAY);
-            expect(await fund.currentDay()).to.equal(startDay);
-            expect(
-                await fund.isPrimaryMarketActive(primaryMarket.address, startDay - DAY + HOUR * 12)
-            ).to.equal(true);
-
-            await twapOracle.mock.getTwap.returns(parseEther("1000"));
-            await advanceOneDayAndSettle();
-
-            expect(await fund.fundActivityStartTime()).to.equal(startDay);
-            expect(await fund.currentDay()).to.equal(startDay + DAY);
-            expect(
-                await fund.isPrimaryMarketActive(primaryMarket.address, startDay + HOUR * 12)
-            ).to.equal(true);
-        });
-
-        it("Should return the activity window with rebalance", async function () {
-            await twapOracle.mock.getTwap.returns(parseEther("1510"));
-            await pmCreate(user1, parseBtc("1"), parseEther("500"));
-            await advanceOneDayAndSettle();
-
-            expect(await fund.fundActivityStartTime()).to.equal(
-                startDay + POST_REBALANCE_DELAY_TIME
-            );
-            expect(await fund.currentDay()).to.equal(startDay + DAY);
-            expect(
-                await fund.isPrimaryMarketActive(
-                    primaryMarket.address,
-                    startDay + POST_REBALANCE_DELAY_TIME - 1
-                )
-            ).to.equal(false);
-            expect(
-                await fund.isPrimaryMarketActive(
-                    primaryMarket.address,
-                    startDay + POST_REBALANCE_DELAY_TIME
-                )
-            ).to.equal(true);
         });
     });
 

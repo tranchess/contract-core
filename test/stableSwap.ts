@@ -1439,7 +1439,6 @@ describe("Flash Swap", function () {
         await fund.mock.tokenShare.withArgs(TRANCHE_B).returns(tokens[0].address);
         await fund.mock.tokenUnderlying.returns(btc.address);
         await fund.mock.underlyingDecimalMultiplier.returns(1e10);
-        await fund.mock.isPrimaryMarketActive.returns(true);
         await fund.mock.splitRatio.returns(SPLIT_RATIO);
         await fund.mock.getTotalUnderlying.returns(TOTAL_UNDERLYING);
         await fund.mock.getEquivalentTotalQ.returns(EQUIVALENT_TOTAL_Q);
