@@ -335,7 +335,7 @@ describe("BishopStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, dy, 0, 0, amount, addr1);
+                .withArgs(swapRouter.address, addr1, 0, amount, dy, 0, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -370,7 +370,7 @@ describe("BishopStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, amount, 0, 0, dx, addr1);
+                .withArgs(swapRouter.address, addr1, 0, dx, amount, 0, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -475,7 +475,7 @@ describe("BishopStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, 0, dy, amount, 0, addr1);
+                .withArgs(swapRouter.address, addr1, amount, 0, 0, dy, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -511,7 +511,7 @@ describe("BishopStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, 0, amount, dx, 0, addr1);
+                .withArgs(swapRouter.address, addr1, dx, 0, 0, amount, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -943,7 +943,7 @@ describe("QueenStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, dy, 0, 0, amount, addr1);
+                .withArgs(swapRouter.address, addr1, 0, amount, dy, 0, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -978,7 +978,7 @@ describe("QueenStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, amount, 0, 0, dx, addr1);
+                .withArgs(swapRouter.address, addr1, 0, dx, amount, 0, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -1083,7 +1083,7 @@ describe("QueenStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, 0, dy, amount, 0, addr1);
+                .withArgs(swapRouter.address, addr1, amount, 0, 0, dy, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -1119,7 +1119,7 @@ describe("QueenStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, 0, amount, dx, 0, addr1);
+                .withArgs(swapRouter.address, addr1, dx, 0, 0, amount, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
