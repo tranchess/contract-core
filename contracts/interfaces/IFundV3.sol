@@ -113,11 +113,6 @@ interface IFundV3 {
 
     function isFundActive(uint256 timestamp) external view returns (bool);
 
-    function isPrimaryMarketActive(address primaryMarket, uint256 timestamp)
-        external
-        view
-        returns (bool);
-
     function getEquivalentTotalB() external view returns (uint256);
 
     function getEquivalentTotalQ() external view returns (uint256);

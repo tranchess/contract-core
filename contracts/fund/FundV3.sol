@@ -277,19 +277,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         return timestamp >= fundActivityStartTime;
     }
 
-    /// @notice Return the status of a given primary market contract.
-    /// @param pm The primary market contract address
-    /// @param timestamp Timestamp to assess
-    /// @return True if the primary market contract is active
-    function isPrimaryMarketActive(address pm, uint256 timestamp)
-        public
-        view
-        override
-        returns (bool)
-    {
-        return pm == _primaryMarket && timestamp >= fundActivityStartTime && timestamp < currentDay;
-    }
-
     function getTotalUnderlying() public view override returns (uint256) {
         uint256 hot = IERC20(tokenUnderlying).balanceOf(address(this));
         return hot.add(_strategyUnderlying).sub(_totalDebt);
