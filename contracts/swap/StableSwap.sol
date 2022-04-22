@@ -48,10 +48,15 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     );
     event Sync(uint256 baseBalance, uint256 quoteBalance);
     event AmplRampUpdated(uint256 start, uint256 end, uint256 startTimestamp, uint256 endTimestamp);
+    event FeeCollectorUpdated(address newFeeCollector);
+    event FeeRateUpdated(uint256 newFeeRate);
+    event AdminFeeRateUpdated(uint256 newAdminFeeRate);
 
     uint256 private constant AMPL_MAX_VALUE = 1e6;
     uint256 private constant AMPL_RAMP_MIN_TIME = 86400;
     uint256 private constant AMPL_RAMP_MAX_CHANGE = 10;
+    uint256 private constant MAX_FEE_RATE = 0.5e18;
+    uint256 private constant MAX_ADMIN_FEE_RATE = 1e18;
 
     address public immutable lpToken;
     IFundV3 public immutable fund;
@@ -94,9 +99,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         amplRampEnd = ampl_;
         emit AmplRampUpdated(ampl_, ampl_, 0, 0);
 
-        feeCollector = feeCollector_;
-        feeRate = feeRate_;
-        adminFeeRate = adminFeeRate_;
+        _updateFeeCollector(feeCollector_);
+        _updateFeeRate(feeRate_);
+        _updateAdminFeeRate(adminFeeRate_);
     }
 
     function baseAddress() public view override returns (address) {
@@ -560,6 +565,35 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         amplRampStartTimestamp = block.timestamp;
         amplRampEndTimestamp = endTimestamp;
         emit AmplRampUpdated(ampl, endAmpl, block.timestamp, endTimestamp);
+    }
+
+    function _updateFeeCollector(address newFeeCollector) private {
+        feeCollector = newFeeCollector;
+        emit FeeCollectorUpdated(newFeeCollector);
+    }
+
+    function updateFeeCollector(address newFeeCollector) external onlyOwner {
+        _updateFeeCollector(newFeeCollector);
+    }
+
+    function _updateFeeRate(uint256 newFeeRate) private {
+        require(newFeeRate <= MAX_FEE_RATE, "Exceed max fee rate");
+        feeRate = newFeeRate;
+        emit FeeRateUpdated(newFeeRate);
+    }
+
+    function updateFeeRate(uint256 newFeeRate) external onlyOwner {
+        _updateFeeRate(newFeeRate);
+    }
+
+    function _updateAdminFeeRate(uint256 newAdminFeeRate) private {
+        require(newAdminFeeRate <= MAX_ADMIN_FEE_RATE, "Exceed max admin fee rate");
+        adminFeeRate = newAdminFeeRate;
+        emit AdminFeeRateUpdated(newAdminFeeRate);
+    }
+
+    function updateAdminFeeRate(uint256 newAdminFeeRate) external onlyOwner {
+        _updateAdminFeeRate(newAdminFeeRate);
     }
 
     /// @dev Check if the user-specified version is correct.
