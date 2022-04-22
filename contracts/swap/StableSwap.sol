@@ -66,9 +66,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     uint256 public baseBalance;
     uint256 public quoteBalance;
 
-    uint256 public baseCumulativeLast;
-    uint256 public quoteCumulativeLast;
-    uint256 private blockTimestampLast;
+    uint256 private _priceOverOracleIntegral;
+    uint256 private _priceOverOracleTimestamp;
 
     uint256 public amplRampStart;
     uint256 public amplRampEnd;
@@ -142,14 +141,22 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
 
     function getCurrentPriceOverOracle() external view override returns (uint256) {
         (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
-        return _getPriceOverOracle(base, quote, getAmpl(), getOraclePrice());
+        uint256 ampl = getAmpl();
+        uint256 oraclePrice = getOraclePrice();
+        uint256 d = _getD(base, quote, ampl, oraclePrice);
+        return _getPriceOverOracle(base, quote, ampl, oraclePrice, d);
     }
 
     function getCurrentPrice() external view override returns (uint256) {
         (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
-        return
-            _getPriceOverOracle(base, quote, getAmpl(), oraclePrice).multiplyDecimal(oraclePrice);
+        uint256 d = _getD(base, quote, ampl, oraclePrice);
+        return _getPriceOverOracle(base, quote, ampl, oraclePrice, d).multiplyDecimal(oraclePrice);
+    }
+
+    function priceOverOracleIntegral() external view override returns (uint256, uint256) {
+        return (_priceOverOracleIntegral, _priceOverOracleTimestamp);
     }
 
     function getQuoteOut(uint256 baseIn) external view override returns (uint256 quoteOut) {
@@ -211,7 +218,6 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         require(baseOut > 0, "Zero output");
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
         require(baseOut < oldBase, "Insufficient liquidity");
-        _update(oldBase, oldQuote);
         // Optimistically transfer tokens.
         IERC20(baseAddress()).safeTransfer(recipient, baseOut);
         if (data.length > 0) {
@@ -224,6 +230,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             uint256 ampl = getAmpl();
             uint256 oraclePrice = getOraclePrice();
             uint256 oldD = _getD(oldBase, oldQuote, ampl, oraclePrice);
+            _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, oldD);
             uint256 newD = _getD(oldBase - baseOut, newQuote.sub(fee), ampl, oraclePrice);
             require(newD >= oldD, "Invariant mismatch");
         }
@@ -242,7 +249,6 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     ) external override nonReentrant checkVersion(version) {
         require(quoteOut > 0, "Zero output");
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
-        _update(oldBase, oldQuote);
         // Optimistically transfer tokens.
         IERC20(quoteAddress).safeTransfer(recipient, quoteOut);
         if (data.length > 0) {
@@ -261,6 +267,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             uint256 ampl = getAmpl();
             uint256 oraclePrice = getOraclePrice();
             uint256 oldD = _getD(oldBase, oldQuote, ampl, oraclePrice);
+            _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, oldD);
             uint256 newD = _getD(newBase, newQuote - fee, ampl, oraclePrice);
             require(newD >= oldD, "Invariant mismatch");
         }
@@ -272,14 +279,19 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         emit Swap(msg.sender, recipient, baseIn, 0, 0, quoteOut_, fee, adminFee);
     }
 
-    function _update(uint256 oldBaseBalance, uint256 oldQuoteBalance) private {
-        uint256 timeElapsed = block.timestamp - blockTimestampLast; // overflow is desired
-        if (timeElapsed > 0 && oldBaseBalance != 0 && oldQuoteBalance != 0) {
-            // + overflow is desired
-            baseCumulativeLast += oldQuoteBalance.mul(timeElapsed).divideDecimal(oldBaseBalance);
-            quoteCumulativeLast += oldBaseBalance.mul(timeElapsed).divideDecimal(oldQuoteBalance);
-        }
-        blockTimestampLast = block.timestamp;
+    function _updatePriceOverOracleIntegral(
+        uint256 base,
+        uint256 quote,
+        uint256 ampl,
+        uint256 oraclePrice,
+        uint256 d
+    ) private {
+        uint256 timeElapsed = block.timestamp - _priceOverOracleTimestamp;
+        // Addition overflow is desired
+        _priceOverOracleIntegral += _getPriceOverOracle(base, quote, ampl, oraclePrice, d).mul(
+            timeElapsed
+        );
+        _priceOverOracleTimestamp = block.timestamp;
     }
 
     /// @notice Add liquidity. This function should be called by a smart contract, which transfers
@@ -295,7 +307,6 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         returns (uint256 lpOut)
     {
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
-        _update(oldBase, oldQuote);
         uint256 newBase = IERC20(baseAddress()).balanceOf(address(this));
         uint256 newQuote = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
         uint256 ampl = getAmpl();
@@ -305,6 +316,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             require(newBase > 0 && newQuote > 0, "Zero initial balance");
             baseBalance = newBase;
             quoteBalance = newQuote;
+            _priceOverOracleTimestamp = block.timestamp;
             uint256 d1 = _getD(newBase, newQuote, ampl, oraclePrice);
             ILiquidityGauge(lpToken).mint(recipient, d1);
             emit LiquidityAdded(msg.sender, recipient, newBase, newQuote, d1, 0, 0);
@@ -315,6 +327,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         {
             // Initial invariant
             uint256 d0 = _getD(oldBase, oldQuote, ampl, oraclePrice);
+            _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, d0);
             {
                 // New invariant before charging fee
                 uint256 d1 = _getD(newBase, newQuote, ampl, oraclePrice);
@@ -362,7 +375,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     {
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
-        _update(oldBase, oldQuote);
+        uint256 ampl = getAmpl();
+        uint256 oraclePrice = getOraclePrice();
+        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
+        _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, d);
         baseOut = oldBase.mul(lpIn).div(lpSupply);
         quoteOut = oldQuote.mul(lpIn).div(lpSupply);
         require(baseOut >= minBaseOut, "Insufficient output");
@@ -384,13 +400,13 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 minBaseOut
     ) public override nonReentrant checkVersion(version) returns (uint256 baseOut) {
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
-        _update(oldBase, oldQuote);
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
         uint256 d1;
         {
             uint256 d0 = _getD(oldBase, oldQuote, ampl, oraclePrice);
+            _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, d0);
             d1 = d0.sub(d0.mul(lpIn).div(lpSupply));
         }
         uint256 fee = oldQuote.mul(lpIn).div(lpSupply).multiplyDecimal(feeRate);
@@ -415,13 +431,13 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 minQuoteOut
     ) public override nonReentrant checkVersion(version) returns (uint256 quoteOut) {
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
-        _update(oldBase, oldQuote);
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
         uint256 d1;
         {
             uint256 d0 = _getD(oldBase, oldQuote, ampl, oraclePrice);
+            _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, d0);
             d1 = d0.sub(d0.mul(lpIn).div(lpSupply));
         }
         uint256 idealQuote = oldQuote.mul(lpSupply.sub(lpIn)).div(lpSupply);
@@ -442,7 +458,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         address baseAddress_ = baseAddress(); // gas savings
         address quoteAddress_ = quoteAddress; // gas savings
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(fund.getRebalanceSize());
-        _update(oldBase, oldQuote);
+        uint256 ampl = getAmpl();
+        uint256 oraclePrice = getOraclePrice();
+        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
+        _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, d);
         IERC20(baseAddress_).safeTransfer(
             recipient,
             IERC20(baseAddress_).balanceOf(address(this)).sub(oldBase)
@@ -456,7 +475,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     /// @notice Force stored values to match balances.
     function sync() external nonReentrant {
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(fund.getRebalanceSize());
-        _update(oldBase, oldQuote);
+        uint256 ampl = getAmpl();
+        uint256 oraclePrice = getOraclePrice();
+        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
+        _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, d);
         uint256 newBase = IERC20(baseAddress()).balanceOf(address(this));
         uint256 newQuote = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
         baseBalance = newBase;
@@ -490,9 +512,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 base,
         uint256 quote,
         uint256 ampl,
-        uint256 oraclePrice
+        uint256 oraclePrice,
+        uint256 d
     ) private pure returns (uint256) {
-        uint256 d = _getD(base, quote, ampl, oraclePrice);
         uint256 commonExp = d.multiplyDecimal(4e18 - 1e18 / ampl);
         uint256 baseValue = base.multiplyDecimal(oraclePrice);
         uint256 quote_ = quote;
