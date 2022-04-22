@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
 
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -13,7 +14,7 @@ import "../interfaces/ITranchessSwapCallee.sol";
 import "../utils/SafeDecimalMath.sol";
 import "../utils/AdvancedMath.sol";
 
-abstract contract StableSwap is IStableSwap, ReentrancyGuard {
+abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
@@ -46,6 +47,11 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         uint256 adminFee
     );
     event Sync(uint256 baseBalance, uint256 quoteBalance);
+    event AmplRampUpdated(uint256 start, uint256 end, uint256 startTimestamp, uint256 endTimestamp);
+
+    uint256 private constant AMPL_MAX_VALUE = 1e6;
+    uint256 private constant AMPL_RAMP_MIN_TIME = 86400;
+    uint256 private constant AMPL_RAMP_MAX_CHANGE = 10;
 
     address public immutable lpToken;
     IFundV3 public immutable fund;
@@ -59,10 +65,10 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     uint256 public quoteCumulativeLast;
     uint256 private blockTimestampLast;
 
-    uint256 public initialAmpl;
-    uint256 public futureAmpl;
-    uint256 public initialTime;
-    uint256 public futureTime;
+    uint256 public amplRampStart;
+    uint256 public amplRampEnd;
+    uint256 public amplRampStartTimestamp;
+    uint256 public amplRampEndTimestamp;
 
     address public feeCollector;
     uint256 public feeRate;
@@ -74,8 +80,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         address fund_,
         uint256 baseTranche_,
         address quoteAddress_,
-        uint256 initialAmpl_,
-        uint256 futureAmpl_,
+        uint256 ampl_,
         address feeCollector_,
         uint256 feeRate_,
         uint256 adminFeeRate_
@@ -85,8 +90,9 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         baseTranche = baseTranche_;
         quoteAddress = quoteAddress_;
 
-        initialAmpl = initialAmpl_;
-        futureAmpl = futureAmpl_;
+        require(ampl_ > 0 && ampl_ < AMPL_MAX_VALUE, "Invalid A");
+        amplRampEnd = ampl_;
+        emit AmplRampUpdated(ampl_, ampl_, 0, 0);
 
         feeCollector = feeCollector_;
         feeRate = feeRate_;
@@ -103,21 +109,24 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     }
 
     function getAmpl() public view returns (uint256) {
-        if (block.timestamp < futureTime) {
-            uint256 deltaAmpl =
-                futureAmpl > initialAmpl
-                    ? futureAmpl.sub(initialAmpl)
-                    : initialAmpl.sub(futureAmpl);
-            uint256 deltaTime = block.timestamp.sub(initialTime);
-            uint256 timeInterval = futureTime.sub(initialTime);
-
-            if (futureAmpl > initialAmpl) {
-                return initialAmpl.add(deltaAmpl.mul(deltaTime).div(timeInterval));
+        uint256 endTimestamp = amplRampEndTimestamp;
+        if (block.timestamp < endTimestamp) {
+            uint256 startTimestamp = amplRampStartTimestamp;
+            uint256 start = amplRampStart;
+            uint256 end = amplRampEnd;
+            if (end > start) {
+                return
+                    start +
+                    ((end - start) * (block.timestamp - startTimestamp)) /
+                    (endTimestamp - startTimestamp);
             } else {
-                return initialAmpl.sub(deltaAmpl.mul(deltaTime).div(timeInterval));
+                return
+                    start -
+                    ((start - end) * (block.timestamp - startTimestamp)) /
+                    (endTimestamp - startTimestamp);
             }
         } else {
-            return futureAmpl;
+            return amplRampEnd;
         }
     }
 
@@ -535,6 +544,22 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         require(delta >= 0, "invalid # of real root");
 
         return AdvancedMath.sqrt(delta).add(b2).sub(b1).mul(5e17).div(a);
+    }
+
+    function updateAmplRamp(uint256 endAmpl, uint256 endTimestamp) external onlyOwner {
+        require(endAmpl > 0 && endAmpl < AMPL_MAX_VALUE, "Invalid A");
+        require(endTimestamp >= block.timestamp + AMPL_RAMP_MIN_TIME, "A ramp time too short");
+        uint256 ampl = getAmpl();
+        require(
+            (endAmpl >= ampl && endAmpl <= ampl * AMPL_RAMP_MAX_CHANGE) ||
+                (endAmpl < ampl && endAmpl * AMPL_RAMP_MAX_CHANGE >= ampl),
+            "A ramp change too large"
+        );
+        amplRampStart = ampl;
+        amplRampEnd = endAmpl;
+        amplRampStartTimestamp = block.timestamp;
+        amplRampEndTimestamp = endTimestamp;
+        emit AmplRampUpdated(ampl, endAmpl, block.timestamp, endTimestamp);
     }
 
     /// @dev Check if the user-specified version is correct.

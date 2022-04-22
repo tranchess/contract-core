@@ -13,8 +13,7 @@ contract QueenStableSwap is StableSwap, ITrancheIndexV2 {
         address lpToken_,
         address fund_,
         address quoteAddress_,
-        uint256 initialAmpl_,
-        uint256 futureAmpl_,
+        uint256 ampl_,
         address feeCollector_,
         uint256 feeRate_,
         uint256 adminFeeRate_
@@ -25,8 +24,7 @@ contract QueenStableSwap is StableSwap, ITrancheIndexV2 {
             fund_,
             TRANCHE_Q,
             quoteAddress_,
-            initialAmpl_,
-            futureAmpl_,
+            ampl_,
             feeCollector_,
             feeRate_,
             adminFeeRate_
