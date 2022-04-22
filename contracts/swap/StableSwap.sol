@@ -526,7 +526,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         // △ = q^2 / 4 + p^3 / 27
         // x = ∛(- q/2 + √△) + ∛(- q/2 - √△)
         uint256 delta =
-            AdvancedMath.sqrt((p.mul(p).multiplyDecimal(p) / 27).add(negQ.mul(negQ) / 4));
+            AdvancedMath.sqrt((p.multiplyDecimal(p).mul(p) / 27).add(negQ.mul(negQ) / 4));
         require(delta > 0, "wrong # of real root");
 
         return
