@@ -140,13 +140,16 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         return _getD(base, quote, getAmpl(), getOraclePrice());
     }
 
-    function getD(
-        uint256 base,
-        uint256 quote,
-        uint256 ampl,
-        uint256 oraclePrice
-    ) external pure override returns (uint256) {
-        return _getD(base, quote, ampl, oraclePrice);
+    function getCurrentPriceOverOracle() external view override returns (uint256) {
+        (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        return _getPriceOverOracle(base, quote, getAmpl(), getOraclePrice());
+    }
+
+    function getCurrentPrice() external view override returns (uint256) {
+        (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        uint256 oraclePrice = getOraclePrice();
+        return
+            _getPriceOverOracle(base, quote, getAmpl(), oraclePrice).multiplyDecimal(oraclePrice);
     }
 
     function getQuoteOut(uint256 baseIn) external view override returns (uint256 quoteOut) {
@@ -481,6 +484,23 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
                 .multiplyDecimal(base.multiplyDecimal(oraclePrice).add(quote))
                 .multiplyDecimal(oraclePrice);
         return solveDepressedCubic(p, negQ);
+    }
+
+    function _getPriceOverOracle(
+        uint256 base,
+        uint256 quote,
+        uint256 ampl,
+        uint256 oraclePrice
+    ) private pure returns (uint256) {
+        uint256 d = _getD(base, quote, ampl, oraclePrice);
+        uint256 commonExp = d.multiplyDecimal(4e18 - 1e18 / ampl);
+        uint256 baseValue = base.multiplyDecimal(oraclePrice);
+        uint256 quote_ = quote;
+        return
+            (baseValue.mul(8).add(quote_.mul(4)).sub(commonExp))
+                .multiplyDecimal(quote_)
+                .divideDecimal(quote_.mul(8).add(baseValue.mul(4)).sub(commonExp))
+                .divideDecimal(baseValue);
     }
 
     function _getBase(
