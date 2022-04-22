@@ -991,7 +991,10 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
             _totalDebt = total - amount;
             // Call `feeCollector.checkpoint()` without errors.
             // This is a intended behavior because `feeCollector` may not have `checkpoint()`.
-            feeCollector.call(abi.encodeWithSignature("checkpoint()"));
+            (bool success, ) = feeCollector.call(abi.encodeWithSignature("checkpoint()"));
+            if (!success) {
+                // ignore
+            }
             IERC20(tokenUnderlying).safeTransfer(feeCollector, amount);
             emit FeeDebtPaid(amount);
         }
