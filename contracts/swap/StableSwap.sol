@@ -47,9 +47,6 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
     );
     event Sync(uint256 baseBalance, uint256 quoteBalance);
 
-    uint256 private constant MIN_DIFF = 2;
-    uint256 private constant MAX_ITERATION = 255;
-
     address public immutable lpToken;
     IFundV3 public immutable fund;
     uint256 public immutable baseTranche;
@@ -100,7 +97,7 @@ abstract contract StableSwap is IStableSwap, ReentrancyGuard {
         return fund.tokenShare(baseTranche);
     }
 
-    function allBalances() public view override returns (uint256, uint256) {
+    function allBalances() external view override returns (uint256, uint256) {
         (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
         return (base, quote);
     }
