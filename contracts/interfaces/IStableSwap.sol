@@ -33,33 +33,28 @@ interface IStableSwap {
         bool deposit
     ) external view returns (uint256);
 
-    function swap(
+    function buy(
         uint256 version,
-        uint256 baseDeltaOut,
-        uint256 quoteDeltaOut,
-        address to,
+        uint256 baseOut,
+        address recipient,
         bytes calldata data
     ) external;
 
-    function addLiquidity(
+    function sell(
         uint256 version,
-        address to,
-        uint256 minMintAmount
+        uint256 quoteOut,
+        address recipient,
+        bytes calldata data
     ) external;
+
+    function addLiquidity(uint256 version, address recipient) external returns (uint256);
 
     function removeLiquidity(
         uint256 version,
-        uint256 minBaseDelta,
-        uint256 minQuoteDelta,
-        uint256 burnAmount
+        uint256 lpIn,
+        uint256 minBaseOut,
+        uint256 minQuoteOut
     ) external returns (uint256 baseDelta, uint256 quoteDelta);
-
-    function removeLiquidityImbalance(
-        uint256 version,
-        uint256 baseDelta,
-        uint256 quoteDelta,
-        uint256 maxBurnAmount
-    ) external returns (uint256 burnAmount);
 
     function removeBaseLiquidity(
         uint256 version,
@@ -74,27 +69,20 @@ interface IStableSwap {
     ) external returns (uint256);
 
     event LiquidityAdded(
-        address indexed account,
-        uint256 baseDelta,
-        uint256 quoteDelta,
+        address indexed sender,
+        address indexed recipient,
+        uint256 baseIn,
+        uint256 quoteIn,
+        uint256 lpOut,
         uint256 fee,
-        uint256 d1,
-        uint256 newTokenSupply
+        uint256 adminFee
     );
     event LiquidityRemoved(
         address indexed account,
-        uint256 baseAmount,
-        uint256 quoteAmount,
+        uint256 lpIn,
+        uint256 baseOut,
+        uint256 quotOut,
         uint256 fee,
-        uint256 lpSupply
+        uint256 adminFee
     );
-    event LiquidityImbalanceRemoved(
-        address indexed account,
-        uint256 baseDelta,
-        uint256 quoteDelta,
-        uint256 fee,
-        uint256 invariant,
-        uint256 lpSupply
-    );
-    event LiquiditySingleRemoved(address indexed account, uint256 amount, uint256 dy);
 }

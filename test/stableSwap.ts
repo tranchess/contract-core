@@ -335,7 +335,7 @@ describe("BishopStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, dy, 0, 0, amount, addr1);
+                .withArgs(swapRouter.address, addr1, 0, amount, dy, 0, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -370,7 +370,7 @@ describe("BishopStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, amount, 0, 0, dx, addr1);
+                .withArgs(swapRouter.address, addr1, 0, dx, amount, 0, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -475,7 +475,7 @@ describe("BishopStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, 0, dy, amount, 0, addr1);
+                .withArgs(swapRouter.address, addr1, amount, 0, 0, dy, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -511,7 +511,7 @@ describe("BishopStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, 0, amount, dx, 0, addr1);
+                .withArgs(swapRouter.address, addr1, dx, 0, 0, amount, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -653,7 +653,7 @@ describe("BishopStableSwap", function () {
             const beforeLP = await lpToken0.balanceOf(addr2);
             await stableSwap0
                 .connect(user2)
-                .removeLiquidity(0, parseEther("1"), parseEther("1"), parseEther("2"));
+                .removeLiquidity(0, parseEther("2"), parseEther("1"), parseEther("1"));
             const afterLP = await lpToken0.balanceOf(addr2);
             expect(beforeLP.sub(afterLP)).to.equal(parseEther("2"));
         });
@@ -943,7 +943,7 @@ describe("QueenStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, dy, 0, 0, amount, addr1);
+                .withArgs(swapRouter.address, addr1, 0, amount, dy, 0, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -978,7 +978,7 @@ describe("QueenStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, amount, 0, 0, dx, addr1);
+                .withArgs(swapRouter.address, addr1, 0, dx, amount, 0, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -1083,7 +1083,7 @@ describe("QueenStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, 0, dy, amount, 0, addr1);
+                .withArgs(swapRouter.address, addr1, amount, 0, 0, dy, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -1119,7 +1119,7 @@ describe("QueenStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, 0, amount, dx, 0, addr1);
+                .withArgs(swapRouter.address, addr1, dx, 0, 0, amount, fee, adminFee);
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -1244,7 +1244,7 @@ describe("QueenStableSwap", function () {
             const beforeLP = await lpToken0.balanceOf(addr2);
             await stableSwap0
                 .connect(user2)
-                .removeLiquidity(0, parseEther("1"), parseEther("1"), parseEther("2"));
+                .removeLiquidity(0, parseEther("2"), parseEther("1"), parseEther("1"));
             const afterLP = await lpToken0.balanceOf(addr2);
             expect(beforeLP.sub(afterLP)).to.equal(parseEther("2"));
         });
@@ -1562,7 +1562,6 @@ describe("Flash Swap", function () {
                 stableSwap1.call(
                     flashSwapRouter,
                     "tranchessSwapCallback",
-                    addr1,
                     parseEther("1"),
                     0,
                     defaultAbiCoder.encode(
@@ -1582,7 +1581,6 @@ describe("Flash Swap", function () {
                 stableSwap1.call(
                     flashSwapRouter,
                     "tranchessSwapCallback",
-                    addr1,
                     parseEther("1"),
                     parseEther("1"),
                     defaultAbiCoder.encode(
