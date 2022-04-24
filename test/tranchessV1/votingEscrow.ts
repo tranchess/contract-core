@@ -576,7 +576,7 @@ describe("VotingEscrow", function () {
         beforeEach(async function () {
             newWhitelist = await deployMockForName(
                 owner,
-                "contracts/governance/VotingEscrow.sol:IAddressWhitelist"
+                "contracts/tranchessV1/governance/VotingEscrow.sol:IAddressWhitelist"
             );
             someContract = await deployMockForName(owner, "IERC20");
             await chess.mint(someContract.address, parseEther("1000"));
