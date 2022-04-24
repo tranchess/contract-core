@@ -5,7 +5,7 @@ import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther } = ethers.utils;
-import { deployMockForName } from "./mock";
+import { deployMockForName } from "../mock";
 import { WEEK, SETTLEMENT_TIME, FixtureWalletMap, advanceBlockAtTime } from "./utils";
 
 const MAX_TIME = WEEK * 100;
@@ -576,7 +576,7 @@ describe("VotingEscrow", function () {
         beforeEach(async function () {
             newWhitelist = await deployMockForName(
                 owner,
-                "contracts/governance/VotingEscrow.sol:IAddressWhitelist"
+                "contracts/tranchessV1/governance/VotingEscrow.sol:IAddressWhitelist"
             );
             someContract = await deployMockForName(owner, "IERC20");
             await chess.mint(someContract.address, parseEther("1000"));

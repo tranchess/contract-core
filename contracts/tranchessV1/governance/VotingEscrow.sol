@@ -9,8 +9,8 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
-import "../utils/CoreUtility.sol";
-import "../interfaces/IVotingEscrow.sol";
+import "../../utils/CoreUtility.sol";
+import "../../interfaces/IVotingEscrow.sol";
 
 interface IAddressWhitelist {
     function check(address account) external view returns (bool);
