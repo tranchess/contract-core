@@ -161,12 +161,12 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
     ) internal virtual {
         for (uint256 i = 0; i < path.length - 1; i++) {
             IStableSwap swap = getSwap(path[i], path[i + 1]);
-            address nextSwap =
+            address to =
                 i < path.length - 2 ? address(getSwap(path[i + 1], path[i + 2])) : recipient;
             if (path[i] == swap.baseAddress()) {
-                swap.sell(versions[i], amounts[i + 1], nextSwap, new bytes(0));
+                swap.sell(versions[i], amounts[i + 1], to, new bytes(0));
             } else {
-                swap.buy(versions[i], amounts[i + 1], nextSwap, new bytes(0));
+                swap.buy(versions[i], amounts[i + 1], to, new bytes(0));
             }
         }
     }
