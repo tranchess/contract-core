@@ -16,39 +16,39 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
     mapping(address => mapping(address => IStableSwap)) private _swapMap;
 
     /// @dev Returns the swap for the given token pair and fee. The swap contract may or may not exist.
-    function getSwap(address baseToken, address quoteToken)
+    function getSwap(address baseAddress, address quoteAddress)
         public
         view
         override
         returns (IStableSwap)
     {
-        (address token0, address token1) =
-            baseToken < quoteToken ? (baseToken, quoteToken) : (quoteToken, baseToken);
-        return _swapMap[token0][token1];
+        (address addr0, address addr1) =
+            baseAddress < quoteAddress ? (baseAddress, quoteAddress) : (quoteAddress, baseAddress);
+        return _swapMap[addr0][addr1];
     }
 
     function addSwap(
-        address baseToken,
-        address quoteToken,
+        address baseAddress,
+        address quoteAddress,
         address swap
     ) external onlyOwner {
-        (address token0, address token1) =
-            baseToken < quoteToken ? (baseToken, quoteToken) : (quoteToken, baseToken);
-        _swapMap[token0][token1] = IStableSwap(swap);
+        (address addr0, address addr1) =
+            baseAddress < quoteAddress ? (baseAddress, quoteAddress) : (quoteAddress, baseAddress);
+        _swapMap[addr0][addr1] = IStableSwap(swap);
     }
 
     function addLiquidity(
-        address baseToken,
-        address quoteToken,
+        address baseAddress,
+        address quoteAddress,
         uint256 baseDelta,
         uint256 quoteDelta,
         uint256 minMintAmount,
         uint256 version,
         uint256 deadline
     ) external virtual override checkDeadline(deadline) {
-        IStableSwap swap = getSwap(baseToken, quoteToken);
-        IERC20(baseToken).safeTransferFrom(msg.sender, address(swap), baseDelta);
-        IERC20(quoteToken).safeTransferFrom(msg.sender, address(swap), quoteDelta);
+        IStableSwap swap = getSwap(baseAddress, quoteAddress);
+        IERC20(baseAddress).safeTransferFrom(msg.sender, address(swap), baseDelta);
+        IERC20(quoteAddress).safeTransferFrom(msg.sender, address(swap), quoteDelta);
         uint256 mintAmount = swap.addLiquidity(version, msg.sender);
         require(mintAmount >= minMintAmount, "Insufficient output");
     }
