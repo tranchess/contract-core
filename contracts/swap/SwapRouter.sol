@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../interfaces/ISwapRouter.sol";
 import "../interfaces/ITrancheIndexV2.sol";
-import "../exchange/StakingV4.sol";
+import "../fund/ShareStaking.sol";
 
 /// @title Tranchess Swap Router
 /// @notice Router for stateless execution of swaps against Tranchess stable swaps
@@ -77,7 +77,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
             _swap(amounts, path, versions, to);
         } else {
             _swap(amounts, path, versions, address(this));
-            StakingV4(staking).deposit(
+            ShareStaking(staking).deposit(
                 TRANCHE_B,
                 amounts[amounts.length - 1],
                 to,
@@ -108,7 +108,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
             _swap(amounts, path, versions, to);
         } else {
             _swap(amounts, path, versions, address(this));
-            StakingV4(staking).deposit(TRANCHE_B, amountOut, to, versions[versions.length - 1]);
+            ShareStaking(staking).deposit(TRANCHE_B, amountOut, to, versions[versions.length - 1]);
         }
     }
 

@@ -111,7 +111,7 @@ const USER2_WORKING_BALANCE = boostedWorkingBalance(
 );
 const WORKING_SUPPLY = USER1_WORKING_BALANCE.add(USER2_WORKING_BALANCE);
 
-describe("StakingV4", function () {
+describe("ShareStaking", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly checkpointTimestamp: number;
@@ -154,8 +154,8 @@ describe("StakingV4", function () {
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
 
-        const Staking = await ethers.getContractFactory("StakingV4");
-        const staking = await Staking.connect(owner).deploy(
+        const ShareStaking = await ethers.getContractFactory("ShareStaking");
+        const staking = await ShareStaking.connect(owner).deploy(
             fund.address,
             chessSchedule.address,
             chessController.address,
