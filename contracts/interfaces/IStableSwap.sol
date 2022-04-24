@@ -8,16 +8,15 @@ interface IStableSwap {
 
     function allBalances() external view returns (uint256, uint256);
 
-    function virtualPrice() external view returns (uint256);
+    function getOraclePrice() external view returns (uint256);
 
     function getCurrentD() external view returns (uint256);
 
-    function getD(
-        uint256 base,
-        uint256 quote,
-        uint256 ampl,
-        uint256 navB
-    ) external view returns (uint256);
+    function getCurrentPriceOverOracle() external view returns (uint256);
+
+    function getCurrentPrice() external view returns (uint256);
+
+    function getPriceOverOracleIntegral() external view returns (uint256);
 
     function getQuoteOut(uint256 baseIn) external view returns (uint256 quoteOut);
 
@@ -26,12 +25,6 @@ interface IStableSwap {
     function getBaseOut(uint256 quoteIn) external view returns (uint256 baseOut);
 
     function getBaseIn(uint256 quoteOut) external view returns (uint256 baseIn);
-
-    function calculateTokenAmount(
-        uint256 baseDelta,
-        uint256 quoteDelta,
-        bool deposit
-    ) external view returns (uint256);
 
     function buy(
         uint256 version,
@@ -54,35 +47,17 @@ interface IStableSwap {
         uint256 lpIn,
         uint256 minBaseOut,
         uint256 minQuoteOut
-    ) external returns (uint256 baseDelta, uint256 quoteDelta);
+    ) external returns (uint256 baseOut, uint256 quoteOut);
 
     function removeBaseLiquidity(
         uint256 version,
-        uint256 burnAmount,
-        uint256 minAmount
-    ) external returns (uint256);
+        uint256 lpIn,
+        uint256 minBaseOut
+    ) external returns (uint256 baseOut);
 
     function removeQuoteLiquidity(
         uint256 version,
-        uint256 burnAmount,
-        uint256 minAmount
-    ) external returns (uint256);
-
-    event LiquidityAdded(
-        address indexed sender,
-        address indexed recipient,
-        uint256 baseIn,
-        uint256 quoteIn,
-        uint256 lpOut,
-        uint256 fee,
-        uint256 adminFee
-    );
-    event LiquidityRemoved(
-        address indexed account,
         uint256 lpIn,
-        uint256 baseOut,
-        uint256 quotOut,
-        uint256 fee,
-        uint256 adminFee
-    );
+        uint256 minQuoteOut
+    ) external returns (uint256 quoteOut);
 }

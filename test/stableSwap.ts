@@ -210,7 +210,6 @@ describe("BishopStableSwap", function () {
             fund0.address,
             tokens[1].address,
             A,
-            A,
             owner.address,
             FEE_RATE,
             ADMIN_FEE_RATE,
@@ -221,7 +220,6 @@ describe("BishopStableSwap", function () {
             lpToken1.address,
             fund1.address,
             tokens[1].address,
-            A,
             A,
             owner.address,
             FEE_RATE,
@@ -335,7 +333,17 @@ describe("BishopStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, addr1, 0, amount, dy, 0, fee, adminFee);
+                .withArgs(
+                    swapRouter.address,
+                    addr1,
+                    0,
+                    amount,
+                    dy,
+                    0,
+                    fee,
+                    adminFee,
+                    parseEther("1")
+                );
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -370,7 +378,17 @@ describe("BishopStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, addr1, 0, dx, amount, 0, fee, adminFee);
+                .withArgs(
+                    swapRouter.address,
+                    addr1,
+                    0,
+                    dx,
+                    amount,
+                    0,
+                    fee,
+                    adminFee,
+                    parseEther("1")
+                );
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -475,7 +493,17 @@ describe("BishopStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, addr1, amount, 0, 0, dy, fee, adminFee);
+                .withArgs(
+                    swapRouter.address,
+                    addr1,
+                    amount,
+                    0,
+                    0,
+                    dy,
+                    fee,
+                    adminFee,
+                    parseEther("1")
+                );
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -511,7 +539,17 @@ describe("BishopStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, addr1, dx, 0, 0, amount, fee, adminFee);
+                .withArgs(
+                    swapRouter.address,
+                    addr1,
+                    dx,
+                    0,
+                    0,
+                    amount,
+                    fee,
+                    adminFee,
+                    parseEther("1")
+                );
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -865,7 +903,6 @@ describe("QueenStableSwap", function () {
             fund0.address,
             tokens[1].address,
             A,
-            A,
             owner.address,
             FEE_RATE,
             ADMIN_FEE_RATE
@@ -943,7 +980,17 @@ describe("QueenStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, addr1, 0, amount, dy, 0, fee, adminFee);
+                .withArgs(
+                    swapRouter.address,
+                    addr1,
+                    0,
+                    amount,
+                    dy,
+                    0,
+                    fee,
+                    adminFee,
+                    parseEther("1")
+                );
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -978,7 +1025,17 @@ describe("QueenStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, addr1, 0, dx, amount, 0, fee, adminFee);
+                .withArgs(
+                    swapRouter.address,
+                    addr1,
+                    0,
+                    dx,
+                    amount,
+                    0,
+                    fee,
+                    adminFee,
+                    parseEther("1")
+                );
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -1083,7 +1140,17 @@ describe("QueenStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, addr1, amount, 0, 0, dy, fee, adminFee);
+                .withArgs(
+                    swapRouter.address,
+                    addr1,
+                    amount,
+                    0,
+                    0,
+                    dy,
+                    fee,
+                    adminFee,
+                    parseEther("1")
+                );
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -1119,7 +1186,17 @@ describe("QueenStableSwap", function () {
                 )
             )
                 .to.emit(stableSwap0, "Swap")
-                .withArgs(swapRouter.address, addr1, dx, 0, 0, amount, fee, adminFee);
+                .withArgs(
+                    swapRouter.address,
+                    addr1,
+                    dx,
+                    0,
+                    0,
+                    amount,
+                    fee,
+                    adminFee,
+                    parseEther("1")
+                );
 
             const afterD = await stableSwap0.getCurrentD();
 
@@ -1491,7 +1568,6 @@ describe("Flash Swap", function () {
             lpToken0.address,
             fund.address,
             usd.address,
-            A,
             A,
             owner.address,
             FEE_RATE,

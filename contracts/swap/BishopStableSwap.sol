@@ -8,6 +8,8 @@ import "../interfaces/ITrancheIndexV2.sol";
 import "./StableSwap.sol";
 
 contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
+    event Rebalanced(uint256 base, uint256 quote, uint256 version);
+
     uint256 public immutable tradingCurbThreshold;
     address public immutable chainlinkAggregator;
 
@@ -17,8 +19,7 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
         address lpToken_,
         address fund_,
         address quoteAddress_,
-        uint256 initialAmpl_,
-        uint256 futureAmpl_,
+        uint256 ampl_,
         address feeCollector_,
         uint256 feeRate_,
         uint256 adminFeeRate_,
@@ -31,8 +32,7 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
             fund_,
             TRANCHE_B,
             quoteAddress_,
-            initialAmpl_,
-            futureAmpl_,
+            ampl_,
             feeCollector_,
             feeRate_,
             adminFeeRate_
@@ -120,6 +120,7 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
             baseBalance = newBase;
             quoteBalance = newQuote;
             currentVersion = latestVersion;
+            emit Rebalanced(newBase, newQuote, latestVersion);
             if (excessiveQ > 0) {
                 fund.trancheTransfer(TRANCHE_Q, lpToken, excessiveQ, latestVersion);
             }
@@ -142,12 +143,10 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
         }
     }
 
-    function checkOracle(Operation op) public view override returns (uint256 oracle) {
+    function getOraclePrice() public view override returns (uint256) {
         (, int256 answer, , , ) = AggregatorV3Interface(chainlinkAggregator).latestRoundData();
         (, uint256 navB, uint256 navR) = fund.extrapolateNav(uint256(answer));
-        if (op == Operation.SWAP || op == Operation.ADD_LIQUIDITY) {
-            require(navR >= navB.multiplyDecimal(tradingCurbThreshold), "Trading curb");
-        }
+        require(navR >= navB.multiplyDecimal(tradingCurbThreshold), "Trading curb");
         return navB;
     }
 }
