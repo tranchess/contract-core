@@ -283,21 +283,6 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         emit Swap(msg.sender, recipient, baseIn, 0, 0, quoteOut_, fee, adminFee, oraclePrice);
     }
 
-    function _updatePriceOverOracleIntegral(
-        uint256 base,
-        uint256 quote,
-        uint256 ampl,
-        uint256 oraclePrice,
-        uint256 d
-    ) private {
-        uint256 timeElapsed = block.timestamp - _priceOverOracleTimestamp;
-        // Addition overflow is desired
-        _priceOverOracleIntegral += _getPriceOverOracle(base, quote, ampl, oraclePrice, d).mul(
-            timeElapsed
-        );
-        _priceOverOracleTimestamp = block.timestamp;
-    }
-
     /// @notice Add liquidity. This function should be called by a smart contract, which transfers
     ///         base and quote tokens to this contract in the same transaction.
     /// @param version The latest rebalance version
@@ -494,6 +479,21 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     function collectFee() external {
         IERC20(quoteAddress).safeTransfer(feeCollector, totalAdminFee);
         delete totalAdminFee;
+    }
+
+    function _updatePriceOverOracleIntegral(
+        uint256 base,
+        uint256 quote,
+        uint256 ampl,
+        uint256 oraclePrice,
+        uint256 d
+    ) private {
+        uint256 timeElapsed = block.timestamp - _priceOverOracleTimestamp;
+        // Addition overflow is desired
+        _priceOverOracleIntegral += _getPriceOverOracle(base, quote, ampl, oraclePrice, d).mul(
+            timeElapsed
+        );
+        _priceOverOracleTimestamp = block.timestamp;
     }
 
     function _getD(
