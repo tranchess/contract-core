@@ -26,7 +26,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 quoteIn,
         uint256 lpOut,
         uint256 fee,
-        uint256 adminFee
+        uint256 adminFee,
+        uint256 oraclePrice
     );
     event LiquidityRemoved(
         address indexed account,
@@ -34,7 +35,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 baseOut,
         uint256 quotOut,
         uint256 fee,
-        uint256 adminFee
+        uint256 adminFee,
+        uint256 oraclePrice
     );
     event Swap(
         address indexed sender,
@@ -44,9 +46,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 baseOut,
         uint256 quoteOut,
         uint256 fee,
-        uint256 adminFee
+        uint256 adminFee,
+        uint256 oraclePrice
     );
-    event Sync(uint256 baseBalance, uint256 quoteBalance);
+    event Sync(uint256 base, uint256 quote, uint256 oraclePrice);
     event AmplRampUpdated(uint256 start, uint256 end, uint256 startTimestamp, uint256 endTimestamp);
     event FeeCollectorUpdated(address newFeeCollector);
     event FeeRateUpdated(uint256 newFeeRate);
@@ -226,9 +229,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 newQuote = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
         uint256 quoteIn = newQuote.sub(oldQuote);
         uint256 fee = quoteIn.multiplyDecimal(feeRate);
+        uint256 oraclePrice = getOraclePrice();
         {
             uint256 ampl = getAmpl();
-            uint256 oraclePrice = getOraclePrice();
             uint256 oldD = _getD(oldBase, oldQuote, ampl, oraclePrice);
             _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, oldD);
             uint256 newD = _getD(oldBase - baseOut, newQuote.sub(fee), ampl, oraclePrice);
@@ -238,7 +241,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         baseBalance = oldBase - baseOut;
         quoteBalance = newQuote.sub(adminFee);
         totalAdminFee = totalAdminFee.add(adminFee);
-        emit Swap(msg.sender, recipient, 0, quoteIn, baseOut, 0, fee, adminFee);
+        uint256 baseOut_ = baseOut;
+        emit Swap(msg.sender, recipient, 0, quoteIn, baseOut_, 0, fee, adminFee, oraclePrice);
     }
 
     function sell(
@@ -262,10 +266,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             fee = quoteOut.mul(feeRate_).div(uint256(1e18).sub(feeRate_));
         }
         require(quoteOut.add(fee) < oldQuote, "Insufficient liquidity");
+        uint256 oraclePrice = getOraclePrice();
         {
             uint256 newQuote = oldQuote - quoteOut;
             uint256 ampl = getAmpl();
-            uint256 oraclePrice = getOraclePrice();
             uint256 oldD = _getD(oldBase, oldQuote, ampl, oraclePrice);
             _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, oldD);
             uint256 newD = _getD(newBase, newQuote - fee, ampl, oraclePrice);
@@ -276,7 +280,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         quoteBalance = oldQuote - quoteOut - adminFee;
         totalAdminFee = totalAdminFee.add(adminFee);
         uint256 quoteOut_ = quoteOut;
-        emit Swap(msg.sender, recipient, baseIn, 0, 0, quoteOut_, fee, adminFee);
+        emit Swap(msg.sender, recipient, baseIn, 0, 0, quoteOut_, fee, adminFee, oraclePrice);
     }
 
     function _updatePriceOverOracleIntegral(
@@ -319,7 +323,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             _priceOverOracleTimestamp = block.timestamp;
             uint256 d1 = _getD(newBase, newQuote, ampl, oraclePrice);
             ILiquidityGauge(lpToken).mint(recipient, d1);
-            emit LiquidityAdded(msg.sender, recipient, newBase, newQuote, d1, 0, 0);
+            emit LiquidityAdded(msg.sender, recipient, newBase, newQuote, d1, 0, 0, oraclePrice);
             return d1;
         }
         uint256 fee;
@@ -353,7 +357,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             newQuote - oldQuote,
             lpOut,
             fee,
-            adminFee
+            adminFee,
+            oraclePrice
         );
     }
 
@@ -388,7 +393,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         ILiquidityGauge(lpToken).burnFrom(msg.sender, lpIn);
         IERC20(baseAddress()).safeTransfer(msg.sender, baseOut);
         IERC20(quoteAddress).safeTransfer(msg.sender, quoteOut);
-        emit LiquidityRemoved(msg.sender, lpIn, baseOut, quoteOut, 0, 0);
+        emit LiquidityRemoved(msg.sender, lpIn, baseOut, quoteOut, 0, 0, oraclePrice);
     }
 
     /// @dev Remove base liquidity only.
@@ -419,7 +424,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         totalAdminFee = totalAdminFee.add(adminFee);
         quoteBalance = oldQuote.sub(adminFee);
         IERC20(baseAddress()).safeTransfer(msg.sender, baseOut);
-        emit LiquidityRemoved(msg.sender, lpIn, baseOut, 0, fee, adminFee);
+        emit LiquidityRemoved(msg.sender, lpIn, baseOut, 0, fee, adminFee, oraclePrice);
     }
 
     /// @dev Remove quote liquidity only.
@@ -450,7 +455,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         totalAdminFee = totalAdminFee.add(adminFee);
         quoteBalance = newQuote.add(fee).sub(adminFee);
         IERC20(quoteAddress).safeTransfer(msg.sender, quoteOut);
-        emit LiquidityRemoved(msg.sender, lpIn, 0, quoteOut, fee, adminFee);
+        emit LiquidityRemoved(msg.sender, lpIn, 0, quoteOut, fee, adminFee, oraclePrice);
     }
 
     /// @notice Force balances to match stored values.
@@ -483,7 +488,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 newQuote = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
         baseBalance = newBase;
         quoteBalance = newQuote;
-        emit Sync(newBase, newQuote);
+        emit Sync(newBase, newQuote, oraclePrice);
     }
 
     function collectFee() external {
