@@ -25,7 +25,7 @@ struct VESnapshot {
     IVotingEscrow.LockedBalance veLocked;
 }
 
-contract StakingV4 is ITrancheIndexV2, CoreUtility {
+contract ShareStaking is ITrancheIndexV2, CoreUtility {
     /// @dev Reserved storage slots for future sibling contract upgrades
     uint256[32] private _reservedSlots;
 
