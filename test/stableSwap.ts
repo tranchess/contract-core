@@ -107,15 +107,12 @@ describe("BishopStableSwap", function () {
 
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
-        readonly fund0: MockContract;
-        readonly fund1: MockContract;
+        readonly fund: MockContract;
         readonly tokens: Contract[];
         readonly deadline: BigNumberish;
         readonly swapRouter: Contract;
-        readonly lpToken0: Contract;
-        readonly stableSwap0: Contract;
-        readonly lpToken1: Contract;
-        readonly stableSwap1: Contract;
+        readonly lpToken: Contract;
+        readonly stableSwap: Contract;
     }
 
     const FEE_RATE = parseEther("0.03");
@@ -128,13 +125,12 @@ describe("BishopStableSwap", function () {
     let user2: Wallet;
     let addr1: string;
     let addr2: string;
-    let fund0: MockContract;
+    let fund: MockContract;
     let tokens: Contract[];
     let deadline: BigNumberish;
     let swapRouter: Contract;
-    let lpToken0: Contract;
-    let stableSwap0: Contract;
-    //let stableSwap1: Contract;
+    let lpToken: Contract;
+    let stableSwap: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
         const [user1, user2, owner] = provider.getWallets();
@@ -146,31 +142,22 @@ describe("BishopStableSwap", function () {
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
         await votingEscrow.mock.getLockedBalance.returns([0, 0]);
 
-        const fund0 = await deployMockForName(owner, "IFundV3");
-        const fund1 = await deployMockForName(owner, "IFundV3");
-        await fund0.mock.currentDay.returns(0);
-        await fund0.mock.extrapolateNav.returns(0, parseEther("1"), parseEther("1"));
-        await fund0.mock.getRebalanceSize.returns(0);
-        await fund0.mock.refreshBalance.returns();
-        await fund1.mock.currentDay.returns(0);
-        await fund1.mock.extrapolateNav.returns(0, parseEther("1"), parseEther("1"));
-        await fund1.mock.getRebalanceSize.returns(0);
-        await fund1.mock.refreshBalance.returns();
+        const fund = await deployMockForName(owner, "IFundV3");
+        await fund.mock.currentDay.returns(0);
+        await fund.mock.extrapolateNav.returns(0, parseEther("1"), parseEther("1"));
+        await fund.mock.getRebalanceSize.returns(0);
+        await fund.mock.refreshBalance.returns();
 
         const MockToken = await ethers.getContractFactory("MockToken");
         const tokens = [
             await MockToken.connect(owner).deploy("token", "token", 18),
             await MockToken.connect(owner).deploy("token", "token", 18),
-            await MockToken.connect(owner).deploy("token", "token", 18),
         ];
-        await fund0.mock.tokenShare.withArgs(TRANCHE_B).returns(tokens[0].address);
-        await fund1.mock.tokenShare.withArgs(TRANCHE_B).returns(tokens[2].address);
+        await fund.mock.tokenShare.withArgs(TRANCHE_B).returns(tokens[0].address);
         await tokens[0].connect(owner).mint(user1.address, parseEther("1000"));
         await tokens[1].connect(owner).mint(user1.address, parseEther("1000"));
-        await tokens[2].connect(owner).mint(user1.address, parseEther("1000"));
         await tokens[0].connect(owner).mint(user2.address, parseEther("1000"));
         await tokens[1].connect(owner).mint(user2.address, parseEther("1000"));
-        await tokens[2].connect(owner).mint(user2.address, parseEther("1000"));
 
         const chessSchedule = await deployMockForName(owner, "ChessSchedule");
         const chessController = await deployMockForName(owner, "ChessController");
@@ -182,21 +169,12 @@ describe("BishopStableSwap", function () {
         await swapReward.mock.getReward.returns();
 
         const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
-        const lpToken0 = await LiquidityGauge.connect(owner).deploy(
+        const lpToken = await LiquidityGauge.connect(owner).deploy(
             "pool2 token",
             "pool2 token",
             chessSchedule.address,
             chessController.address,
-            fund0.address,
-            votingEscrow.address,
-            swapReward.address
-        );
-        const lpToken1 = await LiquidityGauge.connect(owner).deploy(
-            "pool2 token",
-            "pool2 token",
-            chessSchedule.address,
-            chessController.address,
-            fund1.address,
+            fund.address,
             votingEscrow.address,
             swapReward.address
         );
@@ -205,20 +183,9 @@ describe("BishopStableSwap", function () {
         const swapRouter = await SwapRouter.connect(owner).deploy();
 
         const BishopStableSwap = await ethers.getContractFactory("BishopStableSwap");
-        const stableSwap0 = await BishopStableSwap.connect(owner).deploy(
-            lpToken0.address,
-            fund0.address,
-            tokens[1].address,
-            A,
-            owner.address,
-            FEE_RATE,
-            ADMIN_FEE_RATE,
-            aggregator.address,
-            parseEther("0.35")
-        );
-        const stableSwap1 = await BishopStableSwap.connect(owner).deploy(
-            lpToken1.address,
-            fund1.address,
+        const stableSwap = await BishopStableSwap.connect(owner).deploy(
+            lpToken.address,
+            fund.address,
             tokens[1].address,
             A,
             owner.address,
@@ -228,14 +195,11 @@ describe("BishopStableSwap", function () {
             parseEther("0.35")
         );
 
-        await swapRouter.addSwap(tokens[0].address, tokens[1].address, stableSwap0.address);
-        await swapRouter.addSwap(tokens[2].address, tokens[1].address, stableSwap1.address);
+        await swapRouter.addSwap(tokens[0].address, tokens[1].address, stableSwap.address);
 
-        await lpToken0.transferOwnership(stableSwap0.address);
-        await lpToken1.transferOwnership(stableSwap1.address);
+        await lpToken.transferOwnership(stableSwap.address);
         await tokens[0].connect(user1).approve(swapRouter.address, parseEther("10"));
         await tokens[1].connect(user1).approve(swapRouter.address, parseEther("20"));
-        await tokens[2].connect(user1).approve(swapRouter.address, parseEther("10"));
 
         await swapRouter
             .connect(user1)
@@ -248,29 +212,15 @@ describe("BishopStableSwap", function () {
                 0,
                 deadline
             );
-        await swapRouter
-            .connect(user1)
-            .addLiquidity(
-                tokens[2].address,
-                tokens[1].address,
-                parseEther("10"),
-                parseEther("10"),
-                BigNumber.from("0"),
-                0,
-                deadline
-            );
 
         return {
             wallets: { user1, user2, owner },
-            fund0,
-            fund1,
+            fund,
             tokens,
             deadline,
             swapRouter: swapRouter.connect(user1),
-            lpToken0,
-            stableSwap0: stableSwap0.connect(user1),
-            lpToken1,
-            stableSwap1: stableSwap1.connect(user1),
+            lpToken,
+            stableSwap: stableSwap.connect(user1),
         };
     }
 
@@ -286,16 +236,15 @@ describe("BishopStableSwap", function () {
         addr2 = user2.address;
         deadline = fixtureData.deadline;
         swapRouter = fixtureData.swapRouter;
-        fund0 = fixtureData.fund0;
+        fund = fixtureData.fund;
         tokens = fixtureData.tokens;
-        lpToken0 = fixtureData.lpToken0;
-        stableSwap0 = fixtureData.stableSwap0;
-        //stableSwap1 = fixtureData.stableSwap1;
+        lpToken = fixtureData.lpToken;
+        stableSwap = fixtureData.stableSwap;
     });
 
     describe("buy()", function () {
         it("Should revert when trading curb", async function () {
-            await fund0.mock.extrapolateNav.returns(0, parseEther("1"), parseEther("0.34"));
+            await fund.mock.extrapolateNav.returns(0, parseEther("1"), parseEther("0.34"));
             await tokens[1].connect(user1).approve(swapRouter.address, parseEther("1"));
             await expect(
                 swapRouter.swapExactTokensForTokens(
@@ -316,9 +265,9 @@ describe("BishopStableSwap", function () {
             const fee = amount.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
-            expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect(await stableSwap0.getBaseOut(amount)).to.equal(dy);
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10"));
+            expect((await stableSwap.allBalances())[1]).to.equal(parseEther("10"));
+            expect(await stableSwap.getBaseOut(amount)).to.equal(dy);
 
             await tokens[1].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -332,7 +281,7 @@ describe("BishopStableSwap", function () {
                     deadline
                 )
             )
-                .to.emit(stableSwap0, "Swap")
+                .to.emit(stableSwap, "Swap")
                 .withArgs(
                     swapRouter.address,
                     addr1,
@@ -345,14 +294,14 @@ describe("BishopStableSwap", function () {
                     parseEther("1")
                 );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, parseEther("1"));
+            validate(await stableSwap.allBalances(), afterD, A, parseEther("1"));
 
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").add(amount).sub(adminFee)
             );
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").sub(dy));
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").sub(dy));
         });
 
         it("Should buy exact", async function () {
@@ -361,9 +310,9 @@ describe("BishopStableSwap", function () {
             const fee = dx.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
-            expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect(await stableSwap0.getQuoteIn(amount)).to.equal(dx);
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10"));
+            expect((await stableSwap.allBalances())[1]).to.equal(parseEther("10"));
+            expect(await stableSwap.getQuoteIn(amount)).to.equal(dx);
 
             await tokens[1].connect(user1).approve(swapRouter.address, dx);
             await expect(
@@ -377,7 +326,7 @@ describe("BishopStableSwap", function () {
                     deadline
                 )
             )
-                .to.emit(stableSwap0, "Swap")
+                .to.emit(stableSwap, "Swap")
                 .withArgs(
                     swapRouter.address,
                     addr1,
@@ -390,14 +339,14 @@ describe("BishopStableSwap", function () {
                     parseEther("1")
                 );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, parseEther("1"));
+            validate(await stableSwap.allBalances(), afterD, A, parseEther("1"));
 
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").add(dx).sub(adminFee)
             );
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").sub(amount));
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").sub(amount));
         });
 
         it("Should buy as oracle shifts up", async function () {
@@ -407,9 +356,9 @@ describe("BishopStableSwap", function () {
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
             const oracle = parseEther("1.2");
-            await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
+            await fund.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
 
-            expect(await stableSwap0.getBaseOut(amount)).to.equal(dy);
+            expect(await stableSwap.getBaseOut(amount)).to.equal(dy);
 
             await tokens[1].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -424,14 +373,14 @@ describe("BishopStableSwap", function () {
                 )
             );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, oracle);
+            validate(await stableSwap.allBalances(), afterD, A, oracle);
 
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").add(amount).sub(adminFee)
             );
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").sub(dy));
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").sub(dy));
         });
 
         it("Should buy as oracle shifts down", async function () {
@@ -441,9 +390,9 @@ describe("BishopStableSwap", function () {
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
             const oracle = parseEther("0.8");
-            await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
+            await fund.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
 
-            expect(await stableSwap0.getBaseOut(amount)).to.equal(dy);
+            expect(await stableSwap.getBaseOut(amount)).to.equal(dy);
 
             await tokens[1].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -458,14 +407,14 @@ describe("BishopStableSwap", function () {
                 )
             );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, oracle);
+            validate(await stableSwap.allBalances(), afterD, A, oracle);
 
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").add(amount).sub(adminFee)
             );
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").sub(dy));
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").sub(dy));
         });
     });
 
@@ -476,9 +425,9 @@ describe("BishopStableSwap", function () {
             const fee = BigNumber.from("29982291590730242");
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
-            expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect(await stableSwap0.getQuoteOut(amount)).to.equal(dy);
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10"));
+            expect((await stableSwap.allBalances())[1]).to.equal(parseEther("10"));
+            expect(await stableSwap.getQuoteOut(amount)).to.equal(dy);
 
             await tokens[0].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -492,7 +441,7 @@ describe("BishopStableSwap", function () {
                     deadline
                 )
             )
-                .to.emit(stableSwap0, "Swap")
+                .to.emit(stableSwap, "Swap")
                 .withArgs(
                     swapRouter.address,
                     addr1,
@@ -505,12 +454,12 @@ describe("BishopStableSwap", function () {
                     parseEther("1")
                 );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, parseEther("1"));
+            validate(await stableSwap.allBalances(), afterD, A, parseEther("1"));
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").add(amount));
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").add(amount));
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").sub(dy).sub(adminFee)
             );
         });
@@ -522,9 +471,9 @@ describe("BishopStableSwap", function () {
             const fee = amountBeforeFee.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
-            expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect(await stableSwap0.getBaseIn(amount)).to.equal(dx);
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10"));
+            expect((await stableSwap.allBalances())[1]).to.equal(parseEther("10"));
+            expect(await stableSwap.getBaseIn(amount)).to.equal(dx);
 
             await tokens[0].connect(user1).approve(swapRouter.address, dx);
             await expect(
@@ -538,7 +487,7 @@ describe("BishopStableSwap", function () {
                     deadline
                 )
             )
-                .to.emit(stableSwap0, "Swap")
+                .to.emit(stableSwap, "Swap")
                 .withArgs(
                     swapRouter.address,
                     addr1,
@@ -551,12 +500,12 @@ describe("BishopStableSwap", function () {
                     parseEther("1")
                 );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, parseEther("1"));
+            validate(await stableSwap.allBalances(), afterD, A, parseEther("1"));
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").add(dx));
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").add(dx));
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").sub(amountBeforeFee).add(fee).sub(adminFee)
             );
         });
@@ -568,9 +517,9 @@ describe("BishopStableSwap", function () {
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
             const oracle = parseEther("1.2");
-            await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
+            await fund.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
 
-            expect(await stableSwap0.getQuoteOut(amount)).to.equal(dy);
+            expect(await stableSwap.getQuoteOut(amount)).to.equal(dy);
 
             await tokens[0].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -585,12 +534,12 @@ describe("BishopStableSwap", function () {
                 )
             );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, oracle);
+            validate(await stableSwap.allBalances(), afterD, A, oracle);
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").add(amount));
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").add(amount));
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").sub(dy).sub(adminFee)
             );
         });
@@ -602,9 +551,9 @@ describe("BishopStableSwap", function () {
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
             const oracle = parseEther("0.8");
-            await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
+            await fund.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
 
-            expect(await stableSwap0.getQuoteOut(amount)).to.equal(dy);
+            expect(await stableSwap.getQuoteOut(amount)).to.equal(dy);
 
             await tokens[0].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -619,12 +568,12 @@ describe("BishopStableSwap", function () {
                 )
             );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, oracle);
+            validate(await stableSwap.allBalances(), afterD, A, oracle);
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").add(amount));
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").add(amount));
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").sub(dy).sub(adminFee)
             );
         });
@@ -632,7 +581,7 @@ describe("BishopStableSwap", function () {
 
     describe("addLiquidity()", function () {
         it("Should revert when trading curb", async function () {
-            await fund0.mock.extrapolateNav.returns(0, parseEther("1"), parseEther("0.34"));
+            await fund.mock.extrapolateNav.returns(0, parseEther("1"), parseEther("0.34"));
             await tokens[0].connect(user1).approve(swapRouter.address, parseEther("1"));
             await tokens[1].connect(user1).approve(swapRouter.address, parseEther("1"));
             await expect(
@@ -652,7 +601,7 @@ describe("BishopStableSwap", function () {
             await tokens[0].connect(user1).approve(swapRouter.address, parseEther("1"));
             await tokens[1].connect(user1).approve(swapRouter.address, parseEther("1"));
 
-            const beforeLP = await lpToken0.balanceOf(addr1);
+            const beforeLP = await lpToken.balanceOf(addr1);
             await swapRouter.addLiquidity(
                 tokens[0].address,
                 tokens[1].address,
@@ -662,10 +611,10 @@ describe("BishopStableSwap", function () {
                 0,
                 deadline
             );
-            const afterLP = await lpToken0.balanceOf(addr1);
+            const afterLP = await lpToken.balanceOf(addr1);
             expect(afterLP.sub(beforeLP)).to.equal(parseEther("2"));
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("11"));
-            expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("11"));
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("11"));
+            expect((await stableSwap.allBalances())[1]).to.equal(parseEther("11"));
         });
     });
 
@@ -688,20 +637,20 @@ describe("BishopStableSwap", function () {
         });
 
         it("Should remove liquidity", async function () {
-            const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0
+            const beforeLP = await lpToken.balanceOf(addr2);
+            await stableSwap
                 .connect(user2)
                 .removeLiquidity(0, parseEther("2"), parseEther("1"), parseEther("1"));
-            const afterLP = await lpToken0.balanceOf(addr2);
+            const afterLP = await lpToken.balanceOf(addr2);
             expect(beforeLP.sub(afterLP)).to.equal(parseEther("2"));
         });
 
         it("Should remove base liquidity when oracle shifts up", async function () {
             const burnAmount = parseEther("0.5");
             const oracle = parseEther("1.2");
-            const lpSupply = await lpToken0.totalSupply();
-            await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
-            const beforeD = await stableSwap0.getCurrentD();
+            const lpSupply = await lpToken.totalSupply();
+            await fund.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
+            const beforeD = await stableSwap.getCurrentD();
             const afterD = beforeD.sub(beforeD.mul(burnAmount).div(lpSupply));
             let newBaseBalance = getBase(A, parseEther("11"), oracle, afterD);
             newBaseBalance = parseEther("11");
@@ -716,10 +665,10 @@ describe("BishopStableSwap", function () {
                 .sub(1); // 452276567283981505
 
             const beforeToken = await tokens[0].balanceOf(addr2);
-            const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
+            const beforeLP = await lpToken.balanceOf(addr2);
+            await stableSwap.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[0].balanceOf(addr2);
-            const afterLP = await lpToken0.balanceOf(addr2);
+            const afterLP = await lpToken.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(baseDelta);
             expect(beforeLP.sub(afterLP)).to.equal(burnAmount);
         });
@@ -727,9 +676,9 @@ describe("BishopStableSwap", function () {
         it("Should remove base liquidity when oracle shifts down", async function () {
             const burnAmount = parseEther("0.5");
             const oracle = parseEther("0.8");
-            const lpSupply = await lpToken0.totalSupply();
-            await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
-            const beforeD = await stableSwap0.getCurrentD();
+            const lpSupply = await lpToken.totalSupply();
+            await fund.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
+            const beforeD = await stableSwap.getCurrentD();
             const afterD = beforeD.sub(beforeD.mul(burnAmount).div(lpSupply));
             let newBaseBalance = getBase(A, parseEther("11"), oracle, afterD);
             newBaseBalance = parseEther("11");
@@ -743,12 +692,12 @@ describe("BishopStableSwap", function () {
                 .sub(getBase(A, newQuoteBalance, oracle, afterD))
                 .sub(1); // 552673302281266301
 
-            await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
+            await fund.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
             const beforeToken = await tokens[0].balanceOf(addr2);
-            const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
+            const beforeLP = await lpToken.balanceOf(addr2);
+            await stableSwap.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[0].balanceOf(addr2);
-            const afterLP = await lpToken0.balanceOf(addr2);
+            const afterLP = await lpToken.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(baseDelta);
             expect(beforeLP.sub(afterLP)).to.equal(burnAmount);
         });
@@ -756,9 +705,9 @@ describe("BishopStableSwap", function () {
         it("Should remove quote liquidity when oracle shifts up", async function () {
             const burnAmount = parseEther("0.5");
             const oracle = parseEther("1.2");
-            const lpSupply = await lpToken0.totalSupply();
-            await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
-            const beforeD = await stableSwap0.getCurrentD();
+            const lpSupply = await lpToken.totalSupply();
+            await fund.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
+            const beforeD = await stableSwap.getCurrentD();
             const afterD = beforeD.sub(beforeD.mul(burnAmount).div(lpSupply));
             let newQuoteBalance = getQuote(A, parseEther("11"), oracle, afterD);
             newQuoteBalance = parseEther("11").sub(
@@ -774,12 +723,12 @@ describe("BishopStableSwap", function () {
                 .sub(getQuote(A, newBaseBalance, oracle, afterD))
                 .sub(1); // 540639941406019232
 
-            await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
+            await fund.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
             const beforeToken = await tokens[1].balanceOf(addr2);
-            const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeQuoteLiquidity(0, burnAmount, parseEther("0"));
+            const beforeLP = await lpToken.balanceOf(addr2);
+            await stableSwap.connect(user2).removeQuoteLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[1].balanceOf(addr2);
-            const afterLP = await lpToken0.balanceOf(addr2);
+            const afterLP = await lpToken.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(quoteDelta);
             expect(beforeLP.sub(afterLP)).to.equal(burnAmount);
         });
@@ -787,9 +736,9 @@ describe("BishopStableSwap", function () {
         it("Should remove quote liquidity when oracle shifts down", async function () {
             const burnAmount = parseEther("0.5");
             const oracle = parseEther("0.8");
-            const lpSupply = await lpToken0.totalSupply();
-            await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
-            const beforeD = await stableSwap0.getCurrentD();
+            const lpSupply = await lpToken.totalSupply();
+            await fund.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
+            const beforeD = await stableSwap.getCurrentD();
             const afterD = beforeD.sub(beforeD.mul(burnAmount).div(lpSupply));
             let newQuoteBalance = getQuote(A, parseEther("11"), oracle, afterD);
             newQuoteBalance = parseEther("11").sub(
@@ -805,12 +754,12 @@ describe("BishopStableSwap", function () {
                 .sub(getQuote(A, newBaseBalance, oracle, afterD))
                 .sub(1); // 444233504454156034
 
-            await fund0.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
+            await fund.mock.extrapolateNav.returns(0, oracle, parseEther("1"));
             const beforeToken = await tokens[1].balanceOf(addr2);
-            const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeQuoteLiquidity(0, burnAmount, parseEther("0"));
+            const beforeLP = await lpToken.balanceOf(addr2);
+            await stableSwap.connect(user2).removeQuoteLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[1].balanceOf(addr2);
-            const afterLP = await lpToken0.balanceOf(addr2);
+            const afterLP = await lpToken.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(quoteDelta);
             expect(beforeLP.sub(afterLP)).to.equal(burnAmount);
         });
@@ -824,12 +773,12 @@ describe("QueenStableSwap", function () {
 
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
-        readonly fund0: MockContract;
+        readonly fund: MockContract;
         readonly tokens: Contract[];
         readonly deadline: BigNumberish;
         readonly swapRouter: Contract;
-        readonly lpToken0: Contract;
-        readonly stableSwap0: Contract;
+        readonly lpToken: Contract;
+        readonly stableSwap: Contract;
     }
 
     const FEE_RATE = parseEther("0.03");
@@ -842,12 +791,12 @@ describe("QueenStableSwap", function () {
     let user2: Wallet;
     let addr1: string;
     let addr2: string;
-    let fund0: MockContract;
+    let fund: MockContract;
     let tokens: Contract[];
     let deadline: BigNumberish;
     let swapRouter: Contract;
-    let lpToken0: Contract;
-    let stableSwap0: Contract;
+    let lpToken: Contract;
+    let stableSwap: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
         const [user1, user2, owner] = provider.getWallets();
@@ -856,19 +805,19 @@ describe("QueenStableSwap", function () {
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
         await votingEscrow.mock.getLockedBalance.returns([0, 0]);
 
-        const fund0 = await deployMockForName(owner, "IFundV3");
-        await fund0.mock.currentDay.returns(0);
-        await fund0.mock.getRebalanceSize.returns(0);
-        await fund0.mock.refreshBalance.returns();
-        await fund0.mock.getTotalUnderlying.returns(parseEther("1"));
-        await fund0.mock.getEquivalentTotalQ.returns(parseEther("1"));
+        const fund = await deployMockForName(owner, "IFundV3");
+        await fund.mock.currentDay.returns(0);
+        await fund.mock.getRebalanceSize.returns(0);
+        await fund.mock.refreshBalance.returns();
+        await fund.mock.getTotalUnderlying.returns(parseEther("1"));
+        await fund.mock.getEquivalentTotalQ.returns(parseEther("1"));
 
         const MockToken = await ethers.getContractFactory("MockToken");
         const tokens = [
             await MockToken.connect(owner).deploy("token", "token", 18),
             await MockToken.connect(owner).deploy("token", "token", 18),
         ];
-        await fund0.mock.tokenShare.withArgs(TRANCHE_Q).returns(tokens[0].address);
+        await fund.mock.tokenShare.withArgs(TRANCHE_Q).returns(tokens[0].address);
         await tokens[0].connect(owner).mint(user1.address, parseEther("1000"));
         await tokens[1].connect(owner).mint(user1.address, parseEther("1000"));
         await tokens[0].connect(owner).mint(user2.address, parseEther("1000"));
@@ -884,12 +833,12 @@ describe("QueenStableSwap", function () {
         await swapReward.mock.getReward.returns();
 
         const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
-        const lpToken0 = await LiquidityGauge.connect(owner).deploy(
+        const lpToken = await LiquidityGauge.connect(owner).deploy(
             "pool2 token",
             "pool2 token",
             chessSchedule.address,
             chessController.address,
-            fund0.address,
+            fund.address,
             votingEscrow.address,
             swapReward.address
         );
@@ -898,9 +847,9 @@ describe("QueenStableSwap", function () {
         const swapRouter = await SwapRouter.connect(owner).deploy();
 
         const QueenStableSwap = await ethers.getContractFactory("QueenStableSwap");
-        const stableSwap0 = await QueenStableSwap.connect(owner).deploy(
-            lpToken0.address,
-            fund0.address,
+        const stableSwap = await QueenStableSwap.connect(owner).deploy(
+            lpToken.address,
+            fund.address,
             tokens[1].address,
             A,
             owner.address,
@@ -908,9 +857,9 @@ describe("QueenStableSwap", function () {
             ADMIN_FEE_RATE
         );
 
-        await swapRouter.addSwap(tokens[0].address, tokens[1].address, stableSwap0.address);
+        await swapRouter.addSwap(tokens[0].address, tokens[1].address, stableSwap.address);
 
-        await lpToken0.transferOwnership(stableSwap0.address);
+        await lpToken.transferOwnership(stableSwap.address);
         await tokens[0].connect(user1).approve(swapRouter.address, parseEther("10"));
         await tokens[1].connect(user1).approve(swapRouter.address, parseEther("20"));
 
@@ -928,12 +877,12 @@ describe("QueenStableSwap", function () {
 
         return {
             wallets: { user1, user2, owner },
-            fund0,
+            fund,
             tokens,
             deadline,
             swapRouter: swapRouter.connect(user1),
-            lpToken0,
-            stableSwap0: stableSwap0.connect(user1),
+            lpToken,
+            stableSwap: stableSwap.connect(user1),
         };
     }
 
@@ -949,11 +898,10 @@ describe("QueenStableSwap", function () {
         addr2 = user2.address;
         deadline = fixtureData.deadline;
         swapRouter = fixtureData.swapRouter;
-        fund0 = fixtureData.fund0;
+        fund = fixtureData.fund;
         tokens = fixtureData.tokens;
-        lpToken0 = fixtureData.lpToken0;
-        stableSwap0 = fixtureData.stableSwap0;
-        //stableSwap1 = fixtureData.stableSwap1;
+        lpToken = fixtureData.lpToken;
+        stableSwap = fixtureData.stableSwap;
     });
 
     describe("buy()", function () {
@@ -963,9 +911,9 @@ describe("QueenStableSwap", function () {
             const fee = amount.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
-            expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect(await stableSwap0.getBaseOut(amount)).to.equal(dy);
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10"));
+            expect((await stableSwap.allBalances())[1]).to.equal(parseEther("10"));
+            expect(await stableSwap.getBaseOut(amount)).to.equal(dy);
 
             await tokens[1].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -979,7 +927,7 @@ describe("QueenStableSwap", function () {
                     deadline
                 )
             )
-                .to.emit(stableSwap0, "Swap")
+                .to.emit(stableSwap, "Swap")
                 .withArgs(
                     swapRouter.address,
                     addr1,
@@ -992,14 +940,14 @@ describe("QueenStableSwap", function () {
                     parseEther("1")
                 );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, parseEther("1"));
+            validate(await stableSwap.allBalances(), afterD, A, parseEther("1"));
 
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").add(amount).sub(adminFee)
             );
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").sub(dy));
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").sub(dy));
         });
 
         it("Should buy exact", async function () {
@@ -1008,9 +956,9 @@ describe("QueenStableSwap", function () {
             const fee = dx.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
-            expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect(await stableSwap0.getQuoteIn(amount)).to.equal(dx);
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10"));
+            expect((await stableSwap.allBalances())[1]).to.equal(parseEther("10"));
+            expect(await stableSwap.getQuoteIn(amount)).to.equal(dx);
 
             await tokens[1].connect(user1).approve(swapRouter.address, dx);
             await expect(
@@ -1024,7 +972,7 @@ describe("QueenStableSwap", function () {
                     deadline
                 )
             )
-                .to.emit(stableSwap0, "Swap")
+                .to.emit(stableSwap, "Swap")
                 .withArgs(
                     swapRouter.address,
                     addr1,
@@ -1037,14 +985,14 @@ describe("QueenStableSwap", function () {
                     parseEther("1")
                 );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, parseEther("1"));
+            validate(await stableSwap.allBalances(), afterD, A, parseEther("1"));
 
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").add(dx).sub(adminFee)
             );
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").sub(amount));
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").sub(amount));
         });
 
         it("Should buy as oracle shifts up", async function () {
@@ -1054,9 +1002,9 @@ describe("QueenStableSwap", function () {
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
             const oracle = parseEther("1.2");
-            await fund0.mock.getTotalUnderlying.returns(oracle);
+            await fund.mock.getTotalUnderlying.returns(oracle);
 
-            expect(await stableSwap0.getBaseOut(amount)).to.equal(dy);
+            expect(await stableSwap.getBaseOut(amount)).to.equal(dy);
 
             await tokens[1].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -1071,14 +1019,14 @@ describe("QueenStableSwap", function () {
                 )
             );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, oracle);
+            validate(await stableSwap.allBalances(), afterD, A, oracle);
 
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").add(amount).sub(adminFee)
             );
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").sub(dy));
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").sub(dy));
         });
 
         it("Should buy as oracle shifts down", async function () {
@@ -1088,9 +1036,9 @@ describe("QueenStableSwap", function () {
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
             const oracle = parseEther("0.8");
-            await fund0.mock.getTotalUnderlying.returns(oracle);
+            await fund.mock.getTotalUnderlying.returns(oracle);
 
-            expect(await stableSwap0.getBaseOut(amount)).to.equal(dy);
+            expect(await stableSwap.getBaseOut(amount)).to.equal(dy);
 
             await tokens[1].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -1105,14 +1053,14 @@ describe("QueenStableSwap", function () {
                 )
             );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, oracle);
+            validate(await stableSwap.allBalances(), afterD, A, oracle);
 
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").add(amount).sub(adminFee)
             );
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").sub(dy));
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").sub(dy));
         });
     });
 
@@ -1123,9 +1071,9 @@ describe("QueenStableSwap", function () {
             const fee = BigNumber.from("29982291590730242");
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
-            expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect(await stableSwap0.getQuoteOut(amount)).to.equal(dy);
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10"));
+            expect((await stableSwap.allBalances())[1]).to.equal(parseEther("10"));
+            expect(await stableSwap.getQuoteOut(amount)).to.equal(dy);
 
             await tokens[0].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -1139,7 +1087,7 @@ describe("QueenStableSwap", function () {
                     deadline
                 )
             )
-                .to.emit(stableSwap0, "Swap")
+                .to.emit(stableSwap, "Swap")
                 .withArgs(
                     swapRouter.address,
                     addr1,
@@ -1152,12 +1100,12 @@ describe("QueenStableSwap", function () {
                     parseEther("1")
                 );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, parseEther("1"));
+            validate(await stableSwap.allBalances(), afterD, A, parseEther("1"));
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").add(amount));
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").add(amount));
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").sub(dy).sub(adminFee)
             );
         });
@@ -1169,9 +1117,9 @@ describe("QueenStableSwap", function () {
             const fee = amountBeforeFee.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10"));
-            expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("10"));
-            expect(await stableSwap0.getBaseIn(amount)).to.equal(dx);
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10"));
+            expect((await stableSwap.allBalances())[1]).to.equal(parseEther("10"));
+            expect(await stableSwap.getBaseIn(amount)).to.equal(dx);
 
             await tokens[0].connect(user1).approve(swapRouter.address, dx);
             await expect(
@@ -1185,7 +1133,7 @@ describe("QueenStableSwap", function () {
                     deadline
                 )
             )
-                .to.emit(stableSwap0, "Swap")
+                .to.emit(stableSwap, "Swap")
                 .withArgs(
                     swapRouter.address,
                     addr1,
@@ -1198,12 +1146,12 @@ describe("QueenStableSwap", function () {
                     parseEther("1")
                 );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, parseEther("1"));
+            validate(await stableSwap.allBalances(), afterD, A, parseEther("1"));
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").add(dx));
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").add(dx));
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").sub(amountBeforeFee).add(fee).sub(adminFee)
             );
         });
@@ -1215,9 +1163,9 @@ describe("QueenStableSwap", function () {
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
             const oracle = parseEther("1.2");
-            await fund0.mock.getTotalUnderlying.returns(oracle);
+            await fund.mock.getTotalUnderlying.returns(oracle);
 
-            expect(await stableSwap0.getQuoteOut(amount)).to.equal(dy);
+            expect(await stableSwap.getQuoteOut(amount)).to.equal(dy);
 
             await tokens[0].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -1232,12 +1180,12 @@ describe("QueenStableSwap", function () {
                 )
             );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, oracle);
+            validate(await stableSwap.allBalances(), afterD, A, oracle);
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").add(amount));
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").add(amount));
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").sub(dy).sub(adminFee)
             );
         });
@@ -1249,9 +1197,9 @@ describe("QueenStableSwap", function () {
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
             const oracle = parseEther("0.8");
-            await fund0.mock.getTotalUnderlying.returns(oracle);
+            await fund.mock.getTotalUnderlying.returns(oracle);
 
-            expect(await stableSwap0.getQuoteOut(amount)).to.equal(dy);
+            expect(await stableSwap.getQuoteOut(amount)).to.equal(dy);
 
             await tokens[0].connect(user1).approve(swapRouter.address, amount);
             await expect(
@@ -1266,12 +1214,12 @@ describe("QueenStableSwap", function () {
                 )
             );
 
-            const afterD = await stableSwap0.getCurrentD();
+            const afterD = await stableSwap.getCurrentD();
 
-            validate(await stableSwap0.allBalances(), afterD, A, oracle);
+            validate(await stableSwap.allBalances(), afterD, A, oracle);
 
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("10").add(amount));
-            expect((await stableSwap0.allBalances())[1]).to.equal(
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("10").add(amount));
+            expect((await stableSwap.allBalances())[1]).to.equal(
                 parseEther("10").sub(dy).sub(adminFee)
             );
         });
@@ -1282,7 +1230,7 @@ describe("QueenStableSwap", function () {
             await tokens[0].connect(user1).approve(swapRouter.address, parseEther("1"));
             await tokens[1].connect(user1).approve(swapRouter.address, parseEther("1"));
 
-            const beforeLP = await lpToken0.balanceOf(addr1);
+            const beforeLP = await lpToken.balanceOf(addr1);
             await swapRouter.addLiquidity(
                 tokens[0].address,
                 tokens[1].address,
@@ -1292,10 +1240,10 @@ describe("QueenStableSwap", function () {
                 0,
                 deadline
             );
-            const afterLP = await lpToken0.balanceOf(addr1);
+            const afterLP = await lpToken.balanceOf(addr1);
             expect(afterLP.sub(beforeLP)).to.equal(parseEther("2"));
-            expect((await stableSwap0.allBalances())[0]).to.equal(parseEther("11"));
-            expect((await stableSwap0.allBalances())[1]).to.equal(parseEther("11"));
+            expect((await stableSwap.allBalances())[0]).to.equal(parseEther("11"));
+            expect((await stableSwap.allBalances())[1]).to.equal(parseEther("11"));
         });
     });
 
@@ -1318,20 +1266,20 @@ describe("QueenStableSwap", function () {
         });
 
         it("Should remove liquidity", async function () {
-            const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0
+            const beforeLP = await lpToken.balanceOf(addr2);
+            await stableSwap
                 .connect(user2)
                 .removeLiquidity(0, parseEther("2"), parseEther("1"), parseEther("1"));
-            const afterLP = await lpToken0.balanceOf(addr2);
+            const afterLP = await lpToken.balanceOf(addr2);
             expect(beforeLP.sub(afterLP)).to.equal(parseEther("2"));
         });
 
         it("Should remove base liquidity when oracle shifts up", async function () {
             const burnAmount = parseEther("0.5");
             const oracle = parseEther("1.2");
-            const lpSupply = await lpToken0.totalSupply();
-            await fund0.mock.getTotalUnderlying.returns(oracle);
-            const beforeD = await stableSwap0.getCurrentD();
+            const lpSupply = await lpToken.totalSupply();
+            await fund.mock.getTotalUnderlying.returns(oracle);
+            const beforeD = await stableSwap.getCurrentD();
             const afterD = beforeD.sub(beforeD.mul(burnAmount).div(lpSupply));
             let newBaseBalance = getBase(A, parseEther("11"), oracle, afterD);
             newBaseBalance = parseEther("11");
@@ -1346,10 +1294,10 @@ describe("QueenStableSwap", function () {
                 .sub(1); // 452276567283981505
 
             const beforeToken = await tokens[0].balanceOf(addr2);
-            const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
+            const beforeLP = await lpToken.balanceOf(addr2);
+            await stableSwap.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[0].balanceOf(addr2);
-            const afterLP = await lpToken0.balanceOf(addr2);
+            const afterLP = await lpToken.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(baseDelta);
             expect(beforeLP.sub(afterLP)).to.equal(burnAmount);
         });
@@ -1357,9 +1305,9 @@ describe("QueenStableSwap", function () {
         it("Should remove base liquidity when oracle shifts down", async function () {
             const burnAmount = parseEther("0.5");
             const oracle = parseEther("0.8");
-            const lpSupply = await lpToken0.totalSupply();
-            await fund0.mock.getTotalUnderlying.returns(oracle);
-            const beforeD = await stableSwap0.getCurrentD();
+            const lpSupply = await lpToken.totalSupply();
+            await fund.mock.getTotalUnderlying.returns(oracle);
+            const beforeD = await stableSwap.getCurrentD();
             const afterD = beforeD.sub(beforeD.mul(burnAmount).div(lpSupply));
             let newBaseBalance = getBase(A, parseEther("11"), oracle, afterD);
             newBaseBalance = parseEther("11");
@@ -1373,12 +1321,12 @@ describe("QueenStableSwap", function () {
                 .sub(getBase(A, newQuoteBalance, oracle, afterD))
                 .sub(1); // 552673302281266301
 
-            await fund0.mock.getTotalUnderlying.returns(oracle);
+            await fund.mock.getTotalUnderlying.returns(oracle);
             const beforeToken = await tokens[0].balanceOf(addr2);
-            const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
+            const beforeLP = await lpToken.balanceOf(addr2);
+            await stableSwap.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[0].balanceOf(addr2);
-            const afterLP = await lpToken0.balanceOf(addr2);
+            const afterLP = await lpToken.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(baseDelta);
             expect(beforeLP.sub(afterLP)).to.equal(burnAmount);
         });
@@ -1386,9 +1334,9 @@ describe("QueenStableSwap", function () {
         it("Should remove quote liquidity when oracle shifts up", async function () {
             const burnAmount = parseEther("0.5");
             const oracle = parseEther("1.2");
-            const lpSupply = await lpToken0.totalSupply();
-            await fund0.mock.getTotalUnderlying.returns(oracle);
-            const beforeD = await stableSwap0.getCurrentD();
+            const lpSupply = await lpToken.totalSupply();
+            await fund.mock.getTotalUnderlying.returns(oracle);
+            const beforeD = await stableSwap.getCurrentD();
             const afterD = beforeD.sub(beforeD.mul(burnAmount).div(lpSupply));
             let newQuoteBalance = getQuote(A, parseEther("11"), oracle, afterD);
             newQuoteBalance = parseEther("11").sub(
@@ -1404,12 +1352,12 @@ describe("QueenStableSwap", function () {
                 .sub(getQuote(A, newBaseBalance, oracle, afterD))
                 .sub(1); // 540639941406019232
 
-            await fund0.mock.getTotalUnderlying.returns(oracle);
+            await fund.mock.getTotalUnderlying.returns(oracle);
             const beforeToken = await tokens[1].balanceOf(addr2);
-            const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeQuoteLiquidity(0, burnAmount, parseEther("0"));
+            const beforeLP = await lpToken.balanceOf(addr2);
+            await stableSwap.connect(user2).removeQuoteLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[1].balanceOf(addr2);
-            const afterLP = await lpToken0.balanceOf(addr2);
+            const afterLP = await lpToken.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(quoteDelta);
             expect(beforeLP.sub(afterLP)).to.equal(burnAmount);
         });
@@ -1417,9 +1365,9 @@ describe("QueenStableSwap", function () {
         it("Should remove quote liquidity when oracle shifts down", async function () {
             const burnAmount = parseEther("0.5");
             const oracle = parseEther("0.8");
-            const lpSupply = await lpToken0.totalSupply();
-            await fund0.mock.getTotalUnderlying.returns(oracle);
-            const beforeD = await stableSwap0.getCurrentD();
+            const lpSupply = await lpToken.totalSupply();
+            await fund.mock.getTotalUnderlying.returns(oracle);
+            const beforeD = await stableSwap.getCurrentD();
             const afterD = beforeD.sub(beforeD.mul(burnAmount).div(lpSupply));
             let newQuoteBalance = getQuote(A, parseEther("11"), oracle, afterD);
             newQuoteBalance = parseEther("11").sub(
@@ -1435,12 +1383,12 @@ describe("QueenStableSwap", function () {
                 .sub(getQuote(A, newBaseBalance, oracle, afterD))
                 .sub(1); // 444233504454156034
 
-            await fund0.mock.getTotalUnderlying.returns(oracle);
+            await fund.mock.getTotalUnderlying.returns(oracle);
             const beforeToken = await tokens[1].balanceOf(addr2);
-            const beforeLP = await lpToken0.balanceOf(addr2);
-            await stableSwap0.connect(user2).removeQuoteLiquidity(0, burnAmount, parseEther("0"));
+            const beforeLP = await lpToken.balanceOf(addr2);
+            await stableSwap.connect(user2).removeQuoteLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[1].balanceOf(addr2);
-            const afterLP = await lpToken0.balanceOf(addr2);
+            const afterLP = await lpToken.balanceOf(addr2);
             expect(afterToken.sub(beforeToken)).to.equal(quoteDelta);
             expect(beforeLP.sub(afterLP)).to.equal(burnAmount);
         });
@@ -1468,7 +1416,7 @@ describe("Flash Swap", function () {
         readonly usd: Contract;
         readonly tokens: Contract[];
         readonly swapRouter: Contract;
-        readonly stableSwap0: Contract;
+        readonly stableSwap: Contract;
         readonly flashSwapRouter: Contract;
     }
 
@@ -1488,7 +1436,7 @@ describe("Flash Swap", function () {
     let btc: Contract;
     let usd: Contract;
     let swapRouter: Contract;
-    let stableSwap0: Contract;
+    let stableSwap: Contract;
     let flashSwapRouter: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
@@ -1554,7 +1502,7 @@ describe("Flash Swap", function () {
         await swapReward.mock.getReward.returns();
 
         const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
-        const lpToken0 = await LiquidityGauge.connect(owner).deploy(
+        const lpToken = await LiquidityGauge.connect(owner).deploy(
             "pool2 token",
             "pool2 token",
             chessSchedule.address,
@@ -1564,8 +1512,8 @@ describe("Flash Swap", function () {
             swapReward.address
         );
         const BishopStableSwap = await ethers.getContractFactory("BishopStableSwap");
-        const stableSwap0 = await BishopStableSwap.connect(owner).deploy(
-            lpToken0.address,
+        const stableSwap = await BishopStableSwap.connect(owner).deploy(
+            lpToken.address,
             fund.address,
             usd.address,
             A,
@@ -1576,8 +1524,8 @@ describe("Flash Swap", function () {
             parseEther("0.35")
         );
 
-        await swapRouter.addSwap(tokens[0].address, usd.address, stableSwap0.address);
-        await lpToken0.transferOwnership(stableSwap0.address);
+        await swapRouter.addSwap(tokens[0].address, usd.address, stableSwap.address);
+        await lpToken.transferOwnership(stableSwap.address);
 
         await tokens[0].connect(user1).approve(swapRouter.address, parseEther("10"));
         await usd.connect(user1).approve(swapRouter.address, parseEther("20"));
@@ -1604,7 +1552,7 @@ describe("Flash Swap", function () {
             usd,
             tokens,
             swapRouter,
-            stableSwap0,
+            stableSwap,
             flashSwapRouter: flashSwapRouter.connect(user1),
         };
     }
@@ -1618,7 +1566,7 @@ describe("Flash Swap", function () {
         user1 = fixtureData.wallets.user1;
         addr1 = user1.address;
         swapRouter = fixtureData.swapRouter;
-        stableSwap0 = fixtureData.stableSwap0;
+        stableSwap = fixtureData.stableSwap;
         flashSwapRouter = fixtureData.flashSwapRouter;
         pancakeRouter = fixtureData.pancakeRouter;
         pancakeSwapRouter = fixtureData.pancakeSwapRouter;
@@ -1688,7 +1636,7 @@ describe("Flash Swap", function () {
             await fund.mock.tokenB.returns(tokens[0].address);
             await fund.mock.tokenR.returns(tokens[1].address);
             await fund.mock.trancheTransfer
-                .withArgs(TRANCHE_B, stableSwap0.address, outR, 0)
+                .withArgs(TRANCHE_B, stableSwap.address, outR, 0)
                 .returns();
             await fund.mock.trancheTransfer.withArgs(TRANCHE_R, addr1, outR, 0).returns();
             await fund.mock.primaryMarketMint
@@ -1707,12 +1655,12 @@ describe("Flash Swap", function () {
             await pancakeRouter.mock.swapExactTokensForTokens.returns([0, parseBtc("0.002")]);
 
             await btc.mint(flashSwapRouter.address, parseBtc("1"));
-            await tokens[0].mint(stableSwap0.address, outR);
+            await tokens[0].mint(stableSwap.address, outR);
             await usd
                 .connect(user1)
                 .approve(flashSwapRouter.address, BigNumber.from("30572571899722170"));
             await usd.mint(
-                stableSwap0.address,
+                stableSwap.address,
                 parseEther("1").sub(BigNumber.from("30572571899722170"))
             );
 
