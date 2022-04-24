@@ -16,7 +16,7 @@ interface IStableSwap {
 
     function getCurrentPrice() external view returns (uint256);
 
-    function priceOverOracleIntegral() external view returns (uint256 integral, uint256 timestamp);
+    function getPriceOverOracleIntegral() external view returns (uint256);
 
     function getQuoteOut(uint256 baseIn) external view returns (uint256 quoteOut);
 

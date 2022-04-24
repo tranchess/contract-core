@@ -158,8 +158,18 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         return _getPriceOverOracle(base, quote, ampl, oraclePrice, d).multiplyDecimal(oraclePrice);
     }
 
-    function priceOverOracleIntegral() external view override returns (uint256, uint256) {
-        return (_priceOverOracleIntegral, _priceOverOracleTimestamp);
+    function getPriceOverOracleIntegral() external view override returns (uint256) {
+        (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        uint256 integral = _priceOverOracleIntegral;
+        if (base != 0 && quote != 0) {
+            uint256 ampl = getAmpl();
+            uint256 oraclePrice = getOraclePrice();
+            uint256 d = _getD(base, quote, ampl, oraclePrice);
+            integral +=
+                _getPriceOverOracle(base, quote, ampl, oraclePrice, d) *
+                (block.timestamp - _priceOverOracleTimestamp);
+        }
+        return integral;
     }
 
     function getQuoteOut(uint256 baseIn) external view override returns (uint256 quoteOut) {
@@ -488,11 +498,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 oraclePrice,
         uint256 d
     ) private {
-        uint256 timeElapsed = block.timestamp - _priceOverOracleTimestamp;
-        // Addition overflow is desired
-        _priceOverOracleIntegral += _getPriceOverOracle(base, quote, ampl, oraclePrice, d).mul(
-            timeElapsed
-        );
+        // Overflow is desired
+        _priceOverOracleIntegral +=
+            _getPriceOverOracle(base, quote, ampl, oraclePrice, d) *
+            (block.timestamp - _priceOverOracleTimestamp);
         _priceOverOracleTimestamp = block.timestamp;
     }
 
