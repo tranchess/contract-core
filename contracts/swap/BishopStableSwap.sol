@@ -8,6 +8,8 @@ import "../interfaces/ITrancheIndexV2.sol";
 import "./StableSwap.sol";
 
 contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
+    event Rebalanced(uint256 base, uint256 quote, uint256 version);
+
     uint256 public immutable tradingCurbThreshold;
     address public immutable chainlinkAggregator;
 
@@ -118,6 +120,7 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
             baseBalance = newBase;
             quoteBalance = newQuote;
             currentVersion = latestVersion;
+            emit Rebalanced(newBase, newQuote, latestVersion);
             if (excessiveQ > 0) {
                 fund.trancheTransfer(TRANCHE_Q, lpToken, excessiveQ, latestVersion);
             }
