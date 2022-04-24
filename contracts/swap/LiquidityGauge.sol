@@ -19,10 +19,6 @@ import "../interfaces/IVotingEscrow.sol";
 import "../utils/CoreUtility.sol";
 import "../utils/SafeDecimalMath.sol";
 
-interface IController {
-    function getRelativeWeight(address gauge, uint256 timestamp) external view returns (uint256);
-}
-
 interface ISwapRewards {
     function rewardToken() external view returns (address);
 
