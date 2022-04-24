@@ -15,8 +15,6 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
 
     mapping(address => mapping(address => IStableSwap)) private _swapMap;
 
-    constructor() public {}
-
     /// @dev Returns the swap for the given token pair and fee. The swap contract may or may not exist.
     function getSwap(address baseToken, address quoteToken)
         public
