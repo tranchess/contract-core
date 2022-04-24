@@ -86,22 +86,21 @@ contract QueenSwapRouter is ITrancheIndexV2, IPrimaryMarketV3 {
         uint256 minOutQ,
         uint256 version
     ) private returns (uint256 outQ) {
-        ISwapRouter swapRouter_ = swapRouter;
         IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
         // Get out amount from swap
         address[] memory path = new address[](2);
         path[0] = _tokenUnderlying;
         path[1] = _tokenQ;
-        uint256 swapAmount = swapRouter_.getAmountsOut(underlying, path)[1];
+        uint256 swapAmount = swapRouter.getAmountsOut(underlying, path)[1];
         // Get out amount from primary market
         uint256 pmAmount = pm.getCreation(underlying);
 
         if (pmAmount < swapAmount) {
             // Swap path
-            IERC20(path[0]).safeApprove(address(swapRouter_), underlying);
+            IERC20(path[0]).safeApprove(address(swapRouter), underlying);
             uint256[] memory versions = new uint256[](1);
             versions[0] = version;
-            outQ = swapRouter_.swapExactTokensForTokens(
+            outQ = swapRouter.swapExactTokensForTokens(
                 underlying,
                 minOutQ,
                 path,
@@ -124,22 +123,21 @@ contract QueenSwapRouter is ITrancheIndexV2, IPrimaryMarketV3 {
         uint256 minUnderlying,
         uint256 version
     ) private returns (uint256 underlying) {
-        ISwapRouter swapRouter_ = swapRouter;
         IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
         // Get out amount from swap
         address[] memory path = new address[](2);
         path[0] = _tokenQ;
         path[1] = _tokenUnderlying;
-        uint256 swapAmount = swapRouter_.getAmountsOut(inQ, path)[1];
+        uint256 swapAmount = swapRouter.getAmountsOut(inQ, path)[1];
         // Get out amount from primary market
         (uint256 pmAmount, ) = pm.getRedemption(inQ);
 
         if (pmAmount < swapAmount) {
             // Swap path
-            pm.fund().trancheApprove(TRANCHE_Q, address(swapRouter_), inQ, version);
+            pm.fund().trancheApprove(TRANCHE_Q, address(swapRouter), inQ, version);
             uint256[] memory versions = new uint256[](1);
             versions[0] = version;
-            underlying = swapRouter_.swapExactTokensForTokens(
+            underlying = swapRouter.swapExactTokensForTokens(
                 inQ,
                 minUnderlying,
                 path,
