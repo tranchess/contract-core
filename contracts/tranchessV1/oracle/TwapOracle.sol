@@ -3,7 +3,7 @@ pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "../interfaces/ITwapOracle.sol";
+import "../../interfaces/ITwapOracle.sol";
 
 /// @title Time-weighted average price oracle
 /// @notice This contract extends the Open Oracle standard by Compound, accepts price data
