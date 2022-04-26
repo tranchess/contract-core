@@ -7,11 +7,14 @@ import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "./StableSwap.sol";
 
+interface IChainlinkOracle {
+    function getLatest() external view returns (int256 price);
+}
+
 contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
     event Rebalanced(uint256 base, uint256 quote, uint256 version);
 
     uint256 public immutable tradingCurbThreshold;
-    address public immutable chainlinkAggregator;
 
     uint256 public currentVersion;
 
@@ -23,7 +26,6 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
         address feeCollector_,
         uint256 feeRate_,
         uint256 adminFeeRate_,
-        address chainlinkAggregator_,
         uint256 tradingCurbThreshold_
     )
         public
@@ -39,7 +41,6 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
         )
     {
         tradingCurbThreshold = tradingCurbThreshold_;
-        chainlinkAggregator = chainlinkAggregator_;
         currentVersion = IFundV3(fund_).getRebalanceSize();
     }
 
@@ -144,8 +145,8 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
     }
 
     function getOraclePrice() public view override returns (uint256) {
-        (, int256 answer, , , ) = AggregatorV3Interface(chainlinkAggregator).latestRoundData();
-        (, uint256 navB, uint256 navR) = fund.extrapolateNav(uint256(answer));
+        int256 price = IChainlinkOracle(address(fund.twapOracle())).getLatest();
+        (, uint256 navB, uint256 navR) = fund.extrapolateNav(uint256(price));
         require(navR >= navB.multiplyDecimal(tradingCurbThreshold), "Trading curb");
         return navB;
     }

@@ -129,6 +129,12 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
         (lastRoundID, , , , ) = AggregatorV3Interface(chainlinkAggregator_).latestRoundData();
     }
 
+    /// @notice Return the latest price with 18 decimal places.
+    /// @return price price (18 decimal places).
+    function getLatest() external view returns (int256 price) {
+        (, price, , , ) = AggregatorV3Interface(chainlinkAggregator).latestRoundData();
+    }
+
     /// @notice Return TWAP with 18 decimal places in the epoch ending at the specified timestamp.
     ///         Zero is returned if the epoch is not initialized yet.
     /// @param timestamp End Timestamp in seconds of the epoch

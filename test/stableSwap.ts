@@ -136,8 +136,8 @@ describe("BishopStableSwap", function () {
         const [user1, user2, owner] = provider.getWallets();
         const deadline = (await ethers.provider.getBlock("latest")).timestamp + 3600;
 
-        const aggregator = await deployMockForName(owner, "AggregatorV3Interface");
-        await aggregator.mock.latestRoundData.returns(0, 0, 0, 0, 0);
+        const twapOracle = await deployMockForName(owner, "IChainlinkOracle");
+        await twapOracle.mock.getLatest.returns(0);
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
         await votingEscrow.mock.getLockedBalance.returns([0, 0]);
@@ -147,6 +147,7 @@ describe("BishopStableSwap", function () {
         await fund.mock.extrapolateNav.returns(0, parseEther("1"), parseEther("1"));
         await fund.mock.getRebalanceSize.returns(0);
         await fund.mock.refreshBalance.returns();
+        await fund.mock.twapOracle.returns(twapOracle.address);
 
         const MockToken = await ethers.getContractFactory("MockToken");
         const tokens = [
@@ -191,7 +192,6 @@ describe("BishopStableSwap", function () {
             owner.address,
             FEE_RATE,
             ADMIN_FEE_RATE,
-            aggregator.address,
             parseEther("0.35")
         );
 
@@ -1443,8 +1443,8 @@ describe("Flash Swap", function () {
         const [user1, user2, owner] = provider.getWallets();
         const deadline = (await ethers.provider.getBlock("latest")).timestamp + 3600;
 
-        const aggregator = await deployMockForName(owner, "AggregatorV3Interface");
-        await aggregator.mock.latestRoundData.returns(0, 0, 0, 0, 0);
+        const twapOracle = await deployMockForName(owner, "IChainlinkOracle");
+        await twapOracle.mock.getLatest.returns(0);
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
         await votingEscrow.mock.getLockedBalance.returns([0, 0]);
@@ -1471,6 +1471,7 @@ describe("Flash Swap", function () {
         await fund.mock.getRebalanceSize.returns(0);
         await fund.mock.refreshBalance.returns();
         await fund.mock.extrapolateNav.returns(0, parseEther("1"), parseEther("1"));
+        await fund.mock.twapOracle.returns(twapOracle.address);
         await btc.mint(fund.address, TOTAL_UNDERLYING);
         const PrimaryMarket = await ethers.getContractFactory("PrimaryMarketV3");
         const primaryMarket = await PrimaryMarket.connect(owner).deploy(
@@ -1520,7 +1521,6 @@ describe("Flash Swap", function () {
             owner.address,
             FEE_RATE,
             ADMIN_FEE_RATE,
-            aggregator.address,
             parseEther("0.35")
         );
 
