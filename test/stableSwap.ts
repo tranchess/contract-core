@@ -1589,8 +1589,14 @@ describe("Flash Swap", function () {
                     parseEther("1"),
                     0,
                     defaultAbiCoder.encode(
-                        ["address", "uint256", "address", "uint256", "uint256"],
-                        [primaryMarket.address, parseEther("1"), addr1, 0, 1]
+                        ["address", "uint256", "address", "uint256", "address[]"],
+                        [
+                            primaryMarket.address,
+                            parseEther("1"),
+                            addr1,
+                            0,
+                            [usd.address, btc.address],
+                        ]
                     )
                 )
             ).to.be.revertedWith("Tranchess Pair check failed");
@@ -1608,8 +1614,14 @@ describe("Flash Swap", function () {
                     parseEther("1"),
                     parseEther("1"),
                     defaultAbiCoder.encode(
-                        ["address", "uint256", "address", "uint256", "uint256"],
-                        [primaryMarket.address, parseEther("1"), addr1, 0, 1]
+                        ["address", "uint256", "address", "uint256", "address[]"],
+                        [
+                            primaryMarket.address,
+                            parseEther("1"),
+                            addr1,
+                            0,
+                            [usd.address, btc.address],
+                        ]
                     )
                 )
             ).to.be.revertedWith("Unidirectional check failed");
@@ -1625,7 +1637,15 @@ describe("Flash Swap", function () {
             await expect(
                 flashSwapRouter
                     .connect(user1)
-                    .buyR(primaryMarket.address, parseEther("0.03"), addr1, usd.address, 1, 0, outR)
+                    .buyR(
+                        primaryMarket.address,
+                        parseEther("0.03"),
+                        addr1,
+                        usd.address,
+                        [usd.address, btc.address],
+                        0,
+                        outR
+                    )
             ).to.be.revertedWith("Insufficient input");
         });
 
@@ -1668,7 +1688,15 @@ describe("Flash Swap", function () {
 
             await flashSwapRouter
                 .connect(user1)
-                .buyR(primaryMarket.address, parseEther("1"), addr1, usd.address, 1, 0, outR);
+                .buyR(
+                    primaryMarket.address,
+                    parseEther("1"),
+                    addr1,
+                    usd.address,
+                    [usd.address, btc.address],
+                    0,
+                    outR
+                );
 
             const afterQuote = await usd.balanceOf(user1.address);
             expect(afterQuote.sub(beforeQuote)).to.equal(BigNumber.from("-30572571899722170"));
@@ -1719,7 +1747,15 @@ describe("Flash Swap", function () {
             await expect(
                 flashSwapRouter
                     .connect(user1)
-                    .sellR(primaryMarket.address, parseEther("1.4"), addr1, usd.address, 1, 0, inR)
+                    .sellR(
+                        primaryMarket.address,
+                        parseEther("1.4"),
+                        addr1,
+                        usd.address,
+                        [btc.address, usd.address],
+                        0,
+                        inR
+                    )
             ).to.be.revertedWith("Insufficient output");
         });
 
@@ -1767,7 +1803,15 @@ describe("Flash Swap", function () {
 
             await flashSwapRouter
                 .connect(user1)
-                .sellR(primaryMarket.address, parseEther("0"), addr1, usd.address, 1, 0, inR);
+                .sellR(
+                    primaryMarket.address,
+                    parseEther("0"),
+                    addr1,
+                    usd.address,
+                    [btc.address, usd.address],
+                    0,
+                    inR
+                );
 
             const afterQuote = await usd.balanceOf(user1.address);
             expect(afterQuote.sub(beforeQuote)).to.equal(BigNumber.from("968462902096752591"));
