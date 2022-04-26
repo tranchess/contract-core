@@ -8,12 +8,13 @@ import "../interfaces/ITrancheIndexV2.sol";
 import "./StableSwap.sol";
 
 interface IChainlinkOracle {
-    function getLatest() external view returns (int256 price);
+    function getLatest() external view returns (int256 price, uint256 updatedAt);
 }
 
 contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
     event Rebalanced(uint256 base, uint256 quote, uint256 version);
 
+    uint256 private constant EPOCH = 30 minutes; // An exchange epoch is 30 minutes long
     uint256 public immutable tradingCurbThreshold;
 
     uint256 public currentVersion;
@@ -145,7 +146,9 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
     }
 
     function getOraclePrice() public view override returns (uint256) {
-        int256 price = IChainlinkOracle(address(fund.twapOracle())).getLatest();
+        (int256 price, uint256 updatedAt) =
+            IChainlinkOracle(address(fund.twapOracle())).getLatest();
+        require(updatedAt + EPOCH > block.timestamp, "Stale price oracle");
         (, uint256 navB, uint256 navR) = fund.extrapolateNav(uint256(price));
         require(navR >= navB.multiplyDecimal(tradingCurbThreshold), "Trading curb");
         return navB;
