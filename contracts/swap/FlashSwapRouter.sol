@@ -3,6 +3,7 @@ pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router01.sol";
 
 import "../interfaces/ITranchessSwapCallee.sol";
 import "../interfaces/IPrimaryMarketV3.sol";
@@ -11,40 +12,15 @@ import "../interfaces/ITrancheIndexV2.sol";
 
 /// @title Tranchess Flash Swap Router
 /// @notice Router for stateless execution of flash swaps against Tranchess stable swaps
-
-interface IPancakeRouter01 {
-    function factory() external pure returns (address);
-
-    function getAmountsOut(uint256 amountIn, address[] calldata path)
-        external
-        view
-        returns (uint256[] memory amounts);
-
-    function getAmountsIn(uint256 amountOut, address[] calldata path)
-        external
-        view
-        returns (uint256[] memory amounts);
-
-    function swapExactTokensForTokens(
-        uint256 amountIn,
-        uint256 amountOutMin,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts);
-}
-
 contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    enum RouterOption {LEAST_SLIPPAGE, PANCAKE_SWAP}
-
-    IPancakeRouter01 public immutable pancakeRouter;
+    IUniswapV2Router01 public immutable externalRouter;
     ISwapRouter public immutable tranchessRouter;
 
-    constructor(address pancakeRouter_, address tranchessRouter_) public {
-        pancakeRouter = IPancakeRouter01(pancakeRouter_);
+    constructor(address externalRouter_, address tranchessRouter_) public {
+        externalRouter = IUniswapV2Router01(externalRouter_);
         tranchessRouter = ISwapRouter(tranchessRouter_);
     }
 
@@ -61,7 +37,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
         uint256 maxQuote,
         address recipient,
         address tokenQuote,
-        RouterOption mode,
+        address[] memory externalPath,
         uint256 version,
         uint256 outR
     ) external {
@@ -70,16 +46,10 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
         uint256 totalQuoteAmount;
         uint256 quoteAmount;
         {
-            address tokenUnderlying = pm.fund().tokenUnderlying();
             uint256 inQ = pm.getSplitForB(outR);
             underlyingAmount = pm.getCreationForQ(inQ);
             // Calculate the exact amount of quote asset to pay
-            (totalQuoteAmount, mode) = _externalGetAmountsIn(
-                mode,
-                underlyingAmount,
-                tokenQuote,
-                tokenUnderlying
-            );
+            totalQuoteAmount = externalRouter.getAmountsIn(underlyingAmount, externalPath)[0];
             // Arrange the stable swap path
             address[] memory tranchessPath = new address[](2);
             tranchessPath[0] = pm.fund().tokenB();
@@ -92,7 +62,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
         uint256 resultAmount = totalQuoteAmount.sub(quoteAmount);
         require(resultAmount <= maxQuote, "Insufficient input");
         bytes memory data =
-            abi.encode(primaryMarketOrRouter, underlyingAmount, recipient, version, mode);
+            abi.encode(primaryMarketOrRouter, underlyingAmount, recipient, version, externalPath);
         IERC20(tokenQuote).safeTransferFrom(msg.sender, address(this), resultAmount);
         tranchessPair.sell(version, quoteAmount, address(this), data);
     }
@@ -102,14 +72,15 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
         uint256 minQuote,
         address recipient,
         address tokenQuote,
-        RouterOption mode,
+        address[] memory externalPath,
         uint256 version,
         uint256 inR
     ) external {
         IPrimaryMarketV3 pm = getPrimaryMarket(primaryMarketOrRouter);
         // Send the user's ROOK to this router
         pm.fund().trancheTransferFrom(TRANCHE_R, msg.sender, address(this), inR, version);
-        bytes memory data = abi.encode(primaryMarketOrRouter, minQuote, recipient, version, mode);
+        bytes memory data =
+            abi.encode(primaryMarketOrRouter, minQuote, recipient, version, externalPath);
         tranchessRouter.getSwap(pm.fund().tokenB(), tokenQuote).buy(
             version,
             inR,
@@ -128,8 +99,8 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
             uint256 expectAmount,
             address recipient,
             uint256 version,
-            RouterOption mode
-        ) = abi.decode(data, (address, uint256, address, uint256, RouterOption));
+            address[] memory externalPath
+        ) = abi.decode(data, (address, uint256, address, uint256, address[]));
         IPrimaryMarketV3 pm = getPrimaryMarket(primaryMarketOrRouter);
         address tokenQuote = IStableSwap(msg.sender).quoteAddress();
         require(
@@ -158,9 +129,13 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
                 IPrimaryMarketV3(primaryMarketOrRouter).redeem(address(this), outQ, 0, version);
             // Trade underlying for quote asset
             uint256 totalQuoteAmount =
-                _externalSwap(mode, underlyingAmount, 0, pm.fund().tokenUnderlying(), tokenQuote)[
-                    1
-                ];
+                _externalSwap(
+                    externalPath,
+                    underlyingAmount,
+                    0,
+                    pm.fund().tokenUnderlying(),
+                    tokenQuote
+                )[1];
             // Send back quote asset to tranchess swap
             IERC20(tokenQuote).safeTransfer(msg.sender, quoteAmount);
             // Send the rest of quote asset to user
@@ -171,7 +146,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
             // Trade quote asset for underlying asset
             uint256 underlyingAmount =
                 _externalSwap(
-                    mode,
+                    externalPath,
                     quoteDeltaOut,
                     expectAmount,
                     tokenQuote,
@@ -198,67 +173,22 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
         }
     }
 
-    function _externalGetAmountsIn(
-        RouterOption mode,
-        uint256 amountOut,
-        address tokenIn,
-        address tokenOut
-    ) private view returns (uint256, RouterOption) {
-        if (mode == RouterOption.LEAST_SLIPPAGE) {
-            return (_pancakeGetAmountsIn(amountOut, tokenIn, tokenOut), mode);
-        } else if (mode == RouterOption.PANCAKE_SWAP) {
-            return (_pancakeGetAmountsIn(amountOut, tokenIn, tokenOut), mode);
-        } else {
-            revert("Invalid external swap");
-        }
-    }
-
     function _externalSwap(
-        RouterOption mode,
+        address[] memory externalPath,
         uint256 amountIn,
         uint256 minAmountOut,
         address tokenIn,
         address tokenOut
     ) private returns (uint256[] memory amounts) {
-        if (mode == RouterOption.LEAST_SLIPPAGE) {
-            mode = RouterOption.PANCAKE_SWAP;
-        }
-
-        if (mode == RouterOption.PANCAKE_SWAP) {
-            address[] memory pancakePath = new address[](2);
-            pancakePath[0] = tokenIn;
-            pancakePath[1] = tokenOut;
-            amounts = pancakeRouter.swapExactTokensForTokens(
-                amountIn,
-                minAmountOut,
-                pancakePath,
-                address(this),
-                block.timestamp
-            );
-        } else {
-            revert("Invalid external swap");
-        }
-    }
-
-    function _pancakeGetAmountsIn(
-        uint256 amountOut,
-        address tokenIn,
-        address tokenOut
-    ) private view returns (uint256 amount) {
-        address[] memory pancakePath = new address[](2);
-        pancakePath[0] = tokenIn;
-        pancakePath[1] = tokenOut;
-        amount = pancakeRouter.getAmountsIn(amountOut, pancakePath)[0];
-    }
-
-    function _pancakeGetAmountsOut(
-        uint256 amountIn,
-        address tokenIn,
-        address tokenOut
-    ) private view returns (uint256 amount) {
-        address[] memory pancakePath = new address[](2);
-        pancakePath[0] = tokenIn;
-        pancakePath[1] = tokenOut;
-        amount = pancakeRouter.getAmountsOut(amountIn, pancakePath)[1];
+        require(externalPath.length > 1, "Invalid external path");
+        require(externalPath[0] == tokenIn, "Invalid token in");
+        require(externalPath[externalPath.length - 1] == tokenOut, "Invalid token out");
+        amounts = externalRouter.swapExactTokensForTokens(
+            amountIn,
+            minAmountOut,
+            externalPath,
+            address(this),
+            block.timestamp
+        );
     }
 }
