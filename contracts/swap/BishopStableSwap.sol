@@ -7,14 +7,9 @@ import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "./StableSwap.sol";
 
-interface IChainlinkOracle {
-    function getLatest() external view returns (int256 price, uint256 updatedAt);
-}
-
 contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
     event Rebalanced(uint256 base, uint256 quote, uint256 version);
 
-    uint256 private constant EPOCH = 30 minutes; // An exchange epoch is 30 minutes long
     uint256 public immutable tradingCurbThreshold;
 
     uint256 public currentVersion;
