@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
 
-import "../interfaces/IFundV3.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "../utils/SafeDecimalMath.sol";
 import "./StableSwap.sol";
@@ -12,7 +11,7 @@ contract QueenStableSwap is StableSwap, ITrancheIndexV2 {
     constructor(
         address lpToken_,
         address fund_,
-        address quoteAddress_,
+        uint256 quoteDecimals_,
         uint256 ampl_,
         address feeCollector_,
         uint256 feeRate_,
@@ -23,13 +22,16 @@ contract QueenStableSwap is StableSwap, ITrancheIndexV2 {
             lpToken_,
             fund_,
             TRANCHE_Q,
-            quoteAddress_,
+            IFundV3(fund_).tokenUnderlying(),
+            quoteDecimals_,
             ampl_,
             feeCollector_,
             feeRate_,
             adminFeeRate_
         )
-    {}
+    {
+        require(10**(18 - quoteDecimals_) == IFundV3(fund_).underlyingDecimalMultiplier());
+    }
 
     function _getRebalanceResult(uint256)
         internal
@@ -59,6 +61,6 @@ contract QueenStableSwap is StableSwap, ITrancheIndexV2 {
     function getOraclePrice() public view override returns (uint256) {
         uint256 fundUnderlying = fund.getTotalUnderlying();
         uint256 fundEquivalentTotalQ = fund.getEquivalentTotalQ();
-        return fundUnderlying.divideDecimal(fundEquivalentTotalQ);
+        return fundUnderlying.mul(_quoteDecimalMultiplier).divideDecimal(fundEquivalentTotalQ);
     }
 }
