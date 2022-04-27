@@ -146,10 +146,8 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
     }
 
     function getOraclePrice() public view override returns (uint256) {
-        (int256 price, uint256 updatedAt) =
-            IChainlinkOracle(address(fund.twapOracle())).getLatest();
-        require(updatedAt + EPOCH > block.timestamp, "Stale price oracle");
-        (, uint256 navB, uint256 navR) = fund.extrapolateNav(uint256(price));
+        uint256 price = fund.twapOracle().getLatest();
+        (, uint256 navB, uint256 navR) = fund.extrapolateNav(price);
         require(navR >= navB.multiplyDecimal(tradingCurbThreshold), "Trading curb");
         return navB;
     }

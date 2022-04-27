@@ -8,7 +8,7 @@ import "@chainlink/contracts/src/v0.6/interfaces/AggregatorV3Interface.sol";
 import "@uniswap/v2-periphery/contracts/libraries/UniswapV2OracleLibrary.sol";
 import "@uniswap/lib/contracts/libraries/FixedPoint.sol";
 
-import "../interfaces/ITwapOracle.sol";
+import "../interfaces/ITwapOracleV2.sol";
 
 /// @title Time-weighted average price oracle
 /// @notice This contract extends the Chainlink Oracle, computes
@@ -23,7 +23,7 @@ import "../interfaces/ITwapOracle.sol";
 ///      4. Each round is updated only once and `updatedAt` returned by `getRoundData()` is
 ///         timestamp of the block in which the round is updated. Therefore, a transaction is
 ///         guaranteed to see all rounds whose `updatedAt` is less than the current block timestamp.
-contract ChainlinkTwapOracle is ITwapOracle, Ownable {
+contract ChainlinkTwapOracle is ITwapOracleV2, Ownable {
     using FixedPoint for FixedPoint.uq112x112;
     using FixedPoint for FixedPoint.uq144x112;
     using SafeMath for uint256;
@@ -130,10 +130,11 @@ contract ChainlinkTwapOracle is ITwapOracle, Ownable {
     }
 
     /// @notice Return the latest price with 18 decimal places.
-    /// @return price Price (18 decimal places).
-    /// @return updatedAt Timestamp when the price got updated
-    function getLatest() external view returns (int256 price, uint256 updatedAt) {
-        (, price, , updatedAt, ) = AggregatorV3Interface(chainlinkAggregator).latestRoundData();
+    function getLatest() external view override returns (uint256) {
+        (, int256 answer, , uint256 updatedAt, ) =
+            AggregatorV3Interface(chainlinkAggregator).latestRoundData();
+        require(updatedAt > block.timestamp - EPOCH, "Stale price oracle");
+        return uint256(answer).mul(_chainlinkPriceMultiplier);
     }
 
     /// @notice Return TWAP with 18 decimal places in the epoch ending at the specified timestamp.

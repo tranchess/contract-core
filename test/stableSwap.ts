@@ -136,8 +136,8 @@ describe("BishopStableSwap", function () {
         const [user1, user2, owner] = provider.getWallets();
         const deadline = (await ethers.provider.getBlock("latest")).timestamp + 3600;
 
-        const twapOracle = await deployMockForName(owner, "IChainlinkOracle");
-        await twapOracle.mock.getLatest.returns(0, deadline);
+        const twapOracle = await deployMockForName(owner, "ITwapOracleV2");
+        await twapOracle.mock.getLatest.returns(0);
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
         await votingEscrow.mock.getLockedBalance.returns([0, 0]);
@@ -1443,8 +1443,8 @@ describe("Flash Swap", function () {
         const [user1, user2, owner] = provider.getWallets();
         const deadline = (await ethers.provider.getBlock("latest")).timestamp + 3600;
 
-        const twapOracle = await deployMockForName(owner, "IChainlinkOracle");
-        await twapOracle.mock.getLatest.returns(0, deadline);
+        const twapOracle = await deployMockForName(owner, "ITwapOracleV2");
+        await twapOracle.mock.getLatest.returns(0);
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
         await votingEscrow.mock.getLockedBalance.returns([0, 0]);
