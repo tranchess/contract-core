@@ -14,7 +14,7 @@ import "../utils/CoreUtility.sol";
 import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/IFundV3.sol";
 import "../interfaces/IShareV2.sol";
-import "../interfaces/ITwapOracle.sol";
+import "../interfaces/ITwapOracleV2.sol";
 import "../interfaces/IAprOracle.sol";
 import "../interfaces/IBallot.sol";
 import "../interfaces/IVotingEscrow.sol";
@@ -63,7 +63,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     uint256 public dailyProtocolFeeRate;
 
     /// @notice TwapOracle address for the underlying asset.
-    ITwapOracle public override twapOracle;
+    ITwapOracleV2 public override twapOracle;
 
     /// @notice AprOracle address.
     IAprOracle public aprOracle;
@@ -915,7 +915,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     }
 
     function _updateTwapOracle(address newTwapOracle) private {
-        twapOracle = ITwapOracle(newTwapOracle);
+        twapOracle = ITwapOracleV2(newTwapOracle);
         emit TwapOracleUpdated(newTwapOracle);
     }
 

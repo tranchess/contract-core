@@ -2,7 +2,7 @@
 pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
-import "./ITwapOracle.sol";
+import "./ITwapOracleV2.sol";
 
 interface IFundV3 {
     /// @notice A linear transformation matrix that represents a rebalance.
@@ -45,7 +45,7 @@ interface IFundV3 {
 
     function underlyingDecimalMultiplier() external view returns (uint256);
 
-    function twapOracle() external view returns (ITwapOracle);
+    function twapOracle() external view returns (ITwapOracleV2);
 
     function feeCollector() external view returns (address);
 
