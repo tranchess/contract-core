@@ -66,6 +66,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     uint256 public immutable baseTranche;
     address public immutable override quoteAddress;
 
+    /// @dev A multipler that normalizes a quote asset balance to 18 decimal places.
+    uint256 internal immutable _quoteDecimalMultiplier;
+
     uint256 public baseBalance;
     uint256 public quoteBalance;
 
@@ -87,6 +90,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         address fund_,
         uint256 baseTranche_,
         address quoteAddress_,
+        uint256 quoteDecimals_,
         uint256 ampl_,
         address feeCollector_,
         uint256 feeRate_,
@@ -96,6 +100,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         fund = IFundV3(fund_);
         baseTranche = baseTranche_;
         quoteAddress = quoteAddress_;
+        require(quoteDecimals_ <= 18, "Quote asset decimals larger than 18");
+        _quoteDecimalMultiplier = 10**(18 - quoteDecimals_);
 
         require(ampl_ > 0 && ampl_ < AMPL_MAX_VALUE, "Invalid A");
         amplRampEnd = ampl_;
@@ -236,7 +242,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         if (data.length > 0) {
             ITranchessSwapCallee(msg.sender).tranchessSwapCallback(baseOut, 0, data);
         }
-        uint256 newQuote = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
+        uint256 newQuote = _getNewQuoteBalance();
         uint256 quoteIn = newQuote.sub(oldQuote);
         uint256 fee = quoteIn.multiplyDecimal(feeRate);
         uint256 oraclePrice = getOraclePrice();
@@ -307,7 +313,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     {
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
         uint256 newBase = IERC20(baseAddress()).balanceOf(address(this));
-        uint256 newQuote = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
+        uint256 newQuote = _getNewQuoteBalance();
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
         uint256 lpSupply = IERC20(lpToken).totalSupply();
@@ -480,7 +486,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
         _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, d);
         uint256 newBase = IERC20(baseAddress()).balanceOf(address(this));
-        uint256 newQuote = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
+        uint256 newQuote = _getNewQuoteBalance();
         baseBalance = newBase;
         quoteBalance = newQuote;
         emit Sync(newBase, newQuote, oraclePrice);
@@ -489,6 +495,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     function collectFee() external {
         IERC20(quoteAddress).safeTransfer(feeCollector, totalAdminFee);
         delete totalAdminFee;
+    }
+
+    function _getNewQuoteBalance() private view returns (uint256) {
+        return IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
     }
 
     function _updatePriceOverOracleIntegral(
@@ -510,14 +520,15 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 quote,
         uint256 ampl,
         uint256 oraclePrice
-    ) private pure returns (uint256) {
+    ) private view returns (uint256) {
         // Solve D^3 + kxy(4A - 1)·D - 16Akxy(y + kx) = 0
-        uint256 product = base.multiplyDecimal(quote);
+        uint256 normalizedQuote = quote.mul(_quoteDecimalMultiplier);
+        uint256 product = base.multiplyDecimal(normalizedQuote);
         uint256 p = product.mul(16 * ampl - 4).multiplyDecimal(oraclePrice);
         uint256 negQ =
             product
                 .mul(16 * ampl)
-                .multiplyDecimal(base.multiplyDecimal(oraclePrice).add(quote))
+                .multiplyDecimal(base.multiplyDecimal(oraclePrice).add(normalizedQuote))
                 .multiplyDecimal(oraclePrice);
         return solveDepressedCubic(p, negQ);
     }
@@ -541,39 +552,38 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
 
     function _getBase(
         uint256 ampl,
-        uint256 newQuoteBalance,
+        uint256 quote,
         uint256 oraclePrice,
         uint256 d
-    ) private pure returns (uint256 newBaseBalance) {
+    ) private view returns (uint256 base) {
         // Solve 16Ayk^2·x^2 + 4ky(4Ay - 4AD + D)·x - D^3 = 0
+        uint256 normalizedQuote = quote.mul(_quoteDecimalMultiplier);
         uint256 a =
-            (16 * ampl * newQuoteBalance).multiplyDecimal(oraclePrice).multiplyDecimal(oraclePrice);
+            (16 * ampl * normalizedQuote).multiplyDecimal(oraclePrice).multiplyDecimal(oraclePrice);
         uint256 b1 =
-            (d.multiplyDecimal(newQuoteBalance * 4) +
-                newQuoteBalance.mul(16 * ampl).multiplyDecimal(newQuoteBalance))
+            (d.multiplyDecimal(normalizedQuote * 4) +
+                normalizedQuote.mul(16 * ampl).multiplyDecimal(normalizedQuote))
                 .multiplyDecimal(oraclePrice);
-        uint256 b2 = d.multiplyDecimal(16 * ampl * newQuoteBalance).multiplyDecimal(oraclePrice);
+        uint256 b2 = d.multiplyDecimal(16 * ampl * normalizedQuote).multiplyDecimal(oraclePrice);
         uint256 negC = d.multiplyDecimal(d).multiplyDecimal(d);
-        newBaseBalance = solveQuadratic(a, b1, b2, negC);
+        base = solveQuadratic(a, b1, b2, negC);
     }
 
     function _getQuote(
         uint256 ampl,
-        uint256 newBaseBalance,
+        uint256 base,
         uint256 oraclePrice,
         uint256 d
-    ) private pure returns (uint256 newQuoteBalance) {
+    ) private view returns (uint256 quote) {
         // Solve 16Axk·y^2 + 4kx(4Akx - 4AD + D)·y - D^3 = 0
-        uint256 a = (16 * ampl * newBaseBalance).multiplyDecimal(oraclePrice);
+        uint256 a = (16 * ampl * base).multiplyDecimal(oraclePrice);
         uint256 b1 =
-            (d.multiplyDecimal(newBaseBalance * 4) +
-                newBaseBalance.mul(16 * ampl).multiplyDecimal(newBaseBalance).multiplyDecimal(
-                    oraclePrice
-                ))
+            (d.multiplyDecimal(base * 4) +
+                base.mul(16 * ampl).multiplyDecimal(base).multiplyDecimal(oraclePrice))
                 .multiplyDecimal(oraclePrice);
-        uint256 b2 = d.multiplyDecimal(16 * ampl * newBaseBalance).multiplyDecimal(oraclePrice);
+        uint256 b2 = d.multiplyDecimal(16 * ampl * base).multiplyDecimal(oraclePrice);
         uint256 negC = d.multiplyDecimal(d).multiplyDecimal(d);
-        newQuoteBalance = solveQuadratic(a, b1, b2, negC);
+        quote = solveQuadratic(a, b1, b2, negC) / _quoteDecimalMultiplier;
     }
 
     function solveDepressedCubic(uint256 p, uint256 negQ) public pure returns (uint256) {
@@ -695,5 +705,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         virtual
         returns (uint256 newBase, uint256 newQuote);
 
+    /// @notice Get the base token price from the price oracle. The returned price is normalized
+    ///         to 18 decimal places.
     function getOraclePrice() public view virtual override returns (uint256);
 }

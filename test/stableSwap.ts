@@ -188,6 +188,7 @@ describe("BishopStableSwap", function () {
             lpToken.address,
             fund.address,
             tokens[1].address,
+            18,
             A,
             owner.address,
             FEE_RATE,
@@ -817,6 +818,8 @@ describe("QueenStableSwap", function () {
             await MockToken.connect(owner).deploy("token", "token", 18),
             await MockToken.connect(owner).deploy("token", "token", 18),
         ];
+        await fund.mock.tokenUnderlying.returns(tokens[1].address);
+        await fund.mock.underlyingDecimalMultiplier.returns(1);
         await fund.mock.tokenShare.withArgs(TRANCHE_Q).returns(tokens[0].address);
         await tokens[0].connect(owner).mint(user1.address, parseEther("1000"));
         await tokens[1].connect(owner).mint(user1.address, parseEther("1000"));
@@ -850,7 +853,7 @@ describe("QueenStableSwap", function () {
         const stableSwap = await QueenStableSwap.connect(owner).deploy(
             lpToken.address,
             fund.address,
-            tokens[1].address,
+            18, // tokens[1].address,
             A,
             owner.address,
             FEE_RATE,
@@ -1515,6 +1518,7 @@ describe("Flash Swap", function () {
             lpToken.address,
             fund.address,
             usd.address,
+            18,
             A,
             owner.address,
             FEE_RATE,
