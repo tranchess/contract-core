@@ -2,10 +2,12 @@ import { strict as assert } from "assert";
 import { task } from "hardhat/config";
 import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./address_file";
 import type { GovernanceAddresses } from "./deploy_governance";
-import type { TwapOracleAddresses } from "./deploy_twap_oracle";
+import type { TwapOracleAddresses } from "./deploy_mock_twap_oracle";
 import type { BscAprOracleAddresses } from "./deploy_bsc_apr_oracle";
-import { GOVERNANCE_CONFIG, FUND_CONFIG } from "../config";
 import { updateHreSigner } from "./signers";
+import { BigNumber } from "ethers";
+import { StrategyAddresses } from "./deploy_bsc_staking_strategy";
+import { FeeDistrubtorAddresses } from "./deploy_fee_distributor";
 
 export interface FundAddresses extends Addresses {
     underlyingSymbol: string;
@@ -16,17 +18,32 @@ export interface FundAddresses extends Addresses {
     aprOracle: string;
     feeDistributor: string;
     fund: string;
-    shareM: string;
-    shareA: string;
+    shareQ: string;
     shareB: string;
+    shareR: string;
     primaryMarket: string;
+    primaryMarketRouter: string;
+    shareStaking: string;
 }
 
 task("deploy_fund", "Deploy fund contracts")
     .addParam("underlyingSymbol", "Underlying token symbol")
     .addParam("quoteSymbol", "Quote token symbol")
     .addParam("shareSymbolPrefix", "Symbol prefix of share tokens")
-    .addParam("adminFeeRate", "Admin fraction in the fee distributor")
+    .addParam("redemptionFeeRate", "Primary market redemption fee rate")
+    .addParam("mergeFeeRate", "Primary market merge fee rate")
+    .addParam("fundCap", "Fund cap (in underlying's precision), or -1 for no cap")
+    .addParam("strategy", "Name of the strategy (snake_case), or 'NONE' for no strategy")
+    .addOptionalParam(
+        "strategyParams",
+        "Strategy parameters in JSON (param names in camelCase)",
+        ""
+    )
+    .addOptionalParam(
+        "fundInitializationParams",
+        "Parameters to call Fund.initialize() in JSON (param names in camelCase)",
+        ""
+    )
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
         const { ethers } = hre;
@@ -40,7 +57,6 @@ task("deploy_fund", "Deploy fund contracts")
         const shareSymbolPrefix: string = args.shareSymbolPrefix;
         assert.match(shareSymbolPrefix, /^[a-zA-Z.]+$/, "Invalid symbol prefix");
         assert.ok(shareSymbolPrefix.length <= 5, "Symbol prefix too long");
-        const adminFeeRate = parseEther(args.adminFeeRate);
 
         const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
         const twapOracleAddresses = loadAddressFile<TwapOracleAddresses>(
@@ -51,6 +67,10 @@ task("deploy_fund", "Deploy fund contracts")
             hre,
             `bsc_apr_oracle_${quoteSymbol.toLowerCase()}`
         );
+        const feeDistributorAddresses = loadAddressFile<FeeDistrubtorAddresses>(
+            hre,
+            `fee_distributor_${underlyingSymbol.toLowerCase()}`
+        );
 
         const underlyingToken = await ethers.getContractAt("ERC20", twapOracleAddresses.token);
         const underlyingDecimals = await underlyingToken.decimals();
@@ -60,80 +80,146 @@ task("deploy_fund", "Deploy fund contracts")
         console.log(`Underlying: ${underlyingToken.address}`);
         console.log(`Quote: ${quoteToken.address}`);
 
-        const FeeDistributor = await ethers.getContractFactory("FeeDistributor");
-        const feeDistributor = await FeeDistributor.deploy(
-            underlyingToken.address,
-            governanceAddresses.votingEscrow,
-            GOVERNANCE_CONFIG.TREASURY || (await FeeDistributor.signer.getAddress()), // admin
-            adminFeeRate
-        );
-        console.log(`FeeDistributor: ${feeDistributor.address}`);
+        const fundCap =
+            args.fundCap === "-1"
+                ? BigNumber.from(1).shl(256).sub(1)
+                : parseUnits(args.fundCap, underlyingDecimals);
 
-        const Fund = await ethers.getContractFactory("Fund");
-        const fund = await Fund.deploy(
+        const strategyName: string = args.strategy;
+        assert.match(strategyName, /^[a-z_]+|NONE$/, "Strategy name should be in snake_case");
+        if (strategyName !== "NONE") {
+            assert.ok(
+                Object.keys(hre.tasks).includes(`deploy_${strategyName}`),
+                "Cannot find deployment task for the strategy"
+            );
+        }
+        const strategyParams = args.strategyParams ? JSON.parse(args.strategyParams) : {};
+        const fundInitializationParams = args.fundInitializationParams
+            ? JSON.parse(args.fundInitializationParams)
+            : {};
+        const fundNewSplitRatio = parseEther(fundInitializationParams.newSplitRatio || "500");
+        const fundLastNavB = parseEther(fundInitializationParams.lastNavB || "1");
+        const fundLastNavR = parseEther(fundInitializationParams.lastNavR || "1");
+
+        const [deployer] = await ethers.getSigners();
+
+        // +0 ShareQ
+        // +1 ShareB
+        // +2 ShareR
+        // +3 Fund
+        // +4 PrimaryMarket
+        // +5 Strategy
+        const fundAddress = ethers.utils.getContractAddress({
+            from: deployer.address,
+            nonce: (await deployer.getTransactionCount("pending")) + 3,
+        });
+        const primaryMarketAddress = ethers.utils.getContractAddress({
+            from: deployer.address,
+            nonce: (await deployer.getTransactionCount("pending")) + 4,
+        });
+        let strategyAddress = ethers.constants.AddressZero;
+        if (strategyName !== "NONE") {
+            strategyAddress = ethers.utils.getContractAddress({
+                from: deployer.address,
+                nonce: (await deployer.getTransactionCount("pending")) + 5,
+            });
+        }
+
+        const Share = await ethers.getContractFactory("ShareV2");
+        const shareQ = await Share.deploy(
+            `Tranchess ${underlyingSymbol} QUEEN`,
+            `${shareSymbolPrefix}QUEEN`,
+            fundAddress,
+            0
+        );
+        console.log(`ShareQ: ${shareQ.address}`);
+
+        const shareB = await Share.deploy(
+            `Tranchess ${underlyingSymbol} BISHOP`,
+            `${shareSymbolPrefix}BISHOP`,
+            fundAddress,
+            1
+        );
+        console.log(`ShareB: ${shareB.address}`);
+
+        const shareR = await Share.deploy(
+            `Tranchess ${underlyingSymbol} ROOK`,
+            `${shareSymbolPrefix}ROOK`,
+            fundAddress,
+            2
+        );
+        console.log(`ShareR: ${shareR.address}`);
+
+        const Fund = await ethers.getContractFactory("FundV3");
+        const UPPER_REBALANCE_THRESHOLD = parseEther("2");
+        const LOWER_REBALANCE_THRESHOLD = parseEther("0.5");
+        const fund = await Fund.deploy([
             underlyingToken.address,
             underlyingDecimals,
+            shareQ.address,
+            shareB.address,
+            shareR.address,
+            primaryMarketAddress,
+            strategyAddress,
             0,
-            parseEther("2"),
-            parseEther("0.5"),
+            UPPER_REBALANCE_THRESHOLD,
+            LOWER_REBALANCE_THRESHOLD,
             twapOracleAddresses.twapOracle,
             bscAprOracleAddresses.bscAprOracle,
             governanceAddresses.interestRateBallot,
-            feeDistributor.address,
-            { gasLimit: 5e6 } // Gas estimation may fail
-        );
+            feeDistributorAddresses.feeDistributor,
+            { gasLimit: 5e6 }, // Gas estimation may fail
+        ]);
+        assert.strictEqual(fund.address, fundAddress);
         console.log(`Fund: ${fund.address}`);
         console.log(
             "Before setting protocol fee rate, make sure people have synced in FeeDistributor"
         );
 
-        const Share = await ethers.getContractFactory("Share");
-        const shareM = await Share.deploy(
-            `Tranchess ${underlyingSymbol} QUEEN`,
-            `${shareSymbolPrefix}QUEEN`,
-            fund.address,
-            0
-        );
-        console.log(`ShareM: ${shareM.address}`);
-
-        const shareA = await Share.deploy(
-            `Tranchess ${underlyingSymbol} BISHOP`,
-            `${shareSymbolPrefix}BISHOP`,
-            fund.address,
-            1
-        );
-        console.log(`ShareA: ${shareA.address}`);
-
-        const shareB = await Share.deploy(
-            `Tranchess ${underlyingSymbol} ROOK`,
-            `${shareSymbolPrefix}ROOK`,
-            fund.address,
-            2
-        );
-        console.log(`ShareB: ${shareB.address}`);
-
-        const PrimaryMarket = await ethers.getContractFactory("PrimaryMarket");
+        const redemptionFeeRate = parseEther(args.redemptionFeeRate);
+        const mergeFeeRate = parseEther(args.mergeFeeRate);
+        const PrimaryMarket = await ethers.getContractFactory("PrimaryMarketV3");
         const primaryMarket = await PrimaryMarket.deploy(
             fund.address,
-            FUND_CONFIG.GUARDED_LAUNCH ? GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP : 0,
-            parseEther("0.002"),
-            parseEther("0.0005"),
-            parseEther("0.0005"),
-            parseUnits(FUND_CONFIG.MIN_CREATION, underlyingDecimals),
+            redemptionFeeRate,
+            mergeFeeRate,
+            fundCap,
             { gasLimit: 5e6 } // Gas estimation may fail
         );
+        assert.strictEqual(primaryMarket.address, primaryMarketAddress);
         console.log(`PrimaryMarket: ${primaryMarket.address}`);
 
-        console.log("Initializing Fund");
-        await fund.initialize(
-            shareM.address,
-            shareA.address,
-            shareB.address,
-            primaryMarket.address
+        if (strategyName !== "NONE") {
+            console.log("Deploying strategy");
+            await hre.run(`deploy_${strategyName}`, { ...strategyParams, fund: fund.address });
+            const strategyAddresses = loadAddressFile<StrategyAddresses>(hre, strategyName);
+            assert.strictEqual(strategyAddresses.strategy, strategyAddress);
+        }
+
+        const ShareStaking = await ethers.getContractFactory("ShareStaking");
+        const shareStaking = await ShareStaking.deploy(
+            fund.address,
+            governanceAddresses.chessSchedule,
+            governanceAddresses.chessController,
+            governanceAddresses.votingEscrow,
+            0
         );
+        console.log(`ShareStaking: ${shareStaking.address}`);
+
+        const PrimaryMarketRouter = await ethers.getContractFactory("PrimaryMarketRouter");
+        const primaryMarketRouter = await PrimaryMarketRouter.deploy(primaryMarket.address);
+        console.log(`PrimaryMarketRouter: ${primaryMarketRouter.address}`);
+
+        if (args.fundInitializationParams) {
+            console.log(
+                `Initializing fund with ${fundNewSplitRatio}, ${fundLastNavB}, ${fundLastNavR}`
+            );
+            await fund.initialize(fundNewSplitRatio, fundLastNavB, fundLastNavR);
+        } else {
+            console.log("NOTE: Please call fund.initialize()");
+        }
 
         console.log("Transfering ownership to TimelockController");
-        await feeDistributor.transferOwnership(governanceAddresses.timelockController);
         await primaryMarket.transferOwnership(governanceAddresses.timelockController);
         await fund.transferOwnership(governanceAddresses.timelockController);
 
@@ -142,11 +228,11 @@ task("deploy_fund", "Deploy fund contracts")
             governanceAddresses.controllerBallot
         );
         if ((await controllerBallot.owner()) === (await controllerBallot.signer.getAddress())) {
-            console.log("Adding Fund to ControllerBallot");
-            await controllerBallot.addPool(fund.address);
+            console.log("Adding ShareStaking to ControllerBallot");
+            await controllerBallot.addPool(shareStaking.address);
             console.log("NOTE: Please transfer ownership of ControllerBallot to Timelock later");
         } else {
-            console.log("NOTE: Please add Fund to ControllerBallot");
+            console.log("NOTE: Please add ShareStaking to ControllerBallot");
         }
 
         const addresses: FundAddresses = {
@@ -157,12 +243,14 @@ task("deploy_fund", "Deploy fund contracts")
             quote: quoteToken.address,
             twapOracle: twapOracleAddresses.twapOracle,
             aprOracle: bscAprOracleAddresses.bscAprOracle,
-            feeDistributor: feeDistributor.address,
+            feeDistributor: feeDistributorAddresses.feeDistributor,
             fund: fund.address,
-            shareM: shareM.address,
-            shareA: shareA.address,
+            shareQ: shareQ.address,
             shareB: shareB.address,
+            shareR: shareR.address,
             primaryMarket: primaryMarket.address,
+            primaryMarketRouter: primaryMarketRouter.address,
+            shareStaking: shareStaking.address,
         };
         saveAddressFile(hre, `fund_${underlyingSymbol.toLowerCase()}`, addresses);
     });

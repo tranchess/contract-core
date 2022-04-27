@@ -3,10 +3,10 @@ pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "../interfaces/ITwapOracle.sol";
+import "../interfaces/ITwapOracleV2.sol";
 import "../utils/CoreUtility.sol";
 
-contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
+contract MockTwapOracle is ITwapOracleV2, CoreUtility, Ownable {
     struct StoredEpoch {
         uint256 twap;
         uint256 nextEpoch;
@@ -152,6 +152,10 @@ contract MockTwapOracle is ITwapOracle, CoreUtility, Ownable {
             next = storedEpochs[epoch].nextEpoch;
         }
         return storedEpochs[epoch].twap;
+    }
+
+    function getLatest() external view override returns (uint256) {
+        return storedEpochs[lastStoredEpoch].twap;
     }
 
     function _endOfDay(uint256 timestamp) private pure returns (uint256) {

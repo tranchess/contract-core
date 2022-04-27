@@ -31,7 +31,7 @@ task("deploy_chess_controller_impl", "Deploy ChessControllerV4 implementation")
                 ? ethers.constants.AddressZero
                 : loadAddressFile<FundAddresses>(hre, `fund_${fund0Symbol.toLowerCase()}`).fund;
 
-        const ChessController = await ethers.getContractFactory("ChessControllerV4");
+        const ChessController = await ethers.getContractFactory("ChessControllerV5");
         const chessControllerImpl = await ChessController.deploy(
             fund0Address,
             launchStart,
@@ -43,5 +43,5 @@ task("deploy_chess_controller_impl", "Deploy ChessControllerV4 implementation")
             ...newAddresses(hre),
             chessControllerImpl: chessControllerImpl.address,
         };
-        saveAddressFile(hre, "chess_controller_v4_impl", addresses);
+        saveAddressFile(hre, "chess_controller_v5_impl", addresses);
     });
