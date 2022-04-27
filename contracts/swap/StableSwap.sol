@@ -236,7 +236,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         if (data.length > 0) {
             ITranchessSwapCallee(msg.sender).tranchessSwapCallback(baseOut, 0, data);
         }
-        uint256 newQuote = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
+        uint256 newQuote = _getNewQuoteBalance();
         uint256 quoteIn = newQuote.sub(oldQuote);
         uint256 fee = quoteIn.multiplyDecimal(feeRate);
         uint256 oraclePrice = getOraclePrice();
@@ -307,7 +307,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     {
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
         uint256 newBase = IERC20(baseAddress()).balanceOf(address(this));
-        uint256 newQuote = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
+        uint256 newQuote = _getNewQuoteBalance();
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
         uint256 lpSupply = IERC20(lpToken).totalSupply();
@@ -480,7 +480,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
         _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, d);
         uint256 newBase = IERC20(baseAddress()).balanceOf(address(this));
-        uint256 newQuote = IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
+        uint256 newQuote = _getNewQuoteBalance();
         baseBalance = newBase;
         quoteBalance = newQuote;
         emit Sync(newBase, newQuote, oraclePrice);
@@ -489,6 +489,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     function collectFee() external {
         IERC20(quoteAddress).safeTransfer(feeCollector, totalAdminFee);
         delete totalAdminFee;
+    }
+
+    function _getNewQuoteBalance() private view returns (uint256) {
+        return IERC20(quoteAddress).balanceOf(address(this)).sub(totalAdminFee);
     }
 
     function _updatePriceOverOracleIntegral(
