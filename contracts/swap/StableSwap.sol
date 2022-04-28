@@ -156,6 +156,11 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         return _getPriceOverOracle(base, quote, ampl, oraclePrice, d);
     }
 
+    /// @notice Get the current swap price, i.e. negative slope at the current point on the curve.
+    ///         The returned value is computed after both base and quote balances are normalized to
+    ///         18 decimal places. If the quote token does not have 18 decimal places, the returned
+    ///         value has a different order of magnitude than the ratio of quote amount to base
+    ///         amount in a swap.
     function getCurrentPrice() external view override returns (uint256) {
         (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
         uint256 ampl = getAmpl();
