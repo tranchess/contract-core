@@ -526,16 +526,25 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 ampl,
         uint256 oraclePrice
     ) private view returns (uint256) {
-        // Solve D^3 + kxy(4A - 1)·D - 16Akxy(y + kx) = 0
+        // kx + y
         uint256 normalizedQuote = quote.mul(_quoteDecimalMultiplier);
-        uint256 product = base.multiplyDecimal(normalizedQuote);
-        uint256 p = product.mul(16 * ampl - 4).multiplyDecimal(oraclePrice);
-        uint256 negQ =
-            product
-                .mul(16 * ampl)
-                .multiplyDecimal(base.multiplyDecimal(oraclePrice).add(normalizedQuote))
-                .multiplyDecimal(oraclePrice);
-        return solveDepressedCubic(p, negQ);
+        uint256 sum = base.multiplyDecimal(oraclePrice) + normalizedQuote;
+        if (sum == 0) return 0;
+
+        uint256 prev = 0;
+        uint256 d = sum;
+        uint256 base_ = base;
+        for (uint256 counter = 0; counter < 255; counter++) {
+            // D^3 / 4kxy
+            uint256 d3 =
+                d.mul(d).div(base_).mul(d).div(4).div(normalizedQuote).divideDecimal(oraclePrice);
+            prev = d;
+            d = ((4 * ampl * sum + 2 * d3) * d) / ((4 * ampl - 1) * d + 3 * d3);
+            if (closeEnough(d, prev)) {
+                break;
+            }
+        }
+        return d;
     }
 
     function _getPriceOverOracle(
@@ -562,16 +571,31 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 d
     ) private view returns (uint256 base) {
         // Solve 16Ayk^2·x^2 + 4ky(4Ay - 4AD + D)·x - D^3 = 0
+        uint256 ampl_ = ampl;
         uint256 normalizedQuote = quote.mul(_quoteDecimalMultiplier);
-        uint256 a =
-            (16 * ampl * normalizedQuote).multiplyDecimal(oraclePrice).multiplyDecimal(oraclePrice);
-        uint256 b1 =
-            (d.multiplyDecimal(normalizedQuote * 4) +
-                normalizedQuote.mul(16 * ampl).multiplyDecimal(normalizedQuote))
-                .multiplyDecimal(oraclePrice);
-        uint256 b2 = d.multiplyDecimal(16 * ampl * normalizedQuote).multiplyDecimal(oraclePrice);
-        uint256 negC = d.multiplyDecimal(d).multiplyDecimal(d);
-        base = solveQuadratic(a, b1, b2, negC);
+        uint256 d_ = d;
+        uint256 prev = 0;
+        base = d;
+        for (uint256 counter = 0; counter < 255; counter++) {
+            prev = base;
+            uint256 d3 =
+                d_
+                    .mul(d_)
+                    .div(normalizedQuote)
+                    .mul(d_)
+                    .div(16 * ampl_)
+                    .divideDecimal(oraclePrice)
+                    .divideDecimal(oraclePrice);
+            base = base.mul(base).add(d3).div(
+                (2 * base)
+                    .add(normalizedQuote.divideDecimal(oraclePrice))
+                    .add(d_.divideDecimal(4 * ampl_ * oraclePrice))
+                    .sub(d_.divideDecimal(oraclePrice))
+            );
+            if (closeEnough(base, prev)) {
+                break;
+            }
+        }
     }
 
     function _getQuote(
@@ -581,14 +605,18 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 d
     ) private view returns (uint256 quote) {
         // Solve 16Axk·y^2 + 4kx(4Akx - 4AD + D)·y - D^3 = 0
-        uint256 a = (16 * ampl * base).multiplyDecimal(oraclePrice);
-        uint256 b1 =
-            (d.multiplyDecimal(base * 4) +
-                base.mul(16 * ampl).multiplyDecimal(base).multiplyDecimal(oraclePrice))
-                .multiplyDecimal(oraclePrice);
-        uint256 b2 = d.multiplyDecimal(16 * ampl * base).multiplyDecimal(oraclePrice);
-        uint256 negC = d.multiplyDecimal(d).multiplyDecimal(d);
-        quote = solveQuadratic(a, b1, b2, negC) / _quoteDecimalMultiplier;
+        uint256 prev = 0;
+        quote = d;
+        for (uint256 counter = 0; counter < 255; counter++) {
+            prev = quote;
+            uint256 d3 = d.mul(d).div(base).mul(d).div(16 * ampl).divideDecimal(oraclePrice);
+            quote = quote.mul(quote).add(d3).div(
+                (2 * quote).add(oraclePrice.multiplyDecimal(base)).add(d.div(4 * ampl)).sub(d)
+            );
+            if (closeEnough(quote, prev)) {
+                break;
+            }
+        }
     }
 
     function solveDepressedCubic(uint256 p, uint256 negQ) public pure returns (uint256) {
@@ -665,6 +693,20 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
 
     function updateAdminFeeRate(uint256 newAdminFeeRate) external onlyOwner {
         _updateAdminFeeRate(newAdminFeeRate);
+    }
+
+    function closeEnough(uint256 current, uint256 previous) internal pure returns (bool) {
+        if (current > previous) {
+            if (current <= previous.add(1)) {
+                return true;
+            }
+        } else {
+            if (current >= previous.sub(1)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// @dev Check if the user-specified version is correct.
