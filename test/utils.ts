@@ -1,4 +1,4 @@
-import { Wallet } from "ethers";
+import { BigNumberish, Wallet } from "ethers";
 import { ethers } from "hardhat";
 
 export const TRANCHE_Q = 0;
@@ -26,4 +26,14 @@ export async function setNextBlockTime(time: number): Promise<void> {
  */
 export async function setAutomine(flag: boolean): Promise<void> {
     await ethers.provider.send("evm_setAutomine", [flag]);
+}
+
+declare global {
+    // eslint-disable-next-line @typescript-eslint/no-namespace
+    export namespace Chai {
+        // Fix type annotation in @ethereum-waffle/chai
+        interface CloseTo {
+            (expected: BigNumberish, delta: BigNumberish, message?: string): Assertion;
+        }
+    }
 }
