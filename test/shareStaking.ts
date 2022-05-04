@@ -18,9 +18,10 @@ import {
 } from "./utils";
 
 export const REWARD_WEIGHT_Q = 3;
-export const REWARD_WEIGHT_B = 4;
-export const REWARD_WEIGHT_R = 2;
+export const REWARD_WEIGHT_B = 2;
+export const REWARD_WEIGHT_R = 1;
 export const MAX_BOOSTING_FACTOR = parseEther("3");
+export const SPLIT_RATIO = parseEther("100");
 
 export function boostedWorkingBalance(
     amountQ: BigNumber,
@@ -33,7 +34,8 @@ export function boostedWorkingBalance(
     const weightedBR = amountB
         .mul(REWARD_WEIGHT_B)
         .add(amountR.mul(REWARD_WEIGHT_R))
-        .div(REWARD_WEIGHT_Q);
+        .mul(e18)
+        .div(SPLIT_RATIO.mul(REWARD_WEIGHT_Q));
     const upperBoundBR = weightedBR.mul(MAX_BOOSTING_FACTOR).div(e18);
     let workingBR = weightedBR.add(
         weightedSupply.mul(veProportion).div(e18).mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18)
@@ -57,29 +59,29 @@ export function boostedWorkingBalance(
 }
 
 // Initial balance:
-// User 1: 400 Q + 120 B + 180 R
-// User 2:         180 B + 120 R
+// User 1: 400 Q + 24000 B + 36000 R
+// User 2:         36000 B + 24000 R
 // Reward weight:
 // User 1: 400   + 160   + 120   = 680
 // User 2:         240   +  80   = 320
 // Total : 400   + 400   + 200   = 1000
 const USER1_Q = parseEther("400");
-const USER1_B = parseEther("120");
-const USER1_R = parseEther("180");
+const USER1_B = parseEther("24000");
+const USER1_R = parseEther("36000");
 const USER2_Q = parseEther("0");
-const USER2_B = parseEther("180");
-const USER2_R = parseEther("120");
+const USER2_B = parseEther("36000");
+const USER2_R = parseEther("24000");
 const TOTAL_Q = USER1_Q.add(USER2_Q);
 const TOTAL_B = USER1_B.add(USER2_B);
 const TOTAL_R = USER1_R.add(USER2_R);
-const USER1_WEIGHT = USER1_Q.mul(REWARD_WEIGHT_Q)
+const USER1_WEIGHT = USER1_Q.mul(SPLIT_RATIO.mul(REWARD_WEIGHT_Q).div(parseEther("1")))
     .add(USER1_B.mul(REWARD_WEIGHT_B))
     .add(USER1_R.mul(REWARD_WEIGHT_R))
-    .div(REWARD_WEIGHT_Q);
-const USER2_WEIGHT = USER2_Q.mul(REWARD_WEIGHT_Q)
+    .div(SPLIT_RATIO.mul(REWARD_WEIGHT_Q).div(parseEther("1")));
+const USER2_WEIGHT = USER2_Q.mul(SPLIT_RATIO.mul(REWARD_WEIGHT_Q).div(parseEther("1")))
     .add(USER2_B.mul(REWARD_WEIGHT_B))
     .add(USER2_R.mul(REWARD_WEIGHT_R))
-    .div(REWARD_WEIGHT_Q);
+    .div(SPLIT_RATIO.mul(REWARD_WEIGHT_Q).div(parseEther("1")));
 const TOTAL_WEIGHT = USER1_WEIGHT.add(USER2_WEIGHT);
 
 // veCHESS proportion:
@@ -145,6 +147,7 @@ describe("ShareStaking", function () {
 
         const fund = await deployMockForName(owner, "IFundV3");
         await fund.mock.getRebalanceSize.returns(0);
+        await fund.mock.splitRatio.returns(SPLIT_RATIO);
 
         const chessSchedule = await deployMockForName(owner, "IChessSchedule");
         await chessSchedule.mock.getRate.returns(0);
@@ -304,12 +307,16 @@ describe("ShareStaking", function () {
 
     describe("weightedBalance()", function () {
         it("Should calculate weighted balance", async function () {
-            expect(await staking.weightedBalance(1000, 0, 0)).to.equal(1000);
-            expect(await staking.weightedBalance(0, 1000, 0)).to.equal(
-                BigNumber.from(1000 * REWARD_WEIGHT_B).div(REWARD_WEIGHT_Q)
+            expect(await staking.weightedBalance(1000, 0, 0, SPLIT_RATIO)).to.equal(1000);
+            expect(await staking.weightedBalance(0, 1000, 0, SPLIT_RATIO)).to.equal(
+                BigNumber.from(1000 * REWARD_WEIGHT_B)
+                    .mul(parseEther("1"))
+                    .div(SPLIT_RATIO.mul(REWARD_WEIGHT_Q))
             );
-            expect(await staking.weightedBalance(0, 0, 1000)).to.equal(
-                BigNumber.from(1000 * REWARD_WEIGHT_R).div(REWARD_WEIGHT_Q)
+            expect(await staking.weightedBalance(0, 0, 1000, SPLIT_RATIO)).to.equal(
+                BigNumber.from(1000 * REWARD_WEIGHT_R)
+                    .mul(parseEther("1"))
+                    .div(SPLIT_RATIO.mul(REWARD_WEIGHT_Q))
             );
         });
 
@@ -317,18 +324,22 @@ describe("ShareStaking", function () {
             const q = 1000000;
             const b = 10000;
             const r = 100;
-            expect(await staking.weightedBalance(1000000, 10000, 100)).to.equal(
-                BigNumber.from(q * REWARD_WEIGHT_Q + b * REWARD_WEIGHT_B + r * REWARD_WEIGHT_R).div(
-                    REWARD_WEIGHT_Q
-                )
+            expect(await staking.weightedBalance(1000000, 10000, 100, SPLIT_RATIO)).to.equal(
+                SPLIT_RATIO.mul(q)
+                    .mul(REWARD_WEIGHT_Q)
+                    .div(parseEther("1"))
+                    .add(REWARD_WEIGHT_B * b)
+                    .add(REWARD_WEIGHT_R * r)
+                    .mul(parseEther("1"))
+                    .div(SPLIT_RATIO.mul(REWARD_WEIGHT_Q))
             );
         });
 
         it("Should round down weighted balance", async function () {
-            // Assume weights of (Q, B, R) are (3, 4, 2)
-            expect(await staking.weightedBalance(0, 1, 0)).to.equal(1);
-            expect(await staking.weightedBalance(0, 0, 1)).to.equal(0);
-            expect(await staking.weightedBalance(0, 1, 1)).to.equal(2);
+            // Assume weights of (Q, B, R) are (6r, 4, 2)
+            expect(await staking.weightedBalance(0, 500, 0, SPLIT_RATIO)).to.equal(3);
+            expect(await staking.weightedBalance(0, 0, 500, SPLIT_RATIO)).to.equal(1);
+            expect(await staking.weightedBalance(0, 500, 500, SPLIT_RATIO)).to.equal(5);
         });
     });
 
@@ -561,6 +572,8 @@ describe("ShareStaking", function () {
         it("Should reset working balance without boosting after rebalance", async function () {
             await fund.mock.getRebalanceSize.returns(1);
             await fund.mock.getRebalanceTimestamp.withArgs(0).returns(checkpointTimestamp + 100);
+            await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
+            await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
             await advanceBlockAtTime(checkpointTimestamp + 100);
             await fund.mock.doRebalance
                 .withArgs(TOTAL_Q, TOTAL_B, TOTAL_R, 0)
@@ -649,6 +662,10 @@ describe("ShareStaking", function () {
                 await fund.mock.getRebalanceTimestamp.withArgs(0).returns(checkpointTimestamp + 1);
                 await fund.mock.getRebalanceTimestamp.withArgs(1).returns(checkpointTimestamp + 2);
                 await fund.mock.getRebalanceTimestamp.withArgs(2).returns(checkpointTimestamp + 3);
+                await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
+                await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
+                await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO);
+                await fund.mock.historicalSplitRatio.withArgs(3).returns(SPLIT_RATIO);
                 await advanceBlockAtTime(checkpointTimestamp + 100);
                 await expect(() => staking.refreshBalance(addr1, 1)).to.callMocks(
                     {
@@ -689,6 +706,9 @@ describe("ShareStaking", function () {
                 await fund.mock.getRebalanceSize.returns(2);
                 await fund.mock.getRebalanceTimestamp.withArgs(0).returns(checkpointTimestamp + 1);
                 await fund.mock.getRebalanceTimestamp.withArgs(1).returns(checkpointTimestamp + 2);
+                await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
+                await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
+                await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO);
                 await advanceBlockAtTime(checkpointTimestamp + 100);
                 await expect(() => staking.refreshBalance(addr1, 0)).to.callMocks(
                     {
@@ -718,6 +738,9 @@ describe("ShareStaking", function () {
                 await fund.mock.getRebalanceSize.returns(2);
                 await fund.mock.getRebalanceTimestamp.withArgs(0).returns(checkpointTimestamp + 1);
                 await fund.mock.getRebalanceTimestamp.withArgs(1).returns(checkpointTimestamp + 2);
+                await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
+                await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
+                await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO);
                 await advanceBlockAtTime(checkpointTimestamp + 100);
                 await expect(() => staking.refreshBalance(addr1, 2)).to.callMocks(
                     {
@@ -747,6 +770,8 @@ describe("ShareStaking", function () {
             it("Should rebalance zero balance", async function () {
                 await fund.mock.getRebalanceSize.returns(1);
                 await fund.mock.getRebalanceTimestamp.withArgs(0).returns(checkpointTimestamp + 1);
+                await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
+                await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
                 await advanceBlockAtTime(checkpointTimestamp + 100);
                 await expect(() => staking.refreshBalance(owner.address, 1)).to.callMocks({
                     func: fund.mock.doRebalance.withArgs(TOTAL_Q, TOTAL_B, TOTAL_R, 0),
@@ -855,7 +880,9 @@ describe("ShareStaking", function () {
             await setNextBlockTime(rewardStartTimestamp + 100);
             await staking.deposit(
                 TRANCHE_B,
-                TOTAL_WEIGHT.mul(REWARD_WEIGHT_Q).div(REWARD_WEIGHT_B),
+                TOTAL_WEIGHT.mul(SPLIT_RATIO.mul(REWARD_WEIGHT_Q)).div(
+                    parseEther("1").mul(REWARD_WEIGHT_B)
+                ),
                 addr1,
                 0
             );
@@ -935,6 +962,8 @@ describe("ShareStaking", function () {
             await fund.mock.getRebalanceTimestamp
                 .withArgs(0)
                 .returns(rewardStartTimestamp + WEEK + 100);
+            await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
+            await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
             await fund.mock.doRebalance
                 .withArgs(TOTAL_Q, TOTAL_B, TOTAL_R, 0)
                 .returns(TOTAL_Q.mul(4), TOTAL_B.mul(4), TOTAL_R.mul(4));
@@ -965,7 +994,9 @@ describe("ShareStaking", function () {
 
         it("Should handle multiple checkpoints in the same block correctly", async function () {
             // Deposit some BISHOP to double the total reward weight, in three transactions
-            const totalDeposit = TOTAL_WEIGHT.mul(REWARD_WEIGHT_Q).div(REWARD_WEIGHT_B);
+            const totalDeposit = TOTAL_WEIGHT.mul(
+                SPLIT_RATIO.mul(REWARD_WEIGHT_Q).div(parseEther("1"))
+            ).div(REWARD_WEIGHT_B);
             const deposit1 = totalDeposit.div(4);
             const deposit2 = totalDeposit.div(3);
             const deposit3 = totalDeposit.sub(deposit1).sub(deposit2);
@@ -987,6 +1018,9 @@ describe("ShareStaking", function () {
             await fund.mock.getRebalanceSize.returns(2);
             await fund.mock.getRebalanceTimestamp.withArgs(0).returns(rewardStartTimestamp + 100);
             await fund.mock.getRebalanceTimestamp.withArgs(1).returns(rewardStartTimestamp + 400);
+            await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
+            await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
+            await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO);
             await fund.mock.doRebalance
                 .withArgs(TOTAL_Q, TOTAL_B, TOTAL_R, 0)
                 .returns(TOTAL_Q.mul(4), TOTAL_B.mul(4), TOTAL_R.mul(4));
@@ -1012,6 +1046,9 @@ describe("ShareStaking", function () {
             // Withdraw all QUEEN and BISHOP (in a single block to make rewards calculation easy)
             await fund.mock.trancheTransfer.returns();
             await fund.mock.trancheTransferFrom.returns();
+            await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
+            await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
+            await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO);
             await setAutomine(false);
             await staking.withdraw(TRANCHE_Q, USER1_Q, 0);
             await staking.withdraw(TRANCHE_B, USER1_B, 0);
@@ -1057,6 +1094,9 @@ describe("ShareStaking", function () {
             await fund.mock.getRebalanceSize.returns(2);
             await fund.mock.getRebalanceTimestamp.withArgs(0).returns(rewardStartTimestamp + 100);
             await fund.mock.getRebalanceTimestamp.withArgs(1).returns(rewardStartTimestamp + 300);
+            await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
+            await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
+            await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO);
             await fund.mock.doRebalance
                 .withArgs(TOTAL_Q, TOTAL_B, TOTAL_R, 0)
                 .returns(TOTAL_Q, TOTAL_B, TOTAL_R);
@@ -1112,6 +1152,9 @@ describe("ShareStaking", function () {
             await fund.mock.getRebalanceSize.returns(2);
             await fund.mock.getRebalanceTimestamp.withArgs(0).returns(rewardStartTimestamp + 300);
             await fund.mock.getRebalanceTimestamp.withArgs(1).returns(rewardStartTimestamp + 600);
+            await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
+            await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
+            await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO);
             await fund.mock.doRebalance
                 .withArgs(TOTAL_Q, TOTAL_B, TOTAL_R, 0)
                 .returns(TOTAL_Q, TOTAL_B, TOTAL_R);

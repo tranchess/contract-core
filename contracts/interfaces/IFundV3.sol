@@ -109,6 +109,8 @@ interface IFundV3 {
 
     function splitRatio() external view returns (uint256);
 
+    function historicalSplitRatio(uint256 version) external view returns (uint256);
+
     function fundActivityStartTime() external view returns (uint256);
 
     function isFundActive(uint256 timestamp) external view returns (bool);
