@@ -617,6 +617,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
                 break;
             }
         }
+        quote = quote / _quoteDecimalMultiplier;
     }
 
     function solveDepressedCubic(uint256 p, uint256 negQ) public pure returns (uint256) {
