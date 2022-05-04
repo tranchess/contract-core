@@ -576,21 +576,13 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 d_ = d;
         uint256 prev = 0;
         base = d;
+        uint256 d3 =
+            d_.mul(d_).div(normalizedQuote).mul(d_).div(16 * ampl_).divideDecimal(oraclePrice);
         for (uint256 counter = 0; counter < 255; counter++) {
             prev = base;
-            uint256 d3 =
-                d_
-                    .mul(d_)
-                    .div(normalizedQuote)
-                    .mul(d_)
-                    .div(16 * ampl_)
-                    .divideDecimal(oraclePrice)
-                    .divideDecimal(oraclePrice);
-            base = base.mul(base).add(d3).div(
-                (2 * base)
-                    .add(normalizedQuote.divideDecimal(oraclePrice))
-                    .add(d_.divideDecimal(4 * ampl_ * oraclePrice))
-                    .sub(d_.divideDecimal(oraclePrice))
+            uint256 baseValue = base.multiplyDecimal(oraclePrice);
+            base = base.mul(baseValue).add(d3).div(
+                (2 * baseValue).add(normalizedQuote).add(d_.div(4 * ampl_)).sub(d_)
             );
             if (closeEnough(base, prev)) {
                 break;
@@ -607,9 +599,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         // Solve 16Axk·y^2 + 4kx(4Akx - 4AD + D)·y - D^3 = 0
         uint256 prev = 0;
         quote = d;
+        uint256 d3 = d.mul(d).div(base).mul(d).div(16 * ampl).divideDecimal(oraclePrice);
         for (uint256 counter = 0; counter < 255; counter++) {
             prev = quote;
-            uint256 d3 = d.mul(d).div(base).mul(d).div(16 * ampl).divideDecimal(oraclePrice);
             quote = quote.mul(quote).add(d3).div(
                 (2 * quote).add(oraclePrice.multiplyDecimal(base)).add(d.div(4 * ampl)).sub(d)
             );
