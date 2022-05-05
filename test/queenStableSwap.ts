@@ -33,6 +33,7 @@ describe("QueenStableSwap", function () {
         readonly tmpBase: MockContract;
         readonly lpToken: Contract;
         readonly stableSwap: Contract;
+        readonly swapRouter: Contract;
     }
 
     let currentFixture: Fixture<FixtureData>;
@@ -49,6 +50,7 @@ describe("QueenStableSwap", function () {
     let tmpBase: MockContract;
     let lpToken: Contract;
     let stableSwap: Contract;
+    let swapRouter: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
         const [user1, user2, owner, feeCollector] = provider.getWallets();
@@ -104,6 +106,10 @@ describe("QueenStableSwap", function () {
         await btc.mint(stableSwap.address, INIT_BTC);
         await stableSwap.addLiquidity(0, user1.address);
 
+        const SwapRouter = await ethers.getContractFactory("SwapRouter");
+        const swapRouter = await SwapRouter.connect(owner).deploy();
+        await swapRouter.addSwap(tmpBase.address, btc.address, stableSwap.address);
+
         return {
             wallets: { user1, user2, owner, feeCollector },
             btc,
@@ -111,6 +117,7 @@ describe("QueenStableSwap", function () {
             tmpBase,
             lpToken,
             stableSwap: stableSwap.connect(user1),
+            swapRouter: swapRouter.connect(user1),
         };
     }
 
@@ -144,6 +151,7 @@ describe("QueenStableSwap", function () {
         tmpBase = fixtureData.tmpBase;
         lpToken = fixtureData.lpToken;
         stableSwap = fixtureData.stableSwap;
+        swapRouter = fixtureData.swapRouter;
     });
 
     describe("Price and slippage", function () {
@@ -915,6 +923,283 @@ describe("QueenStableSwap", function () {
             await expect(stableSwap.updateAmplRamp(AMPL * 2, startTimestamp + DAY))
                 .to.emit(stableSwap, "AmplRampUpdated")
                 .withArgs(AMPL, AMPL * 2, startTimestamp, startTimestamp + DAY);
+        });
+    });
+
+    describe("SwapRouter", function () {
+        let startTimestamp: number;
+
+        beforeEach(async function () {
+            startTimestamp = (await ethers.provider.getBlock("latest")).timestamp - 1;
+            await btc.mint(addr1, INIT_BTC);
+            await btc.connect(user1).approve(swapRouter.address, INIT_BTC);
+        });
+
+        it("Should check deadline", async function () {
+            await expect(
+                swapRouter.addLiquidity(
+                    tmpBase.address,
+                    btc.address,
+                    0,
+                    0,
+                    0,
+                    0,
+                    startTimestamp - 1
+                )
+            ).to.be.revertedWith("Transaction too old");
+            await expect(
+                swapRouter.swapExactTokensForTokens(
+                    0,
+                    0,
+                    [tmpBase.address, btc.address],
+                    addr1,
+                    ethers.constants.AddressZero,
+                    [0],
+                    startTimestamp - 1
+                )
+            ).to.be.revertedWith("Transaction too old");
+            await expect(
+                swapRouter.swapTokensForExactTokens(
+                    0,
+                    0,
+                    [tmpBase.address, btc.address],
+                    addr1,
+                    ethers.constants.AddressZero,
+                    [0],
+                    startTimestamp - 1
+                )
+            ).to.be.revertedWith("Transaction too old");
+        });
+
+        describe("addLiquidity()", function () {
+            const routerAddLiquidity = (
+                inQ: BigNumberish,
+                inBtc: BigNumberish,
+                outLp: BigNumberish
+            ) =>
+                swapRouter.addLiquidity(
+                    tmpBase.address,
+                    btc.address,
+                    inQ,
+                    inBtc,
+                    outLp,
+                    0,
+                    startTimestamp + DAY
+                );
+
+            it("Should revert if the swap is not found", async function () {
+                await expect(
+                    swapRouter.addLiquidity(addr1, btc.address, 0, 0, 0, 0, startTimestamp + DAY)
+                ).to.be.revertedWith("Unknown swap");
+            });
+
+            it("Should transfer base tokens", async function () {
+                await addBase(parseEther("0.123")); // Mock effect of the base token transfer
+                await expect(() => routerAddLiquidity(parseEther("0.123"), 0, 0)).to.callMocks({
+                    func: tmpBase.mock.transferFrom.withArgs(
+                        addr1,
+                        stableSwap.address,
+                        parseEther("0.123")
+                    ),
+                    rets: [true],
+                });
+            });
+
+            it("Should transfer quote tokens", async function () {
+                await tmpBase.mock.transferFrom.returns(true);
+                await expect(() =>
+                    routerAddLiquidity(0, parseBtc("0.123"), 0)
+                ).to.changeTokenBalances(
+                    btc,
+                    [user1, stableSwap],
+                    [parseBtc("-0.123"), parseBtc("0.123")]
+                );
+            });
+
+            it("Should check min output", async function () {
+                await addBase(INIT_Q.div(2)); // Mock effect of the base token transfer
+                await tmpBase.mock.transferFrom.returns(true);
+                await expect(
+                    routerAddLiquidity(INIT_Q.div(2), INIT_BTC.div(2), INIT_LP.div(2).add(1))
+                ).to.be.revertedWith("Insufficient output");
+                await routerAddLiquidity(INIT_Q.div(2), INIT_BTC.div(2), INIT_LP.div(2));
+            });
+        });
+
+        describe("swapExactTokensForTokens", function () {
+            const callSwap = (
+                amountIn: BigNumberish,
+                minAmountOut: BigNumberish,
+                path: string[],
+                versions: number[]
+            ) =>
+                swapRouter.swapExactTokensForTokens(
+                    amountIn,
+                    minAmountOut,
+                    path,
+                    addr2,
+                    ethers.constants.AddressZero,
+                    versions,
+                    startTimestamp + DAY
+                );
+            const callBuy = (amountIn: BigNumberish, minAmountOut: BigNumberish) =>
+                callSwap(amountIn, minAmountOut, [btc.address, tmpBase.address], [0]);
+            const callSell = (amountIn: BigNumberish, minAmountOut: BigNumberish) =>
+                callSwap(amountIn, minAmountOut, [tmpBase.address, btc.address], [0]);
+
+            it("Should reject invalid path or versions", async function () {
+                await expect(callSwap(0, 0, [btc.address], [0])).to.be.revertedWith("Invalid path");
+                await expect(callSwap(0, 0, [tmpBase.address, btc.address], [])).to.be.revertedWith(
+                    "Invalid versions"
+                );
+                await expect(callSwap(0, 0, [addr1, btc.address], [0])).to.be.revertedWith(
+                    "Unknown swap"
+                );
+            });
+
+            it("Should transfer base tokens", async function () {
+                // Sell
+                await addBase(parseEther("0.123")); // Mock effect of the base token transfer
+                await expect(() => callSell(parseEther("0.123"), 0)).to.callMocks({
+                    func: tmpBase.mock.transferFrom.withArgs(
+                        addr1,
+                        stableSwap.address,
+                        parseEther("0.123")
+                    ),
+                    rets: [true],
+                });
+                // Buy
+                const inBtc = parseBtc("0.456");
+                const outQ = await stableSwap.getBaseOut(inBtc);
+                await expect(() => callBuy(inBtc, 0)).to.callMocks({
+                    func: tmpBase.mock.transfer.withArgs(addr2, outQ),
+                    rets: [true],
+                });
+            });
+
+            it("Should transfer quote tokens", async function () {
+                await tmpBase.mock.transfer.returns(true);
+                await tmpBase.mock.transferFrom.returns(true);
+                // Sell
+                const inQ = parseEther("0.123");
+                const outBtc = await stableSwap.getQuoteOut(inQ);
+                await addBase(inQ); // Mock effect of the base token transfer
+                await expect(() => callSell(inQ, 0)).to.changeTokenBalances(
+                    btc,
+                    [user2, stableSwap],
+                    [outBtc, outBtc.mul(-1)]
+                );
+                // Buy
+                await expect(() => callBuy(parseBtc("0.456"), 0)).to.changeTokenBalances(
+                    btc,
+                    [user1, stableSwap],
+                    [parseBtc("-0.456"), parseBtc("0.456")]
+                );
+            });
+
+            it("Should check min output", async function () {
+                await tmpBase.mock.transfer.returns(true);
+                await tmpBase.mock.transferFrom.returns(true);
+                // Sell
+                const inQ = parseEther("0.123");
+                const outBtc = await stableSwap.getQuoteOut(inQ);
+                await addBase(inQ); // Mock effect of the base token transfer
+                await expect(callSell(inQ, outBtc.add(1))).to.be.revertedWith(
+                    "Insufficient output"
+                );
+                await callSell(inQ, outBtc);
+                // Buy
+                const inBtc = parseBtc("0.456");
+                const outQ = await stableSwap.getBaseOut(inBtc);
+                await expect(callBuy(inBtc, outQ.add(1))).to.be.revertedWith("Insufficient output");
+                await callBuy(inBtc, outQ);
+            });
+        });
+
+        describe("swapTokensForExactTokens", function () {
+            const callSwap = (
+                amountOut: BigNumberish,
+                maxAmountIn: BigNumberish,
+                path: string[],
+                versions: number[]
+            ) =>
+                swapRouter.swapTokensForExactTokens(
+                    amountOut,
+                    maxAmountIn,
+                    path,
+                    addr2,
+                    ethers.constants.AddressZero,
+                    versions,
+                    startTimestamp + DAY
+                );
+            const callBuy = (amountOut: BigNumberish, maxAmountIn: BigNumberish) =>
+                callSwap(amountOut, maxAmountIn, [btc.address, tmpBase.address], [0]);
+            const callSell = (amountOut: BigNumberish, maxAmountIn: BigNumberish) =>
+                callSwap(amountOut, maxAmountIn, [tmpBase.address, btc.address], [0]);
+
+            it("Should reject invalid path or versions", async function () {
+                await expect(callSwap(0, 0, [btc.address], [0])).to.be.revertedWith("Invalid path");
+                await expect(callSwap(0, 0, [tmpBase.address, btc.address], [])).to.be.revertedWith(
+                    "Invalid versions"
+                );
+                await expect(callSwap(0, 0, [addr1, btc.address], [0])).to.be.revertedWith(
+                    "Unknown swap"
+                );
+            });
+
+            it("Should transfer base tokens", async function () {
+                // Sell
+                const outBtc = parseBtc("0.123");
+                const inQ = await stableSwap.getBaseIn(outBtc);
+                await addBase(inQ); // Mock effect of the base token transfer
+                await expect(() => callSell(outBtc, parseEther("999"))).to.callMocks({
+                    func: tmpBase.mock.transferFrom.withArgs(addr1, stableSwap.address, inQ),
+                    rets: [true],
+                });
+                // Buy
+                await expect(() => callBuy(parseEther("0.456"), parseBtc("999"))).to.callMocks({
+                    func: tmpBase.mock.transfer.withArgs(addr2, parseEther("0.456")),
+                    rets: [true],
+                });
+            });
+
+            it("Should transfer quote tokens", async function () {
+                await tmpBase.mock.transfer.returns(true);
+                await tmpBase.mock.transferFrom.returns(true);
+                // Sell
+                const outBtc = parseBtc("0.123");
+                const inQ = await stableSwap.getBaseIn(outBtc);
+                await addBase(inQ); // Mock effect of the base token transfer
+                await expect(() => callSell(outBtc, parseEther("999"))).to.changeTokenBalances(
+                    btc,
+                    [user2, stableSwap],
+                    [outBtc, outBtc.mul(-1)]
+                );
+                // Buy
+                const outQ = parseEther("0.456");
+                const inBtc = await stableSwap.getQuoteIn(outQ);
+                await expect(() => callBuy(outQ, parseBtc("999"))).to.changeTokenBalances(
+                    btc,
+                    [user1, stableSwap],
+                    [inBtc.mul(-1), inBtc]
+                );
+            });
+
+            it("Should check max input", async function () {
+                await tmpBase.mock.transfer.returns(true);
+                await tmpBase.mock.transferFrom.returns(true);
+                // Sell
+                const outBtc = parseBtc("0.123");
+                const inQ = await stableSwap.getBaseIn(outBtc);
+                await addBase(inQ); // Mock effect of the base token transfer
+                await expect(callSell(outBtc, inQ.sub(1))).to.be.revertedWith("Excessive input");
+                await callSell(outBtc, inQ.mul(10));
+                // Buy
+                const outQ = parseEther("0.456");
+                const inBtc = await stableSwap.getQuoteIn(outQ);
+                await expect(callBuy(outQ, inBtc.sub(1))).to.be.revertedWith("Excessive input");
+                await callBuy(outQ, inBtc);
+            });
         });
     });
 });
