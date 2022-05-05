@@ -206,7 +206,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         );
         currentDay = endOfDay(block.timestamp);
         splitRatio = newSplitRatio;
-        _historicalSplitRatio[_rebalanceSize] = newSplitRatio;
+        _historicalSplitRatio[0] = newSplitRatio;
         emit SplitRatioUpdated(newSplitRatio);
         uint256 lastDay = currentDay - 1 days;
         uint256 lastDayPrice = twapOracle.getTwap(lastDay);

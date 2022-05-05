@@ -34,13 +34,12 @@ export function boostedWorkingBalance(
     const weightedBR = amountB
         .mul(REWARD_WEIGHT_B)
         .add(amountR.mul(REWARD_WEIGHT_R))
-        .mul(e18)
-        .div(SPLIT_RATIO.mul(REWARD_WEIGHT_Q));
+        .div(REWARD_WEIGHT_Q);
     const upperBoundBR = weightedBR.mul(MAX_BOOSTING_FACTOR).div(e18);
     let workingBR = weightedBR.add(
         weightedSupply.mul(veProportion).div(e18).mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18)
     );
-    let workingQ = amountQ;
+    let workingQ = amountQ.mul(SPLIT_RATIO).div(e18);
     if (upperBoundBR.lte(workingBR)) {
         const excessiveBoosting = workingBR
             .sub(upperBoundBR)
@@ -51,8 +50,11 @@ export function boostedWorkingBalance(
         const boostingPowerQ = excessiveBoosting.lte(upperBoundBoostingPowerQ)
             ? excessiveBoosting
             : upperBoundBoostingPowerQ;
-        workingQ = amountQ.add(boostingPowerQ.mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18));
-        const upperBoundQ = amountQ.mul(MAX_BOOSTING_FACTOR);
+        workingQ = amountQ
+            .mul(SPLIT_RATIO)
+            .div(e18)
+            .add(boostingPowerQ.mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18));
+        const upperBoundQ = amountQ.mul(SPLIT_RATIO).div(e18).mul(MAX_BOOSTING_FACTOR);
         workingQ = workingQ.lte(upperBoundQ) ? workingQ : upperBoundQ;
     }
     return workingBR.add(workingQ);
@@ -74,14 +76,18 @@ const USER2_R = parseEther("24000");
 const TOTAL_Q = USER1_Q.add(USER2_Q);
 const TOTAL_B = USER1_B.add(USER2_B);
 const TOTAL_R = USER1_R.add(USER2_R);
-const USER1_WEIGHT = USER1_Q.mul(SPLIT_RATIO.mul(REWARD_WEIGHT_Q).div(parseEther("1")))
+const USER1_WEIGHT = USER1_Q.mul(SPLIT_RATIO)
+    .mul(REWARD_WEIGHT_Q)
+    .div(parseEther("1"))
     .add(USER1_B.mul(REWARD_WEIGHT_B))
     .add(USER1_R.mul(REWARD_WEIGHT_R))
-    .div(SPLIT_RATIO.mul(REWARD_WEIGHT_Q).div(parseEther("1")));
-const USER2_WEIGHT = USER2_Q.mul(SPLIT_RATIO.mul(REWARD_WEIGHT_Q).div(parseEther("1")))
+    .div(REWARD_WEIGHT_Q);
+const USER2_WEIGHT = USER2_Q.mul(SPLIT_RATIO)
+    .mul(REWARD_WEIGHT_Q)
+    .div(parseEther("1"))
     .add(USER2_B.mul(REWARD_WEIGHT_B))
     .add(USER2_R.mul(REWARD_WEIGHT_R))
-    .div(SPLIT_RATIO.mul(REWARD_WEIGHT_Q).div(parseEther("1")));
+    .div(REWARD_WEIGHT_Q);
 const TOTAL_WEIGHT = USER1_WEIGHT.add(USER2_WEIGHT);
 
 // veCHESS proportion:
@@ -307,16 +313,14 @@ describe("ShareStaking", function () {
 
     describe("weightedBalance()", function () {
         it("Should calculate weighted balance", async function () {
-            expect(await staking.weightedBalance(1000, 0, 0, SPLIT_RATIO)).to.equal(1000);
+            expect(await staking.weightedBalance(1000, 0, 0, SPLIT_RATIO)).to.equal(
+                SPLIT_RATIO.mul(1000).div(parseEther("1"))
+            );
             expect(await staking.weightedBalance(0, 1000, 0, SPLIT_RATIO)).to.equal(
-                BigNumber.from(1000 * REWARD_WEIGHT_B)
-                    .mul(parseEther("1"))
-                    .div(SPLIT_RATIO.mul(REWARD_WEIGHT_Q))
+                BigNumber.from(1000 * REWARD_WEIGHT_B).div(REWARD_WEIGHT_Q)
             );
             expect(await staking.weightedBalance(0, 0, 1000, SPLIT_RATIO)).to.equal(
-                BigNumber.from(1000 * REWARD_WEIGHT_R)
-                    .mul(parseEther("1"))
-                    .div(SPLIT_RATIO.mul(REWARD_WEIGHT_Q))
+                BigNumber.from(1000 * REWARD_WEIGHT_R).div(REWARD_WEIGHT_Q)
             );
         });
 
@@ -324,22 +328,21 @@ describe("ShareStaking", function () {
             const q = 1000000;
             const b = 10000;
             const r = 100;
-            expect(await staking.weightedBalance(1000000, 10000, 100, SPLIT_RATIO)).to.equal(
+            expect(await staking.weightedBalance(q, b, r, SPLIT_RATIO)).to.equal(
                 SPLIT_RATIO.mul(q)
                     .mul(REWARD_WEIGHT_Q)
                     .div(parseEther("1"))
                     .add(REWARD_WEIGHT_B * b)
                     .add(REWARD_WEIGHT_R * r)
-                    .mul(parseEther("1"))
-                    .div(SPLIT_RATIO.mul(REWARD_WEIGHT_Q))
+                    .div(REWARD_WEIGHT_Q)
             );
         });
 
         it("Should round down weighted balance", async function () {
             // Assume weights of (Q, B, R) are (6r, 4, 2)
-            expect(await staking.weightedBalance(0, 500, 0, SPLIT_RATIO)).to.equal(3);
-            expect(await staking.weightedBalance(0, 0, 500, SPLIT_RATIO)).to.equal(1);
-            expect(await staking.weightedBalance(0, 500, 500, SPLIT_RATIO)).to.equal(5);
+            expect(await staking.weightedBalance(0, 2, 0, SPLIT_RATIO)).to.equal(1);
+            expect(await staking.weightedBalance(0, 0, 2, SPLIT_RATIO)).to.equal(0);
+            expect(await staking.weightedBalance(0, 2, 2, SPLIT_RATIO)).to.equal(2);
         });
     });
 
@@ -395,7 +398,9 @@ describe("ShareStaking", function () {
         it("Should still update working balance when no locking action is taken", async function () {
             await staking.syncWithVotingEscrow(addr1);
             await fund.mock.trancheTransferFrom.returns();
-            await staking.connect(user2).deposit(TRANCHE_Q, TOTAL_WEIGHT, addr2, 0); // Weighted total supply doubles
+            await staking
+                .connect(user2)
+                .deposit(TRANCHE_Q, TOTAL_WEIGHT.mul(parseEther("1")).div(SPLIT_RATIO), addr2, 0); // Weighted total supply doubles
             await staking.syncWithVotingEscrow(addr1);
             const workingBalance = await staking.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
@@ -493,7 +498,7 @@ describe("ShareStaking", function () {
                     USER1_Q.add(USER1_Q),
                     USER1_B,
                     USER1_R,
-                    TOTAL_WEIGHT.add(USER1_Q),
+                    TOTAL_WEIGHT.add(USER1_Q.mul(SPLIT_RATIO).div(parseEther("1"))),
                     USER1_VE_PROPORTION
                 )
             );
@@ -509,7 +514,7 @@ describe("ShareStaking", function () {
                     BigNumber.from(0),
                     USER1_B,
                     USER1_R,
-                    TOTAL_WEIGHT.sub(USER1_Q),
+                    TOTAL_WEIGHT.sub(USER1_Q.mul(SPLIT_RATIO).div(parseEther("1"))),
                     USER1_VE_PROPORTION
                 )
             );
@@ -880,9 +885,7 @@ describe("ShareStaking", function () {
             await setNextBlockTime(rewardStartTimestamp + 100);
             await staking.deposit(
                 TRANCHE_B,
-                TOTAL_WEIGHT.mul(SPLIT_RATIO.mul(REWARD_WEIGHT_Q)).div(
-                    parseEther("1").mul(REWARD_WEIGHT_B)
-                ),
+                TOTAL_WEIGHT.mul(REWARD_WEIGHT_Q).div(REWARD_WEIGHT_B),
                 addr1,
                 0
             );
@@ -898,7 +901,11 @@ describe("ShareStaking", function () {
             // assuming balance is enough
             await fund.mock.trancheTransfer.returns();
             await setNextBlockTime(rewardStartTimestamp + 200);
-            await staking.withdraw(TRANCHE_Q, TOTAL_WEIGHT.div(5), 0);
+            await staking.withdraw(
+                TRANCHE_Q,
+                TOTAL_WEIGHT.mul(parseEther("1")).div(5).div(SPLIT_RATIO),
+                0
+            );
 
             await advanceBlockAtTime(rewardStartTimestamp + 700);
             const { rewards1, rewards2 } = rewardsAfterReducingTotal(200, 700);
@@ -963,7 +970,7 @@ describe("ShareStaking", function () {
                 .withArgs(0)
                 .returns(rewardStartTimestamp + WEEK + 100);
             await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
-            await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
+            await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO.mul(2));
             await fund.mock.doRebalance
                 .withArgs(TOTAL_Q, TOTAL_B, TOTAL_R, 0)
                 .returns(TOTAL_Q.mul(4), TOTAL_B.mul(4), TOTAL_R.mul(4));
@@ -980,23 +987,46 @@ describe("ShareStaking", function () {
 
             const rewardWeek0Version0 = rate1.mul(WEEK);
             const rewardWeek1Version0 = rate1.mul(3).mul(100);
-            const rewardWeek1Version1 = rate1
+
+            const newSplitRatio = SPLIT_RATIO.mul(2);
+            const newUser1Weight = USER1_Q.mul(
+                newSplitRatio.mul(REWARD_WEIGHT_Q).div(parseEther("1"))
+            )
+                .add(USER1_B.mul(REWARD_WEIGHT_B))
+                .add(USER1_R.mul(REWARD_WEIGHT_R))
+                .div(REWARD_WEIGHT_Q);
+            const newUser2Weight = USER2_Q.mul(newSplitRatio)
+                .mul(REWARD_WEIGHT_Q)
+                .div(parseEther("1"))
+                .add(USER2_B.mul(REWARD_WEIGHT_B))
+                .add(USER2_R.mul(REWARD_WEIGHT_R))
+                .div(REWARD_WEIGHT_Q);
+            const newTotalWeight = newUser1Weight.add(newUser2Weight);
+            const rewardWeek1Version1 = parseEther("1")
+                .mul(newUser1Weight)
                 .mul(3)
                 .mul(WEEK - 100)
-                .div(2);
-            const rewardWeek2Version1 = rate1.mul(5).mul(100).div(2);
+                .div(2)
+                .div(newTotalWeight);
+            const rewardWeek2Version1 = parseEther("1")
+                .mul(newUser1Weight)
+                .mul(5)
+                .mul(100)
+                .div(2)
+                .div(newTotalWeight);
             const expectedRewards = rewardWeek0Version0
                 .add(rewardWeek1Version0)
                 .add(rewardWeek1Version1)
                 .add(rewardWeek2Version1);
-            expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(expectedRewards);
+            expect(await staking.callStatic["claimableRewards"](addr1)).to.be.closeTo(
+                expectedRewards,
+                1
+            );
         });
 
         it("Should handle multiple checkpoints in the same block correctly", async function () {
             // Deposit some BISHOP to double the total reward weight, in three transactions
-            const totalDeposit = TOTAL_WEIGHT.mul(
-                SPLIT_RATIO.mul(REWARD_WEIGHT_Q).div(parseEther("1"))
-            ).div(REWARD_WEIGHT_B);
+            const totalDeposit = TOTAL_WEIGHT.mul(REWARD_WEIGHT_Q).div(REWARD_WEIGHT_B);
             const deposit1 = totalDeposit.div(4);
             const deposit2 = totalDeposit.div(3);
             const deposit3 = totalDeposit.sub(deposit1).sub(deposit2);

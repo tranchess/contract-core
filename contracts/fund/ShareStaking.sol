@@ -139,7 +139,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                 .multiplyDecimal(splitRatio)
                 .add(amountB.mul(REWARD_WEIGHT_B))
                 .add(amountR.mul(REWARD_WEIGHT_R))
-                .divideDecimal(REWARD_WEIGHT_Q.mul(splitRatio));
+                .div(REWARD_WEIGHT_Q);
     }
 
     function totalSupply(uint256 tranche) external view returns (uint256) {
@@ -553,7 +553,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
             userIntegral = 0;
 
             // Reset per-user weight boosting after the first rebalance
-            weight = weightedBalance(balanceQ, balanceB, balanceR, _historicalSplitRatio[i]);
+            weight = weightedBalance(balanceQ, balanceB, balanceR, _historicalSplitRatio[i + 1]);
         }
         rewards = rewards.add(weight.multiplyDecimalPrecise(integral.sub(userIntegral)));
         address account_ = account; // Fix the "stack too deep" error
@@ -584,8 +584,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                 splitRatio
             );
         uint256[TRANCHE_COUNT] storage balance = _balances[account];
-        // Assume weightedBalance(x, 0, 0) always equal to x
-        uint256 weightedQ = balance[TRANCHE_Q];
+        uint256 weightedQ = weightedBalance(balance[TRANCHE_Q], 0, 0, splitRatio);
         uint256 weightedBR = weightedBalance(0, balance[TRANCHE_B], balance[TRANCHE_R], splitRatio);
 
         uint256 newWorkingBalance = weightedBR.add(weightedQ);
