@@ -591,19 +591,20 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 d
     ) private view returns (uint256 quote) {
         // Solve 16Axk·y^2 + 4kx(4Akx - 4AD + D)·y - D^3 = 0
+        uint256 baseValue = base.multiplyDecimal(oraclePrice);
+        uint256 d3 = d.mul(d).div(baseValue).mul(d) / (16 * ampl);
         uint256 prev = 0;
-        quote = d;
-        uint256 d3 = d.mul(d).div(base).mul(d).div(16 * ampl).divideDecimal(oraclePrice);
+        uint256 normalizedQuote = d;
         for (uint256 counter = 0; counter < 255; counter++) {
-            prev = quote;
-            quote = quote.mul(quote).add(d3).div(
-                (2 * quote).add(oraclePrice.multiplyDecimal(base)).add(d.div(4 * ampl)).sub(d)
-            );
-            if (closeEnough(quote, prev)) {
+            prev = normalizedQuote;
+            normalizedQuote =
+                normalizedQuote.mul(normalizedQuote).add(d3) /
+                (2 * normalizedQuote).add(baseValue).add(d / (4 * ampl)).sub(d);
+            if (closeEnough(normalizedQuote, prev)) {
                 break;
             }
         }
-        quote = quote / _quoteDecimalMultiplier;
+        quote = normalizedQuote / _quoteDecimalMultiplier;
     }
 
     function solveDepressedCubic(uint256 p, uint256 negQ) public pure returns (uint256) {
