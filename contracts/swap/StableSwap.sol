@@ -526,20 +526,17 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 ampl,
         uint256 oraclePrice
     ) private view returns (uint256) {
-        // kx + y
         uint256 normalizedQuote = quote.mul(_quoteDecimalMultiplier);
-        uint256 sum = base.multiplyDecimal(oraclePrice) + normalizedQuote;
+        uint256 baseValue = base.multiplyDecimal(oraclePrice);
+        uint256 sum = baseValue.add(normalizedQuote);
         if (sum == 0) return 0;
 
         uint256 prev = 0;
         uint256 d = sum;
-        uint256 base_ = base;
         for (uint256 counter = 0; counter < 255; counter++) {
-            // D^3 / 4kxy
-            uint256 d3 =
-                d.mul(d).div(base_).mul(d).div(4).div(normalizedQuote).divideDecimal(oraclePrice);
             prev = d;
-            d = ((4 * ampl * sum + 2 * d3) * d) / ((4 * ampl - 1) * d + 3 * d3);
+            uint256 d3 = d.mul(d).div(baseValue).mul(d) / normalizedQuote / 4;
+            d = (sum.mul(4 * ampl) + 2 * d3).mul(d) / d.mul(4 * ampl - 1).add(3 * d3);
             if (closeEnough(d, prev)) {
                 break;
             }
