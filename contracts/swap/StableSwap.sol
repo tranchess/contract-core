@@ -533,7 +533,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
 
         uint256 prev = 0;
         uint256 d = sum;
-        for (uint256 counter = 0; counter < 255; counter++) {
+        for (uint256 i = 0; i < 255; i++) {
             prev = d;
             uint256 d3 = d.mul(d).div(baseValue).mul(d) / normalizedQuote / 4;
             d = (sum.mul(4 * ampl) + 2 * d3).mul(d) / d.mul(4 * ampl - 1).add(3 * d3);
@@ -572,7 +572,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 d3 = d.mul(d).div(normalizedQuote).mul(d) / (16 * ampl);
         uint256 prev = 0;
         uint256 baseValue = d;
-        for (uint256 counter = 0; counter < 255; counter++) {
+        for (uint256 i = 0; i < 255; i++) {
             prev = baseValue;
             baseValue =
                 baseValue.mul(baseValue).add(d3) /
@@ -595,7 +595,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 d3 = d.mul(d).div(baseValue).mul(d) / (16 * ampl);
         uint256 prev = 0;
         uint256 normalizedQuote = d;
-        for (uint256 counter = 0; counter < 255; counter++) {
+        for (uint256 i = 0; i < 255; i++) {
             prev = normalizedQuote;
             normalizedQuote =
                 normalizedQuote.mul(normalizedQuote).add(d3) /
