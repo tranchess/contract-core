@@ -607,37 +607,6 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         quote = normalizedQuote / _quoteDecimalMultiplier;
     }
 
-    function solveDepressedCubic(uint256 p, uint256 negQ) public pure returns (uint256) {
-        // Cardano's formula
-        // For x^3 + px + q = 0, then the real root:
-        // △ = q^2 / 4 + p^3 / 27
-        // x = ∛(- q/2 + √△) + ∛(- q/2 - √△)
-        uint256 delta =
-            AdvancedMath.sqrt((p.multiplyDecimal(p).mul(p) / 27).add(negQ.mul(negQ) / 4));
-        require(delta > 0, "wrong # of real root");
-
-        return
-            AdvancedMath.cbrt((delta + negQ / 2).mul(1e36)) -
-            AdvancedMath.cbrt((delta - negQ / 2).mul(1e36));
-    }
-
-    function solveQuadratic(
-        uint256 a,
-        uint256 b1,
-        uint256 b2,
-        uint256 negC
-    ) public pure returns (uint256) {
-        // For ax^2 + bx + c = 0, then the positive root:
-        // △ = b^2 - 4ac
-        // x = (- b + √△) / 2a
-        uint256 b = b1 < b2 ? b2 - b1 : b1 - b2;
-        uint256 delta = b.mul(b).add(a.mul(negC).mul(4));
-        require(a != 0, "invalid quadratic constant");
-        require(delta >= 0, "invalid # of real root");
-
-        return AdvancedMath.sqrt(delta).add(b2).sub(b1).mul(5e17).div(a);
-    }
-
     function updateAmplRamp(uint256 endAmpl, uint256 endTimestamp) external onlyOwner {
         require(endAmpl > 0 && endAmpl < AMPL_MAX_VALUE, "Invalid A");
         require(endTimestamp >= block.timestamp + AMPL_RAMP_MIN_TIME, "A ramp time too short");
