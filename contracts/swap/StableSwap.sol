@@ -537,7 +537,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             prev = d;
             uint256 d3 = d.mul(d).div(baseValue).mul(d) / normalizedQuote / 4;
             d = (sum.mul(4 * ampl) + 2 * d3).mul(d) / d.mul(4 * ampl - 1).add(3 * d3);
-            if (closeEnough(d, prev)) {
+            if (d <= prev + 1 && prev <= d + 1) {
                 break;
             }
         }
@@ -577,7 +577,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             baseValue =
                 baseValue.mul(baseValue).add(d3) /
                 (2 * baseValue).add(normalizedQuote).add(d / (4 * ampl)).sub(d);
-            if (closeEnough(baseValue, prev)) {
+            if (baseValue <= prev + 1 && prev <= baseValue + 1) {
                 break;
             }
         }
@@ -600,7 +600,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             normalizedQuote =
                 normalizedQuote.mul(normalizedQuote).add(d3) /
                 (2 * normalizedQuote).add(baseValue).add(d / (4 * ampl)).sub(d);
-            if (closeEnough(normalizedQuote, prev)) {
+            if (normalizedQuote <= prev + 1 && prev <= normalizedQuote + 1) {
                 break;
             }
         }
@@ -650,20 +650,6 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
 
     function updateAdminFeeRate(uint256 newAdminFeeRate) external onlyOwner {
         _updateAdminFeeRate(newAdminFeeRate);
-    }
-
-    function closeEnough(uint256 current, uint256 previous) internal pure returns (bool) {
-        if (current > previous) {
-            if (current <= previous.add(1)) {
-                return true;
-            }
-        } else {
-            if (current >= previous.sub(1)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /// @dev Check if the user-specified version is correct.
