@@ -386,10 +386,6 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     {
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
-        uint256 ampl = getAmpl();
-        uint256 oraclePrice = getOraclePrice();
-        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
-        _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, d);
         baseOut = oldBase.mul(lpIn).div(lpSupply);
         quoteOut = oldQuote.mul(lpIn).div(lpSupply);
         require(baseOut >= minBaseOut, "Insufficient output");
@@ -399,7 +395,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         ILiquidityGauge(lpToken).burnFrom(msg.sender, lpIn);
         IERC20(baseAddress()).safeTransfer(msg.sender, baseOut);
         IERC20(quoteAddress).safeTransfer(msg.sender, quoteOut);
-        emit LiquidityRemoved(msg.sender, lpIn, baseOut, quoteOut, 0, 0, oraclePrice);
+        emit LiquidityRemoved(msg.sender, lpIn, baseOut, quoteOut, 0, 0, 0);
     }
 
     /// @dev Remove base liquidity only.

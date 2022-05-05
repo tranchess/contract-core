@@ -702,15 +702,7 @@ describe("QueenStableSwap", function () {
             await tmpBase.mock.transfer.returns(true);
             await expect(stableSwap.removeLiquidity(0, INIT_LP.div(10), 0, 0))
                 .to.emit(stableSwap, "LiquidityRemoved")
-                .withArgs(
-                    addr1,
-                    INIT_LP.div(10),
-                    INIT_Q.div(10),
-                    INIT_BTC.div(10),
-                    0,
-                    0,
-                    parseEther("2")
-                );
+                .withArgs(addr1, INIT_LP.div(10), INIT_Q.div(10), INIT_BTC.div(10), 0, 0, 0);
         });
     });
 
