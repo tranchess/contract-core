@@ -60,6 +60,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     uint256 private constant AMPL_RAMP_MAX_CHANGE = 10;
     uint256 private constant MAX_FEE_RATE = 0.5e18;
     uint256 private constant MAX_ADMIN_FEE_RATE = 1e18;
+    uint256 private constant MAX_ITERATION = 255;
 
     address public immutable lpToken;
     IFundV3 public immutable fund;
@@ -532,6 +533,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 ampl,
         uint256 oraclePrice
     ) private view returns (uint256) {
+        // Newtonian: D' = (4A(kx + y) + D^3 / 2kxy)D / ((4A - 1)D + 3D^3 / 4kxy)
         uint256 normalizedQuote = quote.mul(_quoteDecimalMultiplier);
         uint256 baseValue = base.multiplyDecimal(oraclePrice);
         uint256 sum = baseValue.add(normalizedQuote);
@@ -539,7 +541,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
 
         uint256 prev = 0;
         uint256 d = sum;
-        for (uint256 i = 0; i < 255; i++) {
+        for (uint256 i = 0; i < MAX_ITERATION; i++) {
             prev = d;
             uint256 d3 = d.mul(d).div(baseValue).mul(d) / normalizedQuote / 4;
             d = (sum.mul(4 * ampl) + 2 * d3).mul(d) / d.mul(4 * ampl - 1).add(3 * d3);
@@ -574,11 +576,12 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 d
     ) private view returns (uint256 base) {
         // Solve 16Ayk^2·x^2 + 4ky(4Ay - 4AD + D)·x - D^3 = 0
+        // Newtonian: kx' = ((kx)^2 + D^3 / 16Ay) / (2kx + y - D + D/4A)
         uint256 normalizedQuote = quote.mul(_quoteDecimalMultiplier);
         uint256 d3 = d.mul(d).div(normalizedQuote).mul(d) / (16 * ampl);
         uint256 prev = 0;
         uint256 baseValue = d;
-        for (uint256 i = 0; i < 255; i++) {
+        for (uint256 i = 0; i < MAX_ITERATION; i++) {
             prev = baseValue;
             baseValue =
                 baseValue.mul(baseValue).add(d3) /
@@ -597,11 +600,12 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 d
     ) private view returns (uint256 quote) {
         // Solve 16Axk·y^2 + 4kx(4Akx - 4AD + D)·y - D^3 = 0
+        // Newtonian: y' = (y^2 + D^3 / 16Akx) / (2y + kx - D + D/4A)
         uint256 baseValue = base.multiplyDecimal(oraclePrice);
         uint256 d3 = d.mul(d).div(baseValue).mul(d) / (16 * ampl);
         uint256 prev = 0;
         uint256 normalizedQuote = d;
-        for (uint256 i = 0; i < 255; i++) {
+        for (uint256 i = 0; i < MAX_ITERATION; i++) {
             prev = normalizedQuote;
             normalizedQuote =
                 normalizedQuote.mul(normalizedQuote).add(d3) /
