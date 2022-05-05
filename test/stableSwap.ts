@@ -386,7 +386,7 @@ describe("BishopStableSwap", function () {
 
         it("Should buy as oracle shifts down", async function () {
             const amount = parseEther("1");
-            const dy = BigNumber.from("1210016884336529142");
+            const dy = BigNumber.from("1210016884336529143");
             const fee = amount.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
@@ -1000,7 +1000,7 @@ describe("QueenStableSwap", function () {
 
         it("Should buy as oracle shifts up", async function () {
             const amount = parseEther("1");
-            const dy = BigNumber.from("808779627775290556");
+            const dy = BigNumber.from("808779627775290557");
             const fee = amount.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
@@ -1034,7 +1034,7 @@ describe("QueenStableSwap", function () {
 
         it("Should buy as oracle shifts down", async function () {
             const amount = parseEther("1");
-            const dy = BigNumber.from("1210016884336529142");
+            const dy = BigNumber.from("1210016884336529143");
             const fee = amount.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
