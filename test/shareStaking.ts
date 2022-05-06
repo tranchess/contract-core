@@ -973,55 +973,24 @@ describe("ShareStaking", function () {
             await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO.mul(2));
             await fund.mock.doRebalance
                 .withArgs(TOTAL_Q, TOTAL_B, TOTAL_R, 0)
-                .returns(TOTAL_Q.mul(4), TOTAL_B.mul(4), TOTAL_R.mul(4));
-            await fund.mock.doRebalance
-                .withArgs(TOTAL_Q.mul(4), TOTAL_B.mul(4), TOTAL_R.mul(4), 1)
-                .returns(TOTAL_Q.mul(15), TOTAL_B.mul(15), TOTAL_R.mul(15));
+                .returns(TOTAL_Q.mul(2), TOTAL_B.mul(4), TOTAL_R.mul(4));
             await fund.mock.doRebalance
                 .withArgs(USER1_Q, USER1_B, USER1_R, 0)
-                .returns(USER1_Q.mul(2), USER1_B.mul(2), USER1_R.mul(2));
-            await fund.mock.doRebalance
-                .withArgs(USER1_Q.mul(2), USER1_B.mul(2), USER1_R.mul(2), 1)
-                .returns(USER1_Q.mul(3), USER1_B.mul(3), USER1_R.mul(3));
+                .returns(USER1_Q, USER1_B.mul(2), USER1_R.mul(2));
             await advanceBlockAtTime(rewardStartTimestamp + WEEK * 2 + 100);
 
             const rewardWeek0Version0 = rate1.mul(WEEK);
             const rewardWeek1Version0 = rate1.mul(3).mul(100);
-
-            const newSplitRatio = SPLIT_RATIO.mul(2);
-            const newUser1Weight = USER1_Q.mul(
-                newSplitRatio.mul(REWARD_WEIGHT_Q).div(parseEther("1"))
-            )
-                .add(USER1_B.mul(REWARD_WEIGHT_B))
-                .add(USER1_R.mul(REWARD_WEIGHT_R))
-                .div(REWARD_WEIGHT_Q);
-            const newUser2Weight = USER2_Q.mul(newSplitRatio)
-                .mul(REWARD_WEIGHT_Q)
-                .div(parseEther("1"))
-                .add(USER2_B.mul(REWARD_WEIGHT_B))
-                .add(USER2_R.mul(REWARD_WEIGHT_R))
-                .div(REWARD_WEIGHT_Q);
-            const newTotalWeight = newUser1Weight.add(newUser2Weight);
-            const rewardWeek1Version1 = parseEther("1")
-                .mul(newUser1Weight)
+            const rewardWeek1Version1 = rate1
                 .mul(3)
                 .mul(WEEK - 100)
-                .div(2)
-                .div(newTotalWeight);
-            const rewardWeek2Version1 = parseEther("1")
-                .mul(newUser1Weight)
-                .mul(5)
-                .mul(100)
-                .div(2)
-                .div(newTotalWeight);
+                .div(2);
+            const rewardWeek2Version1 = rate1.mul(5).mul(100).div(2);
             const expectedRewards = rewardWeek0Version0
                 .add(rewardWeek1Version0)
                 .add(rewardWeek1Version1)
                 .add(rewardWeek2Version1);
-            expect(await staking.callStatic["claimableRewards"](addr1)).to.be.closeTo(
-                expectedRewards,
-                1
-            );
+            expect(await staking.callStatic["claimableRewards"](addr1)).to.equal(expectedRewards);
         });
 
         it("Should handle multiple checkpoints in the same block correctly", async function () {
