@@ -178,9 +178,6 @@ describe("QueenStableSwap", function () {
                 const swapPrice = inBtc.sub(fee).mul(BTC_TO_ETHER).mul(UNIT).div(outQ);
                 expect(swapPrice).to.be.closeTo(price, price.mul(slippageBps).div(10000));
                 await addQuote(inBtc);
-                // await expect(stableSwap.buy(0, outQ.add(1), addr1, "0x")).to.be.revertedWith(
-                //     "Invariant mismatch"
-                // );
                 await stableSwap.buy(0, outQ, addr1, "0x");
             };
         }
@@ -192,11 +189,7 @@ describe("QueenStableSwap", function () {
                 const fee = inBtc.mul(FEE_RATE).div(UNIT);
                 const swapPrice = inBtc.sub(fee).mul(BTC_TO_ETHER).mul(UNIT).div(outQ);
                 expect(swapPrice).to.be.closeTo(price, price.mul(slippageBps).div(10000));
-                await addQuote(inBtc.sub(1));
-                // await expect(stableSwap.buy(0, outQ, addr1, "0x")).to.be.revertedWith(
-                //     "Invariant mismatch"
-                // );
-                await addQuote(1);
+                await addQuote(inBtc);
                 await stableSwap.buy(0, outQ, addr1, "0x");
             };
         }
@@ -209,9 +202,6 @@ describe("QueenStableSwap", function () {
                 const swapPrice = outBtc.add(fee).mul(BTC_TO_ETHER).mul(UNIT).div(inQ);
                 expect(swapPrice).to.be.closeTo(price, price.mul(slippageBps).div(10000));
                 await addBase(inQ);
-                // await expect(stableSwap.sell(0, outBtc.add(1), addr1, "0x")).to.be.revertedWith(
-                //     "Invariant mismatch"
-                // );
                 await stableSwap.sell(0, outBtc, addr1, "0x");
             };
         }
@@ -223,11 +213,7 @@ describe("QueenStableSwap", function () {
                 const fee = outBtc.mul(FEE_RATE).div(UNIT.sub(FEE_RATE));
                 const swapPrice = outBtc.add(fee).mul(BTC_TO_ETHER).mul(UNIT).div(inQ);
                 expect(swapPrice).to.be.closeTo(price, price.mul(slippageBps).div(10000));
-                await addBase(inQ.sub(1));
-                // await expect(stableSwap.sell(0, outBtc, addr1, "0x")).to.be.revertedWith(
-                //     "Invariant mismatch"
-                // );
-                await addBase(1);
+                await addBase(inQ);
                 await stableSwap.sell(0, outBtc, addr1, "0x");
             };
         }
