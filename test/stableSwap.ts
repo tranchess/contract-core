@@ -262,7 +262,7 @@ describe("BishopStableSwap", function () {
 
         it("Should buy", async function () {
             const amount = parseEther("1");
-            const dy = BigNumber.from("969444922369433127");
+            const dy = BigNumber.from("969444922369433125");
             const fee = amount.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
@@ -307,7 +307,7 @@ describe("BishopStableSwap", function () {
 
         it("Should buy exact", async function () {
             const amount = parseEther("1");
-            const dx = BigNumber.from("1031537097903247409");
+            const dx = BigNumber.from("1031537097903247411");
             const fee = dx.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
@@ -422,7 +422,7 @@ describe("BishopStableSwap", function () {
     describe("sell()", function () {
         it("Should sell", async function () {
             const amount = parseEther("1");
-            const dy = BigNumber.from("969427428100277830");
+            const dy = BigNumber.from("969427428100277828");
             const fee = BigNumber.from("29982291590730242");
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
@@ -467,7 +467,7 @@ describe("BishopStableSwap", function () {
 
         it("Should sell exact", async function () {
             const amount = parseEther("1");
-            const dx = BigNumber.from("1031556347189852430");
+            const dx = BigNumber.from("1031556347189852432");
             const amountBeforeFee = amount.mul(UNIT).div(UNIT.sub(FEE_RATE));
             const fee = amountBeforeFee.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
@@ -547,7 +547,7 @@ describe("BishopStableSwap", function () {
 
         it("Should sell as oracle shifts down", async function () {
             const amount = parseEther("1");
-            const dy = BigNumber.from("776612943398956402");
+            const dy = BigNumber.from("776612943398956401");
             const fee = BigNumber.from("24018957012338857");
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
@@ -670,7 +670,7 @@ describe("BishopStableSwap", function () {
             await stableSwap.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[0].balanceOf(addr2);
             const afterLP = await lpToken.balanceOf(addr2);
-            expect(afterToken.sub(beforeToken)).to.equal(baseDelta);
+            expect(afterToken.sub(beforeToken)).to.be.closeTo(baseDelta, 1);
             expect(beforeLP.sub(afterLP)).to.equal(burnAmount);
         });
 
@@ -699,7 +699,7 @@ describe("BishopStableSwap", function () {
             await stableSwap.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[0].balanceOf(addr2);
             const afterLP = await lpToken.balanceOf(addr2);
-            expect(afterToken.sub(beforeToken)).to.equal(baseDelta);
+            expect(afterToken.sub(beforeToken)).to.be.closeTo(baseDelta, 1);
             expect(beforeLP.sub(afterLP)).to.equal(burnAmount);
         });
 
@@ -910,7 +910,7 @@ describe("QueenStableSwap", function () {
     describe("buy()", function () {
         it("Should buy", async function () {
             const amount = parseEther("1");
-            const dy = BigNumber.from("969444922369433127");
+            const dy = BigNumber.from("969444922369433125");
             const fee = amount.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
@@ -955,7 +955,7 @@ describe("QueenStableSwap", function () {
 
         it("Should buy exact", async function () {
             const amount = parseEther("1");
-            const dx = BigNumber.from("1031537097903247409");
+            const dx = BigNumber.from("1031537097903247411");
             const fee = dx.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
@@ -1070,7 +1070,7 @@ describe("QueenStableSwap", function () {
     describe("sell()", function () {
         it("Should sell", async function () {
             const amount = parseEther("1");
-            const dy = BigNumber.from("969427428100277830");
+            const dy = BigNumber.from("969427428100277828");
             const fee = BigNumber.from("29982291590730242");
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
@@ -1115,7 +1115,7 @@ describe("QueenStableSwap", function () {
 
         it("Should sell exact", async function () {
             const amount = parseEther("1");
-            const dx = BigNumber.from("1031556347189852430");
+            const dx = BigNumber.from("1031556347189852432");
             const amountBeforeFee = amount.mul(UNIT).div(UNIT.sub(FEE_RATE));
             const fee = amountBeforeFee.mul(FEE_RATE).div(UNIT);
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
@@ -1195,7 +1195,7 @@ describe("QueenStableSwap", function () {
 
         it("Should sell as oracle shifts down", async function () {
             const amount = parseEther("1");
-            const dy = BigNumber.from("776612943398956402");
+            const dy = BigNumber.from("776612943398956401");
             const fee = BigNumber.from("24018957012338857");
             const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
 
@@ -1301,7 +1301,7 @@ describe("QueenStableSwap", function () {
             await stableSwap.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[0].balanceOf(addr2);
             const afterLP = await lpToken.balanceOf(addr2);
-            expect(afterToken.sub(beforeToken)).to.equal(baseDelta);
+            expect(afterToken.sub(beforeToken)).to.be.closeTo(baseDelta, 1);
             expect(beforeLP.sub(afterLP)).to.equal(burnAmount);
         });
 
@@ -1330,7 +1330,7 @@ describe("QueenStableSwap", function () {
             await stableSwap.connect(user2).removeBaseLiquidity(0, burnAmount, parseEther("0"));
             const afterToken = await tokens[0].balanceOf(addr2);
             const afterLP = await lpToken.balanceOf(addr2);
-            expect(afterToken.sub(beforeToken)).to.equal(baseDelta);
+            expect(afterToken.sub(beforeToken)).to.be.closeTo(baseDelta, 1);
             expect(beforeLP.sub(afterLP)).to.equal(burnAmount);
         });
 
@@ -1678,10 +1678,10 @@ describe("Flash Swap", function () {
             await tokens[0].mint(stableSwap.address, outR);
             await usd
                 .connect(user1)
-                .approve(flashSwapRouter.address, BigNumber.from("30572571899722170"));
+                .approve(flashSwapRouter.address, BigNumber.from("30572571899722172"));
             await usd.mint(
                 stableSwap.address,
-                parseEther("1").sub(BigNumber.from("30572571899722170"))
+                parseEther("1").sub(BigNumber.from("30572571899722172"))
             );
 
             const beforeQuote = await usd.balanceOf(user1.address);
@@ -1699,7 +1699,7 @@ describe("Flash Swap", function () {
                 );
 
             const afterQuote = await usd.balanceOf(user1.address);
-            expect(afterQuote.sub(beforeQuote)).to.equal(BigNumber.from("-30572571899722170"));
+            expect(afterQuote.sub(beforeQuote)).to.equal(BigNumber.from("-30572571899722172"));
         });
     });
 
@@ -1814,7 +1814,7 @@ describe("Flash Swap", function () {
                 );
 
             const afterQuote = await usd.balanceOf(user1.address);
-            expect(afterQuote.sub(beforeQuote)).to.equal(BigNumber.from("968462902096752591"));
+            expect(afterQuote.sub(beforeQuote)).to.equal(BigNumber.from("968462902096752589"));
         });
     });
 });

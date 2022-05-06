@@ -60,6 +60,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     uint256 private constant AMPL_RAMP_MAX_CHANGE = 10;
     uint256 private constant MAX_FEE_RATE = 0.5e18;
     uint256 private constant MAX_ADMIN_FEE_RATE = 1e18;
+    uint256 private constant MAX_ITERATION = 255;
 
     address public immutable lpToken;
     IFundV3 public immutable fund;
@@ -189,9 +190,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 newBase = oldBase.add(baseIn);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
-        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
-        uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d);
-        quoteOut = oldQuote.sub(newQuote).sub(1); // -1 just in case there were some rounding errors
+        // Add 1 in case of rounding errors
+        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice) + 1;
+        uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d) + 1;
+        quoteOut = oldQuote.sub(newQuote);
         uint256 fee = quoteOut.multiplyDecimal(feeRate);
         quoteOut = quoteOut.sub(fee);
     }
@@ -202,9 +204,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 newBase = oldBase.sub(baseOut);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
-        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
-        uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d);
-        quoteIn = newQuote.sub(oldQuote).add(1); // 1 just in case there were some rounding errors
+        // Add 1 in case of rounding errors
+        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice) + 1;
+        uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d) + 1;
+        quoteIn = newQuote.sub(oldQuote);
         uint256 fee = quoteIn.mul(feeRate).div(uint256(1e18).sub(feeRate));
         quoteIn = quoteIn.add(fee);
     }
@@ -216,9 +219,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 newQuote = oldQuote.add(quoteIn.sub(fee));
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
-        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
-        uint256 newBase = _getBase(ampl, newQuote, oraclePrice, d);
-        baseOut = oldBase.sub(newBase).sub(1); // just in case there were rounding error
+        // Add 1 in case of rounding errors
+        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice) + 1;
+        uint256 newBase = _getBase(ampl, newQuote, oraclePrice, d) + 1;
+        baseOut = oldBase.sub(newBase);
     }
 
     function getBaseIn(uint256 quoteOut) external view override returns (uint256 baseIn) {
@@ -228,9 +232,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 newQuote = oldQuote.sub(quoteOut.add(fee));
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
-        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
-        uint256 newBase = _getBase(ampl, newQuote, oraclePrice, d);
-        baseIn = newBase.sub(oldBase).add(1); // just in case there were rounding error
+        // Add 1 in case of rounding errors
+        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice) + 1;
+        uint256 newBase = _getBase(ampl, newQuote, oraclePrice, d) + 1;
+        baseIn = newBase.sub(oldBase);
     }
 
     function buy(
@@ -421,7 +426,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             d1 = d0.sub(d0.mul(lpIn).div(lpSupply));
         }
         uint256 fee = oldQuote.mul(lpIn).div(lpSupply).multiplyDecimal(feeRate);
-        uint256 newBase = _getBase(ampl, oldQuote.sub(fee), oraclePrice, d1).add(1);
+        // Add 1 in case of rounding errors
+        uint256 newBase = _getBase(ampl, oldQuote.sub(fee), oraclePrice, d1) + 1;
         baseOut = oldBase.sub(newBase);
         require(baseOut >= minBaseOut, "Insufficient output");
         ILiquidityGauge(lpToken).burnFrom(msg.sender, lpIn);
@@ -452,7 +458,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             d1 = d0.sub(d0.mul(lpIn).div(lpSupply));
         }
         uint256 idealQuote = oldQuote.mul(lpSupply.sub(lpIn)).div(lpSupply);
-        uint256 newQuote = _getQuote(ampl, oldBase, oraclePrice, d1).add(1);
+        // Add 1 in case of rounding errors
+        uint256 newQuote = _getQuote(ampl, oldBase, oraclePrice, d1) + 1;
         uint256 fee = idealQuote.sub(newQuote).multiplyDecimal(feeRate);
         quoteOut = oldQuote.sub(newQuote).sub(fee);
         require(quoteOut >= minQuoteOut, "Insufficient output");
@@ -526,16 +533,23 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 ampl,
         uint256 oraclePrice
     ) private view returns (uint256) {
-        // Solve D^3 + kxy(4A - 1)·D - 16Akxy(y + kx) = 0
+        // Newtonian: D' = (4A(kx + y) + D^3 / 2kxy)D / ((4A - 1)D + 3D^3 / 4kxy)
         uint256 normalizedQuote = quote.mul(_quoteDecimalMultiplier);
-        uint256 product = base.multiplyDecimal(normalizedQuote);
-        uint256 p = product.mul(16 * ampl - 4).multiplyDecimal(oraclePrice);
-        uint256 negQ =
-            product
-                .mul(16 * ampl)
-                .multiplyDecimal(base.multiplyDecimal(oraclePrice).add(normalizedQuote))
-                .multiplyDecimal(oraclePrice);
-        return solveDepressedCubic(p, negQ);
+        uint256 baseValue = base.multiplyDecimal(oraclePrice);
+        uint256 sum = baseValue.add(normalizedQuote);
+        if (sum == 0) return 0;
+
+        uint256 prev = 0;
+        uint256 d = sum;
+        for (uint256 i = 0; i < MAX_ITERATION; i++) {
+            prev = d;
+            uint256 d3 = d.mul(d).div(baseValue).mul(d) / normalizedQuote / 4;
+            d = (sum.mul(4 * ampl) + 2 * d3).mul(d) / d.mul(4 * ampl - 1).add(3 * d3);
+            if (d <= prev + 1 && prev <= d + 1) {
+                break;
+            }
+        }
+        return d;
     }
 
     function _getPriceOverOracle(
@@ -562,16 +576,21 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 d
     ) private view returns (uint256 base) {
         // Solve 16Ayk^2·x^2 + 4ky(4Ay - 4AD + D)·x - D^3 = 0
+        // Newtonian: kx' = ((kx)^2 + D^3 / 16Ay) / (2kx + y - D + D/4A)
         uint256 normalizedQuote = quote.mul(_quoteDecimalMultiplier);
-        uint256 a =
-            (16 * ampl * normalizedQuote).multiplyDecimal(oraclePrice).multiplyDecimal(oraclePrice);
-        uint256 b1 =
-            (d.multiplyDecimal(normalizedQuote * 4) +
-                normalizedQuote.mul(16 * ampl).multiplyDecimal(normalizedQuote))
-                .multiplyDecimal(oraclePrice);
-        uint256 b2 = d.multiplyDecimal(16 * ampl * normalizedQuote).multiplyDecimal(oraclePrice);
-        uint256 negC = d.multiplyDecimal(d).multiplyDecimal(d);
-        base = solveQuadratic(a, b1, b2, negC);
+        uint256 d3 = d.mul(d).div(normalizedQuote).mul(d) / (16 * ampl);
+        uint256 prev = 0;
+        uint256 baseValue = d;
+        for (uint256 i = 0; i < MAX_ITERATION; i++) {
+            prev = baseValue;
+            baseValue =
+                baseValue.mul(baseValue).add(d3) /
+                (2 * baseValue).add(normalizedQuote).add(d / (4 * ampl)).sub(d);
+            if (baseValue <= prev + 1 && prev <= baseValue + 1) {
+                break;
+            }
+        }
+        base = baseValue.divideDecimal(oraclePrice);
     }
 
     function _getQuote(
@@ -581,45 +600,21 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 d
     ) private view returns (uint256 quote) {
         // Solve 16Axk·y^2 + 4kx(4Akx - 4AD + D)·y - D^3 = 0
-        uint256 a = (16 * ampl * base).multiplyDecimal(oraclePrice);
-        uint256 b1 =
-            (d.multiplyDecimal(base * 4) +
-                base.mul(16 * ampl).multiplyDecimal(base).multiplyDecimal(oraclePrice))
-                .multiplyDecimal(oraclePrice);
-        uint256 b2 = d.multiplyDecimal(16 * ampl * base).multiplyDecimal(oraclePrice);
-        uint256 negC = d.multiplyDecimal(d).multiplyDecimal(d);
-        quote = solveQuadratic(a, b1, b2, negC) / _quoteDecimalMultiplier;
-    }
-
-    function solveDepressedCubic(uint256 p, uint256 negQ) public pure returns (uint256) {
-        // Cardano's formula
-        // For x^3 + px + q = 0, then the real root:
-        // △ = q^2 / 4 + p^3 / 27
-        // x = ∛(- q/2 + √△) + ∛(- q/2 - √△)
-        uint256 delta =
-            AdvancedMath.sqrt((p.multiplyDecimal(p).mul(p) / 27).add(negQ.mul(negQ) / 4));
-        require(delta > 0, "wrong # of real root");
-
-        return
-            AdvancedMath.cbrt((delta + negQ / 2).mul(1e36)) -
-            AdvancedMath.cbrt((delta - negQ / 2).mul(1e36));
-    }
-
-    function solveQuadratic(
-        uint256 a,
-        uint256 b1,
-        uint256 b2,
-        uint256 negC
-    ) public pure returns (uint256) {
-        // For ax^2 + bx + c = 0, then the positive root:
-        // △ = b^2 - 4ac
-        // x = (- b + √△) / 2a
-        uint256 b = b1 < b2 ? b2 - b1 : b1 - b2;
-        uint256 delta = b.mul(b).add(a.mul(negC).mul(4));
-        require(a != 0, "invalid quadratic constant");
-        require(delta >= 0, "invalid # of real root");
-
-        return AdvancedMath.sqrt(delta).add(b2).sub(b1).mul(5e17).div(a);
+        // Newtonian: y' = (y^2 + D^3 / 16Akx) / (2y + kx - D + D/4A)
+        uint256 baseValue = base.multiplyDecimal(oraclePrice);
+        uint256 d3 = d.mul(d).div(baseValue).mul(d) / (16 * ampl);
+        uint256 prev = 0;
+        uint256 normalizedQuote = d;
+        for (uint256 i = 0; i < MAX_ITERATION; i++) {
+            prev = normalizedQuote;
+            normalizedQuote =
+                normalizedQuote.mul(normalizedQuote).add(d3) /
+                (2 * normalizedQuote).add(baseValue).add(d / (4 * ampl)).sub(d);
+            if (normalizedQuote <= prev + 1 && prev <= normalizedQuote + 1) {
+                break;
+            }
+        }
+        quote = normalizedQuote / _quoteDecimalMultiplier;
     }
 
     function updateAmplRamp(uint256 endAmpl, uint256 endTimestamp) external onlyOwner {
