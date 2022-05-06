@@ -39,8 +39,8 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
 
     uint256 private constant MAX_ITERATIONS = 500;
 
-    uint256 private constant REWARD_WEIGHT_B = 4;
-    uint256 private constant REWARD_WEIGHT_R = 2;
+    uint256 private constant REWARD_WEIGHT_B = 2;
+    uint256 private constant REWARD_WEIGHT_R = 1;
     uint256 private constant REWARD_WEIGHT_Q = 3;
     uint256 private constant MAX_BOOSTING_FACTOR = 3e18;
     uint256 private constant MAX_BOOSTING_FACTOR_MINUS_ONE = MAX_BOOSTING_FACTOR - 1e18;
@@ -71,6 +71,9 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
 
     /// @dev Rebalance version mapping for `_balances`.
     mapping(address => uint256) private _balanceVersions;
+
+    /// @dev Mapping of rebalance version => split ratio.
+    mapping(uint256 => uint256) private _historicalSplitRatio;
 
     /// @dev 1e27 * ∫(rate(t) / totalWeight(t) dt) from the latest rebalance till checkpoint.
     uint256 private _invTotalWeightIntegral;
@@ -115,22 +118,28 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         require(_checkpointTimestamp == 0);
         _checkpointTimestamp = block.timestamp;
         _rate = IChessSchedule(chessSchedule).getRate(block.timestamp);
+        _historicalSplitRatio[fund.getRebalanceSize()] = fund.splitRatio();
     }
 
     /// @notice Return weight of given balance with respect to rewards.
     /// @param amountQ Amount of QUEEN
     /// @param amountB Amount of BISHOP
     /// @param amountR Amount of ROOK
+    /// @param splitRatio Split ratio
     /// @return Rewarding weight of the balance
     function weightedBalance(
         uint256 amountQ,
         uint256 amountB,
-        uint256 amountR
+        uint256 amountR,
+        uint256 splitRatio
     ) public pure returns (uint256) {
         return
-            amountQ.mul(REWARD_WEIGHT_Q).add(amountB.mul(REWARD_WEIGHT_B)).add(
-                amountR.mul(REWARD_WEIGHT_R)
-            ) / REWARD_WEIGHT_Q;
+            amountQ
+                .mul(REWARD_WEIGHT_Q)
+                .multiplyDecimal(splitRatio)
+                .add(amountB.mul(REWARD_WEIGHT_B))
+                .add(amountR.mul(REWARD_WEIGHT_R))
+                .div(REWARD_WEIGHT_Q);
     }
 
     function totalSupply(uint256 tranche) external view returns (uint256) {
@@ -209,7 +218,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                     version,
                     rebalanceSize
                 );
-            return weightedBalance(totalSupplyQ, totalSupplyB, totalSupplyR);
+            return weightedBalance(totalSupplyQ, totalSupplyB, totalSupplyR, fund.splitRatio());
         } else {
             return _workingSupply;
         }
@@ -233,7 +242,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                     rebalanceSize
                 );
             }
-            return weightedBalance(amountQ, amountB, amountR);
+            return weightedBalance(amountQ, amountB, amountR, fund.splitRatio());
         } else {
             return workingBalance;
         }
@@ -297,7 +306,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         _userCheckpoint(recipient, version);
         _balances[recipient][tranche] = _balances[recipient][tranche].add(amount);
         _totalSupplies[tranche] = _totalSupplies[tranche].add(amount);
-        _updateWorkingBalance(recipient);
+        _updateWorkingBalance(recipient, _historicalSplitRatio[version]);
         // version is checked by the fund
         fund.trancheTransferFrom(tranche, msg.sender, address(this), amount, version);
         emit Deposited(tranche, recipient, amount);
@@ -319,7 +328,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
             "Insufficient balance to withdraw"
         );
         _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
-        _updateWorkingBalance(msg.sender);
+        _updateWorkingBalance(msg.sender, _historicalSplitRatio[version]);
         // version is checked by the fund
         fund.trancheTransfer(tranche, msg.sender, amount, version);
         emit Withdrawn(tranche, msg.sender, amount);
@@ -387,7 +396,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
             );
         }
 
-        _updateWorkingBalance(account);
+        _updateWorkingBalance(account, _historicalSplitRatio[rebalanceSize]);
     }
 
     /// @dev Transform total supplies to the latest rebalance version and make a global reward checkpoint.
@@ -443,8 +452,12 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                 );
 
                 version++;
-                // Reset total weight boosting after the first rebalance
-                weight = weightedBalance(totalSupplyQ, totalSupplyB, totalSupplyR);
+                {
+                    // Reset total weight boosting after the first rebalance
+                    uint256 splitRatio = fund.historicalSplitRatio(version);
+                    weight = weightedBalance(totalSupplyQ, totalSupplyB, totalSupplyR, splitRatio);
+                    _historicalSplitRatio[version] = splitRatio;
+                }
 
                 if (version < rebalanceSize) {
                     rebalanceTimestamp = fund.getRebalanceTimestamp(version);
@@ -516,7 +529,12 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 weight = _workingBalances[account];
         if (weight == 0) {
             // Loading available and locked is repeated to avoid "stake too deep" error.
-            weight = weightedBalance(balance[TRANCHE_Q], balance[TRANCHE_B], balance[TRANCHE_R]);
+            weight = weightedBalance(
+                balance[TRANCHE_Q],
+                balance[TRANCHE_B],
+                balance[TRANCHE_R],
+                _historicalSplitRatio[oldVersion]
+            );
             if (weight > 0) {
                 // The contract was just upgraded from an old version without boosting
                 _workingBalances[account] = weight;
@@ -535,7 +553,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
             userIntegral = 0;
 
             // Reset per-user weight boosting after the first rebalance
-            weight = weightedBalance(balanceQ, balanceB, balanceR);
+            weight = weightedBalance(balanceQ, balanceB, balanceR, _historicalSplitRatio[i + 1]);
         }
         rewards = rewards.add(weight.multiplyDecimalPrecise(integral.sub(userIntegral)));
         address account_ = account; // Fix the "stack too deep" error
@@ -556,17 +574,18 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
     ///      should be called to update `_workingSupply` and `_workingBalances[account]` to
     ///      the latest rebalance version.
     /// @param account User address
-    function _updateWorkingBalance(address account) private {
+    /// @param splitRatio Split ratio
+    function _updateWorkingBalance(address account, uint256 splitRatio) private {
         uint256 weightedSupply =
             weightedBalance(
                 _totalSupplies[TRANCHE_Q],
                 _totalSupplies[TRANCHE_B],
-                _totalSupplies[TRANCHE_R]
+                _totalSupplies[TRANCHE_R],
+                splitRatio
             );
         uint256[TRANCHE_COUNT] storage balance = _balances[account];
-        // Assume weightedBalance(x, 0, 0) always equal to x
-        uint256 weightedQ = balance[TRANCHE_Q];
-        uint256 weightedBR = weightedBalance(0, balance[TRANCHE_B], balance[TRANCHE_R]);
+        uint256 weightedQ = weightedBalance(balance[TRANCHE_Q], 0, 0, splitRatio);
+        uint256 weightedBR = weightedBalance(0, balance[TRANCHE_B], balance[TRANCHE_R], splitRatio);
 
         uint256 newWorkingBalance = weightedBR.add(weightedQ);
         uint256 veProportion = _veSnapshots[account].veProportion;

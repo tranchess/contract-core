@@ -83,6 +83,9 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     ///         This ratio changes on every rebalance.
     uint256 public override splitRatio;
 
+    /// @dev Mapping of rebalance version => splitRatio.
+    mapping(uint256 => uint256) private _historicalSplitRatio;
+
     /// @notice Start timestamp of the current primary market activity window.
     uint256 public override fundActivityStartTime;
 
@@ -203,6 +206,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         );
         currentDay = endOfDay(block.timestamp);
         splitRatio = newSplitRatio;
+        _historicalSplitRatio[0] = newSplitRatio;
         emit SplitRatioUpdated(newSplitRatio);
         uint256 lastDay = currentDay - 1 days;
         uint256 lastDayPrice = twapOracle.getTwap(lastDay);
@@ -324,6 +328,14 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     /// @notice Return the number of historical rebalances.
     function getRebalanceSize() external view override returns (uint256) {
         return _rebalanceSize;
+    }
+
+    /// @notice Return split ratio at a given version.
+    ///         Zero is returned if `version` is invalid.
+    /// @param version Rebalance version
+    /// @return Split ratio of the version
+    function historicalSplitRatio(uint256 version) external view override returns (uint256) {
+        return _historicalSplitRatio[version];
     }
 
     /// @notice Return NAV of BISHOP and ROOK of the given trading day.
@@ -809,8 +821,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         if (_shouldTriggerRebalance(navB, navR)) {
             uint256 newSplitRatio = splitRatio.multiplyDecimal(navSum) / 2;
             _triggerRebalance(day, navSum, navB, navR, newSplitRatio);
-            splitRatio = newSplitRatio;
-            emit SplitRatioUpdated(newSplitRatio);
             navB = UNIT;
             navR = UNIT;
             equivalentTotalB = getEquivalentTotalB();
@@ -1027,6 +1037,9 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     ) private {
         Rebalance memory rebalance = _calculateRebalance(navSum, navB, navROrZero, newSplitRatio);
         uint256 oldSize = _rebalanceSize;
+        splitRatio = newSplitRatio;
+        _historicalSplitRatio[oldSize + 1] = newSplitRatio;
+        emit SplitRatioUpdated(newSplitRatio);
         _rebalances[oldSize] = rebalance;
         _rebalanceSize = oldSize + 1;
         emit RebalanceTriggered(
