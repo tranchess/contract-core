@@ -189,9 +189,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 newBase = oldBase.add(baseIn);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
-        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
-        uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d);
-        quoteOut = oldQuote.sub(newQuote).sub(1); // -1 just in case there were some rounding errors
+        // Add 1 in case of rounding errors
+        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice) + 1;
+        uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d) + 1;
+        quoteOut = oldQuote.sub(newQuote);
         uint256 fee = quoteOut.multiplyDecimal(feeRate);
         quoteOut = quoteOut.sub(fee);
     }
@@ -202,9 +203,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 newBase = oldBase.sub(baseOut);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
-        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
-        uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d);
-        quoteIn = newQuote.sub(oldQuote).add(1); // 1 just in case there were some rounding errors
+        // Add 1 in case of rounding errors
+        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice) + 1;
+        uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d) + 1;
+        quoteIn = newQuote.sub(oldQuote);
         uint256 fee = quoteIn.mul(feeRate).div(uint256(1e18).sub(feeRate));
         quoteIn = quoteIn.add(fee);
     }
@@ -216,9 +218,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 newQuote = oldQuote.add(quoteIn.sub(fee));
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
-        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
-        uint256 newBase = _getBase(ampl, newQuote, oraclePrice, d);
-        baseOut = oldBase.sub(newBase).sub(1); // just in case there were rounding error
+        // Add 1 in case of rounding errors
+        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice) + 1;
+        uint256 newBase = _getBase(ampl, newQuote, oraclePrice, d) + 1;
+        baseOut = oldBase.sub(newBase);
     }
 
     function getBaseIn(uint256 quoteOut) external view override returns (uint256 baseIn) {
@@ -228,9 +231,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 newQuote = oldQuote.sub(quoteOut.add(fee));
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
-        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
-        uint256 newBase = _getBase(ampl, newQuote, oraclePrice, d);
-        baseIn = newBase.sub(oldBase).add(1); // just in case there were rounding error
+        // Add 1 in case of rounding errors
+        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice) + 1;
+        uint256 newBase = _getBase(ampl, newQuote, oraclePrice, d) + 1;
+        baseIn = newBase.sub(oldBase);
     }
 
     function buy(
@@ -421,7 +425,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             d1 = d0.sub(d0.mul(lpIn).div(lpSupply));
         }
         uint256 fee = oldQuote.mul(lpIn).div(lpSupply).multiplyDecimal(feeRate);
-        uint256 newBase = _getBase(ampl, oldQuote.sub(fee), oraclePrice, d1).add(1);
+        // Add 1 in case of rounding errors
+        uint256 newBase = _getBase(ampl, oldQuote.sub(fee), oraclePrice, d1) + 1;
         baseOut = oldBase.sub(newBase);
         require(baseOut >= minBaseOut, "Insufficient output");
         ILiquidityGauge(lpToken).burnFrom(msg.sender, lpIn);
@@ -452,7 +457,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             d1 = d0.sub(d0.mul(lpIn).div(lpSupply));
         }
         uint256 idealQuote = oldQuote.mul(lpSupply.sub(lpIn)).div(lpSupply);
-        uint256 newQuote = _getQuote(ampl, oldBase, oraclePrice, d1).add(1);
+        // Add 1 in case of rounding errors
+        uint256 newQuote = _getQuote(ampl, oldBase, oraclePrice, d1) + 1;
         uint256 fee = idealQuote.sub(newQuote).multiplyDecimal(feeRate);
         quoteOut = oldQuote.sub(newQuote).sub(fee);
         require(quoteOut >= minQuoteOut, "Insufficient output");
