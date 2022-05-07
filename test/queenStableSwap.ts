@@ -839,6 +839,97 @@ describe("QueenStableSwap", function () {
         });
     });
 
+    describe.only("getPriceOverOracleIntegral()", function () {
+        let startTimestamp: number;
+        let startIntegral: BigNumber;
+
+        async function testIntegralUpdate(operation: Promise<void>): Promise<void> {
+            await setNextBlockTime(startTimestamp + 100);
+            await operation;
+            const newPriceOverOracle = await stableSwap.getCurrentPriceOverOracle();
+            expect(newPriceOverOracle).to.not.equal(UNIT);
+            await advanceBlockAtTime(startTimestamp + 300);
+            expect(await stableSwap.getPriceOverOracleIntegral()).to.equal(
+                startIntegral.add(UNIT.mul(100)).add(newPriceOverOracle.mul(200))
+            );
+        }
+
+        beforeEach(async function () {
+            await tmpBase.mock.transfer.returns(true);
+            startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+            startIntegral = await stableSwap.getPriceOverOracleIntegral();
+        });
+
+        it("Should accumulate the value of price over oracle", async function () {
+            await advanceBlockAtTime(startTimestamp + 100);
+            expect(await stableSwap.getPriceOverOracleIntegral()).to.equal(
+                startIntegral.add(UNIT.mul(100))
+            );
+        });
+
+        it("Should update integral in buy()", async function () {
+            const inBtc = INIT_BTC.div(10);
+            const outQ = await stableSwap.getBaseOut(inBtc);
+            await addQuote(inBtc);
+            await testIntegralUpdate(stableSwap.buy(0, outQ, addr1, "0x"));
+        });
+
+        it("Should update integral in sell()", async function () {
+            const inQ = INIT_Q.div(10);
+            const outBtc = await stableSwap.getQuoteOut(inQ);
+            await addBase(inQ);
+            await testIntegralUpdate(stableSwap.sell(0, outBtc, addr1, "0x"));
+        });
+
+        it("Should update integral in addLiquidity()", async function () {
+            await addBase(INIT_Q.div(10));
+            await testIntegralUpdate(stableSwap.addLiquidity(0, addr2));
+        });
+
+        it("Should update integral in removeBaseLiquidity()", async function () {
+            await testIntegralUpdate(stableSwap.removeBaseLiquidity(0, INIT_LP.div(10), 0));
+        });
+
+        it("Should update integral in removeQuoteLiquidity()", async function () {
+            await testIntegralUpdate(stableSwap.removeQuoteLiquidity(0, INIT_LP.div(10), 0));
+        });
+
+        it("Should update integral in sync()", async function () {
+            await addBase(INIT_Q.div(10));
+            await testIntegralUpdate(stableSwap.sync());
+        });
+
+        it("Should update integral when the pool is empty", async function () {
+            await addBase(INIT_Q.div(10));
+            await setNextBlockTime(startTimestamp + 100);
+            await stableSwap.sync();
+
+            await setNextBlockTime(startTimestamp + 300);
+            await stableSwap.removeLiquidity(0, INIT_LP, 0, 0);
+            // Mock the transfer in removeLiquidity
+            await tmpBase.mock.balanceOf.withArgs(stableSwap.address).returns(0);
+
+            // The following removeLiquidity() does not update the integral. So, the value of
+            // price over oracle after sync() is not accumulated.
+            await advanceBlockAtTime(startTimestamp + 600);
+            expect(await stableSwap.getPriceOverOracleIntegral()).to.equal(
+                startIntegral.add(UNIT.mul(600))
+            );
+
+            await addBase(INIT_Q);
+            await addQuote(INIT_BTC.mul(2));
+            await setNextBlockTime(startTimestamp + 1000);
+            await stableSwap.addLiquidity(0, addr1);
+            // Effective from t=1000 to t=1500
+            const priceOverOracle2 = await stableSwap.getCurrentPriceOverOracle();
+
+            await advanceBlockAtTime(startTimestamp + 1500);
+            expect(await stableSwap.getPriceOverOracleIntegral()).to.equal(
+                startIntegral.add(UNIT.mul(1000)).add(priceOverOracle2.mul(500))
+            );
+        });
+    });
+
     describe("collectFee()", function () {
         it("Should transfer admin fee", async function () {
             await addBase(INIT_Q.div(100));
