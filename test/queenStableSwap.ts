@@ -786,7 +786,7 @@ describe("QueenStableSwap", function () {
         });
     });
 
-    describe("skim()", async function () {
+    describe("skim()", function () {
         it("Should transfer base tokens", async function () {
             await addBase(parseEther("0.123"));
             await expect(() => stableSwap.skim(addr2)).to.callMocks({
@@ -816,7 +816,7 @@ describe("QueenStableSwap", function () {
         });
     });
 
-    describe("sync()", async function () {
+    describe("sync()", function () {
         it("Should update stored balance", async function () {
             await addBase(parseEther("0.123"));
             await addQuote(parseEther("0.456"));
