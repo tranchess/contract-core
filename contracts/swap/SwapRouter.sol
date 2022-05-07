@@ -64,7 +64,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         uint256 deadline
     ) external virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
-        require(versions.length == path.length - 1, "Invalid version");
+        require(versions.length == path.length - 1, "Invalid versions");
         amounts = getAmountsOut(amountIn, path);
         require(amounts[amounts.length - 1] >= minAmountOut, "Insufficient output");
         IERC20(path[0]).safeTransferFrom(
@@ -95,7 +95,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         uint256 deadline
     ) external virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
-        require(versions.length == path.length - 1, "Invalid version");
+        require(versions.length == path.length - 1, "Invalid versions");
         amounts = getAmountsIn(amountOut, path);
         require(amounts[0] <= maxAmountIn, "Excessive input");
         IERC20(path[0]).safeTransferFrom(
