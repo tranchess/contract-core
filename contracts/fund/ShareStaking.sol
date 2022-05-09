@@ -45,9 +45,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
     uint256 private constant MAX_BOOSTING_FACTOR = 3e18;
     uint256 private constant MAX_BOOSTING_FACTOR_MINUS_ONE = MAX_BOOSTING_FACTOR - 1e18;
 
-    /// @dev Maximum fraction of veCHESS that can be used to boost QUEEN.
-    uint256 private constant MAX_BOOSTING_POWER_Q = 0.5e18;
-
     IFundV3 public immutable fund;
 
     /// @notice The Chess release schedule contract.
@@ -584,26 +581,14 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                 splitRatio
             );
         uint256[TRANCHE_COUNT] storage balance = _balances[account];
-        uint256 weightedQ = weightedBalance(balance[TRANCHE_Q], 0, 0, splitRatio);
-        uint256 weightedBR = weightedBalance(0, balance[TRANCHE_B], balance[TRANCHE_R], splitRatio);
-
-        uint256 newWorkingBalance = weightedBR.add(weightedQ);
+        uint256 newWorkingBalance = weightedBalance(balance[TRANCHE_Q], balance[TRANCHE_B], balance[TRANCHE_R], splitRatio);
         uint256 veProportion = _veSnapshots[account].veProportion;
         if (veProportion > 0 && _veSnapshots[account].veLocked.unlockTime > block.timestamp) {
-            uint256 boostingPower = weightedSupply.multiplyDecimal(veProportion);
-            if (boostingPower <= weightedBR) {
-                newWorkingBalance = newWorkingBalance.add(
-                    boostingPower.multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
-                );
-            } else {
-                uint256 boostingPowerQ =
-                    (boostingPower - weightedBR)
-                        .min(boostingPower.multiplyDecimal(MAX_BOOSTING_POWER_Q))
-                        .min(weightedQ);
-                newWorkingBalance = newWorkingBalance.add(
-                    weightedBR.add(boostingPowerQ).multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
-                );
-            }
+            uint256 maxWorkingBalance = newWorkingBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
+            uint256 boostedWorkingBalance = newWorkingBalance.add(
+                weightedSupply.multiplyDecimal(veProportion).multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
+            );
+            newWorkingBalance = maxWorkingBalance.min(boostedWorkingBalance);
         }
 
         _workingSupply = _workingSupply.sub(_workingBalances[account]).add(newWorkingBalance);

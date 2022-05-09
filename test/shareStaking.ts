@@ -31,33 +31,13 @@ export function boostedWorkingBalance(
     veProportion: BigNumber
 ): BigNumber {
     const e18 = parseEther("1");
-    const weightedBR = amountB
-        .mul(REWARD_WEIGHT_B)
+    const weightedBalance = amountQ.mul(SPLIT_RATIO).mul(REWARD_WEIGHT_Q).div(e18)
+        .add(amountB.mul(REWARD_WEIGHT_B))
         .add(amountR.mul(REWARD_WEIGHT_R))
         .div(REWARD_WEIGHT_Q);
-    const upperBoundBR = weightedBR.mul(MAX_BOOSTING_FACTOR).div(e18);
-    let workingBR = weightedBR.add(
-        weightedSupply.mul(veProportion).div(e18).mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18)
-    );
-    let workingQ = amountQ.mul(SPLIT_RATIO).div(e18);
-    if (upperBoundBR.lte(workingBR)) {
-        const excessiveBoosting = workingBR
-            .sub(upperBoundBR)
-            .mul(e18)
-            .div(MAX_BOOSTING_FACTOR.sub(e18));
-        workingBR = upperBoundBR;
-        const upperBoundBoostingPowerQ = weightedSupply.mul(veProportion).div(e18).div(2);
-        const boostingPowerQ = excessiveBoosting.lte(upperBoundBoostingPowerQ)
-            ? excessiveBoosting
-            : upperBoundBoostingPowerQ;
-        workingQ = amountQ
-            .mul(SPLIT_RATIO)
-            .div(e18)
-            .add(boostingPowerQ.mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18));
-        const upperBoundQ = amountQ.mul(SPLIT_RATIO).div(e18).mul(MAX_BOOSTING_FACTOR);
-        workingQ = workingQ.lte(upperBoundQ) ? workingQ : upperBoundQ;
-    }
-    return workingBR.add(workingQ);
+    const upperBoundBalance = weightedBalance.mul(MAX_BOOSTING_FACTOR).div(e18);
+    const boostedBalance = weightedBalance.add(weightedSupply.mul(veProportion).div(e18).mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18))
+    return upperBoundBalance.lt(boostedBalance) ? upperBoundBalance : boostedBalance; 
 }
 
 // Initial balance:
