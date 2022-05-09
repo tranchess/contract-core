@@ -180,6 +180,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             integral +=
                 _getPriceOverOracle(base, quote, ampl, oraclePrice, d) *
                 (block.timestamp - _priceOverOracleTimestamp);
+        } else {
+            integral += 1e18 * (block.timestamp - _priceOverOracleTimestamp);
         }
         return integral;
     }
@@ -331,6 +333,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             require(newBase > 0 && newQuote > 0, "Zero initial balance");
             baseBalance = newBase;
             quoteBalance = newQuote;
+            // Overflow is desired
+            _priceOverOracleIntegral += 1e18 * (block.timestamp - _priceOverOracleTimestamp);
             _priceOverOracleTimestamp = block.timestamp;
             uint256 d1 = _getD(newBase, newQuote, ampl, oraclePrice);
             ILiquidityGauge(lpToken).mint(recipient, d1);
