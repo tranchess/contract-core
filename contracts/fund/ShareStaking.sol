@@ -303,6 +303,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         _userCheckpoint(recipient, version);
         _balances[recipient][tranche] = _balances[recipient][tranche].add(amount);
         _totalSupplies[tranche] = _totalSupplies[tranche].add(amount);
+        _syncWithVotingEscrow(recipient);
         _updateWorkingBalance(recipient, _historicalSplitRatio[version]);
         // version is checked by the fund
         fund.trancheTransferFrom(tranche, msg.sender, address(this), amount, version);
@@ -325,6 +326,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
             "Insufficient balance to withdraw"
         );
         _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
+        _syncWithVotingEscrow(msg.sender);
         _updateWorkingBalance(msg.sender, _historicalSplitRatio[version]);
         // version is checked by the fund
         fund.trancheTransfer(tranche, msg.sender, amount, version);
@@ -369,6 +371,8 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 amount = _claimableRewards[account];
         _claimableRewards[account] = 0;
         chessSchedule.mint(account, amount);
+        _syncWithVotingEscrow(account);
+        _updateWorkingBalance(account, _historicalSplitRatio[rebalanceSize]);
     }
 
     /// @notice Synchronize an account's locked Chess with `VotingEscrow`
@@ -378,7 +382,11 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
+        _syncWithVotingEscrow(account);
+        _updateWorkingBalance(account, _historicalSplitRatio[rebalanceSize]);
+    }
 
+    function _syncWithVotingEscrow(address account) private {
         VESnapshot storage veSnapshot = _veSnapshots[account];
         IVotingEscrow.LockedBalance memory newLocked = _votingEscrow.getLockedBalance(account);
         if (
@@ -392,8 +400,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                 _votingEscrow.totalSupply()
             );
         }
-
-        _updateWorkingBalance(account, _historicalSplitRatio[rebalanceSize]);
     }
 
     /// @dev Transform total supplies to the latest rebalance version and make a global reward checkpoint.
@@ -581,13 +587,17 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                 splitRatio
             );
         uint256[TRANCHE_COUNT] storage balance = _balances[account];
-        uint256 newWorkingBalance = weightedBalance(balance[TRANCHE_Q], balance[TRANCHE_B], balance[TRANCHE_R], splitRatio);
+        uint256 newWorkingBalance =
+            weightedBalance(balance[TRANCHE_Q], balance[TRANCHE_B], balance[TRANCHE_R], splitRatio);
         uint256 veProportion = _veSnapshots[account].veProportion;
         if (veProportion > 0 && _veSnapshots[account].veLocked.unlockTime > block.timestamp) {
             uint256 maxWorkingBalance = newWorkingBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
-            uint256 boostedWorkingBalance = newWorkingBalance.add(
-                weightedSupply.multiplyDecimal(veProportion).multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
-            );
+            uint256 boostedWorkingBalance =
+                newWorkingBalance.add(
+                    weightedSupply.multiplyDecimal(veProportion).multiplyDecimal(
+                        MAX_BOOSTING_FACTOR_MINUS_ONE
+                    )
+                );
             newWorkingBalance = maxWorkingBalance.min(boostedWorkingBalance);
         }
 

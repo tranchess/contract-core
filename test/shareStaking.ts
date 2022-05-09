@@ -31,13 +31,18 @@ export function boostedWorkingBalance(
     veProportion: BigNumber
 ): BigNumber {
     const e18 = parseEther("1");
-    const weightedBalance = amountQ.mul(SPLIT_RATIO).mul(REWARD_WEIGHT_Q).div(e18)
+    const weightedBalance = amountQ
+        .mul(SPLIT_RATIO)
+        .mul(REWARD_WEIGHT_Q)
+        .div(e18)
         .add(amountB.mul(REWARD_WEIGHT_B))
         .add(amountR.mul(REWARD_WEIGHT_R))
         .div(REWARD_WEIGHT_Q);
     const upperBoundBalance = weightedBalance.mul(MAX_BOOSTING_FACTOR).div(e18);
-    const boostedBalance = weightedBalance.add(weightedSupply.mul(veProportion).div(e18).mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18))
-    return upperBoundBalance.lt(boostedBalance) ? upperBoundBalance : boostedBalance; 
+    const boostedBalance = weightedBalance.add(
+        weightedSupply.mul(veProportion).div(e18).mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18)
+    );
+    return upperBoundBalance.lt(boostedBalance) ? upperBoundBalance : boostedBalance;
 }
 
 // Initial balance:
@@ -142,6 +147,9 @@ describe("ShareStaking", function () {
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
+        await votingEscrow.mock.getLockedBalance.returns([0, 0]);
+        await votingEscrow.mock.balanceOf.returns(0);
+        await votingEscrow.mock.totalSupply.returns(1);
 
         const ShareStaking = await ethers.getContractFactory("ShareStaking");
         const staking = await ShareStaking.connect(owner).deploy(
@@ -393,7 +401,15 @@ describe("ShareStaking", function () {
                 )
             );
             expect(await staking.workingSupply()).to.equal(
-                workingBalance.add(USER2_WEIGHT).add(TOTAL_WEIGHT)
+                workingBalance.add(
+                    boostedWorkingBalance(
+                        USER2_Q.add(TOTAL_WEIGHT.mul(parseEther("1")).div(SPLIT_RATIO)),
+                        USER2_B,
+                        USER2_R,
+                        TOTAL_WEIGHT.mul(2),
+                        USER2_VE_PROPORTION
+                    )
+                )
             );
         });
 
