@@ -47,6 +47,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         uint256 deadline
     ) external virtual override checkDeadline(deadline) {
         IStableSwap swap = getSwap(baseAddress, quoteAddress);
+        require(address(swap) != address(0), "Unknown swap");
         IERC20(baseAddress).safeTransferFrom(msg.sender, address(swap), baseIn);
         IERC20(quoteAddress).safeTransferFrom(msg.sender, address(swap), quoteIn);
         uint256 lpOut = swap.addLiquidity(version, msg.sender);
@@ -63,7 +64,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         uint256 deadline
     ) external virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
-        require(versions.length == path.length - 1, "Invalid version");
+        require(versions.length == path.length - 1, "Invalid versions");
         amounts = getAmountsOut(amountIn, path);
         require(amounts[amounts.length - 1] >= minAmountOut, "Insufficient output");
         IERC20(path[0]).safeTransferFrom(
@@ -94,7 +95,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         uint256 deadline
     ) external virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
-        require(versions.length == path.length - 1, "Invalid version");
+        require(versions.length == path.length - 1, "Invalid versions");
         amounts = getAmountsIn(amountOut, path);
         require(amounts[0] <= maxAmountIn, "Excessive input");
         IERC20(path[0]).safeTransferFrom(
@@ -125,7 +126,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         amounts[0] = amount;
         for (uint256 i; i < path.length - 1; i++) {
             IStableSwap swap = getSwap(path[i], path[i + 1]);
-            require(address(swap) != address(0));
+            require(address(swap) != address(0), "Unknown swap");
             if (path[i] == swap.baseAddress()) {
                 amounts[i + 1] = swap.getQuoteOut(amounts[i]);
             } else {
@@ -144,7 +145,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         amounts[amounts.length - 1] = amount;
         for (uint256 i = path.length - 1; i > 0; i--) {
             IStableSwap swap = getSwap(path[i - 1], path[i]);
-            require(address(swap) != address(0));
+            require(address(swap) != address(0), "Unknown swap");
             if (path[i] == swap.baseAddress()) {
                 amounts[i - 1] = swap.getQuoteIn(amounts[i]);
             } else {
