@@ -471,25 +471,6 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         emit LiquidityRemoved(msg.sender, lpIn, 0, quoteOut, fee, adminFee, oraclePrice);
     }
 
-    /// @notice Force balances to match stored values.
-    function skim(address recipient) external nonReentrant {
-        address baseAddress_ = baseAddress(); // gas savings
-        address quoteAddress_ = quoteAddress; // gas savings
-        (uint256 oldBase, uint256 oldQuote) = _handleRebalance(fund.getRebalanceSize());
-        uint256 ampl = getAmpl();
-        uint256 oraclePrice = getOraclePrice();
-        uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
-        _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, d);
-        IERC20(baseAddress_).safeTransfer(
-            recipient,
-            IERC20(baseAddress_).balanceOf(address(this)).sub(oldBase)
-        );
-        IERC20(quoteAddress_).safeTransfer(
-            recipient,
-            IERC20(quoteAddress_).balanceOf(address(this)).sub(totalAdminFee).sub(oldQuote)
-        );
-    }
-
     /// @notice Force stored values to match balances.
     function sync() external nonReentrant {
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(fund.getRebalanceSize());
