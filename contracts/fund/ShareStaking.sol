@@ -17,14 +17,6 @@ import "../interfaces/IChessSchedule.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "../interfaces/IVotingEscrow.sol";
 
-/// @notice Chess locking snapshot used in calculating working balance of an account.
-/// @param veProportion The account's veCHESS divided by the total veCHESS supply.
-/// @param veLocked Locked CHESS and unlock time, which is synchronized from VotingEscrow.
-struct VESnapshot {
-    uint256 veProportion;
-    IVotingEscrow.LockedBalance veLocked;
-}
-
 contract ShareStaking is ITrancheIndexV2, CoreUtility {
     /// @dev Reserved storage slots for future sibling contract upgrades
     uint256[32] private _reservedSlots;
@@ -44,9 +36,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
     uint256 private constant REWARD_WEIGHT_Q = 3;
     uint256 private constant MAX_BOOSTING_FACTOR = 3e18;
     uint256 private constant MAX_BOOSTING_FACTOR_MINUS_ONE = MAX_BOOSTING_FACTOR - 1e18;
-
-    /// @dev Maximum fraction of veCHESS that can be used to boost QUEEN.
-    uint256 private constant MAX_BOOSTING_POWER_Q = 0.5e18;
 
     IFundV3 public immutable fund;
 
@@ -100,7 +89,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
 
     uint256 private _workingSupply;
     mapping(address => uint256) private _workingBalances;
-    mapping(address => VESnapshot) private _veSnapshots;
 
     constructor(
         address fund_,
@@ -248,10 +236,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         }
     }
 
-    function veSnapshotOf(address account) external view returns (VESnapshot memory) {
-        return _veSnapshots[account];
-    }
-
     function _fundRebalanceSize() internal view returns (uint256) {
         return fund.getRebalanceSize();
     }
@@ -372,6 +356,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 amount = _claimableRewards[account];
         _claimableRewards[account] = 0;
         chessSchedule.mint(account, amount);
+        _updateWorkingBalance(account, _historicalSplitRatio[rebalanceSize]);
     }
 
     /// @notice Synchronize an account's locked Chess with `VotingEscrow`
@@ -381,21 +366,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
-
-        VESnapshot storage veSnapshot = _veSnapshots[account];
-        IVotingEscrow.LockedBalance memory newLocked = _votingEscrow.getLockedBalance(account);
-        if (
-            newLocked.amount != veSnapshot.veLocked.amount ||
-            newLocked.unlockTime != veSnapshot.veLocked.unlockTime ||
-            newLocked.unlockTime < block.timestamp
-        ) {
-            veSnapshot.veLocked.amount = newLocked.amount;
-            veSnapshot.veLocked.unlockTime = newLocked.unlockTime;
-            veSnapshot.veProportion = _votingEscrow.balanceOf(account).divideDecimal(
-                _votingEscrow.totalSupply()
-            );
-        }
-
         _updateWorkingBalance(account, _historicalSplitRatio[rebalanceSize]);
     }
 
@@ -584,26 +554,20 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                 splitRatio
             );
         uint256[TRANCHE_COUNT] storage balance = _balances[account];
-        uint256 weightedQ = weightedBalance(balance[TRANCHE_Q], 0, 0, splitRatio);
-        uint256 weightedBR = weightedBalance(0, balance[TRANCHE_B], balance[TRANCHE_R], splitRatio);
-
-        uint256 newWorkingBalance = weightedBR.add(weightedQ);
-        uint256 veProportion = _veSnapshots[account].veProportion;
-        if (veProportion > 0 && _veSnapshots[account].veLocked.unlockTime > block.timestamp) {
-            uint256 boostingPower = weightedSupply.multiplyDecimal(veProportion);
-            if (boostingPower <= weightedBR) {
-                newWorkingBalance = newWorkingBalance.add(
-                    boostingPower.multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
+        uint256 newWorkingBalance =
+            weightedBalance(balance[TRANCHE_Q], balance[TRANCHE_B], balance[TRANCHE_R], splitRatio);
+        uint256 veBalance = _votingEscrow.balanceOf(account);
+        if (veBalance > 0) {
+            uint256 veTotalSupply = _votingEscrow.totalSupply();
+            uint256 maxWorkingBalance = newWorkingBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
+            uint256 boostedWorkingBalance =
+                newWorkingBalance.add(
+                    weightedSupply
+                        .mul(veBalance)
+                        .multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
+                        .div(veTotalSupply)
                 );
-            } else {
-                uint256 boostingPowerQ =
-                    (boostingPower - weightedBR)
-                        .min(boostingPower.multiplyDecimal(MAX_BOOSTING_POWER_Q))
-                        .min(weightedQ);
-                newWorkingBalance = newWorkingBalance.add(
-                    weightedBR.add(boostingPowerQ).multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
-                );
-            }
+            newWorkingBalance = maxWorkingBalance.min(boostedWorkingBalance);
         }
 
         _workingSupply = _workingSupply.sub(_workingBalances[account]).add(newWorkingBalance);
