@@ -64,6 +64,9 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     ///         prefix sum before this entry.
     mapping(uint256 => QueuedRedemption) public queuedRedemptions;
 
+    /// @notice Total underlying tokens of claimable queued redemptions.
+    uint256 public claimableUnderlying;
+
     /// @notice Index of the redemption queue head. All redemptions with index smaller than
     ///         this value can be claimed now.
     uint256 public redemptionQueueHead;
@@ -310,36 +313,24 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         return redemptionQueueHead == redemptionQueueTail;
     }
 
-    /// @notice Create QUEEN using underlying tokens.
+    /// @notice Create QUEEN using underlying tokens. This function should be called by
+    ///         a smart contract, which transfers underlying tokens to this contract
+    ///         in the same transaction.
     /// @param recipient Address that will receive created QUEEN
-    /// @param underlying Spent underlying amount
     /// @param minOutQ Minimum QUEEN amount to be received
     /// @param version The latest rebalance version
     /// @return outQ Received QUEEN amount
     function create(
         address recipient,
-        uint256 underlying,
         uint256 minOutQ,
         uint256 version
     ) external override nonReentrant returns (uint256 outQ) {
-        outQ = _create(recipient, underlying, minOutQ, version);
-        _tokenUnderlying.safeTransferFrom(msg.sender, address(fund), underlying);
-    }
-
-    /// @notice Create QUEEN using native currency. The underlying must be wrapped token
-    ///         of the native currency.
-    /// @param recipient Address that will receive created QUEEN
-    /// @param minOutQ Minimum amount of QUEEN to be received
-    /// @param version The latest rebalance version
-    /// @return outQ Received QUEEN amount
-    function wrapAndCreate(
-        address recipient,
-        uint256 minOutQ,
-        uint256 version
-    ) external payable override nonReentrant returns (uint256 outQ) {
-        outQ = _create(recipient, msg.value, minOutQ, version);
-        IWrappedERC20(address(_tokenUnderlying)).deposit{value: msg.value}();
-        _tokenUnderlying.safeTransfer(address(fund), msg.value);
+        uint256 underlying = _tokenUnderlying.balanceOf(address(this)).sub(claimableUnderlying);
+        outQ = getCreation(underlying);
+        require(outQ >= minOutQ && outQ > 0, "Min QUEEN created");
+        fund.primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
+        _tokenUnderlying.safeTransfer(address(fund), underlying);
+        emit Created(recipient, underlying, outQ);
     }
 
     /// @notice Redeem QUEEN to get underlying tokens back. Revert if there are still some
@@ -376,18 +367,6 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         IWrappedERC20(address(_tokenUnderlying)).withdraw(underlying);
         (bool success, ) = recipient.call{value: underlying}("");
         require(success, "Transfer failed");
-    }
-
-    function _create(
-        address recipient,
-        uint256 underlying,
-        uint256 minOutQ,
-        uint256 version
-    ) private returns (uint256 outQ) {
-        outQ = getCreation(underlying);
-        require(outQ >= minOutQ && outQ > 0, "Min QUEEN created");
-        fund.primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
-        emit Created(recipient, underlying, outQ);
     }
 
     function _redeem(
@@ -473,6 +452,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
             requiredUnderlying <= _tokenUnderlying.balanceOf(address(fund)),
             "Not enough underlying in fund"
         );
+        claimableUnderlying = claimableUnderlying.add(requiredUnderlying);
         fund.primaryMarketPayDebt(requiredUnderlying);
         redemptionQueueHead = newHead;
         emit RedemptionPopped(newHead - oldHead, newHead, requiredUnderlying);
@@ -534,6 +514,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
             emit RedemptionClaimed(account, indices[i], redemptionUnderlying);
             delete queuedRedemptions[indices[i]];
         }
+        claimableUnderlying = claimableUnderlying.sub(underlying);
     }
 
     function split(

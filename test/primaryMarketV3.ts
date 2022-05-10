@@ -60,12 +60,6 @@ describe("PrimaryMarketV3", function () {
             BigNumber.from(1).shl(256).sub(1)
         );
 
-        // Set initial state
-        await btc.mint(user1.address, parseBtc("10000"));
-        await btc.mint(user2.address, parseBtc("10000"));
-        await btc.connect(user1).approve(primaryMarket.address, parseBtc("10000"));
-        await btc.connect(user2).approve(primaryMarket.address, parseBtc("10000"));
-
         return {
             wallets: { user1, user2, owner },
             btc,
@@ -96,58 +90,62 @@ describe("PrimaryMarketV3", function () {
         const inBtc = parseBtc("1");
         const outQ = inBtc.mul(EQUIVALENT_TOTAL_Q).div(TOTAL_UNDERLYING);
 
-        it("Should transfer underlying from msg.sender", async function () {
+        it("Should transfer underlying to fund", async function () {
             await fund.mock.primaryMarketMint.returns();
-            await expect(() => primaryMarket.create(addr2, inBtc, 0, 0)).to.changeTokenBalances(
+            await btc.mint(primaryMarket.address, inBtc);
+            await expect(() => primaryMarket.create(addr2, 0, 0)).to.changeTokenBalances(
                 btc,
-                [user1, fund],
+                [primaryMarket, fund],
                 [inBtc.mul(-1), inBtc]
             );
         });
 
         it("Should mint QUEEN to the given recipient", async function () {
             const version = 999;
-            await expect(() => primaryMarket.create(addr2, inBtc, 0, version)).to.callMocks({
+            await btc.mint(primaryMarket.address, inBtc);
+            await expect(() => primaryMarket.create(addr2, 0, version)).to.callMocks({
                 func: fund.mock.primaryMarketMint.withArgs(TRANCHE_Q, addr2, outQ, version),
             });
         });
 
         it("Should return created QUEEN amount", async function () {
             await fund.mock.primaryMarketMint.returns();
-            expect(await primaryMarket.callStatic.create(addr2, inBtc, 0, 0)).to.equal(outQ);
+            await btc.mint(primaryMarket.address, inBtc);
+            expect(await primaryMarket.callStatic.create(addr2, 0, 0)).to.equal(outQ);
         });
 
         it("Should check min QUEEN created", async function () {
             await fund.mock.primaryMarketMint.returns();
-            await expect(primaryMarket.create(addr2, inBtc, outQ.add(1), 0)).to.be.revertedWith(
+            await btc.mint(primaryMarket.address, inBtc);
+            await expect(primaryMarket.create(addr2, outQ.add(1), 0)).to.be.revertedWith(
                 "Min QUEEN created"
             );
-            await primaryMarket.create(addr2, inBtc, outQ, 0);
+            await primaryMarket.create(addr2, outQ, 0);
         });
 
         it("Should revert if no QUEEN can be created", async function () {
-            await fund.mock.primaryMarketMint.returns();
+            await expect(primaryMarket.create(addr2, 0, 0)).to.be.revertedWith("Min QUEEN created");
+
             await fund.mock.getEquivalentTotalQ.returns(1);
             await fund.mock.getTotalUnderlying.returns(parseBtc("10"));
-            await expect(primaryMarket.create(addr2, parseBtc("1"), 0, 0)).to.be.revertedWith(
-                "Min QUEEN created"
-            );
+            await btc.mint(primaryMarket.address, parseBtc("1"));
+            await expect(primaryMarket.create(addr2, 0, 0)).to.be.revertedWith("Min QUEEN created");
         });
 
         it("Should check fund cap", async function () {
             await fund.mock.primaryMarketMint.returns();
             await primaryMarket.connect(owner).updateFundCap(TOTAL_UNDERLYING.add(inBtc).sub(1));
-            await expect(primaryMarket.create(addr2, inBtc, 0, 0)).to.be.revertedWith(
-                "Exceed fund cap"
-            );
+            await btc.mint(primaryMarket.address, inBtc);
+            await expect(primaryMarket.create(addr2, 0, 0)).to.be.revertedWith("Exceed fund cap");
             await primaryMarket.connect(owner).updateFundCap(TOTAL_UNDERLYING.add(inBtc));
-            await primaryMarket.create(addr2, inBtc, 0, 0);
+            await primaryMarket.create(addr2, 0, 0);
         });
 
         it("Should revert if the fund is not initialized", async function () {
             await fund.mock.getEquivalentTotalQ.returns(0);
             await fund.mock.splitRatio.returns(0);
-            await expect(primaryMarket.create(addr2, inBtc, 0, 0)).to.be.revertedWith(
+            await btc.mint(primaryMarket.address, inBtc);
+            await expect(primaryMarket.create(addr2, 0, 0)).to.be.revertedWith(
                 "Fund is not initialized"
             );
         });
@@ -162,7 +160,8 @@ describe("PrimaryMarketV3", function () {
             const navR = parseEther("1.8");
             await fund.mock.historicalNavs.withArgs(currentDay - DAY).returns(navB, navR);
             await fund.mock.primaryMarketMint.returns();
-            expect(await primaryMarket.callStatic.create(addr2, inBtc, 0, 0)).equal(
+            await btc.mint(primaryMarket.address, inBtc);
+            expect(await primaryMarket.callStatic.create(addr2, 0, 0)).equal(
                 inBtc
                     .mul(BTC_TO_ETHER)
                     .mul(parseEther("1000"))
@@ -174,7 +173,8 @@ describe("PrimaryMarketV3", function () {
 
         it("Should emit an event", async function () {
             await fund.mock.primaryMarketMint.returns();
-            await expect(primaryMarket.create(addr2, inBtc, 0, 0))
+            await btc.mint(primaryMarket.address, inBtc);
+            await expect(primaryMarket.create(addr2, 0, 0))
                 .to.emit(primaryMarket, "Created")
                 .withArgs(addr2, inBtc, outQ);
         });
@@ -611,6 +611,13 @@ describe("PrimaryMarketV3", function () {
                 expect(redemption2.previousPrefixSum).to.equal(outPrefixSum[1]);
             });
 
+            it("Should update total claimable amount", async function () {
+                await fund.mock.primaryMarketPayDebt.returns();
+                await btc.mint(fund.address, outPrefixSum[1]);
+                await primaryMarket.popRedemptionQueue(2);
+                expect(await primaryMarket.claimableUnderlying()).to.equal(outPrefixSum[1]);
+            });
+
             it("Should clear the queue if count is zero", async function () {
                 await fund.mock.primaryMarketPayDebt.returns();
                 await btc.mint(fund.address, TOTAL_UNDERLYING);
@@ -714,6 +721,17 @@ describe("PrimaryMarketV3", function () {
                 expect(redemption3.previousPrefixSum).to.equal(0);
             });
 
+            it("Should update total claimable amount", async function () {
+                await btc.mint(fund.address, TOTAL_UNDERLYING);
+                await btc.mint(primaryMarket.address, TOTAL_UNDERLYING);
+
+                await primaryMarket.claimRedemptions(addr1, [1]);
+                expect(await primaryMarket.claimableUnderlying()).to.equal(outBtcList[0]);
+
+                await primaryMarket.claimRedemptions(addr2, [0, 3]);
+                expect(await primaryMarket.claimableUnderlying()).to.equal(outBtcList[2]);
+            });
+
             it("Should do nothing if the index array is empty", async function () {
                 expect(await primaryMarket.callStatic.claimRedemptions(addr1, [])).to.equal(0);
                 await expect(() => primaryMarket.claimRedemptions(addr1, [])).to.changeTokenBalance(
@@ -771,6 +789,28 @@ describe("PrimaryMarketV3", function () {
                     }
                 );
                 expect(await primaryMarket.redemptionQueueHead()).to.equal(4);
+                expect(await primaryMarket.claimableUnderlying()).to.equal(outPrefixSum[3]);
+            });
+        });
+
+        describe("create()", function () {
+            it("Should create when claimable underlying is not zero", async function () {
+                await btc.mint(fund.address, outPrefixSum[3]);
+                await fund.mock.primaryMarketPayDebt.returns();
+                await primaryMarket.popRedemptionQueue(0);
+                expect(await primaryMarket.claimableUnderlying()).to.equal(outPrefixSum[3]);
+                await btc.mint(primaryMarket.address, outPrefixSum[3]);
+
+                const inBtc = parseBtc("1");
+                const outQ = inBtc.mul(EQUIVALENT_TOTAL_Q).div(TOTAL_UNDERLYING);
+                await btc.mint(primaryMarket.address, inBtc);
+                await fund.mock.primaryMarketMint.returns();
+                expect(await primaryMarket.callStatic.create(addr2, 0, 0)).to.equal(outQ);
+                await expect(() => primaryMarket.create(addr2, 0, 0)).to.changeTokenBalances(
+                    btc,
+                    [primaryMarket, fund],
+                    [inBtc.mul(-1), inBtc]
+                );
             });
         });
     });
@@ -782,11 +822,7 @@ describe("PrimaryMarketV3", function () {
             const BIG_UNIT = BigNumber.from(1).shl(252); // 1/16 of 2^256
             await fund.mock.getTotalUnderlying.returns(BIG_UNIT.mul(3));
             await fund.mock.getEquivalentTotalQ.returns(3);
-            // Clear btc minted before and then mint 15 BIG_UNIT. The mock contract never transfers
-            // those btc away, so there will be always enough underlying tokens in fund no matter
-            // how many redemptions have been done.
             await btc.burn(fund.address, TOTAL_UNDERLYING); // clear btc minted before
-            await btc.mint(fund.address, BIG_UNIT.mul(15));
 
             await fund.mock.primaryMarketBurn.returns();
             await fund.mock.primaryMarketAddDebt.returns();
@@ -812,12 +848,25 @@ describe("PrimaryMarketV3", function () {
             expect(await getPreviousPrefixSum(12)).to.equal(BIG_UNIT);
 
             // Check overflow in substractions
+            await btc.mint(fund.address, BIG_UNIT.mul(14));
             await expect(() => primaryMarket.popRedemptionQueue(5)).to.callMocks({
                 func: fund.mock.primaryMarketPayDebt.withArgs(BIG_UNIT.mul(14)),
             });
+            await btc.burn(fund.address, BIG_UNIT.mul(14));
+            await btc.mint(primaryMarket.address, BIG_UNIT.mul(14));
+            await primaryMarket.claimRedemptions(addr2, [0, 1, 2, 3, 4]);
+            await btc.burn(addr2, BIG_UNIT.mul(14));
+
+            await btc.mint(fund.address, BIG_UNIT.mul(12));
             await expect(() => primaryMarket.popRedemptionQueue(4)).to.callMocks({
                 func: fund.mock.primaryMarketPayDebt.withArgs(BIG_UNIT.mul(12)), // overflow 10 - 14
             });
+            await btc.burn(fund.address, BIG_UNIT.mul(12));
+            await btc.mint(primaryMarket.address, BIG_UNIT.mul(12));
+            await primaryMarket.claimRedemptions(addr2, [5, 6, 7, 8]);
+            await btc.burn(addr2, BIG_UNIT.mul(12));
+
+            await btc.mint(fund.address, BIG_UNIT.mul(6));
             await expect(() => primaryMarket.popRedemptionQueue(2)).to.callMocks({
                 func: fund.mock.primaryMarketPayDebt.withArgs(BIG_UNIT.mul(6)), // overflow 0 - 10
             });
@@ -892,21 +941,6 @@ describe("PrimaryMarketV3", function () {
                 BigNumber.from(1).shl(256).sub(1)
             );
             primaryMarket = primaryMarket.connect(user1);
-        });
-
-        it("wrapAndCreate()", async function () {
-            const inEth = parseEther("1");
-            const outQ = inEth.mul(EQUIVALENT_TOTAL_Q).div(ETH_TOTAL_UNDERLYING);
-            const version = 999;
-            await fund.mock.primaryMarketMint.withArgs(TRANCHE_Q, addr2, outQ, version).returns();
-            expect(
-                await primaryMarket.callStatic.wrapAndCreate(addr2, 0, version, { value: inEth })
-            ).to.equal(outQ);
-            await expect(() =>
-                primaryMarket.wrapAndCreate(addr2, 0, version, { value: inEth })
-            ).to.changeEtherBalance(user1, inEth.mul(-1));
-            expect(await weth.balanceOf(primaryMarket.address)).to.equal(0);
-            expect(await weth.balanceOf(fund.address)).to.equal(inEth);
         });
 
         it("redeemAndUnwrap()", async function () {
