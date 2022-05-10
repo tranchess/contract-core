@@ -794,36 +794,6 @@ describe("QueenStableSwap", function () {
         });
     });
 
-    describe("skim()", function () {
-        it("Should transfer base tokens", async function () {
-            await addBase(parseEther("0.123"));
-            await expect(() => stableSwap.skim(addr2)).to.callMocks({
-                func: tmpBase.mock.transfer.withArgs(addr2, parseEther("0.123")),
-                rets: [true],
-            });
-        });
-
-        it("Should transfer quote tokens", async function () {
-            await addQuote(parseEther("0.123"));
-            await tmpBase.mock.transfer.returns(true);
-            await expect(() => stableSwap.skim(addr2)).to.changeTokenBalances(
-                btc,
-                [user2, stableSwap],
-                [parseEther("0.123"), parseEther("-0.123")]
-            );
-        });
-
-        it("Should keep stored balance unchanged", async function () {
-            await addBase(parseEther("0.123"));
-            await addQuote(parseEther("0.456"));
-            await tmpBase.mock.transfer.returns(true);
-            await stableSwap.skim(addr2);
-            const [base, quote] = await stableSwap.allBalances();
-            expect(base).to.equal(INIT_Q);
-            expect(quote).to.equal(INIT_BTC);
-        });
-    });
-
     describe("sync()", function () {
         it("Should update stored balance", async function () {
             await addBase(parseEther("0.123"));
