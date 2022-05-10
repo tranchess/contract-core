@@ -351,9 +351,10 @@ describe("ShareStaking", function () {
             expect(await staking.workingSupply()).to.equal(WORKING_SUPPLY);
         });
 
-        it("Should still update working balance when no locking action is taken", async function () {
+        it("Should still update working balance with no other action taken", async function () {
             await staking.syncWithVotingEscrow(addr1);
             await fund.mock.trancheTransferFrom.returns();
+            await votingEscrow.mock.balanceOf.withArgs(addr2).returns(0);
             await staking
                 .connect(user2)
                 .deposit(TRANCHE_Q, TOTAL_WEIGHT.mul(parseEther("1")).div(SPLIT_RATIO), addr2, 0); // Weighted total supply doubles
@@ -370,16 +371,7 @@ describe("ShareStaking", function () {
                 )
             );
             expect(await staking.workingSupply()).to.equal(
-                workingBalance.add(
-                    boostedWorkingBalance(
-                        USER2_Q.add(TOTAL_WEIGHT.mul(parseEther("1")).div(SPLIT_RATIO)),
-                        USER2_B,
-                        USER2_R,
-                        TOTAL_WEIGHT.mul(2),
-                        USER2_VE,
-                        TOTAL_VE
-                    )
-                )
+                workingBalance.add(USER2_WEIGHT).add(TOTAL_WEIGHT)
             );
         });
 
@@ -407,7 +399,6 @@ describe("ShareStaking", function () {
         beforeEach(async function () {
             await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE);
             await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
-            await staking.syncWithVotingEscrow(addr1);
         });
 
         it("Should update working balance on deposit()", async function () {
@@ -489,11 +480,11 @@ describe("ShareStaking", function () {
 
         it("Should not update working balance on refreshBalance()", async function () {
             await staking.refreshBalance(addr1, 0);
-            expect(await staking.workingBalanceOf(addr1)).to.equal(USER1_WORKING_BALANCE);
-            expect(await staking.workingSupply()).to.equal(USER1_WORKING_BALANCE.add(USER2_WEIGHT));
+            expect(await staking.workingBalanceOf(addr1)).to.equal(USER1_WEIGHT);
+            expect(await staking.workingSupply()).to.equal(USER1_WEIGHT.add(USER2_WEIGHT));
         });
 
-        it("Should not update working balance on claimRewards()", async function () {
+        it("Should update working balance on claimRewards()", async function () {
             await chessSchedule.mock.mint.returns();
             await staking.claimRewards(addr1);
             expect(await staking.workingBalanceOf(addr1)).to.equal(USER1_WORKING_BALANCE);
