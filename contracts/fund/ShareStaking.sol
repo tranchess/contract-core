@@ -17,14 +17,6 @@ import "../interfaces/IChessSchedule.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "../interfaces/IVotingEscrow.sol";
 
-/// @notice Chess locking snapshot used in calculating working balance of an account.
-/// @param veProportion The account's veCHESS divided by the total veCHESS supply.
-/// @param veLocked Locked CHESS and unlock time, which is synchronized from VotingEscrow.
-struct VESnapshot {
-    uint256 veProportion;
-    IVotingEscrow.LockedBalance veLocked;
-}
-
 contract ShareStaking is ITrancheIndexV2, CoreUtility {
     /// @dev Reserved storage slots for future sibling contract upgrades
     uint256[32] private _reservedSlots;
@@ -97,7 +89,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
 
     uint256 private _workingSupply;
     mapping(address => uint256) private _workingBalances;
-    mapping(address => VESnapshot) private _veSnapshots;
 
     constructor(
         address fund_,
@@ -245,10 +236,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         }
     }
 
-    function veSnapshotOf(address account) external view returns (VESnapshot memory) {
-        return _veSnapshots[account];
-    }
-
     function _fundRebalanceSize() internal view returns (uint256) {
         return fund.getRebalanceSize();
     }
@@ -303,7 +290,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         _userCheckpoint(recipient, version);
         _balances[recipient][tranche] = _balances[recipient][tranche].add(amount);
         _totalSupplies[tranche] = _totalSupplies[tranche].add(amount);
-        _syncWithVotingEscrow(recipient);
         _updateWorkingBalance(recipient, _historicalSplitRatio[version]);
         // version is checked by the fund
         fund.trancheTransferFrom(tranche, msg.sender, address(this), amount, version);
@@ -326,7 +312,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
             "Insufficient balance to withdraw"
         );
         _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
-        _syncWithVotingEscrow(msg.sender);
         _updateWorkingBalance(msg.sender, _historicalSplitRatio[version]);
         // version is checked by the fund
         fund.trancheTransfer(tranche, msg.sender, amount, version);
@@ -371,7 +356,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 amount = _claimableRewards[account];
         _claimableRewards[account] = 0;
         chessSchedule.mint(account, amount);
-        _syncWithVotingEscrow(account);
         _updateWorkingBalance(account, _historicalSplitRatio[rebalanceSize]);
     }
 
@@ -382,24 +366,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
-        _syncWithVotingEscrow(account);
         _updateWorkingBalance(account, _historicalSplitRatio[rebalanceSize]);
-    }
-
-    function _syncWithVotingEscrow(address account) private {
-        VESnapshot storage veSnapshot = _veSnapshots[account];
-        IVotingEscrow.LockedBalance memory newLocked = _votingEscrow.getLockedBalance(account);
-        if (
-            newLocked.amount != veSnapshot.veLocked.amount ||
-            newLocked.unlockTime != veSnapshot.veLocked.unlockTime ||
-            newLocked.unlockTime < block.timestamp
-        ) {
-            veSnapshot.veLocked.amount = newLocked.amount;
-            veSnapshot.veLocked.unlockTime = newLocked.unlockTime;
-            veSnapshot.veProportion = _votingEscrow.balanceOf(account).divideDecimal(
-                _votingEscrow.totalSupply()
-            );
-        }
     }
 
     /// @dev Transform total supplies to the latest rebalance version and make a global reward checkpoint.
@@ -589,14 +556,16 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256[TRANCHE_COUNT] storage balance = _balances[account];
         uint256 newWorkingBalance =
             weightedBalance(balance[TRANCHE_Q], balance[TRANCHE_B], balance[TRANCHE_R], splitRatio);
-        uint256 veProportion = _veSnapshots[account].veProportion;
-        if (veProportion > 0 && _veSnapshots[account].veLocked.unlockTime > block.timestamp) {
+        uint256 veBalance = _votingEscrow.balanceOf(account);
+        if (veBalance > 0) {
+            uint256 veTotalSupply = _votingEscrow.totalSupply();
             uint256 maxWorkingBalance = newWorkingBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
             uint256 boostedWorkingBalance =
                 newWorkingBalance.add(
-                    weightedSupply.multiplyDecimal(veProportion).multiplyDecimal(
-                        MAX_BOOSTING_FACTOR_MINUS_ONE
-                    )
+                    weightedSupply
+                        .mul(veBalance)
+                        .multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
+                        .div(veTotalSupply)
                 );
             newWorkingBalance = maxWorkingBalance.min(boostedWorkingBalance);
         }
