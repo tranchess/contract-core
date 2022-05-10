@@ -383,26 +383,7 @@ describe("ShareStaking", function () {
             );
         });
 
-        it("Should update ve proportion if locked amount changed", async function () {
-            await staking.syncWithVotingEscrow(addr1);
-            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE.mul(2));
-            await votingEscrow.mock.totalSupply.returns(TOTAL_VE.mul(5));
-            await staking.syncWithVotingEscrow(addr1);
-            const workingBalance = await staking.workingBalanceOf(addr1);
-            expect(workingBalance).to.equal(
-                boostedWorkingBalance(
-                    USER1_Q,
-                    USER1_B,
-                    USER1_R,
-                    TOTAL_WEIGHT,
-                    USER1_VE.mul(2),
-                    TOTAL_VE.mul(5)
-                )
-            );
-            expect(await staking.workingSupply()).to.equal(workingBalance.add(USER2_WEIGHT));
-        });
-
-        it("Should update ve proportion if unlock time extended", async function () {
+        it("Should update ve proportion if locked amount changed/unlock time extended", async function () {
             await staking.syncWithVotingEscrow(addr1);
             await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE.mul(2));
             await votingEscrow.mock.totalSupply.returns(TOTAL_VE.mul(5));
