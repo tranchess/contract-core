@@ -335,10 +335,7 @@ describe("ShareStaking", function () {
     });
 
     describe("syncWithVotingEscrow()", function () {
-        let unlockTime1: number;
-
         beforeEach(async function () {
-            unlockTime1 = checkpointTimestamp + WEEK * 20;
             await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE);
             await votingEscrow.mock.balanceOf.withArgs(addr2).returns(USER2_VE);
             await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
@@ -422,15 +419,6 @@ describe("ShareStaking", function () {
                 )
             );
             expect(await staking.workingSupply()).to.equal(workingBalance.add(USER2_WEIGHT));
-        });
-
-        it("Should update ve proportion if lock expires", async function () {
-            await staking.syncWithVotingEscrow(addr1);
-            await advanceBlockAtTime(unlockTime1);
-            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(0);
-            await staking.syncWithVotingEscrow(addr1);
-            expect(await staking.workingBalanceOf(addr1)).to.equal(USER1_WEIGHT);
-            expect(await staking.workingSupply()).to.equal(TOTAL_WEIGHT);
         });
     });
 
