@@ -31,13 +31,14 @@ contract SwapReward is Ownable {
         uint256 start,
         uint256 interval
     ) external onlyOwner {
+        require(start >= block.timestamp, "Start time in the past");
         require(
             endTimestamp < block.timestamp && endTimestamp == lastTimestamp,
             "Last reward not yet expired"
         );
         require(caller != address(0));
         ratePerSecond = amount.div(interval);
-        startTimestamp = start.max(block.timestamp);
+        startTimestamp = start;
         endTimestamp = start.add(interval);
         lastTimestamp = startTimestamp;
         IERC20(rewardToken).safeTransferFrom(
