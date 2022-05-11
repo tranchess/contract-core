@@ -149,8 +149,11 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         return _getD(base, quote, getAmpl(), getOraclePrice());
     }
 
-    function getCurrentPriceOverOracle() external view override returns (uint256) {
+    function getCurrentPriceOverOracle() public view override returns (uint256) {
         (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        if (base == 0 || quote == 0) {
+            return 1e18;
+        }
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
         uint256 d = _getD(base, quote, ampl, oraclePrice);
@@ -164,26 +167,20 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     ///         amount in a swap.
     function getCurrentPrice() external view override returns (uint256) {
         (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
-        uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
+        if (base == 0 || quote == 0) {
+            return oraclePrice;
+        }
+        uint256 ampl = getAmpl();
         uint256 d = _getD(base, quote, ampl, oraclePrice);
         return _getPriceOverOracle(base, quote, ampl, oraclePrice, d).multiplyDecimal(oraclePrice);
     }
 
     function getPriceOverOracleIntegral() external view override returns (uint256) {
-        (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
-        uint256 integral = _priceOverOracleIntegral;
-        if (base != 0 && quote != 0) {
-            uint256 ampl = getAmpl();
-            uint256 oraclePrice = getOraclePrice();
-            uint256 d = _getD(base, quote, ampl, oraclePrice);
-            integral +=
-                _getPriceOverOracle(base, quote, ampl, oraclePrice, d) *
-                (block.timestamp - _priceOverOracleTimestamp);
-        } else {
-            integral += 1e18 * (block.timestamp - _priceOverOracleTimestamp);
-        }
-        return integral;
+        return
+            _priceOverOracleIntegral +
+            getCurrentPriceOverOracle() *
+            (block.timestamp - _priceOverOracleTimestamp);
     }
 
     function getQuoteOut(uint256 baseIn) external view override returns (uint256 quoteOut) {

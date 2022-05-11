@@ -817,7 +817,34 @@ describe("QueenStableSwap", function () {
         });
     });
 
-    describe.only("getPriceOverOracleIntegral()", function () {
+    describe("Empty pool", function () {
+        beforeEach(async function () {
+            await tmpBase.mock.transfer.returns(true);
+            await stableSwap.removeLiquidity(0, INIT_LP, 0, 0);
+            // Mock the transfer in removeLiquidity
+            await tmpBase.mock.balanceOf.withArgs(stableSwap.address).returns(0);
+        });
+
+        it("getCurrentPriceOverOracle() and getCurrentPrice()", async function () {
+            expect(await stableSwap.getCurrentPriceOverOracle()).to.equal(UNIT);
+            expect(await stableSwap.getCurrentPrice()).to.equal(parseEther("2"));
+        });
+
+        it("Should require both assets for initial liquidity", async function () {
+            await tmpBase.mock.balanceOf.withArgs(stableSwap.address).returns(INIT_Q);
+            await expect(stableSwap.addLiquidity(0, addr1)).to.be.revertedWith(
+                "Zero initial balance"
+            );
+
+            await tmpBase.mock.balanceOf.withArgs(stableSwap.address).returns(0);
+            await btc.mint(stableSwap.address, INIT_BTC);
+            await expect(stableSwap.addLiquidity(0, addr1)).to.be.revertedWith(
+                "Zero initial balance"
+            );
+        });
+    });
+
+    describe("getPriceOverOracleIntegral()", function () {
         let startTimestamp: number;
         let startIntegral: BigNumber;
 
