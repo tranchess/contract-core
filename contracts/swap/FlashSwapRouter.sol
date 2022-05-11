@@ -153,17 +153,12 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
                     pm.fund().tokenUnderlying()
                 )[1];
             // Create QUEEN using the borrowed underlying
-            IERC20(pm.fund().tokenUnderlying()).safeApprove(
+            IERC20(pm.fund().tokenUnderlying()).safeTransfer(
                 primaryMarketOrRouter,
                 underlyingAmount
             );
             uint256 outQ =
-                IPrimaryMarketV3(primaryMarketOrRouter).create(
-                    address(this),
-                    underlyingAmount,
-                    0,
-                    version
-                );
+                IPrimaryMarketV3(primaryMarketOrRouter).create(address(this), 0, version);
             // Split QUEEN into BISHOP and ROOK
             uint256 outB = pm.split(address(this), outQ, version);
             // Send back BISHOP to tranchess swap

@@ -26,16 +26,9 @@ interface IPrimaryMarketV3 {
 
     function create(
         address recipient,
-        uint256 underlying,
         uint256 minOutQ,
         uint256 version
     ) external returns (uint256 outQ);
-
-    function wrapAndCreate(
-        address recipient,
-        uint256 minOutQ,
-        uint256 version
-    ) external payable returns (uint256 outQ);
 
     function redeem(
         address recipient,
