@@ -3,7 +3,8 @@ import { BigNumber, constants, Contract, Wallet } from "ethers";
 import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
-const { parseEther } = ethers.utils;
+const { parseEther, parseUnits } = ethers.utils;
+const parseUsdc = (value: string) => parseUnits(value, 6);
 import { deployMockForName } from "./mock";
 import {
     WEEK,
@@ -103,7 +104,7 @@ describe("LiquidityGauge", function () {
         await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
 
         const MockToken = await ethers.getContractFactory("MockToken");
-        const usdc = await MockToken.connect(owner).deploy("USD", "USD", 18);
+        const usdc = await MockToken.connect(owner).deploy("USD Coin", "USDC", 6);
         const tokens = [
             await MockToken.connect(owner).deploy("token", "token", 18),
             await MockToken.connect(owner).deploy("token", "token", 18),
@@ -188,12 +189,12 @@ describe("LiquidityGauge", function () {
 
     describe("burnFrom()", function () {
         it("Should revert if not owner", async function () {
-            await expect(liquidityGauge.connect(user1).burnFrom(addr1, 10000)).to.be.revertedWith(
+            await expect(liquidityGauge.burnFrom(addr1, 10000)).to.be.revertedWith(
                 "Ownable: caller is not the owner"
             );
         });
 
-        it("Should transfer shares and update balance", async function () {
+        it("Should update balance", async function () {
             await swap.call(liquidityGauge, "burnFrom", addr1, 10000);
             expect(await liquidityGauge.balanceOf(addr1)).to.equal(USER1_LP.sub(10000));
             expect(await liquidityGauge.totalSupply()).to.equal(TOTAL_LP.sub(10000));
@@ -307,14 +308,14 @@ describe("LiquidityGauge", function () {
             await tokens[0].mint(liquidityGauge.address, parseEther("12"));
             await tokens[1].mint(liquidityGauge.address, parseEther("23"));
             await tokens[2].mint(liquidityGauge.address, parseEther("34"));
-            await usdc.mint(liquidityGauge.address, parseEther("45"));
+            await usdc.mint(liquidityGauge.address, parseUsdc("45"));
             await swap.call(
                 liquidityGauge,
                 "snapshot",
                 parseEther("12"),
                 parseEther("23"),
                 parseEther("34"),
-                parseEther("45"),
+                parseUsdc("45"),
                 1
             );
         });
@@ -325,7 +326,7 @@ describe("LiquidityGauge", function () {
             expect((await liquidityGauge.distributions(0))[0]).to.equal(parseEther("12"));
             expect((await liquidityGauge.distributions(0))[1]).to.equal(parseEther("23"));
             expect((await liquidityGauge.distributions(0))[2]).to.equal(parseEther("34"));
-            expect((await liquidityGauge.distributions(0))[3]).to.equal(parseEther("45"));
+            expect((await liquidityGauge.distributions(0))[3]).to.equal(parseUsdc("45"));
             expect(await liquidityGauge.claimableAssets(addr1, 0)).to.equal(
                 parseEther("12").mul(USER1_LP).div(TOTAL_LP)
             );
@@ -336,7 +337,7 @@ describe("LiquidityGauge", function () {
                 parseEther("34").mul(USER1_LP).div(TOTAL_LP)
             );
             expect(await liquidityGauge.claimableAssets(addr1, 3)).to.equal(
-                parseEther("45").mul(USER1_LP).div(TOTAL_LP)
+                parseUsdc("45").mul(USER1_LP).div(TOTAL_LP)
             );
             expect(await liquidityGauge.distributionVersions(addr1)).to.equal(1);
         });
@@ -347,14 +348,14 @@ describe("LiquidityGauge", function () {
             await tokens[0].mint(liquidityGauge.address, parseEther("10"));
             await tokens[1].mint(liquidityGauge.address, parseEther("10"));
             await tokens[2].mint(liquidityGauge.address, parseEther("10"));
-            await usdc.mint(liquidityGauge.address, parseEther("10"));
+            await usdc.mint(liquidityGauge.address, parseUsdc("10"));
             await swap.call(
                 liquidityGauge,
                 "snapshot",
                 parseEther("10"),
                 parseEther("10"),
                 parseEther("10"),
-                parseEther("10"),
+                parseUsdc("10"),
                 2
             );
 
@@ -363,7 +364,7 @@ describe("LiquidityGauge", function () {
             expect((await liquidityGauge.distributions(1))[0]).to.equal(parseEther("10"));
             expect((await liquidityGauge.distributions(1))[1]).to.equal(parseEther("10"));
             expect((await liquidityGauge.distributions(1))[2]).to.equal(parseEther("10"));
-            expect((await liquidityGauge.distributions(1))[3]).to.equal(parseEther("10"));
+            expect((await liquidityGauge.distributions(1))[3]).to.equal(parseUsdc("10"));
             expect(await liquidityGauge.claimableAssets(addr1, 0)).to.equal(
                 parseEther("1").add(parseEther("10").mul(USER1_LP).div(TOTAL_LP))
             );
@@ -374,7 +375,7 @@ describe("LiquidityGauge", function () {
                 parseEther("3").add(parseEther("10").mul(USER1_LP).div(TOTAL_LP))
             );
             expect(await liquidityGauge.claimableAssets(addr1, 3)).to.equal(
-                parseEther("55").mul(USER1_LP).div(TOTAL_LP)
+                parseUsdc("55").mul(USER1_LP).div(TOTAL_LP)
             );
             expect(await liquidityGauge.distributionVersions(addr1)).to.equal(2);
         });
