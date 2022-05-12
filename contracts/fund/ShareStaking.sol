@@ -275,7 +275,9 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         return fund.batchRebalance(amountQ, amountB, amountR, fromIndex, toIndex);
     }
 
-    /// @dev Stake share tokens.
+    /// @dev Stake share tokens. A user could send QUEEN before deposit().
+    ///      The contract first measures how much tranche share it has received,
+    ///      then transfer the rest from the user
     /// @param tranche Tranche of the share
     /// @param amount The amount to deposit
     /// @param recipient Address that receives deposit
@@ -289,10 +291,21 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         _checkpoint(version);
         _userCheckpoint(recipient, version);
         _balances[recipient][tranche] = _balances[recipient][tranche].add(amount);
-        _totalSupplies[tranche] = _totalSupplies[tranche].add(amount);
+        uint256 oldTotalSupply = _totalSupplies[tranche];
+        _totalSupplies[tranche] = oldTotalSupply.add(amount);
         _updateWorkingBalance(recipient, _historicalSplitRatio[version]);
         // version is checked by the fund
-        fund.trancheTransferFrom(tranche, msg.sender, address(this), amount, version);
+        uint256 spareAmount = fund.trancheBalanceOf(tranche, address(this)).sub(oldTotalSupply);
+        if (spareAmount < amount) {
+            // Retain the rest of share token
+            fund.trancheTransferFrom(
+                tranche,
+                msg.sender,
+                address(this),
+                amount - spareAmount,
+                version
+            );
+        }
         emit Deposited(tranche, recipient, amount);
     }
 
