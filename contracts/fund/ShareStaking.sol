@@ -288,6 +288,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         address recipient,
         uint256 version
     ) public {
+        require(version == _fundRebalanceSize(), "Invalid version");
         _checkpoint(version);
         _userCheckpoint(recipient, version);
         _balances[recipient][tranche] = _balances[recipient][tranche].add(amount);

@@ -211,6 +211,12 @@ describe("ShareStaking", function () {
     });
 
     describe("deposit()", function () {
+        it("Should revert if version mismatches the fund version", async function () {
+            await fund.mock.trancheBalanceOf.returns(TOTAL_Q.add(10000));
+            await expect(staking.deposit(TRANCHE_Q, 10000, addr1, 1)).to.be.revertedWith(
+                "Invalid version"
+            );
+        });
         it("Should transfer shares and update balance", async function () {
             await expect(() => staking.deposit(TRANCHE_Q, 10000, addr1, 0)).to.callMocks({
                 func: fund.mock.trancheTransferFrom.withArgs(
