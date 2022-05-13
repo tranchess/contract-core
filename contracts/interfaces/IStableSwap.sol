@@ -15,14 +15,14 @@ interface IStableSwapCore {
         uint256 baseOut,
         address recipient,
         bytes calldata data
-    ) external;
+    ) external returns (uint256 realBaseOut);
 
     function sell(
         uint256 version,
         uint256 quoteOut,
         address recipient,
         bytes calldata data
-    ) external;
+    ) external returns (uint256 realQuoteOut);
 }
 
 interface IStableSwap is IStableSwapCore {

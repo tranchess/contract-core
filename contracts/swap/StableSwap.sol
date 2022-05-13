@@ -242,8 +242,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 baseOut,
         address recipient,
         bytes calldata data
-    ) external override nonReentrant checkVersion(version) {
+    ) external override nonReentrant checkVersion(version) returns (uint256 realBaseOut) {
         require(baseOut > 0, "Zero output");
+        realBaseOut = baseOut;
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
         require(baseOut < oldBase, "Insufficient liquidity");
         // Optimistically transfer tokens.
@@ -275,8 +276,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 quoteOut,
         address recipient,
         bytes calldata data
-    ) external override nonReentrant checkVersion(version) {
+    ) external override nonReentrant checkVersion(version) returns (uint256 realQuoteOut) {
         require(quoteOut > 0, "Zero output");
+        realQuoteOut = quoteOut;
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
         // Optimistically transfer tokens.
         IERC20(quoteAddress).safeTransfer(recipient, quoteOut);

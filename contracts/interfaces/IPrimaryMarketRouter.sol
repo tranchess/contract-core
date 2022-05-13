@@ -24,7 +24,7 @@ interface IPrimaryMarketRouter is IStableSwapCore {
         uint256 minOutQ,
         address staking,
         uint256 version
-    ) external;
+    ) external payable;
 
     function createSplitAndStake(
         address router,
@@ -33,5 +33,5 @@ interface IPrimaryMarketRouter is IStableSwapCore {
         uint256 minOutQ,
         address staking,
         uint256 version
-    ) external;
+    ) external payable;
 }
