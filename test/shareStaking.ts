@@ -162,23 +162,25 @@ describe("ShareStaking", function () {
 
         // Deposit initial shares
         await fund.mock.trancheTransferFrom.returns();
-        await fund.mock.trancheBalanceOf.returns(0);
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, staking.address).returns(0);
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_B, staking.address).returns(0);
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_R, staking.address).returns(0);
         await staking.connect(user1).deposit(TRANCHE_Q, USER1_Q, user1.address, 0);
         await staking.connect(user1).deposit(TRANCHE_B, USER1_B, user1.address, 0);
         await staking.connect(user1).deposit(TRANCHE_R, USER1_R, user1.address, 0);
-        await fund.mock.trancheBalanceOf.returns(USER1_Q);
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, staking.address).returns(USER1_Q);
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_B, staking.address).returns(USER1_B);
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_R, staking.address).returns(USER1_R);
         await staking.connect(user2).deposit(TRANCHE_Q, USER2_Q, user2.address, 0);
-        await fund.mock.trancheBalanceOf.returns(USER1_B);
         await staking.connect(user2).deposit(TRANCHE_B, USER2_B, user2.address, 0);
-        await fund.mock.trancheBalanceOf.returns(USER1_R);
         await staking.connect(user2).deposit(TRANCHE_R, USER2_R, user2.address, 0);
         const checkpointTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
-        await fund.mock.trancheTransferFrom.revertsWithReason(
-            "Mock on the method is not initialized"
-        );
         await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, staking.address).returns(TOTAL_Q);
         await fund.mock.trancheBalanceOf.withArgs(TRANCHE_B, staking.address).returns(TOTAL_B);
         await fund.mock.trancheBalanceOf.withArgs(TRANCHE_R, staking.address).returns(TOTAL_R);
+        await fund.mock.trancheTransferFrom.revertsWithReason(
+            "Mock on the method is not initialized"
+        );
 
         return {
             wallets: { user1, user2, owner },
@@ -212,11 +214,17 @@ describe("ShareStaking", function () {
 
     describe("deposit()", function () {
         it("Should revert if version mismatches the fund version", async function () {
-            await fund.mock.trancheBalanceOf.returns(TOTAL_Q.add(10000));
+            await fund.mock.trancheBalanceOf
+                .withArgs(TRANCHE_Q, staking.address)
+                .returns(TOTAL_Q.add(10000));
+            // The version check is only reached under these abnormal mock function returns.
+            await fund.mock.getRebalanceTimestamp.returns(checkpointTimestamp + 1000);
+            await fund.mock.doRebalance.returns(0, 0, 0);
             await expect(staking.deposit(TRANCHE_Q, 10000, addr1, 1)).to.be.revertedWith(
                 "Invalid version"
             );
         });
+
         it("Should transfer shares and update balance", async function () {
             await expect(() => staking.deposit(TRANCHE_Q, 10000, addr1, 0)).to.callMocks({
                 func: fund.mock.trancheTransferFrom.withArgs(
