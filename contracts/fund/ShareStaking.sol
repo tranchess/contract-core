@@ -288,17 +288,15 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         address recipient,
         uint256 version
     ) public {
-        require(version == _fundRebalanceSize(), "Invalid version");
         _checkpoint(version);
         _userCheckpoint(recipient, version);
         _balances[recipient][tranche] = _balances[recipient][tranche].add(amount);
         uint256 oldTotalSupply = _totalSupplies[tranche];
         _totalSupplies[tranche] = oldTotalSupply.add(amount);
         _updateWorkingBalance(recipient, _historicalSplitRatio[version]);
-        // version is checked by the fund
         uint256 spareAmount = fund.trancheBalanceOf(tranche, address(this)).sub(oldTotalSupply);
         if (spareAmount < amount) {
-            // Retain the rest of share token
+            // Retain the rest of share token (version is checked by the fund)
             fund.trancheTransferFrom(
                 tranche,
                 msg.sender,
@@ -306,6 +304,8 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                 amount - spareAmount,
                 version
             );
+        } else {
+            require(version == _fundRebalanceSize(), "Invalid version");
         }
         emit Deposited(tranche, recipient, amount);
     }
