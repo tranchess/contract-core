@@ -13,6 +13,12 @@ interface IPrimaryMarketRouter is IStableSwapCore {
         uint256 version
     ) external returns (uint256 outQ);
 
+    function wrapAndCreate(
+        address recipient,
+        uint256 minOutQ,
+        uint256 version
+    ) external payable returns (uint256 outQ);
+
     function createAndStake(
         uint256 underlying,
         uint256 minOutQ,
@@ -20,7 +26,7 @@ interface IPrimaryMarketRouter is IStableSwapCore {
         uint256 version
     ) external;
 
-    function createAndStake(
+    function createSplitAndStake(
         address router,
         address quoteAddress,
         uint256 underlying,
