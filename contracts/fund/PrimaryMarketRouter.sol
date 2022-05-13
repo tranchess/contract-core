@@ -20,9 +20,10 @@ contract PrimaryMarketRouter is IPrimaryMarketRouter, ITrancheIndexV2 {
 
     constructor(address pm) public {
         _pm = IPrimaryMarketV3(pm);
-        _fund = IPrimaryMarketV3(pm).fund();
-        _tokenUnderlying = IERC20(IPrimaryMarketV3(pm).fund().tokenUnderlying());
-        _tokenB = IPrimaryMarketV3(pm).fund().tokenB();
+        IFundV3 fund = IPrimaryMarketV3(pm).fund();
+        _fund = fund;
+        _tokenUnderlying = IERC20(fund.tokenUnderlying());
+        _tokenB = fund.tokenB();
     }
 
     /// @dev Get redemption with StableSwap getQuoteOut interface.
