@@ -1,23 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
 
-interface IStableSwap {
-    function baseAddress() external view returns (address);
-
-    function quoteAddress() external view returns (address);
-
-    function allBalances() external view returns (uint256, uint256);
-
-    function getOraclePrice() external view returns (uint256);
-
-    function getCurrentD() external view returns (uint256);
-
-    function getCurrentPriceOverOracle() external view returns (uint256);
-
-    function getCurrentPrice() external view returns (uint256);
-
-    function getPriceOverOracleIntegral() external view returns (uint256);
-
+interface IStableSwapCore {
     function getQuoteOut(uint256 baseIn) external view returns (uint256 quoteOut);
 
     function getQuoteIn(uint256 baseOut) external view returns (uint256 quoteIn);
@@ -39,6 +23,24 @@ interface IStableSwap {
         address recipient,
         bytes calldata data
     ) external;
+}
+
+interface IStableSwap is IStableSwapCore {
+    function baseAddress() external view returns (address);
+
+    function quoteAddress() external view returns (address);
+
+    function allBalances() external view returns (uint256, uint256);
+
+    function getOraclePrice() external view returns (uint256);
+
+    function getCurrentD() external view returns (uint256);
+
+    function getCurrentPriceOverOracle() external view returns (uint256);
+
+    function getCurrentPrice() external view returns (uint256);
+
+    function getPriceOverOracleIntegral() external view returns (uint256);
 
     function addLiquidity(uint256 version, address recipient) external returns (uint256);
 
