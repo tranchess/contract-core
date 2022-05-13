@@ -162,13 +162,22 @@ describe("ShareStaking", function () {
 
         // Deposit initial shares
         await fund.mock.trancheTransferFrom.returns();
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, staking.address).returns(0);
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_B, staking.address).returns(0);
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_R, staking.address).returns(0);
         await staking.connect(user1).deposit(TRANCHE_Q, USER1_Q, user1.address, 0);
         await staking.connect(user1).deposit(TRANCHE_B, USER1_B, user1.address, 0);
         await staking.connect(user1).deposit(TRANCHE_R, USER1_R, user1.address, 0);
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, staking.address).returns(USER1_Q);
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_B, staking.address).returns(USER1_B);
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_R, staking.address).returns(USER1_R);
         await staking.connect(user2).deposit(TRANCHE_Q, USER2_Q, user2.address, 0);
         await staking.connect(user2).deposit(TRANCHE_B, USER2_B, user2.address, 0);
         await staking.connect(user2).deposit(TRANCHE_R, USER2_R, user2.address, 0);
         const checkpointTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, staking.address).returns(TOTAL_Q);
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_B, staking.address).returns(TOTAL_B);
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_R, staking.address).returns(TOTAL_R);
         await fund.mock.trancheTransferFrom.revertsWithReason(
             "Mock on the method is not initialized"
         );
@@ -204,6 +213,18 @@ describe("ShareStaking", function () {
     });
 
     describe("deposit()", function () {
+        it("Should revert if version mismatches the fund version", async function () {
+            await fund.mock.trancheBalanceOf
+                .withArgs(TRANCHE_Q, staking.address)
+                .returns(TOTAL_Q.add(10000));
+            // The version check is only reached under these abnormal mock function returns.
+            await fund.mock.getRebalanceTimestamp.returns(checkpointTimestamp + 1000);
+            await fund.mock.doRebalance.returns(0, 0, 0);
+            await expect(staking.deposit(TRANCHE_Q, 10000, addr1, 1)).to.be.revertedWith(
+                "Invalid version"
+            );
+        });
+
         it("Should transfer shares and update balance", async function () {
             await expect(() => staking.deposit(TRANCHE_Q, 10000, addr1, 0)).to.callMocks({
                 func: fund.mock.trancheTransferFrom.withArgs(
@@ -919,7 +940,13 @@ describe("ShareStaking", function () {
             await fund.mock.trancheTransferFrom.returns();
             await setAutomine(false);
             await staking.deposit(TRANCHE_B, deposit1, addr1, 0);
+            await fund.mock.trancheBalanceOf
+                .withArgs(TRANCHE_B, staking.address)
+                .returns(TOTAL_B.add(deposit1));
             await staking.deposit(TRANCHE_B, deposit2, addr1, 0);
+            await fund.mock.trancheBalanceOf
+                .withArgs(TRANCHE_B, staking.address)
+                .returns(TOTAL_B.add(deposit1).add(deposit2));
             await staking.deposit(TRANCHE_B, deposit3, addr1, 0);
             await advanceBlockAtTime(rewardStartTimestamp + 100);
             await setAutomine(true);
@@ -993,6 +1020,9 @@ describe("ShareStaking", function () {
             await staking.deposit(TRANCHE_Q, parseEther("1"), addr1, 2);
 
             // User2 deposit some QUEEN
+            await fund.mock.trancheBalanceOf
+                .withArgs(TRANCHE_Q, staking.address)
+                .returns(TOTAL_Q.add(parseEther("1")));
             await setNextBlockTime(rewardStartTimestamp + 3500);
             await staking.connect(user2).deposit(TRANCHE_Q, parseEther("1"), addr2, 2);
             // Add rewards before user2's deposit
