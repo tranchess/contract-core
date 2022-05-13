@@ -78,8 +78,8 @@ contract PrimaryMarketRouter is IPrimaryMarketRouter, ITrancheIndexV2 {
     }
 
     function create(
-        uint256 underlying,
         address recipient,
+        uint256 underlying,
         uint256 minOutQ,
         uint256 version
     ) public override returns (uint256 outQ) {
@@ -94,7 +94,7 @@ contract PrimaryMarketRouter is IPrimaryMarketRouter, ITrancheIndexV2 {
         uint256 version
     ) external override {
         // Create QUEEN
-        uint256 outQ = create(underlying, address(this), minOutQ, version);
+        uint256 outQ = create(address(this), underlying, minOutQ, version);
         // Stake QUEEN
         _fund.trancheTransfer(TRANCHE_Q, staking, outQ, version);
         ShareStaking(staking).deposit(TRANCHE_Q, outQ, msg.sender, version);
@@ -109,7 +109,7 @@ contract PrimaryMarketRouter is IPrimaryMarketRouter, ITrancheIndexV2 {
         uint256 version
     ) external override {
         // Create QUEEN
-        uint256 outQ = create(underlying, address(this), minOutQ, version);
+        uint256 outQ = create(address(this), underlying, minOutQ, version);
         // Split QUEEN into BISHOP and ROOK
         uint256 outB = _pm.split(address(this), outQ, version);
         // Add BISHOP to stable swap

@@ -7,8 +7,8 @@ import "../interfaces/IStableSwap.sol";
 
 interface IPrimaryMarketRouter is IStableSwapCore {
     function create(
-        uint256 underlying,
         address recipient,
+        uint256 underlying,
         uint256 minOutQ,
         uint256 version
     ) external returns (uint256 outQ);
