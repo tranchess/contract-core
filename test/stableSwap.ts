@@ -1414,6 +1414,7 @@ describe("Flash Swap", function () {
         readonly exteralRouter: MockContract;
         readonly fund: MockContract;
         readonly primaryMarket: Contract;
+        readonly primaryMarketRouter: Contract;
         readonly btc: Contract;
         readonly usd: Contract;
         readonly tokens: Contract[];
@@ -1433,6 +1434,7 @@ describe("Flash Swap", function () {
     let exteralRouter: MockContract;
     let fund: MockContract;
     let primaryMarket: Contract;
+    let primaryMarketRouter: Contract;
     let tokens: Contract[];
     let btc: Contract;
     let usd: Contract;
@@ -1473,6 +1475,8 @@ describe("Flash Swap", function () {
         await fund.mock.refreshBalance.returns();
         await fund.mock.extrapolateNav.returns(0, parseEther("1"), parseEther("1"));
         await fund.mock.twapOracle.returns(twapOracle.address);
+        await fund.mock.tokenB.returns(tokens[0].address);
+        await fund.mock.tokenR.returns(tokens[1].address);
         await btc.mint(fund.address, TOTAL_UNDERLYING);
         const PrimaryMarket = await ethers.getContractFactory("PrimaryMarketV3");
         const primaryMarket = await PrimaryMarket.connect(owner).deploy(
@@ -1482,6 +1486,11 @@ describe("Flash Swap", function () {
             BigNumber.from(1).shl(256).sub(1)
         );
         await fund.mock.primaryMarket.returns(primaryMarket.address);
+
+        const PrimaryMarketRouter = await ethers.getContractFactory("PrimaryMarketRouter");
+        const primaryMarketRouter = await PrimaryMarketRouter.connect(owner).deploy(
+            primaryMarket.address
+        );
 
         const chessSchedule = await deployMockForName(owner, "ChessSchedule");
         const chessController = await deployMockForName(owner, "ChessController");
@@ -1494,10 +1503,7 @@ describe("Flash Swap", function () {
         const swapRouter = await SwapRouter.connect(owner).deploy();
 
         const FlashSwapRouter = await ethers.getContractFactory("FlashSwapRouter");
-        const flashSwapRouter = await FlashSwapRouter.connect(owner).deploy(
-            exteralRouter.address,
-            swapRouter.address
-        );
+        const flashSwapRouter = await FlashSwapRouter.connect(owner).deploy(swapRouter.address);
 
         const swapReward = await deployMockForName(owner, "SwapReward");
         await swapReward.mock.rewardToken.returns(tokens[0].address);
@@ -1549,6 +1555,7 @@ describe("Flash Swap", function () {
             exteralRouter,
             fund,
             primaryMarket,
+            primaryMarketRouter,
             btc,
             usd,
             tokens,
@@ -1572,6 +1579,7 @@ describe("Flash Swap", function () {
         exteralRouter = fixtureData.exteralRouter;
         fund = fixtureData.fund;
         primaryMarket = fixtureData.primaryMarket;
+        primaryMarketRouter = fixtureData.primaryMarketRouter;
         btc = fixtureData.btc;
         usd = fixtureData.usd;
         tokens = fixtureData.tokens;
@@ -1581,7 +1589,6 @@ describe("Flash Swap", function () {
         it("Should revert if call is not tranchess pair", async function () {
             const stableSwap1 = await deployMockForName(user1, "BishopStableSwap");
             await stableSwap1.mock.quoteAddress.returns(usd.address);
-            await fund.mock.tokenB.returns(tokens[0].address);
             await expect(
                 stableSwap1.call(
                     flashSwapRouter,
@@ -1589,12 +1596,22 @@ describe("Flash Swap", function () {
                     parseEther("1"),
                     0,
                     defaultAbiCoder.encode(
-                        ["address", "uint256", "address", "uint256", "address[]"],
+                        [
+                            "address",
+                            "address",
+                            "uint256",
+                            "address",
+                            "uint256",
+                            "address",
+                            "address[]",
+                        ],
                         [
                             primaryMarket.address,
+                            primaryMarketRouter.address,
                             parseEther("1"),
                             addr1,
                             0,
+                            exteralRouter.address,
                             [usd.address, btc.address],
                         ]
                     )
@@ -1605,7 +1622,6 @@ describe("Flash Swap", function () {
         it("Should revert if it's bidirectional", async function () {
             const stableSwap1 = await deployMockForName(user1, "BishopStableSwap");
             await stableSwap1.mock.quoteAddress.returns(usd.address);
-            await fund.mock.tokenB.returns(tokens[0].address);
             await swapRouter.addSwap(tokens[0].address, usd.address, stableSwap1.address);
             await expect(
                 stableSwap1.call(
@@ -1614,12 +1630,22 @@ describe("Flash Swap", function () {
                     parseEther("1"),
                     parseEther("1"),
                     defaultAbiCoder.encode(
-                        ["address", "uint256", "address", "uint256", "address[]"],
+                        [
+                            "address",
+                            "address",
+                            "uint256",
+                            "address",
+                            "uint256",
+                            "address",
+                            "address[]",
+                        ],
                         [
                             primaryMarket.address,
+                            primaryMarketRouter.address,
                             parseEther("1"),
                             addr1,
                             0,
+                            exteralRouter.address,
                             [usd.address, btc.address],
                         ]
                     )
@@ -1631,17 +1657,17 @@ describe("Flash Swap", function () {
     describe("buyR()", function () {
         it("Should revert if insufficient input quote", async function () {
             const outR = parseEther("1");
-            await fund.mock.tokenUnderlying.returns(btc.address);
-            await fund.mock.tokenB.returns(tokens[0].address);
             await exteralRouter.mock.getAmountsIn.returns([parseEther("1"), 0]);
             await expect(
                 flashSwapRouter
                     .connect(user1)
                     .buyR(
                         primaryMarket.address,
+                        primaryMarketRouter.address,
                         parseEther("0.03"),
                         addr1,
                         usd.address,
+                        exteralRouter.address,
                         [usd.address, btc.address],
                         0,
                         outR
@@ -1652,9 +1678,6 @@ describe("Flash Swap", function () {
         it("Should buy with external swap", async function () {
             const outR = parseEther("1");
             const createdQ = outR.mul(parseEther("1")).div(SPLIT_RATIO);
-            await fund.mock.tokenUnderlying.returns(btc.address);
-            await fund.mock.tokenB.returns(tokens[0].address);
-            await fund.mock.tokenR.returns(tokens[1].address);
             await fund.mock.trancheTransfer
                 .withArgs(TRANCHE_B, stableSwap.address, outR, 0)
                 .returns();
@@ -1690,9 +1713,11 @@ describe("Flash Swap", function () {
                 .connect(user1)
                 .buyR(
                     primaryMarket.address,
+                    primaryMarketRouter.address,
                     parseEther("1"),
                     addr1,
                     usd.address,
+                    exteralRouter.address,
                     [usd.address, btc.address],
                     0,
                     outR
@@ -1707,11 +1732,13 @@ describe("Flash Swap", function () {
         it("Should revert if insufficient output quote", async function () {
             const inR = parseEther("1");
             const quoteAmount = parseEther("2");
-            await fund.mock.tokenUnderlying.returns(btc.address);
-            await fund.mock.tokenB.returns(tokens[0].address);
-            await fund.mock.tokenR.returns(tokens[1].address);
+            const mergeAmount = inR.mul(parseEther("1")).div(SPLIT_RATIO);
+            const mergeFee = mergeAmount.mul(MERGE_FEE_BPS).div(10000);
             await fund.mock.trancheTransferFrom
                 .withArgs(TRANCHE_R, addr1, flashSwapRouter.address, inR, 0)
+                .returns();
+            await fund.mock.trancheTransfer
+                .withArgs(TRANCHE_Q, primaryMarketRouter.address, mergeAmount.sub(mergeFee), 0)
                 .returns();
             await fund.mock.primaryMarketBurn
                 .withArgs(1, flashSwapRouter.address, inR, 0)
@@ -1719,14 +1746,15 @@ describe("Flash Swap", function () {
             await fund.mock.primaryMarketBurn
                 .withArgs(2, flashSwapRouter.address, inR, 0)
                 .returns();
-            const mergeAmount = inR.mul(parseEther("1")).div(SPLIT_RATIO);
-            const mergeFee = mergeAmount.mul(MERGE_FEE_BPS).div(10000);
             await fund.mock.primaryMarketMint
                 .withArgs(0, flashSwapRouter.address, mergeAmount.sub(mergeFee), 0)
                 .returns();
             await fund.mock.primaryMarketAddDebt
                 .withArgs(0, mergeFee.mul(TOTAL_UNDERLYING).div(EQUIVALENT_TOTAL_Q))
                 .returns();
+            await fund.mock.trancheBalanceOf
+                .withArgs(0, primaryMarketRouter.address)
+                .returns(mergeAmount.sub(mergeFee));
             const redeemAmount = mergeAmount
                 .sub(mergeFee)
                 .mul(TOTAL_UNDERLYING)
@@ -1736,7 +1764,7 @@ describe("Flash Swap", function () {
                 .withArgs(flashSwapRouter.address, redeemAmount.sub(redeemFee), redeemFee)
                 .returns();
             await fund.mock.primaryMarketBurn
-                .withArgs(0, flashSwapRouter.address, mergeAmount.sub(mergeFee), 0)
+                .withArgs(0, primaryMarketRouter.address, mergeAmount.sub(mergeFee), 0)
                 .returns();
             await exteralRouter.mock.getAmountsIn.returns([parseEther("1"), 0]);
             await exteralRouter.mock.swapExactTokensForTokens.returns([0, quoteAmount]);
@@ -1749,9 +1777,11 @@ describe("Flash Swap", function () {
                     .connect(user1)
                     .sellR(
                         primaryMarket.address,
+                        primaryMarketRouter.address,
                         parseEther("1.4"),
                         addr1,
                         usd.address,
+                        exteralRouter.address,
                         [btc.address, usd.address],
                         0,
                         inR
@@ -1762,11 +1792,13 @@ describe("Flash Swap", function () {
         it("Should sell with external swap", async function () {
             const inR = parseEther("1");
             const quoteAmount = parseEther("2");
-            await fund.mock.tokenUnderlying.returns(btc.address);
-            await fund.mock.tokenB.returns(tokens[0].address);
-            await fund.mock.tokenR.returns(tokens[1].address);
+            const mergeAmount = inR.mul(parseEther("1")).div(SPLIT_RATIO);
+            const mergeFee = mergeAmount.mul(MERGE_FEE_BPS).div(10000);
             await fund.mock.trancheTransferFrom
                 .withArgs(TRANCHE_R, addr1, flashSwapRouter.address, inR, 0)
+                .returns();
+            await fund.mock.trancheTransfer
+                .withArgs(TRANCHE_Q, primaryMarketRouter.address, mergeAmount.sub(mergeFee), 0)
                 .returns();
             await fund.mock.primaryMarketBurn
                 .withArgs(1, flashSwapRouter.address, inR, 0)
@@ -1774,14 +1806,15 @@ describe("Flash Swap", function () {
             await fund.mock.primaryMarketBurn
                 .withArgs(2, flashSwapRouter.address, inR, 0)
                 .returns();
-            const mergeAmount = inR.mul(parseEther("1")).div(SPLIT_RATIO);
-            const mergeFee = mergeAmount.mul(MERGE_FEE_BPS).div(10000);
             await fund.mock.primaryMarketMint
                 .withArgs(0, flashSwapRouter.address, mergeAmount.sub(mergeFee), 0)
                 .returns();
             await fund.mock.primaryMarketAddDebt
                 .withArgs(0, mergeFee.mul(TOTAL_UNDERLYING).div(EQUIVALENT_TOTAL_Q))
                 .returns();
+            await fund.mock.trancheBalanceOf
+                .withArgs(0, primaryMarketRouter.address)
+                .returns(mergeAmount.sub(mergeFee));
             const redeemAmount = mergeAmount
                 .sub(mergeFee)
                 .mul(TOTAL_UNDERLYING)
@@ -1791,7 +1824,7 @@ describe("Flash Swap", function () {
                 .withArgs(flashSwapRouter.address, redeemAmount.sub(redeemFee), redeemFee)
                 .returns();
             await fund.mock.primaryMarketBurn
-                .withArgs(0, flashSwapRouter.address, mergeAmount.sub(mergeFee), 0)
+                .withArgs(0, primaryMarketRouter.address, mergeAmount.sub(mergeFee), 0)
                 .returns();
             await exteralRouter.mock.getAmountsIn.returns([parseEther("1"), 0]);
             await exteralRouter.mock.swapExactTokensForTokens.returns([0, quoteAmount]);
@@ -1805,9 +1838,11 @@ describe("Flash Swap", function () {
                 .connect(user1)
                 .sellR(
                     primaryMarket.address,
+                    primaryMarketRouter.address,
                     parseEther("0"),
                     addr1,
                     usd.address,
+                    exteralRouter.address,
                     [btc.address, usd.address],
                     0,
                     inR

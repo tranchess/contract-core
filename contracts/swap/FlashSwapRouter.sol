@@ -16,40 +16,35 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    IUniswapV2Router01 public immutable externalRouter;
     ISwapRouter public immutable tranchessRouter;
 
-    constructor(address externalRouter_, address tranchessRouter_) public {
-        externalRouter = IUniswapV2Router01(externalRouter_);
+    constructor(address tranchessRouter_) public {
         tranchessRouter = ISwapRouter(tranchessRouter_);
     }
 
-    function getPrimaryMarket(address primaryMarketOrRouter)
-        public
-        view
-        returns (IPrimaryMarketV3)
-    {
-        return IPrimaryMarketV3(IPrimaryMarketV3(primaryMarketOrRouter).fund().primaryMarket());
-    }
-
     function buyR(
-        address primaryMarketOrRouter,
+        address primaryMarket,
+        address queenSwapOrPrimaryMarketRouter,
         uint256 maxQuote,
         address recipient,
         address tokenQuote,
+        address externalRouter,
         address[] memory externalPath,
         uint256 version,
         uint256 outR
     ) external {
-        IPrimaryMarketV3 pm = getPrimaryMarket(primaryMarketOrRouter);
+        IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
         uint256 underlyingAmount;
         uint256 totalQuoteAmount;
         uint256 quoteAmount;
         {
             uint256 inQ = pm.getSplitForB(outR);
-            underlyingAmount = pm.getCreationForQ(inQ);
+            underlyingAmount = IStableSwapCore(queenSwapOrPrimaryMarketRouter).getQuoteIn(inQ);
             // Calculate the exact amount of quote asset to pay
-            totalQuoteAmount = externalRouter.getAmountsIn(underlyingAmount, externalPath)[0];
+            totalQuoteAmount = IUniswapV2Router01(externalRouter).getAmountsIn(
+                underlyingAmount,
+                externalPath
+            )[0];
             // Arrange the stable swap path
             address[] memory tranchessPath = new address[](2);
             tranchessPath[0] = pm.fund().tokenB();
@@ -62,25 +57,43 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
         uint256 resultAmount = totalQuoteAmount.sub(quoteAmount);
         require(resultAmount <= maxQuote, "Insufficient input");
         bytes memory data =
-            abi.encode(primaryMarketOrRouter, underlyingAmount, recipient, version, externalPath);
+            abi.encode(
+                primaryMarket,
+                queenSwapOrPrimaryMarketRouter,
+                underlyingAmount,
+                recipient,
+                version,
+                externalRouter,
+                externalPath
+            );
         IERC20(tokenQuote).safeTransferFrom(msg.sender, address(this), resultAmount);
         tranchessPair.sell(version, quoteAmount, address(this), data);
     }
 
     function sellR(
-        address primaryMarketOrRouter,
+        address primaryMarket,
+        address queenSwapOrPrimaryMarketRouter,
         uint256 minQuote,
         address recipient,
         address tokenQuote,
+        address externalRouter,
         address[] memory externalPath,
         uint256 version,
         uint256 inR
     ) external {
-        IPrimaryMarketV3 pm = getPrimaryMarket(primaryMarketOrRouter);
+        IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
         // Send the user's ROOK to this router
         pm.fund().trancheTransferFrom(TRANCHE_R, msg.sender, address(this), inR, version);
         bytes memory data =
-            abi.encode(primaryMarketOrRouter, minQuote, recipient, version, externalPath);
+            abi.encode(
+                primaryMarket,
+                queenSwapOrPrimaryMarketRouter,
+                minQuote,
+                recipient,
+                version,
+                externalRouter,
+                externalPath
+            );
         tranchessRouter.getSwap(pm.fund().tokenB(), tokenQuote).buy(
             version,
             inR,
@@ -95,13 +108,15 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
         bytes calldata data
     ) external override {
         (
-            address primaryMarketOrRouter,
+            address primaryMarket,
+            address queenSwapOrPrimaryMarketRouter,
             uint256 expectAmount,
             address recipient,
             uint256 version,
-            address[] memory externalPath
-        ) = abi.decode(data, (address, uint256, address, uint256, address[]));
-        IPrimaryMarketV3 pm = getPrimaryMarket(primaryMarketOrRouter);
+            ,
+
+        ) = abi.decode(data, (address, address, uint256, address, uint256, address, address[]));
+        IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
         address tokenQuote = IStableSwap(msg.sender).quoteAddress();
         require(
             msg.sender == address(tranchessRouter.getSwap(tokenQuote, pm.fund().tokenB())),
@@ -119,23 +134,17 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
             }
             // Merge BISHOP and ROOK into QUEEN
             uint256 outQ = pm.merge(address(this), baseDeltaOut, version);
-            // Redeem QUEEN for underlying
-            if (address(pm) != primaryMarketOrRouter) {
-                // If primaryMarketOrRouter is a QUEEN Router, transfer QUEEN to
-                // the router for redemption
-                pm.fund().trancheTransfer(TRANCHE_Q, primaryMarketOrRouter, outQ, version);
-            }
+
+            // Redeem or swap QUEEN for underlying
+            pm.fund().trancheTransfer(TRANCHE_Q, queenSwapOrPrimaryMarketRouter, outQ, version);
             uint256 underlyingAmount =
-                IPrimaryMarketV3(primaryMarketOrRouter).redeem(address(this), outQ, 0, version);
+                IStableSwapCore(queenSwapOrPrimaryMarketRouter).sell(version, 0, address(this), "");
+
             // Trade underlying for quote asset
             uint256 totalQuoteAmount =
-                _externalSwap(
-                    externalPath,
-                    underlyingAmount,
-                    0,
-                    pm.fund().tokenUnderlying(),
-                    tokenQuote
-                )[1];
+                _externalSwap(data, underlyingAmount, 0, pm.fund().tokenUnderlying(), tokenQuote)[
+                    1
+                ];
             // Send back quote asset to tranchess swap
             IERC20(tokenQuote).safeTransfer(msg.sender, quoteAmount);
             // Send the rest of quote asset to user
@@ -146,19 +155,21 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
             // Trade quote asset for underlying asset
             uint256 underlyingAmount =
                 _externalSwap(
-                    externalPath,
+                    data,
                     quoteDeltaOut,
                     expectAmount,
                     tokenQuote,
                     pm.fund().tokenUnderlying()
                 )[1];
-            // Create QUEEN using the borrowed underlying
+
+            // Create or swap borrowed underlying for QUEEN
             IERC20(pm.fund().tokenUnderlying()).safeTransfer(
-                primaryMarketOrRouter,
+                queenSwapOrPrimaryMarketRouter,
                 underlyingAmount
             );
             uint256 outQ =
-                IPrimaryMarketV3(primaryMarketOrRouter).create(address(this), 0, version);
+                IStableSwapCore(queenSwapOrPrimaryMarketRouter).buy(version, 0, address(this), "");
+
             // Split QUEEN into BISHOP and ROOK
             uint256 outB = pm.split(address(this), outQ, version);
             // Send back BISHOP to tranchess swap
@@ -169,16 +180,18 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2 {
     }
 
     function _externalSwap(
-        address[] memory externalPath,
+        bytes memory data,
         uint256 amountIn,
         uint256 minAmountOut,
         address tokenIn,
         address tokenOut
     ) private returns (uint256[] memory amounts) {
+        (, , , , , address externalRouter, address[] memory externalPath) =
+            abi.decode(data, (address, address, uint256, address, uint256, address, address[]));
         require(externalPath.length > 1, "Invalid external path");
         require(externalPath[0] == tokenIn, "Invalid token in");
         require(externalPath[externalPath.length - 1] == tokenOut, "Invalid token out");
-        amounts = externalRouter.swapExactTokensForTokens(
+        amounts = IUniswapV2Router01(externalRouter).swapExactTokensForTokens(
             amountIn,
             minAmountOut,
             externalPath,
