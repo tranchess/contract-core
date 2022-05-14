@@ -20,15 +20,15 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
     event SwapToggled(address externalRouter, bool enabled);
 
     ISwapRouter public immutable tranchessRouter;
-    mapping(address => bool) private _externalRouterAllowlist;
+    mapping(address => bool) public externalRouterAllowlist;
 
     constructor(address tranchessRouter_) public {
         tranchessRouter = ISwapRouter(tranchessRouter_);
     }
 
     function toggleExternalRouter(address externalRouter) external onlyOwner {
-        bool enabled = !_externalRouterAllowlist[externalRouter];
-        _externalRouterAllowlist[externalRouter] = enabled;
+        bool enabled = !externalRouterAllowlist[externalRouter];
+        externalRouterAllowlist[externalRouter] = enabled;
         emit SwapToggled(externalRouter, enabled);
     }
 
@@ -43,9 +43,8 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         uint256 version,
         uint256 outR
     ) external {
-        require(_externalRouterAllowlist[externalRouter], "Invalid external router");
+        require(externalRouterAllowlist[externalRouter], "Invalid external router");
         IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
-        IStableSwap tranchessPair;
         uint256 underlyingAmount;
         uint256 totalQuoteAmount;
         uint256 quoteAmount;
@@ -57,11 +56,11 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
                 underlyingAmount,
                 externalPath
             )[0];
-            // Arrange the stable swap path
-            tranchessPair = tranchessRouter.getSwap(pm.fund().tokenB(), tokenQuote);
-            // Calculate the amount of quote asset for selling BISHOP
-            quoteAmount = tranchessPair.getQuoteOut(outR);
         }
+        // Arrange the stable swap path
+        IStableSwap tranchessPair = tranchessRouter.getSwap(pm.fund().tokenB(), tokenQuote);
+        // Calculate the amount of quote asset for selling BISHOP
+        quoteAmount = tranchessPair.getQuoteOut(outR);
         // Send the user's portion of the payment to Tranchess swap
         uint256 resultAmount = totalQuoteAmount.sub(quoteAmount);
         require(resultAmount <= maxQuote, "Insufficient input");
@@ -90,7 +89,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         uint256 version,
         uint256 inR
     ) external {
-        require(_externalRouterAllowlist[externalRouter], "Invalid external router");
+        require(externalRouterAllowlist[externalRouter], "Invalid external router");
         IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
         // Send the user's ROOK to this router
         pm.fund().trancheTransferFrom(TRANCHE_R, msg.sender, address(this), inR, version);

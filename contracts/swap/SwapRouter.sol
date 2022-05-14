@@ -13,6 +13,8 @@ import "../fund/ShareStaking.sol";
 contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
     using SafeERC20 for IERC20;
 
+    event SwapAdded(address addr0, address addr1, address swap);
+
     mapping(address => mapping(address => IStableSwap)) private _swapMap;
 
     /// @dev Returns the swap for the given token pair and fee. The swap contract may or may not exist.
@@ -35,6 +37,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         (address addr0, address addr1) =
             baseAddress < quoteAddress ? (baseAddress, quoteAddress) : (quoteAddress, baseAddress);
         _swapMap[addr0][addr1] = IStableSwap(swap);
+        emit SwapAdded(addr0, addr1, swap);
     }
 
     function addLiquidity(
