@@ -115,16 +115,48 @@ contract PrimaryMarketRouter is IPrimaryMarketRouter, ITrancheIndexV2 {
     ) external payable override {
         // Create QUEEN
         uint256 outQ = create(address(this), underlying, minOutQ, version);
+        _splitAndStake(router, quoteAddress, outQ, staking, version);
+    }
+
+    function splitAndStake(
+        address router,
+        address quoteAddress,
+        uint256 inQ,
+        address staking,
+        uint256 version
+    ) external override {
+        primaryMarket.fund().trancheTransferFrom(
+            TRANCHE_Q,
+            msg.sender,
+            address(this),
+            inQ,
+            version
+        );
+        _splitAndStake(router, quoteAddress, inQ, staking, version);
+    }
+
+    function _splitAndStake(
+        address router,
+        address quoteAddress,
+        uint256 inQ,
+        address staking,
+        uint256 version
+    ) private {
         // Split QUEEN into BISHOP and ROOK
-        uint256 outB = primaryMarket.split(address(this), outQ, version);
+        uint256 outB = primaryMarket.split(address(this), inQ, version);
         // Add BISHOP to stable swap
         {
             IStableSwap swap = ISwapRouter(router).getSwap(_tokenB, quoteAddress);
             fund.trancheTransfer(TRANCHE_B, address(swap), outB, version);
             swap.addLiquidity(version, msg.sender);
         }
-        // Stake rook
-        fund.trancheTransfer(TRANCHE_R, staking, outB, version);
-        ShareStaking(staking).deposit(TRANCHE_R, outB, msg.sender, version);
+
+        if (staking == address(0)) {
+            fund.trancheTransfer(TRANCHE_R, msg.sender, outB, version);
+        } else {
+            // Stake rook
+            fund.trancheTransfer(TRANCHE_R, staking, outB, version);
+            ShareStaking(staking).deposit(TRANCHE_R, outB, msg.sender, version);
+        }
     }
 }
