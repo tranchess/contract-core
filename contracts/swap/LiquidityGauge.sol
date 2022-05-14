@@ -33,14 +33,6 @@ struct Distribution {
     uint256 totalSupply;
 }
 
-/// @notice Chess locking snapshot used in calculating working balance of an account.
-/// @param veProportion The account's veCHESS divided by the total veCHESS supply.
-/// @param veLocked Locked CHESS and unlock time, which is synchronized from VotingEscrow.
-struct VESnapshot {
-    uint256 veProportion;
-    IVotingEscrow.LockedBalance veLocked;
-}
-
 contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownable {
     using Math for uint256;
     using SafeMath for uint256;
@@ -57,7 +49,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
     IChessSchedule public immutable chessSchedule;
     IChessController public immutable chessController;
     IFundV3 public immutable fund;
-    IVotingEscrow public immutable votingEscrow;
+    IVotingEscrow private immutable _votingEscrow;
     uint256 public immutable initialRebalanceVersion;
 
     string public name;
@@ -67,7 +59,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
     mapping(address => uint256) private _balances;
     uint256 private _workingSupply;
     mapping(address => uint256) private _workingBalances;
-    mapping(address => VESnapshot) private _veSnapshots;
 
     uint256 public overallIntegral;
     uint256 public lastTimestamp;
@@ -98,7 +89,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
         fund = IFundV3(fund_);
-        votingEscrow = IVotingEscrow(votingEscrow_);
+        _votingEscrow = IVotingEscrow(votingEscrow_);
         rewardContract = rewardContract_;
         lastTimestamp = block.timestamp;
         initialRebalanceVersion = IFundV3(fund_).getRebalanceSize();
@@ -174,10 +165,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         return _workingSupply;
     }
 
-    function veSnapshotOf(address account) external view returns (VESnapshot memory) {
-        return _veSnapshots[account];
-    }
-
     function claimableTokenAndAssetAndReward(address account)
         external
         override
@@ -244,21 +231,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         uint256 balance = _balances[account];
         _assetCheckpoint(account, balance);
         _rewardCheckpoint(account, balance);
-
-        VESnapshot storage veSnapshot = _veSnapshots[account];
-        IVotingEscrow.LockedBalance memory newLocked = votingEscrow.getLockedBalance(account);
-        if (
-            newLocked.amount != veSnapshot.veLocked.amount ||
-            newLocked.unlockTime != veSnapshot.veLocked.unlockTime ||
-            newLocked.unlockTime < block.timestamp
-        ) {
-            veSnapshot.veLocked.amount = newLocked.amount;
-            veSnapshot.veLocked.unlockTime = newLocked.unlockTime;
-            veSnapshot.veProportion = votingEscrow.balanceOf(account).divideDecimal(
-                votingEscrow.totalSupply()
-            );
-        }
-
         _updateWorkingBalance(
             account,
             _workingBalances[account],
@@ -321,18 +293,22 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         uint256 newBalance,
         uint256 newTotalSupply
     ) private {
-        uint256 newWorkingBalance = newBalance;
-        uint256 veProportion = _veSnapshots[account].veProportion;
-        if (veProportion > 0 && _veSnapshots[account].veLocked.unlockTime > block.timestamp) {
+        uint256 veBalance = _votingEscrow.balanceOf(account);
+        if (veBalance > 0) {
+            uint256 veTotalSupply = _votingEscrow.totalSupply();
             uint256 maxWorkingBalance = newBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
-            uint256 boostingPower = newTotalSupply.multiplyDecimal(veProportion);
-            uint256 workingBalanceAfterBoosting =
-                newBalance.add(boostingPower.multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE));
-            newWorkingBalance = maxWorkingBalance.min(workingBalanceAfterBoosting);
+            uint256 boostedWorkingBalance =
+                newBalance.add(
+                    newTotalSupply
+                        .mul(veBalance)
+                        .multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
+                        .div(veTotalSupply)
+                );
+            newBalance = maxWorkingBalance.min(boostedWorkingBalance);
         }
 
-        _workingSupply = oldWorkingSupply.sub(oldWorkingBalance).add(newWorkingBalance);
-        _workingBalances[account] = newWorkingBalance;
+        _workingSupply = oldWorkingSupply.sub(oldWorkingBalance).add(newBalance);
+        _workingBalances[account] = newBalance;
     }
 
     // ----------------------------- Rewards -----------------------------------
