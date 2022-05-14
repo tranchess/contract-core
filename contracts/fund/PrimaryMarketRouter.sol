@@ -125,13 +125,7 @@ contract PrimaryMarketRouter is IPrimaryMarketRouter, ITrancheIndexV2 {
         address staking,
         uint256 version
     ) external override {
-        primaryMarket.fund().trancheTransferFrom(
-            TRANCHE_Q,
-            msg.sender,
-            address(this),
-            inQ,
-            version
-        );
+        fund.trancheTransferFrom(TRANCHE_Q, msg.sender, address(this), inQ, version);
         _splitAndStake(router, quoteAddress, inQ, staking, version);
     }
 
