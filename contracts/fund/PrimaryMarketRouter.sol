@@ -51,25 +51,25 @@ contract PrimaryMarketRouter is IPrimaryMarketRouter, ITrancheIndexV2 {
     ///      Underlying should have already been sent to this contract
     function buy(
         uint256 version,
-        uint256,
+        uint256 baseOut,
         address recipient,
         bytes calldata
     ) external override returns (uint256 realBaseOut) {
         uint256 routerQuoteBalance = IERC20(_tokenUnderlying).balanceOf(address(this));
         IERC20(_tokenUnderlying).safeTransfer(address(primaryMarket), routerQuoteBalance);
-        realBaseOut = primaryMarket.create(recipient, 0, version);
+        realBaseOut = primaryMarket.create(recipient, baseOut, version);
     }
 
     /// @dev Redeem QUEEN with StableSwap sell interface.
     ///      QUEEN should have already been sent to this contract
     function sell(
         uint256 version,
-        uint256,
+        uint256 quoteOut,
         address recipient,
         bytes calldata
     ) external override returns (uint256 realQuoteOut) {
         uint256 routerBaseBalance = fund.trancheBalanceOf(TRANCHE_Q, address(this));
-        realQuoteOut = primaryMarket.redeem(recipient, routerBaseBalance, 0, version);
+        realQuoteOut = primaryMarket.redeem(recipient, routerBaseBalance, quoteOut, version);
     }
 
     function create(
@@ -77,18 +77,19 @@ contract PrimaryMarketRouter is IPrimaryMarketRouter, ITrancheIndexV2 {
         uint256 underlying,
         uint256 minOutQ,
         uint256 version
-    ) public override returns (uint256 outQ) {
-        IERC20(_tokenUnderlying).safeTransferFrom(msg.sender, address(primaryMarket), underlying);
-        outQ = primaryMarket.create(recipient, minOutQ, version);
-    }
-
-    function wrapAndCreate(
-        address recipient,
-        uint256 minOutQ,
-        uint256 version
     ) public payable override returns (uint256 outQ) {
-        IWrappedERC20(address(_tokenUnderlying)).deposit{value: msg.value}();
-        _tokenUnderlying.safeTransfer(address(primaryMarket), msg.value);
+        if (msg.value > 0) {
+            require(msg.value == underlying); // sanity check
+            IWrappedERC20(address(_tokenUnderlying)).deposit{value: msg.value}();
+            _tokenUnderlying.safeTransfer(address(primaryMarket), msg.value);
+        } else {
+            IERC20(_tokenUnderlying).safeTransferFrom(
+                msg.sender,
+                address(primaryMarket),
+                underlying
+            );
+        }
+
         outQ = primaryMarket.create(recipient, minOutQ, version);
     }
 
@@ -99,10 +100,7 @@ contract PrimaryMarketRouter is IPrimaryMarketRouter, ITrancheIndexV2 {
         uint256 version
     ) external payable override {
         // Create QUEEN
-        uint256 outQ =
-            msg.value > 0
-                ? wrapAndCreate(staking, minOutQ, version)
-                : create(staking, underlying, minOutQ, version);
+        uint256 outQ = create(staking, underlying, minOutQ, version);
         // Stake QUEEN
         ShareStaking(staking).deposit(TRANCHE_Q, outQ, msg.sender, version);
     }
@@ -116,10 +114,7 @@ contract PrimaryMarketRouter is IPrimaryMarketRouter, ITrancheIndexV2 {
         uint256 version
     ) external payable override {
         // Create QUEEN
-        uint256 outQ =
-            msg.value > 0
-                ? wrapAndCreate(address(this), minOutQ, version)
-                : create(address(this), underlying, minOutQ, version);
+        uint256 outQ = create(address(this), underlying, minOutQ, version);
         // Split QUEEN into BISHOP and ROOK
         uint256 outB = primaryMarket.split(address(this), outQ, version);
         // Add BISHOP to stable swap
