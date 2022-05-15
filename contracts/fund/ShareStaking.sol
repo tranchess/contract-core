@@ -414,7 +414,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                 .getRate(startWeek)
                 .mul(weeklyPercentage)
                 .mul(1 weeks)
-                .div(1 weeks + startWeek - timestamp);
+                .div(endWeek - timestamp);
         }
         uint256 totalSupplyQ = _totalSupplies[TRANCHE_Q];
         uint256 totalSupplyB = _totalSupplies[TRANCHE_B];
