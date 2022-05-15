@@ -160,8 +160,7 @@ describe("ShareStaking", function () {
             chessSchedule.address,
             chessController.address,
             votingEscrow.address,
-            startTimestamp,
-            0
+            startTimestamp
         );
         await advanceBlockAtTime(startTimestamp);
 
@@ -231,11 +230,10 @@ describe("ShareStaking", function () {
                 chessSchedule.address,
                 chessController.address,
                 votingEscrow.address,
-                startTimestamp,
-                delay
+                startTimestamp + delay
             );
             await chessSchedule.mock.getRate.withArgs(startTimestamp).returns(parseEther("1"));
-            await advanceBlockAtTime(startTimestamp + DAY);
+            await advanceBlockAtTime(startTimestamp + delay);
         });
 
         it("Should initialize with adjusted initial rate", async function () {

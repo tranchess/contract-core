@@ -97,17 +97,14 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         address chessSchedule_,
         address chessController_,
         address votingEscrow_,
-        uint256 startTimestamp_,
-        uint256 delay_
+        uint256 startTimestamp_
     ) public {
         fund = IFundV3(fund_);
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
         _votingEscrow = IVotingEscrow(votingEscrow_);
-        uint256 startWeek = _endOfWeek(startTimestamp_) - 1 weeks;
-        require(delay_ < 1 weeks);
-        require(startWeek + delay_ > block.timestamp);
-        _checkpointTimestamp = startWeek + delay_;
+        require(startTimestamp_ > block.timestamp);
+        _checkpointTimestamp = startTimestamp_;
         _historicalSplitRatio[IFundV3(fund_).getRebalanceSize()] = IFundV3(fund_).splitRatio();
     }
 
