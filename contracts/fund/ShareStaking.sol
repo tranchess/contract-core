@@ -119,7 +119,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
     }
 
     function getRate() external view returns (uint256) {
-        return _rate;
+        return _rate / 1e18;
     }
 
     /// @notice Return weight of given balance with respect to rewards.

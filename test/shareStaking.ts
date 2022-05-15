@@ -244,7 +244,8 @@ describe("ShareStaking", function () {
             const rate = parseEther("1")
                 .mul(parseEther("1"))
                 .mul(WEEK)
-                .div(WEEK - delay);
+                .div(WEEK - delay)
+                .div(parseEther("1"));
             await testStaking.syncWithVotingEscrow(addr1);
             expect(await testStaking.getRate()).to.equal(rate);
         });
