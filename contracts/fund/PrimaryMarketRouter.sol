@@ -106,33 +106,36 @@ contract PrimaryMarketRouter is IPrimaryMarketRouter, ITrancheIndexV2 {
     }
 
     function createSplitAndStake(
-        address router,
-        address quoteAddress,
         uint256 underlying,
         uint256 minOutQ,
+        address router,
+        address quoteAddress,
+        uint256 minLpOut,
         address staking,
         uint256 version
     ) external payable override {
         // Create QUEEN
         uint256 outQ = create(address(this), underlying, minOutQ, version);
-        _splitAndStake(router, quoteAddress, outQ, staking, version);
+        _splitAndStake(outQ, router, quoteAddress, minLpOut, staking, version);
     }
 
     function splitAndStake(
+        uint256 inQ,
         address router,
         address quoteAddress,
-        uint256 inQ,
+        uint256 minLpOut,
         address staking,
         uint256 version
     ) external override {
         fund.trancheTransferFrom(TRANCHE_Q, msg.sender, address(this), inQ, version);
-        _splitAndStake(router, quoteAddress, inQ, staking, version);
+        _splitAndStake(inQ, router, quoteAddress, minLpOut, staking, version);
     }
 
     function _splitAndStake(
+        uint256 inQ,
         address router,
         address quoteAddress,
-        uint256 inQ,
+        uint256 minLpOut,
         address staking,
         uint256 version
     ) private {
@@ -142,7 +145,8 @@ contract PrimaryMarketRouter is IPrimaryMarketRouter, ITrancheIndexV2 {
         {
             IStableSwap swap = ISwapRouter(router).getSwap(_tokenB, quoteAddress);
             fund.trancheTransfer(TRANCHE_B, address(swap), outB, version);
-            swap.addLiquidity(version, msg.sender);
+            uint256 lpOut = swap.addLiquidity(version, msg.sender);
+            require(lpOut >= minLpOut, "Insufficient output");
         }
 
         if (staking == address(0)) {
