@@ -9,6 +9,7 @@ import {
     TRANCHE_Q,
     TRANCHE_B,
     TRANCHE_R,
+    HOUR,
     WEEK,
     SETTLEMENT_TIME,
     FixtureWalletMap,
@@ -111,6 +112,7 @@ describe("ShareStaking", function () {
         readonly checkpointTimestamp: number;
         readonly fund: MockContract;
         readonly chessSchedule: MockContract;
+        readonly chessController: MockContract;
         readonly votingEscrow: MockContract;
         readonly usdc: Contract;
         readonly staking: Contract;
@@ -127,6 +129,7 @@ describe("ShareStaking", function () {
     let addr2: string;
     let fund: MockContract;
     let chessSchedule: MockContract;
+    let chessController: MockContract;
     let votingEscrow: MockContract;
     let usdc: Contract;
     let staking: Contract;
@@ -135,7 +138,7 @@ describe("ShareStaking", function () {
         const [user1, user2, owner] = provider.getWallets();
 
         const startEpoch = (await ethers.provider.getBlock("latest")).timestamp;
-        await advanceBlockAtTime(Math.floor(startEpoch / WEEK) * WEEK + WEEK);
+        const startTimestamp = Math.floor(startEpoch / WEEK) * WEEK + WEEK + SETTLEMENT_TIME;
 
         const fund = await deployMockForName(owner, "IFundV3");
         await fund.mock.getRebalanceSize.returns(0);
@@ -156,9 +159,12 @@ describe("ShareStaking", function () {
             fund.address,
             chessSchedule.address,
             chessController.address,
-            votingEscrow.address
+            votingEscrow.address,
+            startTimestamp,
+            0
         );
         await staking.initialize();
+        await advanceBlockAtTime(startTimestamp);
 
         // Deposit initial shares
         await fund.mock.trancheTransferFrom.returns();
@@ -187,6 +193,7 @@ describe("ShareStaking", function () {
             checkpointTimestamp,
             fund,
             chessSchedule,
+            chessController,
             votingEscrow,
             usdc,
             staking: staking.connect(user1),
@@ -207,9 +214,40 @@ describe("ShareStaking", function () {
         addr2 = user2.address;
         fund = fixtureData.fund;
         chessSchedule = fixtureData.chessSchedule;
+        chessController = fixtureData.chessController;
         votingEscrow = fixtureData.votingEscrow;
         usdc = fixtureData.usdc;
         staking = fixtureData.staking;
+    });
+
+    describe("initial checkpoint", function () {
+        let testStaking: Contract;
+        const delay = HOUR * 24;
+        beforeEach(async function () {
+            const ShareStaking = await ethers.getContractFactory("ShareStaking");
+            const startEpoch = (await ethers.provider.getBlock("latest")).timestamp;
+            const startTimestamp = Math.floor(startEpoch / WEEK) * WEEK + WEEK + SETTLEMENT_TIME;
+            testStaking = await ShareStaking.connect(owner).deploy(
+                fund.address,
+                chessSchedule.address,
+                chessController.address,
+                votingEscrow.address,
+                startTimestamp,
+                delay
+            );
+            await chessSchedule.mock.getRate.withArgs(startTimestamp).returns(parseEther("1"));
+            await advanceBlockAtTime(startTimestamp);
+            await testStaking.initialize();
+        });
+
+        it("Should initialize with adjusted initial rate", async function () {
+            const rate = parseEther("1")
+                .mul(parseEther("1"))
+                .mul(WEEK)
+                .div(WEEK - delay);
+            await testStaking.syncWithVotingEscrow(addr1);
+            expect(await testStaking.getRate()).to.equal(rate);
+        });
     });
 
     describe("deposit()", function () {

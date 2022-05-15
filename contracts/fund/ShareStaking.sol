@@ -47,6 +47,8 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
 
     IVotingEscrow private immutable _votingEscrow;
 
+    /// @dev Per-fund CHESS emission rate. The product of CHESS emission rate
+    ///      and weekly percentage of the fund
     uint256 private _rate;
 
     /// @dev Total amount of user shares, i.e. sum of all entries in `_balances`.
@@ -81,6 +83,9 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
     /// @dev Timestamp when checkpoint() is called.
     uint256 private _checkpointTimestamp;
 
+    /// @dev Launch delay.
+    uint256 private _delay;
+
     /// @dev Snapshot of `_invTotalWeightIntegral` per user.
     mapping(address => uint256) private _userIntegrals;
 
@@ -94,19 +99,27 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         address fund_,
         address chessSchedule_,
         address chessController_,
-        address votingEscrow_
+        address votingEscrow_,
+        uint256 startTimestamp_,
+        uint256 delay_
     ) public {
         fund = IFundV3(fund_);
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
         _votingEscrow = IVotingEscrow(votingEscrow_);
+        uint256 startWeek = _endOfWeek(startTimestamp_) - 1 weeks;
+        require(delay_ < 1 weeks);
+        require(startWeek + delay_ > block.timestamp);
+        _checkpointTimestamp = startWeek + delay_;
+        _delay = delay_;
     }
 
     function initialize() external {
-        require(_checkpointTimestamp == 0);
-        _checkpointTimestamp = block.timestamp;
-        _rate = IChessSchedule(chessSchedule).getRate(block.timestamp);
         _historicalSplitRatio[fund.getRebalanceSize()] = fund.splitRatio();
+    }
+
+    function getRate() external view returns (uint256) {
+        return _rate;
     }
 
     /// @notice Return weight of given balance with respect to rewards.
@@ -389,13 +402,22 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
     function _checkpoint(uint256 rebalanceSize) private {
         uint256 timestamp = _checkpointTimestamp;
         if (timestamp >= block.timestamp) {
+            // adjust initial rate to compensate for the first week's launch delay
+            uint256 startWeek = _endOfWeek(block.timestamp) - 1 weeks;
+            if (timestamp > startWeek && _rate == 0) {
+                uint256 weeklyPercentage =
+                    chessController.getFundRelativeWeight(address(fund), startWeek);
+                _rate = IChessSchedule(chessSchedule)
+                    .getRate(startWeek)
+                    .mul(weeklyPercentage)
+                    .mul(1 weeks)
+                    .div(1 weeks - _delay);
+            }
             return;
         }
 
         uint256 integral = _invTotalWeightIntegral;
         uint256 endWeek = _endOfWeek(timestamp);
-        uint256 weeklyPercentage =
-            chessController.getFundRelativeWeight(address(fund), endWeek - 1 weeks);
         uint256 version = _totalSupplyVersion;
         uint256 rebalanceTimestamp;
         if (version < rebalanceSize) {
@@ -415,10 +437,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
 
             if (weight > 0) {
                 integral = integral.add(
-                    rate
-                        .mul(endTimestamp.sub(timestamp_))
-                        .multiplyDecimal(weeklyPercentage)
-                        .divideDecimalPrecise(weight)
+                    rate.mul(endTimestamp.sub(timestamp_)).decimalToPreciseDecimal().div(weight)
                 );
             }
 
@@ -450,8 +469,9 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                 }
             }
             if (endTimestamp == endWeek) {
-                rate = chessSchedule.getRate(endWeek);
-                weeklyPercentage = chessController.getFundRelativeWeight(address(fund), endWeek);
+                uint256 weeklyPercentage =
+                    chessController.getFundRelativeWeight(address(fund), endWeek);
+                rate = chessSchedule.getRate(endWeek).mul(weeklyPercentage);
                 endWeek += 1 weeks;
             }
 
