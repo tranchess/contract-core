@@ -9,7 +9,7 @@ import {
     TRANCHE_Q,
     TRANCHE_B,
     TRANCHE_R,
-    HOUR,
+    DAY,
     WEEK,
     SETTLEMENT_TIME,
     FixtureWalletMap,
@@ -163,7 +163,6 @@ describe("ShareStaking", function () {
             startTimestamp,
             0
         );
-        await staking.initialize();
         await advanceBlockAtTime(startTimestamp);
 
         // Deposit initial shares
@@ -222,7 +221,7 @@ describe("ShareStaking", function () {
 
     describe("initial checkpoint", function () {
         let testStaking: Contract;
-        const delay = HOUR * 24;
+        const delay = DAY;
         beforeEach(async function () {
             const ShareStaking = await ethers.getContractFactory("ShareStaking");
             const startEpoch = (await ethers.provider.getBlock("latest")).timestamp;
@@ -236,8 +235,7 @@ describe("ShareStaking", function () {
                 delay
             );
             await chessSchedule.mock.getRate.withArgs(startTimestamp).returns(parseEther("1"));
-            await advanceBlockAtTime(startTimestamp);
-            await testStaking.initialize();
+            await advanceBlockAtTime(startTimestamp + DAY);
         });
 
         it("Should initialize with adjusted initial rate", async function () {

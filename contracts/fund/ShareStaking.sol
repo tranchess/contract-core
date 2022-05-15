@@ -83,9 +83,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
     /// @dev Timestamp when checkpoint() is called.
     uint256 private _checkpointTimestamp;
 
-    /// @dev Launch delay.
-    uint256 private _delay;
-
     /// @dev Snapshot of `_invTotalWeightIntegral` per user.
     mapping(address => uint256) private _userIntegrals;
 
@@ -111,11 +108,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         require(delay_ < 1 weeks);
         require(startWeek + delay_ > block.timestamp);
         _checkpointTimestamp = startWeek + delay_;
-        _delay = delay_;
-    }
-
-    function initialize() external {
-        _historicalSplitRatio[fund.getRebalanceSize()] = fund.splitRatio();
+        _historicalSplitRatio[IFundV3(fund_).getRebalanceSize()] = IFundV3(fund_).splitRatio();
     }
 
     function getRate() external view returns (uint256) {
@@ -402,17 +395,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
     function _checkpoint(uint256 rebalanceSize) private {
         uint256 timestamp = _checkpointTimestamp;
         if (timestamp >= block.timestamp) {
-            // adjust initial rate to compensate for the first week's launch delay
-            uint256 startWeek = _endOfWeek(block.timestamp) - 1 weeks;
-            if (timestamp > startWeek && _rate == 0) {
-                uint256 weeklyPercentage =
-                    chessController.getFundRelativeWeight(address(fund), startWeek);
-                _rate = IChessSchedule(chessSchedule)
-                    .getRate(startWeek)
-                    .mul(weeklyPercentage)
-                    .mul(1 weeks)
-                    .div(1 weeks - _delay);
-            }
             return;
         }
 
@@ -426,6 +408,17 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
             rebalanceTimestamp = type(uint256).max;
         }
         uint256 rate = _rate;
+        // adjust initial rate to compensate for the first week's launch delay
+        if (rate == 0) {
+            uint256 startWeek = endWeek - 1 weeks;
+            uint256 weeklyPercentage =
+                chessController.getFundRelativeWeight(address(fund), startWeek);
+            rate = IChessSchedule(chessSchedule)
+                .getRate(startWeek)
+                .mul(weeklyPercentage)
+                .mul(1 weeks)
+                .div(1 weeks + startWeek - timestamp);
+        }
         uint256 totalSupplyQ = _totalSupplies[TRANCHE_Q];
         uint256 totalSupplyB = _totalSupplies[TRANCHE_B];
         uint256 totalSupplyR = _totalSupplies[TRANCHE_R];
