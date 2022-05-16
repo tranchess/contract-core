@@ -131,12 +131,12 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         emit Transfer(account, address(0), amount);
     }
 
-    function _beforeTokenTransfer(
-        address from,
-        address to,
+    function _transfer(
+        address,
+        address,
         uint256
     ) internal override {
-        require(from == address(0) || to == address(0), "Transfer is not allow");
+        revert("Transfer is not allow");
     }
 
     // ---------------------------- LP Token -----------------------------------
