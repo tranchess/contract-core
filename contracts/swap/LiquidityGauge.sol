@@ -246,15 +246,15 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
 
     function _checkpoint(uint256 currentWorkingSupply) private {
         uint256 timestamp_ = lastTimestamp;
-        uint256 endWeek = _endOfWeek(timestamp_);
-        uint256 rate = chessSchedule.getRate(endWeek.sub(1 weeks));
-        uint256 relativeWeight =
-            chessController.getFundRelativeWeight(address(this), endWeek.sub(1 weeks));
 
         // calculate overall integral till now
         if (currentWorkingSupply != 0) {
             uint256 overallIntegral_ = overallIntegral;
             for (uint256 i = 0; i < MAX_ITERATIONS && timestamp_ < block.timestamp; i++) {
+                uint256 endWeek = _endOfWeek(timestamp_);
+                uint256 rate = chessSchedule.getRate(endWeek.sub(1 weeks));
+                uint256 relativeWeight =
+                    chessController.getFundRelativeWeight(address(this), endWeek.sub(1 weeks));
                 uint256 endTimestamp = endWeek.min(block.timestamp);
                 if (relativeWeight > 0) {
                     overallIntegral_ = overallIntegral_.add(
@@ -265,9 +265,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
                             .div(currentWorkingSupply)
                     );
                 }
-                rate = chessSchedule.getRate(endWeek);
-                relativeWeight = chessController.getFundRelativeWeight(address(this), endWeek);
-                endWeek += 1 weeks;
                 timestamp_ = endTimestamp;
             }
             overallIntegral = overallIntegral_;
