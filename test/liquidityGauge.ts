@@ -310,7 +310,7 @@ describe("LiquidityGauge", function () {
             await usdc.mint(liquidityGauge.address, parseUsdc("45"));
             await swap.call(
                 liquidityGauge,
-                "snapshot",
+                "distribute",
                 parseEther("12"),
                 parseEther("23"),
                 parseEther("34"),
@@ -341,7 +341,7 @@ describe("LiquidityGauge", function () {
             expect(await liquidityGauge.distributionVersions(addr1)).to.equal(1);
         });
 
-        it("Should snapshot for new rebalance", async function () {
+        it("Should distribute for new rebalance", async function () {
             await fund.mock.doRebalance.returns(parseEther("1"), parseEther("2"), parseEther("3"));
             await fund.mock.doRebalance.withArgs(0, 0, 0, 0).returns(0, 0, 0);
             await tokens[0].mint(liquidityGauge.address, parseEther("10"));
@@ -350,7 +350,7 @@ describe("LiquidityGauge", function () {
             await usdc.mint(liquidityGauge.address, parseUsdc("10"));
             await swap.call(
                 liquidityGauge,
-                "snapshot",
+                "distribute",
                 parseEther("10"),
                 parseEther("10"),
                 parseEther("10"),

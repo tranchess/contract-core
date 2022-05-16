@@ -328,7 +328,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
 
     // ----------------------- Asset Distribution ------------------------------
 
-    function snapshot(
+    function distribute(
         uint256 amountQ,
         uint256 amountB,
         uint256 amountR,

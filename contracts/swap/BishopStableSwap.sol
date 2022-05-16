@@ -132,7 +132,7 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
             if (excessiveQuote > 0) {
                 IERC20(quoteAddress).safeTransfer(lpToken, excessiveQuote);
             }
-            ILiquidityGauge(lpToken).snapshot(
+            ILiquidityGauge(lpToken).distribute(
                 excessiveQ,
                 excessiveB,
                 excessiveR,
