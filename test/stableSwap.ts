@@ -140,7 +140,8 @@ describe("BishopStableSwap", function () {
         await twapOracle.mock.getLatest.returns(0);
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
-        await votingEscrow.mock.getLockedBalance.returns([0, 0]);
+        await votingEscrow.mock.balanceOf.returns(0);
+        await votingEscrow.mock.totalSupply.returns(1);
 
         const fund = await deployMockForName(owner, "IFundV3");
         await fund.mock.currentDay.returns(0);
@@ -804,7 +805,8 @@ describe("QueenStableSwap", function () {
         const deadline = (await ethers.provider.getBlock("latest")).timestamp + 3600;
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
-        await votingEscrow.mock.getLockedBalance.returns([0, 0]);
+        await votingEscrow.mock.balanceOf.returns(0);
+        await votingEscrow.mock.totalSupply.returns(1);
 
         const fund = await deployMockForName(owner, "IFundV3");
         await fund.mock.currentDay.returns(0);
@@ -1448,7 +1450,8 @@ describe("Flash Swap", function () {
         await twapOracle.mock.getLatest.returns(0);
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
-        await votingEscrow.mock.getLockedBalance.returns([0, 0]);
+        await votingEscrow.mock.balanceOf.returns(0);
+        await votingEscrow.mock.totalSupply.returns(1);
 
         const MockToken = await ethers.getContractFactory("MockToken");
         const tokens = [

@@ -70,6 +70,8 @@ describe("QueenStableSwap", function () {
         const chessController = await deployMockForName(owner, "ChessController");
         await chessController.mock.getFundRelativeWeight.returns(UNIT);
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
+        await votingEscrow.mock.balanceOf.returns(0);
+        await votingEscrow.mock.totalSupply.returns(1);
         const rewardToken = await MockToken.connect(owner).deploy("Temporary Token", "TMP", 8);
         const swapReward = await deployMockForName(owner, "SwapReward");
         await swapReward.mock.rewardToken.returns(rewardToken.address);

@@ -18,17 +18,15 @@ export const MAX_BOOSTING_FACTOR = parseEther("3");
 export function boostedWorkingBalance(
     balance: BigNumber,
     totalSupply: BigNumber,
-    veProportion: BigNumber
+    veBalance: BigNumber,
+    veTotalSupply: BigNumber
 ): BigNumber {
     const e18 = parseEther("1");
-    const maxWorkingBalance = balance.mul(MAX_BOOSTING_FACTOR).div(e18);
-    const boostingPower = totalSupply.mul(veProportion).div(e18);
-    const workingBalanceAfterBoosting = balance.add(
-        boostingPower.mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18)
+    const upperBoundBalance = balance.mul(MAX_BOOSTING_FACTOR).div(e18);
+    const boostedBalance = balance.add(
+        totalSupply.mul(veBalance).div(veTotalSupply).mul(MAX_BOOSTING_FACTOR.sub(e18)).div(e18)
     );
-    return maxWorkingBalance.lt(workingBalanceAfterBoosting)
-        ? maxWorkingBalance
-        : workingBalanceAfterBoosting;
+    return upperBoundBalance.lt(boostedBalance) ? upperBoundBalance : boostedBalance;
 }
 
 // Initial balance:
@@ -48,11 +46,9 @@ const TOTAL_LP = USER1_LP.add(USER2_LP);
 const USER1_VE = parseEther("0.03");
 const USER2_VE = parseEther("0.07");
 const TOTAL_VE = USER1_VE.add(USER2_VE);
-const USER1_VE_PROPORTION = USER1_VE.mul(parseEther("1")).div(TOTAL_VE);
-const USER2_VE_PROPORTION = USER2_VE.mul(parseEther("1")).div(TOTAL_VE);
 
-const USER1_WORKING_BALANCE = boostedWorkingBalance(USER1_LP, TOTAL_LP, USER1_VE_PROPORTION);
-const USER2_WORKING_BALANCE = boostedWorkingBalance(USER2_LP, TOTAL_LP, USER2_VE_PROPORTION);
+const USER1_WORKING_BALANCE = boostedWorkingBalance(USER1_LP, TOTAL_LP, USER1_VE, TOTAL_VE);
+const USER2_WORKING_BALANCE = boostedWorkingBalance(USER2_LP, TOTAL_LP, USER2_VE, TOTAL_VE);
 const WORKING_SUPPLY = USER1_WORKING_BALANCE.add(USER2_WORKING_BALANCE);
 
 describe("LiquidityGauge", function () {
@@ -103,6 +99,8 @@ describe("LiquidityGauge", function () {
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
 
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
+        await votingEscrow.mock.balanceOf.returns(0);
+        await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
 
         const MockToken = await ethers.getContractFactory("MockToken");
         const usdc = await MockToken.connect(owner).deploy("USD", "USD", 18);
@@ -118,7 +116,6 @@ describe("LiquidityGauge", function () {
 
         const SwapReward = await ethers.getContractFactory("SwapReward");
         const swapReward = await SwapReward.connect(owner).deploy();
-
         const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
         const liquidityGauge = await LiquidityGauge.connect(owner).deploy(
             "Test LP",
@@ -216,20 +213,7 @@ describe("LiquidityGauge", function () {
     });
 
     describe("syncWithVotingEscrow()", function () {
-        const lockedAmount1 = parseEther("150");
-        const lockedAmount2 = parseEther("700");
-        let unlockTime1: number;
-        let unlockTime2: number;
-
         beforeEach(async function () {
-            unlockTime1 = checkpointTimestamp + WEEK * 20;
-            unlockTime2 = checkpointTimestamp + WEEK * 10;
-            await votingEscrow.mock.getLockedBalance
-                .withArgs(addr1)
-                .returns([lockedAmount1, unlockTime1]);
-            await votingEscrow.mock.getLockedBalance
-                .withArgs(addr2)
-                .returns([lockedAmount2, unlockTime2]);
             await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE);
             await votingEscrow.mock.balanceOf.withArgs(addr2).returns(USER2_VE);
             await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
@@ -237,106 +221,47 @@ describe("LiquidityGauge", function () {
 
         it("Should update everything the first time", async function () {
             await liquidityGauge.syncWithVotingEscrow(addr1);
-            const veSnapshot1 = await liquidityGauge.veSnapshotOf(addr1);
-            expect(veSnapshot1.veLocked.amount).to.equal(lockedAmount1);
-            expect(veSnapshot1.veLocked.unlockTime).to.equal(unlockTime1);
-            expect(veSnapshot1.veProportion).to.equal(USER1_VE_PROPORTION);
             expect(await liquidityGauge.workingBalanceOf(addr1)).to.equal(USER1_WORKING_BALANCE);
             expect(await liquidityGauge.workingSupply()).to.equal(
                 USER1_WORKING_BALANCE.add(USER2_LP)
             );
 
             await liquidityGauge.syncWithVotingEscrow(addr2);
-            const veSnapshot2 = await liquidityGauge.veSnapshotOf(addr2);
-            expect(veSnapshot2.veLocked.amount).to.equal(lockedAmount2);
-            expect(veSnapshot2.veLocked.unlockTime).to.equal(unlockTime2);
-            expect(veSnapshot2.veProportion).to.equal(USER2_VE_PROPORTION);
             expect(await liquidityGauge.workingBalanceOf(addr2)).to.equal(USER2_WORKING_BALANCE);
             expect(await liquidityGauge.workingSupply()).to.equal(WORKING_SUPPLY);
         });
 
-        it("Should not update ve proportion when no locking action is taken", async function () {
+        it("Should still update working balance with no other action taken", async function () {
             await liquidityGauge.syncWithVotingEscrow(addr1);
-            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE.div(2));
-            await votingEscrow.mock.totalSupply.returns(TOTAL_VE.mul(2));
-            await liquidityGauge.syncWithVotingEscrow(addr1);
-            const veSnapshot = await liquidityGauge.veSnapshotOf(addr1);
-            expect(veSnapshot.veLocked.amount).to.equal(lockedAmount1);
-            expect(veSnapshot.veLocked.unlockTime).to.equal(unlockTime1);
-            expect(veSnapshot.veProportion).to.equal(USER1_VE_PROPORTION);
-        });
-
-        it("Should still update working balance when no locking action is taken", async function () {
-            await liquidityGauge.syncWithVotingEscrow(addr1);
+            await votingEscrow.mock.balanceOf.withArgs(addr2).returns(0);
             await swap.call(liquidityGauge, "mint", addr2, TOTAL_LP);
             await liquidityGauge.syncWithVotingEscrow(addr1);
             const workingBalance = await liquidityGauge.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
-                boostedWorkingBalance(USER1_LP, TOTAL_LP.mul(2), USER1_VE_PROPORTION)
+                boostedWorkingBalance(USER1_LP, TOTAL_LP.mul(2), USER1_VE, TOTAL_VE)
             );
             expect(await liquidityGauge.workingSupply()).to.equal(
                 workingBalance.add(USER2_LP).add(TOTAL_LP)
             );
         });
 
-        it("Should update ve proportion if locked amount changed", async function () {
+        it("Should update ve proportion if locked amount changed/unlock time extended", async function () {
             await liquidityGauge.syncWithVotingEscrow(addr1);
-            await votingEscrow.mock.getLockedBalance
-                .withArgs(addr1)
-                .returns([lockedAmount1.mul(2), unlockTime1]);
             await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE.mul(2));
             await votingEscrow.mock.totalSupply.returns(TOTAL_VE.mul(5));
             await liquidityGauge.syncWithVotingEscrow(addr1);
-            const veSnapshot = await liquidityGauge.veSnapshotOf(addr1);
-            expect(veSnapshot.veLocked.amount).to.equal(lockedAmount1.mul(2));
-            expect(veSnapshot.veProportion).to.equal(
-                USER1_VE.mul(2).mul(parseEther("1")).div(TOTAL_VE.mul(5))
-            );
             const workingBalance = await liquidityGauge.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
-                boostedWorkingBalance(USER1_LP, TOTAL_LP, veSnapshot.veProportion)
+                boostedWorkingBalance(USER1_LP, TOTAL_LP, USER1_VE.mul(2), TOTAL_VE.mul(5))
             );
             expect(await liquidityGauge.workingSupply()).to.equal(workingBalance.add(USER2_LP));
-        });
-
-        it("Should update ve proportion if unlock time extended", async function () {
-            await liquidityGauge.syncWithVotingEscrow(addr1);
-            await votingEscrow.mock.getLockedBalance
-                .withArgs(addr1)
-                .returns([lockedAmount1, unlockTime1 + WEEK * 20]);
-            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE.mul(2));
-            await votingEscrow.mock.totalSupply.returns(TOTAL_VE.mul(5));
-            await liquidityGauge.syncWithVotingEscrow(addr1);
-            const veSnapshot = await liquidityGauge.veSnapshotOf(addr1);
-            expect(veSnapshot.veLocked.unlockTime).to.equal(unlockTime1 + WEEK * 20);
-            expect(veSnapshot.veProportion).to.equal(
-                USER1_VE.mul(2).mul(parseEther("1")).div(TOTAL_VE.mul(5))
-            );
-            const workingBalance = await liquidityGauge.workingBalanceOf(addr1);
-            expect(workingBalance).to.equal(
-                boostedWorkingBalance(USER1_LP, TOTAL_LP, veSnapshot.veProportion)
-            );
-            expect(await liquidityGauge.workingSupply()).to.equal(workingBalance.add(USER2_LP));
-        });
-
-        it("Should update ve proportion if lock expires", async function () {
-            await liquidityGauge.syncWithVotingEscrow(addr1);
-            await advanceBlockAtTime(unlockTime1);
-            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(0);
-            await liquidityGauge.syncWithVotingEscrow(addr1);
-            const veSnapshot = await liquidityGauge.veSnapshotOf(addr1);
-            expect(veSnapshot.veProportion).to.equal(0);
-            expect(await liquidityGauge.workingBalanceOf(addr1)).to.equal(USER1_LP);
-            expect(await liquidityGauge.workingSupply()).to.equal(TOTAL_LP);
         });
     });
 
     describe("Working balance update due to balance change", function () {
         beforeEach(async function () {
-            await votingEscrow.mock.getLockedBalance.returns([100, checkpointTimestamp + WEEK]);
             await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE);
             await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
-            await liquidityGauge.syncWithVotingEscrow(addr1);
         });
 
         it("Should update working balance on deposit()", async function () {
@@ -346,36 +271,29 @@ describe("LiquidityGauge", function () {
                 boostedWorkingBalance(
                     USER1_LP.add(USER1_LP),
                     TOTAL_LP.add(USER1_LP),
-                    USER1_VE_PROPORTION
+                    USER1_VE,
+                    TOTAL_VE
                 )
             );
             expect(await liquidityGauge.workingSupply()).to.equal(workingBalance.add(USER2_LP));
         });
 
         it("Should update working balance on withdraw()", async function () {
-            await swap.call(liquidityGauge, "burnFrom", addr1, USER1_LP);
+            await swap.call(liquidityGauge, "burnFrom", addr1, USER1_LP.div(10));
             const workingBalance = await liquidityGauge.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
                 boostedWorkingBalance(
-                    BigNumber.from(0),
-                    TOTAL_LP.sub(USER1_LP),
-                    USER1_VE_PROPORTION
+                    USER1_LP.sub(USER1_LP.div(10)),
+                    TOTAL_LP.sub(USER1_LP.div(10)),
+                    USER1_VE,
+                    TOTAL_VE
                 )
             );
             expect(await liquidityGauge.workingSupply()).to.equal(workingBalance.add(USER2_LP));
         });
 
-        it("Should not update working balance on userCheckpoint()", async function () {
-            await liquidityGauge.userCheckpoint(addr1);
-            expect(await liquidityGauge.workingBalanceOf(addr1)).to.equal(USER1_WORKING_BALANCE);
-            expect(await liquidityGauge.workingSupply()).to.equal(
-                USER1_WORKING_BALANCE.add(USER2_LP)
-            );
-        });
-
-        it("Should not update working balance on claimTokenAndAssetAndReward()", async function () {
+        it("Should update working balance on claimTokenAndAssetAndReward()", async function () {
             await chessSchedule.mock.mint.returns();
-            await swap.mock.quoteAddress.returns(usdc.address);
             await liquidityGauge.claimTokenAndAssetAndReward(addr1);
             expect(await liquidityGauge.workingBalanceOf(addr1)).to.equal(USER1_WORKING_BALANCE);
             expect(await liquidityGauge.workingSupply()).to.equal(
@@ -513,10 +431,6 @@ describe("LiquidityGauge", function () {
         });
 
         it("Should calculate rewards according to boosted working balance", async function () {
-            await votingEscrow.mock.getLockedBalance
-                .withArgs(addr1)
-                .returns([100, checkpointTimestamp + WEEK * 100]);
-
             await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE);
             await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
             await setNextBlockTime(rewardStartTimestamp + 100);
