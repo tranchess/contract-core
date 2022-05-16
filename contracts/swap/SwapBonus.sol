@@ -7,25 +7,24 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
-contract SwapReward is Ownable {
+contract SwapBonus is Ownable {
     using Math for uint256;
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    address public liquidityGauge;
-    address public rewardToken;
+    address public immutable liquidityGauge;
+    address public immutable bonusToken;
     uint256 public ratePerSecond;
     uint256 public startTimestamp;
     uint256 public endTimestamp;
     uint256 public lastTimestamp;
 
-    function initialize(address liquidityGauge_, address rewardToken_) external onlyOwner {
-        require(liquidityGauge == address(0));
+    constructor(address liquidityGauge_, address bonusToken_) public {
         liquidityGauge = liquidityGauge_;
-        rewardToken = rewardToken_;
+        bonusToken = bonusToken_;
     }
 
-    function updateReward(
+    function updateBonus(
         address caller,
         uint256 amount,
         uint256 start,
@@ -40,20 +39,16 @@ contract SwapReward is Ownable {
         startTimestamp = start.max(block.timestamp);
         endTimestamp = start.add(interval);
         lastTimestamp = startTimestamp;
-        IERC20(rewardToken).safeTransferFrom(
-            msg.sender,
-            address(this),
-            ratePerSecond.mul(interval)
-        );
+        IERC20(bonusToken).safeTransferFrom(msg.sender, address(this), ratePerSecond.mul(interval));
     }
 
-    function getReward() external {
+    function getBonus() external {
         require(msg.sender == liquidityGauge);
         uint256 currentTimestamp = endTimestamp.min(block.timestamp);
         uint256 reward = ratePerSecond.mul(currentTimestamp - lastTimestamp);
         lastTimestamp = currentTimestamp;
         if (reward > 0) {
-            IERC20(rewardToken).safeTransfer(liquidityGauge, reward);
+            IERC20(bonusToken).safeTransfer(liquidityGauge, reward);
         }
     }
 }

@@ -114,8 +114,15 @@ describe("LiquidityGauge", function () {
         await fund.mock.tokenR.returns(tokens[2].address);
         await swap.mock.quoteAddress.returns(usdc.address);
 
-        const SwapReward = await ethers.getContractFactory("SwapReward");
-        const swapReward = await SwapReward.connect(owner).deploy();
+        const liquidityGaugeAddress = ethers.utils.getContractAddress({
+            from: owner.address,
+            nonce: (await owner.getTransactionCount("pending")) + 1,
+        });
+        const SwapBonus = await ethers.getContractFactory("SwapBonus");
+        const swapBonus = await SwapBonus.connect(owner).deploy(
+            liquidityGaugeAddress,
+            usdc.address
+        );
         const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
         const liquidityGauge = await LiquidityGauge.connect(owner).deploy(
             "Test LP",
@@ -124,10 +131,9 @@ describe("LiquidityGauge", function () {
             chessController.address,
             fund.address,
             votingEscrow.address,
-            swapReward.address
+            swapBonus.address
         );
         await liquidityGauge.transferOwnership(swap.address);
-        await swapReward.initialize(liquidityGauge.address, usdc.address);
 
         // Deposit initial shares
         await swap.call(liquidityGauge, "mint", user1.address, USER1_LP);
@@ -292,9 +298,9 @@ describe("LiquidityGauge", function () {
             expect(await liquidityGauge.workingSupply()).to.equal(workingBalance.add(USER2_LP));
         });
 
-        it("Should update working balance on claimTokenAndAssetAndReward()", async function () {
+        it("Should update working balance on claimTokenAndAssetAndBonus()", async function () {
             await chessSchedule.mock.mint.returns();
-            await liquidityGauge.claimTokenAndAssetAndReward(addr1);
+            await liquidityGauge.claimTokenAndAssetAndBonus(addr1);
             expect(await liquidityGauge.workingBalanceOf(addr1)).to.equal(USER1_WORKING_BALANCE);
             expect(await liquidityGauge.workingSupply()).to.equal(
                 USER1_WORKING_BALANCE.add(USER2_LP)
@@ -397,34 +403,34 @@ describe("LiquidityGauge", function () {
             rate2 = parseEther("1").mul(USER2_LP).div(TOTAL_LP);
         });
 
-        it("Should mint rewards on claimTokenAndAssetAndReward()", async function () {
+        it("Should mint rewards on claimTokenAndAssetAndBonus()", async function () {
             await advanceBlockAtTime(rewardStartTimestamp + 100);
 
             expect(
-                (await liquidityGauge.callStatic["claimableTokenAndAssetAndReward"](addr1))[0]
+                (await liquidityGauge.callStatic["claimableTokenAndAssetAndBonus"](addr1))[0]
             ).to.equal(rate1.mul(100));
             expect(
-                (await liquidityGauge.callStatic["claimableTokenAndAssetAndReward"](addr2))[0]
+                (await liquidityGauge.callStatic["claimableTokenAndAssetAndBonus"](addr2))[0]
             ).to.equal(rate2.mul(100));
 
             await expect(async () => {
                 await setNextBlockTime(rewardStartTimestamp + 300);
-                await liquidityGauge.claimTokenAndAssetAndReward(addr1);
+                await liquidityGauge.claimTokenAndAssetAndBonus(addr1);
             }).to.callMocks({
                 func: chessSchedule.mock.mint.withArgs(addr1, rate1.mul(300)),
             });
 
             await advanceBlockAtTime(rewardStartTimestamp + 800);
             expect(
-                (await liquidityGauge.callStatic["claimableTokenAndAssetAndReward"](addr1))[0]
+                (await liquidityGauge.callStatic["claimableTokenAndAssetAndBonus"](addr1))[0]
             ).to.equal(rate1.mul(500));
             expect(
-                (await liquidityGauge.callStatic["claimableTokenAndAssetAndReward"](addr2))[0]
+                (await liquidityGauge.callStatic["claimableTokenAndAssetAndBonus"](addr2))[0]
             ).to.equal(rate2.mul(800));
 
             await expect(async () => {
                 await setNextBlockTime(rewardStartTimestamp + 1000);
-                await liquidityGauge.claimTokenAndAssetAndReward(addr1);
+                await liquidityGauge.claimTokenAndAssetAndBonus(addr1);
             }).to.callMocks({
                 func: chessSchedule.mock.mint.withArgs(addr1, rate1.mul(700)),
             });
@@ -455,10 +461,10 @@ describe("LiquidityGauge", function () {
                 );
 
             expect(
-                (await liquidityGauge.callStatic["claimableTokenAndAssetAndReward"](addr1))[0]
+                (await liquidityGauge.callStatic["claimableTokenAndAssetAndBonus"](addr1))[0]
             ).to.equal(reward1);
             expect(
-                (await liquidityGauge.callStatic["claimableTokenAndAssetAndReward"](addr2))[0]
+                (await liquidityGauge.callStatic["claimableTokenAndAssetAndBonus"](addr2))[0]
             ).to.equal(reward2);
         });
     });

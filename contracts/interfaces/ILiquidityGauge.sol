@@ -19,18 +19,18 @@ interface ILiquidityGauge is IERC20 {
 
     // ---------------------------- LP Token -----------------------------------
 
-    function claimableTokenAndAssetAndReward(address account)
+    function claimableTokenAndAssetAndBonus(address account)
         external
         returns (
             uint256 amountToken,
-            uint256 amountReward,
+            uint256 amountBonus,
             uint256 amountQ,
             uint256 amountB,
             uint256 amountR,
             uint256 amountU
         );
 
-    function claimTokenAndAssetAndReward(address account) external;
+    function claimTokenAndAssetAndBonus(address account) external;
 
     function userCheckpoint(address account) external;
 

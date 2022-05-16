@@ -19,10 +19,10 @@ import "../interfaces/IVotingEscrow.sol";
 import "../utils/CoreUtility.sol";
 import "../utils/SafeDecimalMath.sol";
 
-interface ISwapRewards {
-    function rewardToken() external view returns (address);
+interface ISwapBonus {
+    function bonusToken() external view returns (address);
 
-    function getReward() external;
+    function getBonus() external;
 }
 
 struct Distribution {
@@ -50,7 +50,8 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
     IChessController public immutable chessController;
     IFundV3 public immutable fund;
     IVotingEscrow private immutable _votingEscrow;
-    address public immutable swapReward;
+    address public immutable swapBonus;
+    IERC20 private immutable _bonusToken;
 
     uint256 private _workingSupply;
     mapping(address => uint256) private _workingBalances;
@@ -66,9 +67,9 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
     mapping(address => uint256) private _chessUserIntegrals;
     mapping(address => uint256) private _claimableChess;
 
-    uint256 private _rewardIntegral;
-    mapping(address => uint256) private _rewardUserIntegral;
-    mapping(address => uint256) private _claimableRewards;
+    uint256 private _bonusIntegral;
+    mapping(address => uint256) private _bonusUserIntegral;
+    mapping(address => uint256) private _claimableBonus;
 
     constructor(
         string memory name_,
@@ -77,13 +78,14 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         address chessController_,
         address fund_,
         address votingEscrow_,
-        address swapReward_
+        address swapBonus_
     ) public ERC20(name_, symbol_) {
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
         fund = IFundV3(fund_);
         _votingEscrow = IVotingEscrow(votingEscrow_);
-        swapReward = swapReward_;
+        swapBonus = swapBonus_;
+        _bonusToken = IERC20(ISwapBonus(swapBonus_).bonusToken());
         _checkpointTimestamp = block.timestamp;
     }
 
@@ -96,7 +98,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         _tokenCheckpoint(account, workingBalance);
         uint256 balance = balanceOf(account);
         _assetCheckpoint(account, balance);
-        _rewardCheckpoint(account, balance);
+        _bonusCheckpoint(account, balance);
 
         _mint(account, amount);
 
@@ -117,7 +119,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         _tokenCheckpoint(account, workingBalance);
         uint256 balance = balanceOf(account);
         _assetCheckpoint(account, balance);
-        _rewardCheckpoint(account, balance);
+        _bonusCheckpoint(account, balance);
 
         _burn(account, amount);
 
@@ -149,12 +151,12 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         return _workingSupply;
     }
 
-    function claimableTokenAndAssetAndReward(address account)
+    function claimableTokenAndAssetAndBonus(address account)
         external
         override
         returns (
             uint256 amountToken,
-            uint256 amountReward,
+            uint256 amountBonus,
             uint256 amountQ,
             uint256 amountB,
             uint256 amountR,
@@ -165,10 +167,10 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         amountToken = _tokenCheckpoint(account, _workingBalances[account]);
         uint256 balance = balanceOf(account);
         (amountQ, amountB, amountR, amountU) = _assetCheckpoint(account, balance);
-        amountReward = _rewardCheckpoint(account, balance);
+        amountBonus = _bonusCheckpoint(account, balance);
     }
 
-    function claimTokenAndAssetAndReward(address account) external override {
+    function claimTokenAndAssetAndBonus(address account) external override {
         uint256 currentWorkingSupply = _workingSupply;
         _checkpoint(currentWorkingSupply);
         uint256 workingBalance = _workingBalances[account];
@@ -176,7 +178,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         uint256 balance = balanceOf(account);
         (uint256 amountQ, uint256 amountB, uint256 amountR, uint256 amountU) =
             _assetCheckpoint(account, balance);
-        uint256 amountReward = _rewardCheckpoint(account, balance);
+        uint256 amountBonus = _bonusCheckpoint(account, balance);
         _updateWorkingBalance(
             account,
             workingBalance,
@@ -188,9 +190,8 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         chessSchedule.mint(account, amountToken);
         delete _claimableChess[account];
 
-        address rewardToken = ISwapRewards(swapReward).rewardToken();
-        IERC20(rewardToken).safeTransfer(account, amountReward);
-        delete _claimableRewards[account];
+        _bonusToken.safeTransfer(account, amountBonus);
+        delete _claimableBonus[account];
 
         IERC20(fund.tokenQ()).safeTransfer(account, amountQ);
         IERC20(fund.tokenB()).safeTransfer(account, amountB);
@@ -206,7 +207,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         _tokenCheckpoint(account, workingBalance);
         uint256 balance = balanceOf(account);
         _assetCheckpoint(account, balance);
-        _rewardCheckpoint(account, balance);
+        _bonusCheckpoint(account, balance);
         _updateWorkingBalance(
             account,
             workingBalance,
@@ -223,7 +224,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         _tokenCheckpoint(account, workingBalance);
         uint256 balance = balanceOf(account);
         _assetCheckpoint(account, balance);
-        _rewardCheckpoint(account, balance);
+        _bonusCheckpoint(account, balance);
 
         _updateWorkingBalance(
             account,
@@ -302,28 +303,26 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         _workingBalances[account] = newWorkingBalance;
     }
 
-    // ----------------------------- Rewards -----------------------------------
+    // ----------------------------- Bonus -----------------------------------
 
-    function _rewardCheckpoint(address account, uint256 balance)
+    function _bonusCheckpoint(address account, uint256 balance)
         private
-        returns (uint256 amountReward)
+        returns (uint256 amountBonus)
     {
-        // Update reward integrals (no gauge weights involved: easy)
-        address rewardToken = ISwapRewards(swapReward).rewardToken();
-
-        uint256 rewardDelta = IERC20(rewardToken).balanceOf(address(this));
-        ISwapRewards(swapReward).getReward();
-        rewardDelta = IERC20(rewardToken).balanceOf(address(this)) - rewardDelta;
+        // Update bonus integrals (no gauge weights involved: easy)
+        uint256 bonusDelta = _bonusToken.balanceOf(address(this));
+        ISwapBonus(swapBonus).getBonus();
+        bonusDelta = _bonusToken.balanceOf(address(this)) - bonusDelta;
 
         uint256 totalSupply_ = totalSupply();
-        uint256 delta = totalSupply_ > 0 ? rewardDelta.divideDecimal(totalSupply_) : 0;
-        uint256 newRewardIntegral = _rewardIntegral + delta;
-        _rewardIntegral = newRewardIntegral;
-        amountReward = _claimableRewards[account].add(
-            balance.multiplyDecimal(newRewardIntegral - _rewardUserIntegral[account])
+        uint256 delta = totalSupply_ > 0 ? bonusDelta.divideDecimal(totalSupply_) : 0;
+        uint256 newBonusIntegral = _bonusIntegral + delta;
+        _bonusIntegral = newBonusIntegral;
+        amountBonus = _claimableBonus[account].add(
+            balance.multiplyDecimal(newBonusIntegral - _bonusUserIntegral[account])
         );
-        _claimableRewards[account] = amountReward;
-        _rewardUserIntegral[account] = newRewardIntegral;
+        _claimableBonus[account] = amountBonus;
+        _bonusUserIntegral[account] = newBonusIntegral;
     }
 
     // ----------------------- Asset Distribution ------------------------------
