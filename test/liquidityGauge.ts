@@ -327,7 +327,7 @@ describe("LiquidityGauge", function () {
 
         it("Should allocate based on LP distribution", async function () {
             await fund.mock.doRebalance.withArgs(0, 0, 0, 0).returns(0, 0, 0);
-            await liquidityGauge.userCheckpoint(addr1);
+            await liquidityGauge.syncWithVotingEscrow(addr1);
             expect((await liquidityGauge.distributions(0))[0]).to.equal(parseEther("12"));
             expect((await liquidityGauge.distributions(0))[1]).to.equal(parseEther("23"));
             expect((await liquidityGauge.distributions(0))[2]).to.equal(parseEther("34"));
@@ -364,7 +364,7 @@ describe("LiquidityGauge", function () {
                 2
             );
 
-            await liquidityGauge.userCheckpoint(addr1);
+            await liquidityGauge.syncWithVotingEscrow(addr1);
 
             expect((await liquidityGauge.distributions(1))[0]).to.equal(parseEther("10"));
             expect((await liquidityGauge.distributions(1))[1]).to.equal(parseEther("10"));

@@ -32,8 +32,6 @@ interface ILiquidityGauge is IERC20 {
 
     function claimTokenAndAssetAndBonus(address account) external;
 
-    function userCheckpoint(address account) external;
-
     // ----------------------- Asset Distribution ------------------------------
 
     function distribute(

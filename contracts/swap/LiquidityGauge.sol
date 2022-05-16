@@ -200,23 +200,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         delete claimableAssets[account];
     }
 
-    function userCheckpoint(address account) public override {
-        uint256 currentWorkingSupply = _workingSupply;
-        _checkpoint(currentWorkingSupply);
-        uint256 workingBalance = _workingBalances[account];
-        _tokenCheckpoint(account, workingBalance);
-        uint256 balance = balanceOf(account);
-        _assetCheckpoint(account, balance);
-        _bonusCheckpoint(account, balance);
-        _updateWorkingBalance(
-            account,
-            workingBalance,
-            currentWorkingSupply,
-            balance,
-            totalSupply()
-        );
-    }
-
     function syncWithVotingEscrow(address account) external {
         uint256 currentWorkingSupply = _workingSupply;
         _checkpoint(currentWorkingSupply);
