@@ -134,7 +134,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
     function _beforeTokenTransfer(
         address from,
         address to,
-        uint256 amount
+        uint256
     ) internal override {
         require(from == address(0) || to == address(0), "Transfer is not allow");
     }
