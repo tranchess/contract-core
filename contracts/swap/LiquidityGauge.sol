@@ -185,12 +185,15 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
     }
 
     function claimTokenAndAssetAndReward(address account) external override {
-        _checkpoint(_workingSupply);
-        uint256 amountToken = _tokenCheckpoint(account, _workingBalances[account]);
+        uint256 currentWorkingSupply = _workingSupply;
+        _checkpoint(currentWorkingSupply);
+        uint256 workingBalance = _workingBalances[account];
+        uint256 amountToken = _tokenCheckpoint(account, workingBalance);
         uint256 balance = _balances[account];
         (uint256 amountQ, uint256 amountB, uint256 amountR, uint256 amountU) =
             _assetCheckpoint(account, balance);
         uint256 amountReward = _rewardCheckpoint(account, balance);
+        _updateWorkingBalance(account, workingBalance, currentWorkingSupply, balance, _totalSupply);
 
         chessSchedule.mint(account, amountToken);
         delete claimableTokens[account];
@@ -231,6 +234,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         uint256 balance = _balances[account];
         _assetCheckpoint(account, balance);
         _rewardCheckpoint(account, balance);
+
         _updateWorkingBalance(
             account,
             _workingBalances[account],
@@ -293,22 +297,22 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         uint256 newBalance,
         uint256 newTotalSupply
     ) private {
+        uint256 newWorkingBalance = newBalance;
         uint256 veBalance = _votingEscrow.balanceOf(account);
         if (veBalance > 0) {
             uint256 veTotalSupply = _votingEscrow.totalSupply();
-            uint256 maxWorkingBalance = newBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
+            uint256 maxWorkingBalance = newWorkingBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
             uint256 boostedWorkingBalance =
-                newBalance.add(
+                newWorkingBalance.add(
                     newTotalSupply
                         .mul(veBalance)
                         .multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
                         .div(veTotalSupply)
                 );
-            newBalance = maxWorkingBalance.min(boostedWorkingBalance);
+            newWorkingBalance = maxWorkingBalance.min(boostedWorkingBalance);
         }
-
-        _workingSupply = oldWorkingSupply.sub(oldWorkingBalance).add(newBalance);
-        _workingBalances[account] = newBalance;
+        _workingSupply = oldWorkingSupply.sub(oldWorkingBalance).add(newWorkingBalance);
+        _workingBalances[account] = newWorkingBalance;
     }
 
     // ----------------------------- Rewards -----------------------------------
