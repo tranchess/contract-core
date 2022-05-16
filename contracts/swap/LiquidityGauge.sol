@@ -2,7 +2,7 @@
 pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/Math.sol";
@@ -33,7 +33,7 @@ struct Distribution {
     uint256 totalSupply;
 }
 
-contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownable {
+contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownable, ERC20 {
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
@@ -52,11 +52,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
     IVotingEscrow private immutable _votingEscrow;
     uint256 public immutable initialRebalanceVersion;
 
-    string public name;
-    string public symbol;
-    uint8 public decimals;
-    uint256 private _totalSupply;
-    mapping(address => uint256) private _balances;
     uint256 private _workingSupply;
     mapping(address => uint256) private _workingBalances;
 
@@ -82,10 +77,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         address fund_,
         address votingEscrow_,
         address rewardContract_
-    ) public {
-        name = name_;
-        symbol = symbol_;
-        decimals = 18;
+    ) public ERC20(name_, symbol_) {
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
         fund = IFundV3(fund_);
@@ -97,62 +89,54 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
 
     // ------------------------------ ERC20 ------------------------------------
 
-    function totalSupply() public view override returns (uint256) {
-        return _totalSupply;
-    }
-
-    function balanceOf(address account) public view override returns (uint256) {
-        return _balances[account];
-    }
-
     function mint(address account, uint256 amount) external override onlyOwner {
-        require(account != address(0), "ERC20: mint to the zero address");
         uint256 currentWorkingSupply = _workingSupply;
         uint256 workingBalance = _workingBalances[account];
         _checkpoint(currentWorkingSupply);
         _tokenCheckpoint(account, workingBalance);
-        uint256 balance = _balances[account];
+        uint256 balance = balanceOf(account);
         _assetCheckpoint(account, balance);
         _rewardCheckpoint(account, balance);
 
-        uint256 newTotalSupply = _totalSupply.add(amount);
-        uint256 newBalance = _balances[account].add(amount);
-        _totalSupply = newTotalSupply;
-        _balances[account] = newBalance;
+        _mint(account, amount);
 
         _updateWorkingBalance(
             account,
             workingBalance,
             currentWorkingSupply,
-            newBalance,
-            newTotalSupply
+            balanceOf(account),
+            totalSupply()
         );
         emit Transfer(address(0), account, amount);
     }
 
     function burnFrom(address account, uint256 amount) external override onlyOwner {
-        require(account != address(0), "ERC20: burn from the zero address");
         uint256 currentWorkingSupply = _workingSupply;
         uint256 workingBalance = _workingBalances[account];
         _checkpoint(currentWorkingSupply);
         _tokenCheckpoint(account, workingBalance);
-        uint256 balance = _balances[account];
+        uint256 balance = balanceOf(account);
         _assetCheckpoint(account, balance);
         _rewardCheckpoint(account, balance);
 
-        uint256 newBalance = _balances[account].sub(amount, "ERC20: burn amount exceeds balance");
-        uint256 newTotalSupply = _totalSupply.sub(amount);
-        _balances[account] = newBalance;
-        _totalSupply = newTotalSupply;
+        _burn(account, amount);
 
         _updateWorkingBalance(
             account,
             workingBalance,
             currentWorkingSupply,
-            newBalance,
-            newTotalSupply
+            balanceOf(account),
+            totalSupply()
         );
         emit Transfer(account, address(0), amount);
+    }
+
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256
+    ) internal override {
+        require(from == address(0) || to == address(0), "Transfer is not allow");
     }
 
     // ---------------------------- LP Token -----------------------------------
@@ -179,7 +163,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
     {
         _checkpoint(_workingSupply);
         amountToken = _tokenCheckpoint(account, _workingBalances[account]);
-        uint256 balance = _balances[account];
+        uint256 balance = balanceOf(account);
         (amountQ, amountB, amountR, amountU) = _assetCheckpoint(account, balance);
         amountReward = _rewardCheckpoint(account, balance);
     }
@@ -189,11 +173,17 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         _checkpoint(currentWorkingSupply);
         uint256 workingBalance = _workingBalances[account];
         uint256 amountToken = _tokenCheckpoint(account, workingBalance);
-        uint256 balance = _balances[account];
+        uint256 balance = balanceOf(account);
         (uint256 amountQ, uint256 amountB, uint256 amountR, uint256 amountU) =
             _assetCheckpoint(account, balance);
         uint256 amountReward = _rewardCheckpoint(account, balance);
-        _updateWorkingBalance(account, workingBalance, currentWorkingSupply, balance, _totalSupply);
+        _updateWorkingBalance(
+            account,
+            workingBalance,
+            currentWorkingSupply,
+            balance,
+            totalSupply()
+        );
 
         chessSchedule.mint(account, amountToken);
         delete claimableTokens[account];
@@ -214,15 +204,15 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         _checkpoint(currentWorkingSupply);
         uint256 workingBalance = _workingBalances[account];
         _tokenCheckpoint(account, workingBalance);
-        uint256 balance = _balances[account];
+        uint256 balance = balanceOf(account);
         _assetCheckpoint(account, balance);
         _rewardCheckpoint(account, balance);
         _updateWorkingBalance(
             account,
             workingBalance,
             currentWorkingSupply,
-            _balances[account],
-            _totalSupply
+            balance,
+            totalSupply()
         );
     }
 
@@ -231,7 +221,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         _checkpoint(currentWorkingSupply);
         uint256 workingBalance = _workingBalances[account];
         _tokenCheckpoint(account, workingBalance);
-        uint256 balance = _balances[account];
+        uint256 balance = balanceOf(account);
         _assetCheckpoint(account, balance);
         _rewardCheckpoint(account, balance);
 
@@ -239,8 +229,8 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
             account,
             _workingBalances[account],
             _workingSupply,
-            _balances[account],
-            _totalSupply
+            balance,
+            totalSupply()
         );
     }
 
@@ -325,7 +315,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         ISwapRewards(rewardContract).getReward();
         rewardDelta = IERC20(rewardToken).balanceOf(address(this)) - rewardDelta;
 
-        uint256 totalSupply_ = _totalSupply;
+        uint256 totalSupply_ = totalSupply();
         uint256 delta = totalSupply_ > 0 ? rewardDelta.divideDecimal(totalSupply_) : 0;
         uint256 newRewardIntegral = rewardIntegral + delta;
         rewardIntegral = newRewardIntegral;
@@ -350,7 +340,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         distributions[index].totalB = amountB;
         distributions[index].totalR = amountR;
         distributions[index].totalU = amountU;
-        distributions[index].totalSupply = _totalSupply;
+        distributions[index].totalSupply = totalSupply();
         currentRebalanceSize = rebalanceVersion;
     }
 

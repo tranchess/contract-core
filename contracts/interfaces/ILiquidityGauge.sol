@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 /**
  * @dev Interface of the ERC20 standard as defined in the EIP.
  */
-interface ILiquidityGauge {
+interface ILiquidityGauge is IERC20 {
     // ------------------------------ ERC20 ------------------------------------
-
-    function totalSupply() external view returns (uint256);
-
-    function balanceOf(address account) external view returns (uint256);
 
     function mint(address account, uint256 amount) external;
 
