@@ -51,23 +51,25 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
     IFundV3 public immutable fund;
     IVotingEscrow private immutable _votingEscrow;
     uint256 public immutable initialRebalanceVersion;
+    address public immutable swapReward;
 
     uint256 private _workingSupply;
     mapping(address => uint256) private _workingBalances;
 
-    uint256 public overallIntegral;
-    uint256 public lastTimestamp;
+    uint256 private _checkpointTimestamp;
+
     uint256 public currentRebalanceSize;
-    mapping(address => uint256) public integrals;
-    mapping(address => uint256) public claimableTokens;
     mapping(address => uint256[TRANCHE_COUNT + 1]) public claimableAssets;
     mapping(address => uint256) public distributionVersions;
     mapping(uint256 => Distribution) public distributions;
 
-    address public rewardContract;
-    uint256 public rewardIntegral;
-    mapping(address => uint256) public rewardIntegrals;
-    mapping(address => uint256) claimableRewards;
+    uint256 private _chessIntegral;
+    mapping(address => uint256) private _chessUserIntegrals;
+    mapping(address => uint256) private _claimableChess;
+
+    uint256 private _rewardIntegral;
+    mapping(address => uint256) private _rewardUserIntegral;
+    mapping(address => uint256) private _claimableRewards;
 
     constructor(
         string memory name_,
@@ -76,14 +78,14 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         address chessController_,
         address fund_,
         address votingEscrow_,
-        address rewardContract_
+        address swapReward_
     ) public ERC20(name_, symbol_) {
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
         fund = IFundV3(fund_);
         _votingEscrow = IVotingEscrow(votingEscrow_);
-        rewardContract = rewardContract_;
-        lastTimestamp = block.timestamp;
+        swapReward = swapReward_;
+        _checkpointTimestamp = block.timestamp;
         initialRebalanceVersion = IFundV3(fund_).getRebalanceSize();
     }
 
@@ -186,11 +188,11 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         );
 
         chessSchedule.mint(account, amountToken);
-        delete claimableTokens[account];
+        delete _claimableChess[account];
 
-        address rewardToken = ISwapRewards(rewardContract).rewardToken();
+        address rewardToken = ISwapRewards(swapReward).rewardToken();
         IERC20(rewardToken).safeTransfer(account, amountReward);
-        delete claimableRewards[account];
+        delete _claimableRewards[account];
 
         IERC20(fund.tokenQ()).safeTransfer(account, amountQ);
         IERC20(fund.tokenB()).safeTransfer(account, amountB);
@@ -235,11 +237,11 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
     }
 
     function _checkpoint(uint256 currentWorkingSupply) private {
-        uint256 timestamp_ = lastTimestamp;
+        uint256 timestamp_ = _checkpointTimestamp;
 
         // calculate overall integral till now
         if (currentWorkingSupply != 0) {
-            uint256 overallIntegral_ = overallIntegral;
+            uint256 overallIntegral_ = _chessIntegral;
             for (uint256 i = 0; i < MAX_ITERATIONS && timestamp_ < block.timestamp; i++) {
                 uint256 endWeek = _endOfWeek(timestamp_);
                 uint256 rate = chessSchedule.getRate(endWeek.sub(1 weeks));
@@ -257,11 +259,11 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
                 }
                 timestamp_ = endTimestamp;
             }
-            overallIntegral = overallIntegral_;
+            _chessIntegral = overallIntegral_;
         }
 
         // update global state
-        lastTimestamp = block.timestamp;
+        _checkpointTimestamp = block.timestamp;
     }
 
     function _tokenCheckpoint(address account, uint256 workingBalance)
@@ -270,11 +272,11 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
     {
         // claim governance token till now
         uint256 claimableToken =
-            workingBalance.multiplyDecimalPrecise(overallIntegral.sub(integrals[account]));
-        amountToken = claimableTokens[account].add(claimableToken);
+            workingBalance.multiplyDecimalPrecise(_chessIntegral.sub(_chessUserIntegrals[account]));
+        amountToken = _claimableChess[account].add(claimableToken);
         // update per-user state
-        claimableTokens[account] = amountToken;
-        integrals[account] = overallIntegral;
+        _claimableChess[account] = amountToken;
+        _chessUserIntegrals[account] = _chessIntegral;
     }
 
     function _updateWorkingBalance(
@@ -309,21 +311,21 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         returns (uint256 amountReward)
     {
         // Update reward integrals (no gauge weights involved: easy)
-        address rewardToken = ISwapRewards(rewardContract).rewardToken();
+        address rewardToken = ISwapRewards(swapReward).rewardToken();
 
         uint256 rewardDelta = IERC20(rewardToken).balanceOf(address(this));
-        ISwapRewards(rewardContract).getReward();
+        ISwapRewards(swapReward).getReward();
         rewardDelta = IERC20(rewardToken).balanceOf(address(this)) - rewardDelta;
 
         uint256 totalSupply_ = totalSupply();
         uint256 delta = totalSupply_ > 0 ? rewardDelta.divideDecimal(totalSupply_) : 0;
-        uint256 newRewardIntegral = rewardIntegral + delta;
-        rewardIntegral = newRewardIntegral;
-        amountReward = claimableRewards[account].add(
-            balance.multiplyDecimal(newRewardIntegral - rewardIntegrals[account])
+        uint256 newRewardIntegral = _rewardIntegral + delta;
+        _rewardIntegral = newRewardIntegral;
+        amountReward = _claimableRewards[account].add(
+            balance.multiplyDecimal(newRewardIntegral - _rewardUserIntegral[account])
         );
-        claimableRewards[account] = amountReward;
-        rewardIntegrals[account] = newRewardIntegral;
+        _claimableRewards[account] = amountReward;
+        _rewardUserIntegral[account] = newRewardIntegral;
     }
 
     // ----------------------- Asset Distribution ------------------------------
