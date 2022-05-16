@@ -89,7 +89,6 @@ describe("LiquidityGauge", function () {
         await advanceBlockAtTime(Math.floor(startEpoch / WEEK) * WEEK + WEEK);
 
         const fund = await deployMockForName(owner, "IFundV3");
-        await fund.mock.getRebalanceSize.returns(0);
 
         const swap = await deployMockForName(owner, "BishopStableSwap");
 

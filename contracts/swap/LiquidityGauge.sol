@@ -50,7 +50,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
     IChessController public immutable chessController;
     IFundV3 public immutable fund;
     IVotingEscrow private immutable _votingEscrow;
-    uint256 public immutable initialRebalanceVersion;
     address public immutable swapReward;
 
     uint256 private _workingSupply;
@@ -58,10 +57,10 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
 
     uint256 private _checkpointTimestamp;
 
-    uint256 public currentRebalanceSize;
+    uint256 public latestVersion;
+    mapping(uint256 => Distribution) public distributions;
     mapping(address => uint256[TRANCHE_COUNT + 1]) public claimableAssets;
     mapping(address => uint256) public distributionVersions;
-    mapping(uint256 => Distribution) public distributions;
 
     uint256 private _chessIntegral;
     mapping(address => uint256) private _chessUserIntegrals;
@@ -86,7 +85,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         _votingEscrow = IVotingEscrow(votingEscrow_);
         swapReward = swapReward_;
         _checkpointTimestamp = block.timestamp;
-        initialRebalanceVersion = IFundV3(fund_).getRebalanceSize();
     }
 
     // ------------------------------ ERC20 ------------------------------------
@@ -335,15 +333,15 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         uint256 amountB,
         uint256 amountR,
         uint256 amountU,
-        uint256 rebalanceVersion
+        uint256 version
     ) external override onlyOwner {
-        uint256 index = rebalanceVersion.sub(1);
+        uint256 index = version.sub(1);
         distributions[index].totalQ = amountQ;
         distributions[index].totalB = amountB;
         distributions[index].totalR = amountR;
         distributions[index].totalU = amountU;
         distributions[index].totalSupply = totalSupply();
-        currentRebalanceSize = rebalanceVersion;
+        latestVersion = version;
     }
 
     function _assetCheckpoint(address account, uint256 balance)
@@ -356,8 +354,8 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         )
     {
         uint256 version = distributionVersions[account];
-        uint256 rebalanceVersion = currentRebalanceSize;
-        if (rebalanceVersion == 0 || version == rebalanceVersion) {
+        uint256 newVersion = latestVersion;
+        if (newVersion == 0 || version == newVersion) {
             return (0, 0, 0, 0);
         }
 
@@ -373,7 +371,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
             amountU = amountU.add(dist.totalU.mul(balance).div(dist.totalSupply));
         }
         version++;
-        for (; version < rebalanceVersion; version++) {
+        for (; version < newVersion; version++) {
             (amountQ, amountB, amountR) = fund.doRebalance(amountQ, amountB, amountR, version);
             dist = distributions[version];
             if (dist.totalSupply > 0) {
@@ -388,6 +386,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, Ownabl
         claimableAssets[account][TRANCHE_B] = amountB;
         claimableAssets[account][TRANCHE_R] = amountR;
         claimableAssets[account][QUOTE_ASSET] = amountU;
-        distributionVersions[account] = rebalanceVersion;
+        distributionVersions[account] = newVersion;
     }
 }

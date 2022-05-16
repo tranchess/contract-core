@@ -41,6 +41,6 @@ interface ILiquidityGauge is IERC20 {
         uint256 amountB,
         uint256 amountR,
         uint256 amountU,
-        uint256 rebalanceVersion
+        uint256 version
     ) external;
 }
