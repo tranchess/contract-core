@@ -7,6 +7,9 @@ const { parseEther, parseUnits } = ethers.utils;
 const parseUsdc = (value: string) => parseUnits(value, 6);
 import { deployMockForName } from "./mock";
 import {
+    TRANCHE_Q,
+    TRANCHE_B,
+    TRANCHE_R,
     WEEK,
     FixtureWalletMap,
     advanceBlockAtTime,
@@ -55,22 +58,21 @@ const WORKING_SUPPLY = USER1_WORKING_BALANCE.add(USER2_WORKING_BALANCE);
 describe("LiquidityGauge", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
-        readonly checkpointTimestamp: number;
         readonly fund: MockContract;
         readonly swap: MockContract;
         readonly chessSchedule: MockContract;
         readonly votingEscrow: MockContract;
         readonly usdc: Contract;
-        readonly tokens: Contract[];
         readonly liquidityGauge: Contract;
+        readonly swapBonus: Contract;
     }
 
     let currentFixture: Fixture<FixtureData>;
     let fixtureData: FixtureData;
 
-    let checkpointTimestamp: number;
     let user1: Wallet;
     let user2: Wallet;
+    let owner: Wallet;
     let addr1: string;
     let addr2: string;
     let fund: MockContract;
@@ -78,41 +80,28 @@ describe("LiquidityGauge", function () {
     let chessSchedule: MockContract;
     let votingEscrow: MockContract;
     let usdc: Contract;
-    let tokens: Contract[];
     let liquidityGauge: Contract;
+    let swapBonus: Contract;
 
     async function deployFixture(_wallets: Wallet[], provider: MockProvider): Promise<FixtureData> {
         const [user1, user2, owner] = provider.getWallets();
-        const checkpointTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
 
-        const startEpoch = (await ethers.provider.getBlock("latest")).timestamp;
-        await advanceBlockAtTime(Math.floor(startEpoch / WEEK) * WEEK + WEEK);
-
-        const fund = await deployMockForName(owner, "IFundV3");
-
-        const swap = await deployMockForName(owner, "BishopStableSwap");
-
-        const chessSchedule = await deployMockForName(owner, "IChessSchedule");
-        await chessSchedule.mock.getRate.returns(0);
-
-        const chessController = await deployMockForName(owner, "IChessController");
-        await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
-
-        const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
-        await votingEscrow.mock.balanceOf.returns(0);
-        await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
+        const startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+        await advanceBlockAtTime(Math.ceil(startTimestamp / WEEK) * WEEK + WEEK);
 
         const MockToken = await ethers.getContractFactory("MockToken");
         const usdc = await MockToken.connect(owner).deploy("USD Coin", "USDC", 6);
-        const tokens = [
-            await MockToken.connect(owner).deploy("token", "token", 18),
-            await MockToken.connect(owner).deploy("token", "token", 18),
-            await MockToken.connect(owner).deploy("token", "token", 18),
-        ];
-        await fund.mock.tokenQ.returns(tokens[0].address);
-        await fund.mock.tokenB.returns(tokens[1].address);
-        await fund.mock.tokenR.returns(tokens[2].address);
+        const swap = await deployMockForName(owner, "BishopStableSwap");
         await swap.mock.quoteAddress.returns(usdc.address);
+        const fund = await deployMockForName(owner, "IFundV3");
+
+        const chessSchedule = await deployMockForName(owner, "IChessSchedule");
+        await chessSchedule.mock.getRate.returns(0);
+        const chessController = await deployMockForName(owner, "IChessController");
+        await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
+        const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
+        await votingEscrow.mock.balanceOf.returns(0);
+        await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
 
         const liquidityGaugeAddress = ethers.utils.getContractAddress({
             from: owner.address,
@@ -127,13 +116,13 @@ describe("LiquidityGauge", function () {
         const liquidityGauge = await LiquidityGauge.connect(owner).deploy(
             "Test LP",
             "TLP",
+            swap.address,
             chessSchedule.address,
             chessController.address,
             fund.address,
             votingEscrow.address,
             swapBonus.address
         );
-        await liquidityGauge.transferOwnership(swap.address);
 
         // Deposit initial shares
         await swap.call(liquidityGauge, "mint", user1.address, USER1_LP);
@@ -141,14 +130,13 @@ describe("LiquidityGauge", function () {
 
         return {
             wallets: { user1, user2, owner },
-            checkpointTimestamp,
             fund,
             swap,
             chessSchedule,
             votingEscrow,
             usdc,
-            tokens,
             liquidityGauge,
+            swapBonus,
         };
     }
 
@@ -158,9 +146,9 @@ describe("LiquidityGauge", function () {
 
     beforeEach(async function () {
         fixtureData = await loadFixture(currentFixture);
-        checkpointTimestamp = fixtureData.checkpointTimestamp;
         user1 = fixtureData.wallets.user1;
         user2 = fixtureData.wallets.user2;
+        owner = fixtureData.wallets.owner;
         addr1 = user1.address;
         addr2 = user2.address;
         fund = fixtureData.fund;
@@ -168,15 +156,13 @@ describe("LiquidityGauge", function () {
         chessSchedule = fixtureData.chessSchedule;
         votingEscrow = fixtureData.votingEscrow;
         usdc = fixtureData.usdc;
-        tokens = fixtureData.tokens;
         liquidityGauge = fixtureData.liquidityGauge;
+        swapBonus = fixtureData.swapBonus;
     });
 
     describe("mint()", function () {
-        it("Should revert if not owner", async function () {
-            await expect(liquidityGauge.mint(addr1, 10000)).to.be.revertedWith(
-                "Ownable: caller is not the owner"
-            );
+        it("Should only be called by stable swap", async function () {
+            await expect(liquidityGauge.mint(addr1, 10000)).to.be.revertedWith("Only stable swap");
         });
 
         it("Should update balance", async function () {
@@ -193,9 +179,9 @@ describe("LiquidityGauge", function () {
     });
 
     describe("burnFrom()", function () {
-        it("Should revert if not owner", async function () {
+        it("Should only be called by stable swap", async function () {
             await expect(liquidityGauge.burnFrom(addr1, 10000)).to.be.revertedWith(
-                "Ownable: caller is not the owner"
+                "Only stable swap"
             );
         });
 
@@ -215,6 +201,17 @@ describe("LiquidityGauge", function () {
             await expect(swap.call(liquidityGauge, "burnFrom", addr1, 10000))
                 .to.emit(liquidityGauge, "Transfer")
                 .withArgs(addr1, constants.AddressZero, 10000);
+        });
+    });
+
+    describe("transfer()", function () {
+        it("Should revert any transfer", async function () {
+            await expect(liquidityGauge.transfer(addr2, 0)).to.be.revertedWith(
+                "Transfer is not allowed"
+            );
+            await expect(liquidityGauge.transferFrom(addr2, addr1, 0)).to.be.revertedWith(
+                "Transfer is not allowed"
+            );
         });
     });
 
@@ -270,7 +267,7 @@ describe("LiquidityGauge", function () {
             await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
         });
 
-        it("Should update working balance on deposit()", async function () {
+        it("Should update working balance on mint()", async function () {
             await swap.call(liquidityGauge, "mint", addr1, USER1_LP);
             const workingBalance = await liquidityGauge.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
@@ -284,7 +281,7 @@ describe("LiquidityGauge", function () {
             expect(await liquidityGauge.workingSupply()).to.equal(workingBalance.add(USER2_LP));
         });
 
-        it("Should update working balance on withdraw()", async function () {
+        it("Should update working balance on burnFrom()", async function () {
             await swap.call(liquidityGauge, "burnFrom", addr1, USER1_LP.div(10));
             const workingBalance = await liquidityGauge.workingBalanceOf(addr1);
             expect(workingBalance).to.equal(
@@ -298,9 +295,10 @@ describe("LiquidityGauge", function () {
             expect(await liquidityGauge.workingSupply()).to.equal(workingBalance.add(USER2_LP));
         });
 
-        it("Should update working balance on claimTokenAndAssetAndBonus()", async function () {
+        it("Should update working balance on claimRewards()", async function () {
+            expect(await liquidityGauge.workingBalanceOf(addr1)).to.equal(USER1_LP);
             await chessSchedule.mock.mint.returns();
-            await liquidityGauge.claimTokenAndAssetAndBonus(addr1);
+            await liquidityGauge.claimRewards(addr1);
             expect(await liquidityGauge.workingBalanceOf(addr1)).to.equal(USER1_WORKING_BALANCE);
             expect(await liquidityGauge.workingSupply()).to.equal(
                 USER1_WORKING_BALANCE.add(USER2_LP)
@@ -308,92 +306,14 @@ describe("LiquidityGauge", function () {
         });
     });
 
-    describe("Snapshot", function () {
-        beforeEach(async function () {
-            await tokens[0].mint(liquidityGauge.address, parseEther("12"));
-            await tokens[1].mint(liquidityGauge.address, parseEther("23"));
-            await tokens[2].mint(liquidityGauge.address, parseEther("34"));
-            await usdc.mint(liquidityGauge.address, parseUsdc("45"));
-            await swap.call(
-                liquidityGauge,
-                "distribute",
-                parseEther("12"),
-                parseEther("23"),
-                parseEther("34"),
-                parseUsdc("45"),
-                1
-            );
-        });
-
-        it("Should allocate based on LP distribution", async function () {
-            await fund.mock.doRebalance.withArgs(0, 0, 0, 0).returns(0, 0, 0);
-            await liquidityGauge.syncWithVotingEscrow(addr1);
-            expect((await liquidityGauge.distributions(0))[0]).to.equal(parseEther("12"));
-            expect((await liquidityGauge.distributions(0))[1]).to.equal(parseEther("23"));
-            expect((await liquidityGauge.distributions(0))[2]).to.equal(parseEther("34"));
-            expect((await liquidityGauge.distributions(0))[3]).to.equal(parseUsdc("45"));
-            expect(await liquidityGauge.claimableAssets(addr1, 0)).to.equal(
-                parseEther("12").mul(USER1_LP).div(TOTAL_LP)
-            );
-            expect(await liquidityGauge.claimableAssets(addr1, 1)).to.equal(
-                parseEther("23").mul(USER1_LP).div(TOTAL_LP)
-            );
-            expect(await liquidityGauge.claimableAssets(addr1, 2)).to.equal(
-                parseEther("34").mul(USER1_LP).div(TOTAL_LP)
-            );
-            expect(await liquidityGauge.claimableAssets(addr1, 3)).to.equal(
-                parseUsdc("45").mul(USER1_LP).div(TOTAL_LP)
-            );
-            expect(await liquidityGauge.distributionVersions(addr1)).to.equal(1);
-        });
-
-        it("Should distribute for new rebalance", async function () {
-            await fund.mock.doRebalance.returns(parseEther("1"), parseEther("2"), parseEther("3"));
-            await fund.mock.doRebalance.withArgs(0, 0, 0, 0).returns(0, 0, 0);
-            await tokens[0].mint(liquidityGauge.address, parseEther("10"));
-            await tokens[1].mint(liquidityGauge.address, parseEther("10"));
-            await tokens[2].mint(liquidityGauge.address, parseEther("10"));
-            await usdc.mint(liquidityGauge.address, parseUsdc("10"));
-            await swap.call(
-                liquidityGauge,
-                "distribute",
-                parseEther("10"),
-                parseEther("10"),
-                parseEther("10"),
-                parseUsdc("10"),
-                2
-            );
-
-            await liquidityGauge.syncWithVotingEscrow(addr1);
-
-            expect((await liquidityGauge.distributions(1))[0]).to.equal(parseEther("10"));
-            expect((await liquidityGauge.distributions(1))[1]).to.equal(parseEther("10"));
-            expect((await liquidityGauge.distributions(1))[2]).to.equal(parseEther("10"));
-            expect((await liquidityGauge.distributions(1))[3]).to.equal(parseUsdc("10"));
-            expect(await liquidityGauge.claimableAssets(addr1, 0)).to.equal(
-                parseEther("1").add(parseEther("10").mul(USER1_LP).div(TOTAL_LP))
-            );
-            expect(await liquidityGauge.claimableAssets(addr1, 1)).to.equal(
-                parseEther("2").add(parseEther("10").mul(USER1_LP).div(TOTAL_LP))
-            );
-            expect(await liquidityGauge.claimableAssets(addr1, 2)).to.equal(
-                parseEther("3").add(parseEther("10").mul(USER1_LP).div(TOTAL_LP))
-            );
-            expect(await liquidityGauge.claimableAssets(addr1, 3)).to.equal(
-                parseUsdc("55").mul(USER1_LP).div(TOTAL_LP)
-            );
-            expect(await liquidityGauge.distributionVersions(addr1)).to.equal(2);
-        });
-    });
-
-    describe("Reward", function () {
+    describe("Chess checkpoint", function () {
         let rewardStartTimestamp: number; // Reward rate becomes non-zero at this timestamp.
         let rate1: BigNumber;
         let rate2: BigNumber;
 
         beforeEach(async function () {
-            rewardStartTimestamp =
-                Math.floor(checkpointTimestamp / WEEK) * WEEK + WEEK * 10 + SETTLEMENT_TIME;
+            const t = (await ethers.provider.getBlock("latest")).timestamp;
+            rewardStartTimestamp = Math.ceil(t / WEEK) * WEEK + WEEK * 10 + SETTLEMENT_TIME;
             await chessSchedule.mock.getRate
                 .withArgs(rewardStartTimestamp)
                 .returns(parseEther("1"));
@@ -403,34 +323,33 @@ describe("LiquidityGauge", function () {
             rate2 = parseEther("1").mul(USER2_LP).div(TOTAL_LP);
         });
 
-        it("Should mint rewards on claimTokenAndAssetAndBonus()", async function () {
+        it("Should mint rewards on claimRewards()", async function () {
             await advanceBlockAtTime(rewardStartTimestamp + 100);
-
-            expect(
-                (await liquidityGauge.callStatic["claimableTokenAndAssetAndBonus"](addr1))[0]
-            ).to.equal(rate1.mul(100));
-            expect(
-                (await liquidityGauge.callStatic["claimableTokenAndAssetAndBonus"](addr2))[0]
-            ).to.equal(rate2.mul(100));
+            expect((await liquidityGauge.callStatic.claimableRewards(addr1)).chessAmount).to.equal(
+                rate1.mul(100)
+            );
+            expect((await liquidityGauge.callStatic.claimableRewards(addr2)).chessAmount).to.equal(
+                rate2.mul(100)
+            );
 
             await expect(async () => {
                 await setNextBlockTime(rewardStartTimestamp + 300);
-                await liquidityGauge.claimTokenAndAssetAndBonus(addr1);
+                await liquidityGauge.claimRewards(addr1);
             }).to.callMocks({
                 func: chessSchedule.mock.mint.withArgs(addr1, rate1.mul(300)),
             });
 
             await advanceBlockAtTime(rewardStartTimestamp + 800);
-            expect(
-                (await liquidityGauge.callStatic["claimableTokenAndAssetAndBonus"](addr1))[0]
-            ).to.equal(rate1.mul(500));
-            expect(
-                (await liquidityGauge.callStatic["claimableTokenAndAssetAndBonus"](addr2))[0]
-            ).to.equal(rate2.mul(800));
+            expect((await liquidityGauge.callStatic.claimableRewards(addr1)).chessAmount).to.equal(
+                rate1.mul(500)
+            );
+            expect((await liquidityGauge.callStatic.claimableRewards(addr2)).chessAmount).to.equal(
+                rate2.mul(800)
+            );
 
             await expect(async () => {
                 await setNextBlockTime(rewardStartTimestamp + 1000);
-                await liquidityGauge.claimTokenAndAssetAndBonus(addr1);
+                await liquidityGauge.claimRewards(addr1);
             }).to.callMocks({
                 func: chessSchedule.mock.mint.withArgs(addr1, rate1.mul(700)),
             });
@@ -441,31 +360,211 @@ describe("LiquidityGauge", function () {
             await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
             await setNextBlockTime(rewardStartTimestamp + 100);
             await liquidityGauge.syncWithVotingEscrow(addr1);
+
             await advanceBlockAtTime(rewardStartTimestamp + 300);
+            const rate1AfterSync = parseEther("1")
+                .mul(USER1_WORKING_BALANCE)
+                .div(TOTAL_LP.sub(USER1_LP).add(USER1_WORKING_BALANCE));
+            const reward1 = rate1.mul(100).add(rate1AfterSync.mul(200));
+            expect((await liquidityGauge.callStatic.claimableRewards(addr1)).chessAmount).to.equal(
+                reward1
+            );
+        });
+    });
 
-            const reward1 = rate1
-                .mul(100)
-                .add(
-                    parseEther("1")
-                        .mul(200)
-                        .mul(USER1_WORKING_BALANCE)
-                        .div(TOTAL_LP.sub(USER1_LP).add(USER1_WORKING_BALANCE))
-                );
-            const reward2 = rate2
-                .mul(100)
-                .add(
-                    parseEther("1")
-                        .mul(200)
-                        .mul(USER2_LP)
-                        .div(TOTAL_LP.sub(USER1_LP).add(USER1_WORKING_BALANCE))
-                );
+    describe("Bonus checkpoint", function () {
+        let rewardStartTimestamp: number; // Reward rate becomes non-zero at this timestamp.
+        let rate1: BigNumber;
+        let rate2: BigNumber;
 
-            expect(
-                (await liquidityGauge.callStatic["claimableTokenAndAssetAndBonus"](addr1))[0]
-            ).to.equal(reward1);
-            expect(
-                (await liquidityGauge.callStatic["claimableTokenAndAssetAndBonus"](addr2))[0]
-            ).to.equal(reward2);
+        beforeEach(async function () {
+            const t = (await ethers.provider.getBlock("latest")).timestamp;
+            rewardStartTimestamp = t + WEEK;
+            await usdc.mint(owner.address, parseUsdc("50000"));
+            await usdc.approve(swapBonus.address, parseUsdc("50000"));
+            await swapBonus.updateBonus(parseUsdc("50000"), rewardStartTimestamp, 1000);
+            await advanceBlockAtTime(rewardStartTimestamp);
+
+            rate1 = parseUsdc("50").mul(USER1_LP).div(TOTAL_LP);
+            rate2 = parseUsdc("50").mul(USER2_LP).div(TOTAL_LP);
+        });
+
+        it("Should transfer bonus on claimRewards()", async function () {
+            await advanceBlockAtTime(rewardStartTimestamp + 100);
+            expect((await liquidityGauge.callStatic.claimableRewards(addr1)).bonusAmount).to.equal(
+                rate1.mul(100)
+            );
+            expect((await liquidityGauge.callStatic.claimableRewards(addr2)).bonusAmount).to.equal(
+                rate2.mul(100)
+            );
+
+            await setNextBlockTime(rewardStartTimestamp + 300);
+            await liquidityGauge.claimRewards(addr1);
+            expect(await usdc.balanceOf(addr1)).to.equal(rate1.mul(300));
+
+            await advanceBlockAtTime(rewardStartTimestamp + 800);
+            expect((await liquidityGauge.callStatic.claimableRewards(addr1)).bonusAmount).to.equal(
+                rate1.mul(500)
+            );
+            expect((await liquidityGauge.callStatic.claimableRewards(addr2)).bonusAmount).to.equal(
+                rate2.mul(800)
+            );
+
+            await advanceBlockAtTime(rewardStartTimestamp + 2000);
+            await liquidityGauge.claimRewards(addr1);
+            expect(await usdc.balanceOf(addr1)).to.equal(rate1.mul(1000));
+            await liquidityGauge.claimRewards(addr2);
+            expect(await usdc.balanceOf(addr2)).to.equal(rate2.mul(1000));
+        });
+
+        it("Should calculate rewards according to boosted working balance", async function () {
+            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE);
+            await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
+            await setNextBlockTime(rewardStartTimestamp + 100);
+            await liquidityGauge.syncWithVotingEscrow(addr1);
+
+            await advanceBlockAtTime(rewardStartTimestamp + 300);
+            const rate1AfterSync = parseUsdc("50")
+                .mul(USER1_WORKING_BALANCE)
+                .div(TOTAL_LP.sub(USER1_LP).add(USER1_WORKING_BALANCE));
+            const reward1 = rate1.mul(100).add(rate1AfterSync.mul(200));
+            expect((await liquidityGauge.callStatic.claimableRewards(addr1)).bonusAmount).to.equal(
+                reward1
+            );
+        });
+
+        it("Should accumulate multiple rounds of bonus", async function () {
+            await advanceBlockAtTime(rewardStartTimestamp + 2000);
+            await swap.call(liquidityGauge, "mint", user1.address, TOTAL_LP);
+            await usdc.mint(owner.address, parseUsdc("1000"));
+            await usdc.approve(swapBonus.address, parseUsdc("1000"));
+            await swapBonus.updateBonus(parseUsdc("1000"), rewardStartTimestamp + 3000, 10000);
+
+            await advanceBlockAtTime(rewardStartTimestamp + 6000);
+            const newRate1 = parseUsdc("0.1").mul(USER1_LP.add(TOTAL_LP)).div(TOTAL_LP.mul(2));
+            const newRate2 = parseUsdc("0.1").mul(USER2_LP).div(TOTAL_LP.mul(2));
+            expect((await liquidityGauge.callStatic.claimableRewards(addr1)).bonusAmount).to.equal(
+                rate1.mul(1000).add(newRate1.mul(3000))
+            );
+            expect((await liquidityGauge.callStatic.claimableRewards(addr2)).bonusAmount).to.equal(
+                rate2.mul(1000).add(newRate2.mul(3000))
+            );
+
+            await setNextBlockTime(rewardStartTimestamp + 7000);
+            await liquidityGauge.claimRewards(addr2);
+            expect(await usdc.balanceOf(addr2)).to.equal(rate2.mul(1000).add(newRate2.mul(4000)));
+        });
+    });
+
+    describe("Distribution checkpoint", function () {
+        const distQ1 = parseEther("1");
+        const distB1 = parseEther("2");
+        const distR1 = parseEther("3");
+        const distU1 = parseUsdc("4");
+
+        beforeEach(async function () {
+            // Distribution uses balances instead of working balances.
+            // Update working balances so that they do not equal to balances.
+            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE);
+            await votingEscrow.mock.balanceOf.withArgs(addr2).returns(USER2_VE);
+            await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
+            await liquidityGauge.syncWithVotingEscrow(addr1);
+            await liquidityGauge.syncWithVotingEscrow(addr2);
+            await swap.call(liquidityGauge, "distribute", distQ1, distB1, distR1, distU1, 1);
+        });
+
+        it("Should only be called by stable swap", async function () {
+            await expect(liquidityGauge.distribute(0, 0, 0, 0, 1)).to.be.revertedWith(
+                "Only stable swap"
+            );
+        });
+
+        it("Should distribute based on LP distribution", async function () {
+            await liquidityGauge.syncWithVotingEscrow(addr1);
+            expect(await liquidityGauge.latestVersion()).to.equal(1);
+            const dist = await liquidityGauge.distributions(1);
+            expect(dist.amountQ).to.equal(distQ1);
+            expect(dist.amountB).to.equal(distB1);
+            expect(dist.amountR).to.equal(distR1);
+            expect(dist.quoteAmount).to.equal(distU1);
+            const userDist = await liquidityGauge.userDistributions(addr1);
+            expect(userDist.amountQ).to.equal(distQ1.mul(USER1_LP).div(TOTAL_LP));
+            expect(userDist.amountB).to.equal(distB1.mul(USER1_LP).div(TOTAL_LP));
+            expect(userDist.amountR).to.equal(distR1.mul(USER1_LP).div(TOTAL_LP));
+            expect(userDist.quoteAmount).to.equal(distU1.mul(USER1_LP).div(TOTAL_LP));
+            expect(await liquidityGauge.userVersions(addr1)).to.equal(1);
+        });
+
+        it("Should accumulate distributions over rebalances", async function () {
+            await liquidityGauge.syncWithVotingEscrow(addr1);
+            const distQ2 = parseEther("10");
+            const distB2 = parseEther("20");
+            const distR2 = parseEther("30");
+            const distU2 = parseUsdc("40");
+            await swap.call(liquidityGauge, "distribute", distQ2, distB2, distR2, distU2, 2);
+            const distQ3 = parseEther("100");
+            const distB3 = parseEther("200");
+            const distR3 = parseEther("300");
+            const distU3 = parseUsdc("400");
+            await swap.call(liquidityGauge, "distribute", distQ3, distB3, distR3, distU3, 3);
+
+            await expect(() =>
+                swap.call(liquidityGauge, "mint", user1.address, USER1_LP.mul(100))
+            ).to.callMocks(
+                {
+                    func: fund.mock.doRebalance.withArgs(
+                        distQ1.mul(USER1_LP).div(TOTAL_LP),
+                        distB1.mul(USER1_LP).div(TOTAL_LP),
+                        distR1.mul(USER1_LP).div(TOTAL_LP),
+                        1
+                    ),
+                    rets: [parseEther("4"), parseEther("5"), parseEther("6")],
+                },
+                {
+                    func: fund.mock.doRebalance.withArgs(
+                        distQ2.mul(USER1_LP).div(TOTAL_LP).add(parseEther("4")),
+                        distB2.mul(USER1_LP).div(TOTAL_LP).add(parseEther("5")),
+                        distR2.mul(USER1_LP).div(TOTAL_LP).add(parseEther("6")),
+                        2
+                    ),
+                    rets: [parseEther("40"), parseEther("50"), parseEther("60")],
+                }
+            );
+
+            expect(await liquidityGauge.latestVersion()).to.equal(3);
+            const userDist = await liquidityGauge.userDistributions(addr1);
+            expect(userDist.amountQ).to.equal(
+                distQ3.mul(USER1_LP).div(TOTAL_LP).add(parseEther("40"))
+            );
+            expect(userDist.amountB).to.equal(
+                distB3.mul(USER1_LP).div(TOTAL_LP).add(parseEther("50"))
+            );
+            expect(userDist.amountR).to.equal(
+                distR3.mul(USER1_LP).div(TOTAL_LP).add(parseEther("60"))
+            );
+            expect(userDist.quoteAmount).to.equal(
+                distU1.add(distU2).add(distU3).mul(USER1_LP).div(TOTAL_LP)
+            );
+            expect(await liquidityGauge.userVersions(addr1)).to.equal(3);
+        });
+
+        it("Should transfer tokens on claimRewards()", async function () {
+            await usdc.mint(liquidityGauge.address, parseUsdc("4"));
+            const amountQ = distQ1.mul(USER1_LP).div(TOTAL_LP);
+            const amountB = distB1.mul(USER1_LP).div(TOTAL_LP);
+            const amountR = distR1.mul(USER1_LP).div(TOTAL_LP);
+            await expect(() => liquidityGauge.claimRewards(addr1)).to.callMocks(
+                {
+                    func: fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, amountQ, 1),
+                },
+                {
+                    func: fund.mock.trancheTransfer.withArgs(TRANCHE_B, addr1, amountB, 1),
+                },
+                {
+                    func: fund.mock.trancheTransfer.withArgs(TRANCHE_R, addr1, amountR, 1),
+                }
+            );
+            expect(await usdc.balanceOf(addr1)).to.equal(distU1.mul(USER1_LP).div(TOTAL_LP));
         });
     });
 });
