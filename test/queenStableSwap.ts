@@ -72,25 +72,17 @@ describe("QueenStableSwap", function () {
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
         await votingEscrow.mock.balanceOf.returns(0);
         await votingEscrow.mock.totalSupply.returns(1);
-        const rewardToken = await MockToken.connect(owner).deploy("Temporary Token", "TMP", 8);
-        const swapReward = await deployMockForName(owner, "SwapReward");
-        await swapReward.mock.rewardToken.returns(rewardToken.address);
-        await swapReward.mock.getReward.returns();
+        const swapBonus = await deployMockForName(owner, "SwapBonus");
+        await swapBonus.mock.bonusToken.returns(ethers.constants.AddressZero);
+        await swapBonus.mock.getBonus.returns(0);
 
-        const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
-        const lpToken = await LiquidityGauge.connect(owner).deploy(
-            "pool2 token",
-            "pool2 token",
-            chessSchedule.address,
-            chessController.address,
-            fund.address,
-            votingEscrow.address,
-            swapReward.address
-        );
-
+        const lpTokenAddress = ethers.utils.getContractAddress({
+            from: owner.address,
+            nonce: (await owner.getTransactionCount("pending")) + 1,
+        });
         const StableSwap = await ethers.getContractFactory("QueenStableSwap");
         const stableSwap = await StableSwap.connect(owner).deploy(
-            lpToken.address,
+            lpTokenAddress,
             fund.address,
             8,
             AMPL,
@@ -98,7 +90,17 @@ describe("QueenStableSwap", function () {
             FEE_RATE,
             ADMIN_FEE_RATE
         );
-        await lpToken.transferOwnership(stableSwap.address);
+        const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
+        const lpToken = await LiquidityGauge.connect(owner).deploy(
+            "LP Token",
+            "LP",
+            stableSwap.address,
+            chessSchedule.address,
+            chessController.address,
+            fund.address,
+            votingEscrow.address,
+            swapBonus.address
+        );
 
         const tmpBase = await deployMockForName(owner, "ERC20");
         await fund.mock.tokenShare.withArgs(TRANCHE_Q).returns(tmpBase.address);
