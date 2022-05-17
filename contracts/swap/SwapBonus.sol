@@ -42,7 +42,7 @@ contract SwapBonus is Ownable {
         IERC20(bonusToken).safeTransferFrom(msg.sender, address(this), ratePerSecond.mul(interval));
     }
 
-    function getBonus() external {
+    function getBonus() external returns (uint256) {
         require(msg.sender == liquidityGauge);
         uint256 currentTimestamp = endTimestamp.min(block.timestamp);
         uint256 reward = ratePerSecond.mul(currentTimestamp - lastTimestamp);
@@ -50,5 +50,6 @@ contract SwapBonus is Ownable {
         if (reward > 0) {
             IERC20(bonusToken).safeTransfer(liquidityGauge, reward);
         }
+        return reward;
     }
 }
