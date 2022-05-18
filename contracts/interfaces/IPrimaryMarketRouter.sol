@@ -21,18 +21,20 @@ interface IPrimaryMarketRouter is IStableSwapCore {
     ) external payable;
 
     function createSplitAndStake(
-        address router,
-        address quoteAddress,
         uint256 underlying,
         uint256 minOutQ,
+        address router,
+        address quoteAddress,
+        uint256 minLpOut,
         address staking,
         uint256 version
     ) external payable;
 
     function splitAndStake(
+        uint256 inQ,
         address router,
         address quoteAddress,
-        uint256 inQ,
+        uint256 minLpOut,
         address staking,
         uint256 version
     ) external;
