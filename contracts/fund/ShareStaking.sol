@@ -472,9 +472,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
 
         _checkpointTimestamp = block.timestamp;
         _invTotalWeightIntegral = integral;
-        if (_rate != rate) {
-            _rate = rate;
-        }
+        _rate = rate;
         if (_totalSupplyVersion != rebalanceSize) {
             _totalSupplies[TRANCHE_Q] = totalSupplyQ;
             _totalSupplies[TRANCHE_B] = totalSupplyB;
