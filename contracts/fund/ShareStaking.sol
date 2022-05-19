@@ -427,7 +427,10 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         for (uint256 i = 0; i < MAX_ITERATIONS && timestamp_ < block.timestamp; i++) {
             uint256 endTimestamp = rebalanceTimestamp.min(endWeek).min(block.timestamp);
 
-            if (weight > 0) {
+            // Note that `endTimestamp` can be smaller than `timestamp_` when there is a rebalance
+            // before the reward starts, i.e. `rebalanceTimestamp` smaller than the initial
+            // `_checkpointTimestamp`.
+            if (weight > 0 && endTimestamp > timestamp_) {
                 integral = integral.add(
                     rate.mul(endTimestamp.sub(timestamp_)).decimalToPreciseDecimal().div(weight)
                 );
@@ -467,7 +470,9 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                 endWeek += 1 weeks;
             }
 
-            timestamp_ = endTimestamp;
+            if (endTimestamp > timestamp_) {
+                timestamp_ = endTimestamp;
+            }
         }
 
         _checkpointTimestamp = block.timestamp;
