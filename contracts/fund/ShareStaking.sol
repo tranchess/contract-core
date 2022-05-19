@@ -408,13 +408,15 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         // adjust initial rate to compensate for the first week's launch delay
         if (rate == 0) {
             uint256 startWeek = endWeek - 1 weeks;
-            uint256 weeklyPercentage =
+            uint256 relativeWeight =
                 chessController.getFundRelativeWeight(address(fund), startWeek);
-            rate = IChessSchedule(chessSchedule)
-                .getRate(startWeek)
-                .mul(weeklyPercentage)
-                .mul(1 weeks)
-                .div(endWeek - timestamp);
+            if (relativeWeight != 0) {
+                rate = IChessSchedule(chessSchedule)
+                    .getRate(startWeek)
+                    .mul(relativeWeight)
+                    .mul(1 weeks)
+                    .div(endWeek - timestamp);
+            }
         }
         uint256 totalSupplyQ = _totalSupplies[TRANCHE_Q];
         uint256 totalSupplyB = _totalSupplies[TRANCHE_B];
@@ -459,9 +461,9 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                 }
             }
             if (endTimestamp == endWeek) {
-                uint256 weeklyPercentage =
+                uint256 relativeWeight =
                     chessController.getFundRelativeWeight(address(fund), endWeek);
-                rate = chessSchedule.getRate(endWeek).mul(weeklyPercentage);
+                rate = chessSchedule.getRate(endWeek).mul(relativeWeight);
                 endWeek += 1 weeks;
             }
 
