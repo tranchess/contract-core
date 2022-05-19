@@ -315,8 +315,12 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         }
 
         // Update per-user state
+        uint256 oldUserIntegral = _bonusUserIntegral[account];
+        if (oldUserIntegral == integral) {
+            return _claimableBonus[account];
+        }
         amount = _claimableBonus[account].add(
-            weight.multiplyDecimalPrecise(integral.sub(_bonusUserIntegral[account]))
+            weight.multiplyDecimalPrecise(integral.sub(oldUserIntegral))
         );
         _claimableBonus[account] = amount;
         _bonusUserIntegral[account] = integral;
