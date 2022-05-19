@@ -212,6 +212,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         uint256 quoteAmount,
         uint256 version
     ) external override onlyStableSwap {
+        // Update global state
         distributions[version].amountQ = amountQ;
         distributions[version].amountB = amountB;
         distributions[version].amountR = amountR;
@@ -343,6 +344,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
             return (0, 0, 0, 0);
         }
 
+        // Update per-user state
         Distribution storage userDist = userDistributions[account];
         amountQ = userDist.amountQ;
         amountB = userDist.amountB;
@@ -361,7 +363,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
                 quoteAmount = quoteAmount.add(dist.quoteAmount.mul(balance).div(distTotalSupply));
             }
         }
-
         userDist.amountQ = amountQ;
         userDist.amountB = amountB;
         userDist.amountR = amountR;
