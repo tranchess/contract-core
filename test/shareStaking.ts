@@ -138,7 +138,7 @@ describe("ShareStaking", function () {
         const [user1, user2, owner] = provider.getWallets();
 
         const startEpoch = (await ethers.provider.getBlock("latest")).timestamp;
-        const startTimestamp = Math.floor(startEpoch / WEEK) * WEEK + WEEK + SETTLEMENT_TIME;
+        await advanceBlockAtTime(Math.floor(startEpoch / WEEK) * WEEK + WEEK);
 
         const fund = await deployMockForName(owner, "IFundV3");
         await fund.mock.getRebalanceSize.returns(0);
@@ -161,9 +161,8 @@ describe("ShareStaking", function () {
             chessSchedule.address,
             chessController.address,
             votingEscrow.address,
-            startTimestamp
+            0
         );
-        await advanceBlockAtTime(startTimestamp);
 
         // Deposit initial shares
         await fund.mock.trancheTransferFrom.returns();
