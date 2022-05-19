@@ -37,8 +37,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         uint256 quoteAmount;
     }
 
-    event Transfer(address indexed from, address indexed to, uint256 value);
-
     uint256 private constant MAX_ITERATIONS = 500;
     uint256 private constant MAX_BOOSTING_FACTOR = 3e18;
     uint256 private constant MAX_BOOSTING_FACTOR_MINUS_ONE = MAX_BOOSTING_FACTOR - 1e18;
@@ -109,7 +107,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
             balanceOf(account),
             totalSupply()
         );
-        emit Transfer(address(0), account, amount);
     }
 
     function burnFrom(address account, uint256 amount) external override onlyStableSwap {
@@ -125,7 +122,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
             balanceOf(account),
             totalSupply()
         );
-        emit Transfer(account, address(0), amount);
     }
 
     function _transfer(
