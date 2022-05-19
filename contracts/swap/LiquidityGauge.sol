@@ -97,14 +97,15 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
     function mint(address account, uint256 amount) external override onlyStableSwap {
         uint256 oldWorkingBalance = _workingBalances[account];
         uint256 oldWorkingSupply = _workingSupply;
-        _checkpoint(account, balanceOf(account), oldWorkingBalance, oldWorkingSupply);
+        uint256 oldBalance = balanceOf(account);
+        _checkpoint(account, oldBalance, oldWorkingBalance, oldWorkingSupply);
 
         _mint(account, amount);
         _updateWorkingBalance(
             account,
             oldWorkingBalance,
             oldWorkingSupply,
-            balanceOf(account),
+            oldBalance.add(amount),
             totalSupply()
         );
     }
@@ -112,14 +113,15 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
     function burnFrom(address account, uint256 amount) external override onlyStableSwap {
         uint256 oldWorkingBalance = _workingBalances[account];
         uint256 oldWorkingSupply = _workingSupply;
-        _checkpoint(account, balanceOf(account), oldWorkingBalance, oldWorkingSupply);
+        uint256 oldBalance = balanceOf(account);
+        _checkpoint(account, oldBalance, oldWorkingBalance, oldWorkingSupply);
 
         _burn(account, amount);
         _updateWorkingBalance(
             account,
             oldWorkingBalance,
             oldWorkingSupply,
-            balanceOf(account),
+            oldBalance.sub(amount),
             totalSupply()
         );
     }
