@@ -166,27 +166,20 @@ describe("BishopStableSwap", function () {
         await chessSchedule.mock.getRate.returns(parseEther("1"));
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
 
-        const swapReward = await deployMockForName(owner, "SwapReward");
-        await swapReward.mock.rewardToken.returns(tokens[0].address);
-        await swapReward.mock.getReward.returns();
-
-        const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
-        const lpToken = await LiquidityGauge.connect(owner).deploy(
-            "pool2 token",
-            "pool2 token",
-            chessSchedule.address,
-            chessController.address,
-            fund.address,
-            votingEscrow.address,
-            swapReward.address
-        );
+        const swapBonus = await deployMockForName(owner, "SwapBonus");
+        await swapBonus.mock.bonusToken.returns(ethers.constants.AddressZero);
+        await swapBonus.mock.getBonus.returns(0);
 
         const SwapRouter = await ethers.getContractFactory("SwapRouter");
         const swapRouter = await SwapRouter.connect(owner).deploy();
 
+        const lpTokenAddress = ethers.utils.getContractAddress({
+            from: owner.address,
+            nonce: (await owner.getTransactionCount("pending")) + 1,
+        });
         const BishopStableSwap = await ethers.getContractFactory("BishopStableSwap");
         const stableSwap = await BishopStableSwap.connect(owner).deploy(
-            lpToken.address,
+            lpTokenAddress,
             fund.address,
             tokens[1].address,
             18,
@@ -196,10 +189,20 @@ describe("BishopStableSwap", function () {
             ADMIN_FEE_RATE,
             parseEther("0.35")
         );
+        const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
+        const lpToken = await LiquidityGauge.connect(owner).deploy(
+            "LP Token",
+            "LP",
+            stableSwap.address,
+            chessSchedule.address,
+            chessController.address,
+            fund.address,
+            votingEscrow.address,
+            swapBonus.address
+        );
 
         await swapRouter.addSwap(tokens[0].address, tokens[1].address, stableSwap.address);
 
-        await lpToken.transferOwnership(stableSwap.address);
         await tokens[0].connect(user1).approve(swapRouter.address, parseEther("10"));
         await tokens[1].connect(user1).approve(swapRouter.address, parseEther("20"));
 
@@ -833,27 +836,20 @@ describe("QueenStableSwap", function () {
         await chessSchedule.mock.getRate.returns(parseEther("1"));
         await chessController.mock.getFundRelativeWeight.returns(parseEther("1"));
 
-        const swapReward = await deployMockForName(owner, "SwapReward");
-        await swapReward.mock.rewardToken.returns(tokens[0].address);
-        await swapReward.mock.getReward.returns();
-
-        const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
-        const lpToken = await LiquidityGauge.connect(owner).deploy(
-            "pool2 token",
-            "pool2 token",
-            chessSchedule.address,
-            chessController.address,
-            fund.address,
-            votingEscrow.address,
-            swapReward.address
-        );
+        const swapBonus = await deployMockForName(owner, "SwapBonus");
+        await swapBonus.mock.bonusToken.returns(ethers.constants.AddressZero);
+        await swapBonus.mock.getBonus.returns(0);
 
         const SwapRouter = await ethers.getContractFactory("SwapRouter");
         const swapRouter = await SwapRouter.connect(owner).deploy();
 
+        const lpTokenAddress = ethers.utils.getContractAddress({
+            from: owner.address,
+            nonce: (await owner.getTransactionCount("pending")) + 1,
+        });
         const QueenStableSwap = await ethers.getContractFactory("QueenStableSwap");
         const stableSwap = await QueenStableSwap.connect(owner).deploy(
-            lpToken.address,
+            lpTokenAddress,
             fund.address,
             18, // tokens[1].address,
             A,
@@ -861,10 +857,20 @@ describe("QueenStableSwap", function () {
             FEE_RATE,
             ADMIN_FEE_RATE
         );
+        const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
+        const lpToken = await LiquidityGauge.connect(owner).deploy(
+            "LP Token",
+            "LP",
+            stableSwap.address,
+            chessSchedule.address,
+            chessController.address,
+            fund.address,
+            votingEscrow.address,
+            swapBonus.address
+        );
 
         await swapRouter.addSwap(tokens[0].address, tokens[1].address, stableSwap.address);
 
-        await lpToken.transferOwnership(stableSwap.address);
         await tokens[0].connect(user1).approve(swapRouter.address, parseEther("10"));
         await tokens[1].connect(user1).approve(swapRouter.address, parseEther("20"));
 
@@ -1509,23 +1515,17 @@ describe("Flash Swap", function () {
         const flashSwapRouter = await FlashSwapRouter.connect(owner).deploy(swapRouter.address);
         await flashSwapRouter.toggleExternalRouter(externalRouter.address);
 
-        const swapReward = await deployMockForName(owner, "SwapReward");
-        await swapReward.mock.rewardToken.returns(tokens[0].address);
-        await swapReward.mock.getReward.returns();
+        const swapBonus = await deployMockForName(owner, "SwapBonus");
+        await swapBonus.mock.bonusToken.returns(ethers.constants.AddressZero);
+        await swapBonus.mock.getBonus.returns(0);
 
-        const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
-        const lpToken = await LiquidityGauge.connect(owner).deploy(
-            "pool2 token",
-            "pool2 token",
-            chessSchedule.address,
-            chessController.address,
-            fund.address,
-            votingEscrow.address,
-            swapReward.address
-        );
+        const lpTokenAddress = ethers.utils.getContractAddress({
+            from: owner.address,
+            nonce: (await owner.getTransactionCount("pending")) + 1,
+        });
         const BishopStableSwap = await ethers.getContractFactory("BishopStableSwap");
         const stableSwap = await BishopStableSwap.connect(owner).deploy(
-            lpToken.address,
+            lpTokenAddress,
             fund.address,
             usd.address,
             18,
@@ -1535,9 +1535,19 @@ describe("Flash Swap", function () {
             ADMIN_FEE_RATE,
             parseEther("0.35")
         );
+        const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
+        await LiquidityGauge.connect(owner).deploy(
+            "LP Token",
+            "LP",
+            stableSwap.address,
+            chessSchedule.address,
+            chessController.address,
+            fund.address,
+            votingEscrow.address,
+            swapBonus.address
+        );
 
         await swapRouter.addSwap(tokens[0].address, usd.address, stableSwap.address);
-        await lpToken.transferOwnership(stableSwap.address);
 
         await tokens[0].connect(user1).approve(swapRouter.address, parseEther("10"));
         await usd.connect(user1).approve(swapRouter.address, parseEther("20"));
