@@ -143,6 +143,7 @@ describe("ShareStaking", function () {
         const fund = await deployMockForName(owner, "IFundV3");
         await fund.mock.getRebalanceSize.returns(0);
         await fund.mock.splitRatio.returns(SPLIT_RATIO);
+        await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
 
         const chessSchedule = await deployMockForName(owner, "IChessSchedule");
         await chessSchedule.mock.getRate.returns(0);
@@ -226,6 +227,7 @@ describe("ShareStaking", function () {
             // The version check is only reached under these abnormal mock function returns.
             await fund.mock.getRebalanceTimestamp.returns(checkpointTimestamp + 1000);
             await fund.mock.doRebalance.returns(0, 0, 0);
+            await fund.mock.historicalSplitRatio.withArgs(1).returns(0);
             await expect(staking.deposit(TRANCHE_Q, 10000, addr1, 1)).to.be.revertedWith(
                 "Invalid version"
             );
@@ -521,7 +523,6 @@ describe("ShareStaking", function () {
         it("Should reset working balance without boosting after rebalance", async function () {
             await fund.mock.getRebalanceSize.returns(1);
             await fund.mock.getRebalanceTimestamp.withArgs(0).returns(checkpointTimestamp + 100);
-            await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
             await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
             await advanceBlockAtTime(checkpointTimestamp + 100);
             await fund.mock.doRebalance
@@ -611,7 +612,6 @@ describe("ShareStaking", function () {
                 await fund.mock.getRebalanceTimestamp.withArgs(0).returns(checkpointTimestamp + 1);
                 await fund.mock.getRebalanceTimestamp.withArgs(1).returns(checkpointTimestamp + 2);
                 await fund.mock.getRebalanceTimestamp.withArgs(2).returns(checkpointTimestamp + 3);
-                await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
                 await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
                 await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO);
                 await fund.mock.historicalSplitRatio.withArgs(3).returns(SPLIT_RATIO);
@@ -655,7 +655,6 @@ describe("ShareStaking", function () {
                 await fund.mock.getRebalanceSize.returns(2);
                 await fund.mock.getRebalanceTimestamp.withArgs(0).returns(checkpointTimestamp + 1);
                 await fund.mock.getRebalanceTimestamp.withArgs(1).returns(checkpointTimestamp + 2);
-                await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
                 await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
                 await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO);
                 await advanceBlockAtTime(checkpointTimestamp + 100);
@@ -687,7 +686,6 @@ describe("ShareStaking", function () {
                 await fund.mock.getRebalanceSize.returns(2);
                 await fund.mock.getRebalanceTimestamp.withArgs(0).returns(checkpointTimestamp + 1);
                 await fund.mock.getRebalanceTimestamp.withArgs(1).returns(checkpointTimestamp + 2);
-                await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
                 await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
                 await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO);
                 await advanceBlockAtTime(checkpointTimestamp + 100);
@@ -719,7 +717,6 @@ describe("ShareStaking", function () {
             it("Should rebalance zero balance", async function () {
                 await fund.mock.getRebalanceSize.returns(1);
                 await fund.mock.getRebalanceTimestamp.withArgs(0).returns(checkpointTimestamp + 1);
-                await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
                 await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
                 await advanceBlockAtTime(checkpointTimestamp + 100);
                 await expect(() => staking.refreshBalance(owner.address, 1)).to.callMocks({
@@ -913,7 +910,6 @@ describe("ShareStaking", function () {
             await fund.mock.getRebalanceTimestamp
                 .withArgs(0)
                 .returns(rewardStartTimestamp + WEEK + 100);
-            await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
             await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO.mul(2));
             await fund.mock.doRebalance
                 .withArgs(TOTAL_Q, TOTAL_B, TOTAL_R, 0)
@@ -967,7 +963,6 @@ describe("ShareStaking", function () {
             await fund.mock.getRebalanceSize.returns(2);
             await fund.mock.getRebalanceTimestamp.withArgs(0).returns(rewardStartTimestamp + 100);
             await fund.mock.getRebalanceTimestamp.withArgs(1).returns(rewardStartTimestamp + 400);
-            await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
             await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
             await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO);
             await fund.mock.doRebalance
@@ -995,7 +990,6 @@ describe("ShareStaking", function () {
             // Withdraw all QUEEN and BISHOP (in a single block to make rewards calculation easy)
             await fund.mock.trancheTransfer.returns();
             await fund.mock.trancheTransferFrom.returns();
-            await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
             await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
             await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO);
             await setAutomine(false);
@@ -1046,7 +1040,6 @@ describe("ShareStaking", function () {
             await fund.mock.getRebalanceSize.returns(2);
             await fund.mock.getRebalanceTimestamp.withArgs(0).returns(rewardStartTimestamp + 100);
             await fund.mock.getRebalanceTimestamp.withArgs(1).returns(rewardStartTimestamp + 300);
-            await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
             await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
             await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO);
             await fund.mock.doRebalance
@@ -1098,7 +1091,6 @@ describe("ShareStaking", function () {
             await fund.mock.getRebalanceSize.returns(2);
             await fund.mock.getRebalanceTimestamp.withArgs(0).returns(rewardStartTimestamp + 300);
             await fund.mock.getRebalanceTimestamp.withArgs(1).returns(rewardStartTimestamp + 600);
-            await fund.mock.historicalSplitRatio.withArgs(0).returns(SPLIT_RATIO);
             await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO);
             await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO);
             await fund.mock.doRebalance

@@ -47,6 +47,9 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
 
     IVotingEscrow private immutable _votingEscrow;
 
+    /// @notice Timestamp when rewards start.
+    uint256 public immutable rewardStartTimestamp;
+
     /// @dev Per-fund CHESS emission rate. The product of CHESS emission rate
     ///      and weekly percentage of the fund
     uint256 private _rate;
@@ -97,15 +100,18 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         address chessSchedule_,
         address chessController_,
         address votingEscrow_,
-        uint256 startTimestamp_
+        uint256 rewardStartTimestamp_
     ) public {
         fund = IFundV3(fund_);
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
         _votingEscrow = IVotingEscrow(votingEscrow_);
-        require(startTimestamp_ > block.timestamp);
-        _checkpointTimestamp = startTimestamp_;
-        _historicalSplitRatio[IFundV3(fund_).getRebalanceSize()] = IFundV3(fund_).splitRatio();
+        rewardStartTimestamp = rewardStartTimestamp_;
+        _checkpointTimestamp = block.timestamp;
+        uint256 startWeek = _endOfWeek(block.timestamp) - 1 weeks;
+        _rate = IChessSchedule(chessSchedule_).getRate(startWeek).mul(
+            IChessController(chessController_).getFundRelativeWeight(fund_, startWeek)
+        );
     }
 
     function getRate() external view returns (uint256) {
@@ -296,7 +302,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         _balances[recipient][tranche] = _balances[recipient][tranche].add(amount);
         uint256 oldTotalSupply = _totalSupplies[tranche];
         _totalSupplies[tranche] = oldTotalSupply.add(amount);
-        _updateWorkingBalance(recipient, _historicalSplitRatio[version]);
+        _updateWorkingBalance(recipient, version);
         uint256 spareAmount = fund.trancheBalanceOf(tranche, address(this)).sub(oldTotalSupply);
         if (spareAmount < amount) {
             // Retain the rest of share token (version is checked by the fund)
@@ -329,7 +335,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
             "Insufficient balance to withdraw"
         );
         _totalSupplies[tranche] = _totalSupplies[tranche].sub(amount);
-        _updateWorkingBalance(msg.sender, _historicalSplitRatio[version]);
+        _updateWorkingBalance(msg.sender, version);
         // version is checked by the fund
         fund.trancheTransfer(tranche, msg.sender, amount, version);
         emit Withdrawn(tranche, msg.sender, amount);
@@ -373,7 +379,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 amount = _claimableRewards[account];
         _claimableRewards[account] = 0;
         chessSchedule.mint(account, amount);
-        _updateWorkingBalance(account, _historicalSplitRatio[rebalanceSize]);
+        _updateWorkingBalance(account, rebalanceSize);
     }
 
     /// @notice Synchronize an account's locked Chess with `VotingEscrow`
@@ -383,7 +389,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 rebalanceSize = _fundRebalanceSize();
         _checkpoint(rebalanceSize);
         _userCheckpoint(account, rebalanceSize);
-        _updateWorkingBalance(account, _historicalSplitRatio[rebalanceSize]);
+        _updateWorkingBalance(account, rebalanceSize);
     }
 
     /// @dev Transform total supplies to the latest rebalance version and make a global reward checkpoint.
@@ -405,19 +411,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
             rebalanceTimestamp = type(uint256).max;
         }
         uint256 rate = _rate;
-        // adjust initial rate to compensate for the first week's launch delay
-        if (rate == 0) {
-            uint256 startWeek = endWeek - 1 weeks;
-            uint256 relativeWeight =
-                chessController.getFundRelativeWeight(address(fund), startWeek);
-            if (relativeWeight != 0) {
-                rate = IChessSchedule(chessSchedule)
-                    .getRate(startWeek)
-                    .mul(relativeWeight)
-                    .mul(1 weeks)
-                    .div(endWeek - timestamp);
-            }
-        }
         uint256 totalSupplyQ = _totalSupplies[TRANCHE_Q];
         uint256 totalSupplyB = _totalSupplies[TRANCHE_B];
         uint256 totalSupplyR = _totalSupplies[TRANCHE_R];
@@ -427,12 +420,12 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         for (uint256 i = 0; i < MAX_ITERATIONS && timestamp_ < block.timestamp; i++) {
             uint256 endTimestamp = rebalanceTimestamp.min(endWeek).min(block.timestamp);
 
-            // Note that `endTimestamp` can be smaller than `timestamp_` when there is a rebalance
-            // before the reward starts, i.e. `rebalanceTimestamp` smaller than the initial
-            // `_checkpointTimestamp`.
-            if (weight > 0 && endTimestamp > timestamp_) {
+            if (weight > 0 && endTimestamp > rewardStartTimestamp) {
                 integral = integral.add(
-                    rate.mul(endTimestamp.sub(timestamp_)).decimalToPreciseDecimal().div(weight)
+                    rate
+                        .mul(endTimestamp.sub(timestamp_.max(rewardStartTimestamp)))
+                        .decimalToPreciseDecimal()
+                        .div(weight)
                 );
             }
 
@@ -464,15 +457,18 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                 }
             }
             if (endTimestamp == endWeek) {
-                uint256 relativeWeight =
-                    chessController.getFundRelativeWeight(address(fund), endWeek);
-                rate = chessSchedule.getRate(endWeek).mul(relativeWeight);
+                rate = chessSchedule.getRate(endWeek).mul(
+                    chessController.getFundRelativeWeight(address(fund), endWeek)
+                );
+                if (endWeek < rewardStartTimestamp && endWeek + 1 weeks > rewardStartTimestamp) {
+                    // Rewards start in the middle of the next week. We adjust the rate to
+                    // compensate for the period between `endWeek` and `rewardStartTimestamp`.
+                    rate = rate.mul(1 weeks).div(endWeek + 1 weeks - rewardStartTimestamp);
+                }
                 endWeek += 1 weeks;
             }
 
-            if (endTimestamp > timestamp_) {
-                timestamp_ = endTimestamp;
-            }
+            timestamp_ = endTimestamp;
         }
 
         _checkpointTimestamp = block.timestamp;
@@ -573,8 +569,16 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
     ///      should be called to update `_workingSupply` and `_workingBalances[account]` to
     ///      the latest rebalance version.
     /// @param account User address
-    /// @param splitRatio Split ratio
-    function _updateWorkingBalance(address account, uint256 splitRatio) private {
+    /// @param rebalanceSize The number of existing rebalances. It must be the same as
+    ///                       `fund.getRebalanceSize()`.
+    function _updateWorkingBalance(address account, uint256 rebalanceSize) private {
+        uint256 splitRatio = _historicalSplitRatio[rebalanceSize];
+        if (splitRatio == 0) {
+            // Read it from the fund in case that it's not initialized yet, e.g. when we reach here
+            // for the first time and `rebalanceSize` is zero.
+            splitRatio = fund.historicalSplitRatio(rebalanceSize);
+            _historicalSplitRatio[rebalanceSize] = splitRatio;
+        }
         uint256 weightedSupply =
             weightedBalance(
                 _totalSupplies[TRANCHE_Q],
