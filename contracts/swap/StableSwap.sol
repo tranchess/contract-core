@@ -426,10 +426,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 lpIn,
         uint256 minBaseOut,
         uint256 minQuoteOut
-    )
-        private
-        returns (uint256 baseOut, uint256 quoteOut)
-    {
+    ) private returns (uint256 baseOut, uint256 quoteOut) {
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
         baseOut = oldBase.mul(lpIn).div(lpSupply);

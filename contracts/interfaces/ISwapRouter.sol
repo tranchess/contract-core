@@ -26,6 +26,26 @@ interface ISwapRouter {
         uint256 deadline
     ) external payable;
 
+    function swapExactTokensForTokens(
+        uint256 amountIn,
+        uint256 minAmountOut,
+        address[] calldata path,
+        address to,
+        address staking,
+        uint256[] calldata versions,
+        uint256 deadline
+    ) external payable returns (uint256[] memory amounts);
+
+    function swapTokensForExactTokens(
+        uint256 amountOut,
+        uint256 maxAmountIn,
+        address[] calldata path,
+        address to,
+        address staking,
+        uint256[] calldata versions,
+        uint256 deadline
+    ) external payable returns (uint256[] memory amounts);
+
     function swapExactTokensForTokensUnwrap(
         uint256 amountIn,
         uint256 minAmountOut,
@@ -43,24 +63,4 @@ interface ISwapRouter {
         uint256[] calldata versions,
         uint256 deadline
     ) external returns (uint256[] memory amounts);
-
-    function swapTokensForExactTokens(
-        uint256 amountOut,
-        uint256 amountInMax,
-        address[] calldata path,
-        address to,
-        address staking,
-        uint256[] calldata versions,
-        uint256 deadline
-    ) external payable returns (uint256[] memory amounts);
-
-    function swapExactTokensForTokens(
-        uint256 amountIn,
-        uint256 amountOutMin,
-        address[] calldata path,
-        address to,
-        address staking,
-        uint256[] calldata versions,
-        uint256 deadline
-    ) external payable returns (uint256[] memory amounts);
 }
