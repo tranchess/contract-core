@@ -10,6 +10,7 @@ import "../interfaces/IStableSwap.sol";
 import "../interfaces/ILiquidityGauge.sol";
 import "../interfaces/IFundV3.sol";
 import "../interfaces/ITranchessSwapCallee.sol";
+import "../interfaces/IWrappedERC20.sol";
 
 import "../utils/SafeDecimalMath.sol";
 import "../utils/AdvancedMath.sol";
@@ -112,6 +113,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         _updateFeeRate(feeRate_);
         _updateAdminFeeRate(adminFeeRate_);
     }
+
+    receive() external payable {}
 
     function baseAddress() public view override returns (address) {
         return fund.tokenShare(baseTranche);
@@ -392,6 +395,38 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         checkVersion(version)
         returns (uint256 baseOut, uint256 quoteOut)
     {
+        (baseOut, quoteOut) = _removeLiquidity(version, lpIn, minBaseOut, minQuoteOut);
+        IERC20(quoteAddress).safeTransfer(msg.sender, quoteOut);
+    }
+
+    /// @dev Remove liquidity proportionally and unwrap for native token.
+    /// @param lpIn Exact amount of LP token to burn
+    /// @param minBaseOut Least amount of base asset to withdraw
+    /// @param minQuoteOut Least amount of quote asset to withdraw
+    function removeLiquidityUnwrap(
+        uint256 version,
+        uint256 lpIn,
+        uint256 minBaseOut,
+        uint256 minQuoteOut
+    )
+        external
+        override
+        nonReentrant
+        checkVersion(version)
+        returns (uint256 baseOut, uint256 quoteOut)
+    {
+        (baseOut, quoteOut) = _removeLiquidity(version, lpIn, minBaseOut, minQuoteOut);
+        IWrappedERC20(quoteAddress).withdraw(quoteOut);
+        (bool success, ) = msg.sender.call{value: quoteOut}("");
+        require(success, "Transfer failed");
+    }
+
+    function _removeLiquidity(
+        uint256 version,
+        uint256 lpIn,
+        uint256 minBaseOut,
+        uint256 minQuoteOut
+    ) private returns (uint256 baseOut, uint256 quoteOut) {
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
         baseOut = oldBase.mul(lpIn).div(lpSupply);
@@ -402,7 +437,6 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         quoteBalance = oldQuote.sub(quoteOut);
         ILiquidityGauge(lpToken).burnFrom(msg.sender, lpIn);
         IERC20(baseAddress()).safeTransfer(msg.sender, baseOut);
-        IERC20(quoteAddress).safeTransfer(msg.sender, quoteOut);
         emit LiquidityRemoved(msg.sender, lpIn, baseOut, quoteOut, 0, 0, 0);
     }
 
@@ -446,6 +480,29 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 lpIn,
         uint256 minQuoteOut
     ) public override nonReentrant checkVersion(version) returns (uint256 quoteOut) {
+        quoteOut = _removeQuoteLiquidity(version, lpIn, minQuoteOut);
+        IERC20(quoteAddress).safeTransfer(msg.sender, quoteOut);
+    }
+
+    /// @dev Remove quote liquidity only and unwrap for native token.
+    /// @param lpIn Exact amount of LP token to burn
+    /// @param minQuoteOut Lesat amount of quote asset to withdrawl
+    function removeQuoteLiquidityUnwrap(
+        uint256 version,
+        uint256 lpIn,
+        uint256 minQuoteOut
+    ) public override nonReentrant checkVersion(version) returns (uint256 quoteOut) {
+        quoteOut = _removeQuoteLiquidity(version, lpIn, minQuoteOut);
+        IWrappedERC20(quoteAddress).withdraw(quoteOut);
+        (bool success, ) = msg.sender.call{value: quoteOut}("");
+        require(success, "Transfer failed");
+    }
+
+    function _removeQuoteLiquidity(
+        uint256 version,
+        uint256 lpIn,
+        uint256 minQuoteOut
+    ) private returns (uint256 quoteOut) {
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 ampl = getAmpl();
@@ -466,7 +523,6 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 adminFee = fee.multiplyDecimal(adminFeeRate);
         totalAdminFee = totalAdminFee.add(adminFee);
         quoteBalance = newQuote.add(fee).sub(adminFee);
-        IERC20(quoteAddress).safeTransfer(msg.sender, quoteOut);
         emit LiquidityRemoved(msg.sender, lpIn, 0, quoteOut, fee, adminFee, oraclePrice);
     }
 

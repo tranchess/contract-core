@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/ISwapRouter.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "../fund/ShareStaking.sol";
+import "../interfaces/IWrappedERC20.sol";
 
 /// @title Tranchess Swap Router
 /// @notice Router for stateless execution of swaps against Tranchess stable swaps
@@ -40,6 +41,8 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         emit SwapAdded(addr0, addr1, swap);
     }
 
+    receive() external payable {}
+
     function addLiquidity(
         address baseAddress,
         address quoteAddress,
@@ -48,11 +51,19 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         uint256 minLpOut,
         uint256 version,
         uint256 deadline
-    ) external virtual override checkDeadline(deadline) {
+    ) external payable virtual override checkDeadline(deadline) {
         IStableSwap swap = getSwap(baseAddress, quoteAddress);
         require(address(swap) != address(0), "Unknown swap");
+
         IERC20(baseAddress).safeTransferFrom(msg.sender, address(swap), baseIn);
-        IERC20(quoteAddress).safeTransferFrom(msg.sender, address(swap), quoteIn);
+        if (msg.value > 0) {
+            require(msg.value == quoteIn); // sanity check
+            IWrappedERC20(quoteAddress).deposit{value: quoteIn}();
+            IERC20(quoteAddress).safeTransfer(address(swap), quoteIn);
+        } else {
+            IERC20(quoteAddress).safeTransferFrom(msg.sender, address(swap), quoteIn);
+        }
+
         uint256 lpOut = swap.addLiquidity(version, msg.sender);
         require(lpOut >= minLpOut, "Insufficient output");
     }
@@ -65,16 +76,24 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         address staking,
         uint256[] calldata versions,
         uint256 deadline
-    ) external virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
+    ) external payable virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
         require(versions.length == path.length - 1, "Invalid versions");
         amounts = getAmountsOut(amountIn, path);
         require(amounts[amounts.length - 1] >= minAmountOut, "Insufficient output");
-        IERC20(path[0]).safeTransferFrom(
-            msg.sender,
-            address(getSwap(path[0], path[1])),
-            amounts[0]
-        );
+
+        if (msg.value > 0) {
+            require(msg.value == amounts[0]); // sanity check
+            IWrappedERC20(path[0]).deposit{value: amounts[0]}();
+            IERC20(path[0]).safeTransfer(address(getSwap(path[0], path[1])), amounts[0]);
+        } else {
+            IERC20(path[0]).safeTransferFrom(
+                msg.sender,
+                address(getSwap(path[0], path[1])),
+                amounts[0]
+            );
+        }
+
         if (staking == address(0)) {
             _swap(amounts, path, versions, recipient);
         } else {
@@ -96,16 +115,24 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         address staking,
         uint256[] calldata versions,
         uint256 deadline
-    ) external virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
+    ) external payable virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
         require(versions.length == path.length - 1, "Invalid versions");
         amounts = getAmountsIn(amountOut, path);
         require(amounts[0] <= maxAmountIn, "Excessive input");
-        IERC20(path[0]).safeTransferFrom(
-            msg.sender,
-            address(getSwap(path[0], path[1])),
-            amounts[0]
-        );
+
+        if (msg.value > 0) {
+            require(msg.value == maxAmountIn); // sanity check
+            IWrappedERC20(path[0]).deposit{value: amounts[0]}();
+            IERC20(path[0]).safeTransfer(address(getSwap(path[0], path[1])), amounts[0]);
+        } else {
+            IERC20(path[0]).safeTransferFrom(
+                msg.sender,
+                address(getSwap(path[0], path[1])),
+                amounts[0]
+            );
+        }
+
         if (staking == address(0)) {
             _swap(amounts, path, versions, recipient);
         } else {
@@ -117,6 +144,57 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
                 versions[versions.length - 1]
             );
         }
+        // refund native token
+        if (msg.value > amounts[0]) {
+            (bool success, ) = msg.sender.call{value: msg.value - amounts[0]}("");
+            require(success, "Transfer failed");
+        }
+    }
+
+    function swapExactTokensForTokensUnwrap(
+        uint256 amountIn,
+        uint256 minAmountOut,
+        address[] calldata path,
+        address recipient,
+        uint256[] calldata versions,
+        uint256 deadline
+    ) external virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
+        require(path.length >= 2, "Invalid path");
+        require(versions.length == path.length - 1, "Invalid versions");
+        amounts = getAmountsOut(amountIn, path);
+        require(amounts[amounts.length - 1] >= minAmountOut, "Insufficient output");
+        IERC20(path[0]).safeTransferFrom(
+            msg.sender,
+            address(getSwap(path[0], path[1])),
+            amounts[0]
+        );
+        _swap(amounts, path, versions, address(this));
+        IWrappedERC20(path[path.length - 1]).withdraw(amounts[amounts.length - 1]);
+        (bool success, ) = recipient.call{value: amounts[amounts.length - 1]}("");
+        require(success, "Transfer failed");
+    }
+
+    function swapTokensForExactTokensUnwrap(
+        uint256 amountOut,
+        uint256 maxAmountIn,
+        address[] calldata path,
+        address recipient,
+        uint256[] calldata versions,
+        uint256 deadline
+    ) external virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
+        require(path.length >= 2, "Invalid path");
+        require(versions.length == path.length - 1, "Invalid versions");
+        amounts = getAmountsIn(amountOut, path);
+        require(amounts[0] <= maxAmountIn, "Excessive input");
+        IERC20(path[0]).safeTransferFrom(
+            msg.sender,
+            address(getSwap(path[0], path[1])),
+            amounts[0]
+        );
+        _swap(amounts, path, versions, address(this));
+        IWrappedERC20(path[path.length - 1]).withdraw(amountOut);
+        (bool success, ) = recipient.call{value: amountOut}("");
+        require(success, "Transfer failed");
     }
 
     function getAmountsOut(uint256 amount, address[] memory path)
