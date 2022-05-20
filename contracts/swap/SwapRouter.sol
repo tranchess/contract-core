@@ -51,7 +51,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         uint256 minLpOut,
         uint256 version,
         uint256 deadline
-    ) external payable virtual override checkDeadline(deadline) {
+    ) external payable override checkDeadline(deadline) {
         IStableSwap swap = getSwap(baseAddress, quoteAddress);
         require(address(swap) != address(0), "Unknown swap");
 
@@ -76,7 +76,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         address staking,
         uint256[] calldata versions,
         uint256 deadline
-    ) external payable virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
+    ) external payable override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
         require(versions.length == path.length - 1, "Invalid versions");
         amounts = getAmountsOut(amountIn, path);
@@ -115,7 +115,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         address staking,
         uint256[] calldata versions,
         uint256 deadline
-    ) external payable virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
+    ) external payable override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
         require(versions.length == path.length - 1, "Invalid versions");
         amounts = getAmountsIn(amountOut, path);
@@ -158,7 +158,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         address recipient,
         uint256[] calldata versions,
         uint256 deadline
-    ) external virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
+    ) external override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
         require(versions.length == path.length - 1, "Invalid versions");
         amounts = getAmountsOut(amountIn, path);
@@ -181,7 +181,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         address recipient,
         uint256[] calldata versions,
         uint256 deadline
-    ) external virtual override checkDeadline(deadline) returns (uint256[] memory amounts) {
+    ) external override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
         require(versions.length == path.length - 1, "Invalid versions");
         amounts = getAmountsIn(amountOut, path);
@@ -240,7 +240,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         address[] memory path,
         uint256[] calldata versions,
         address recipient
-    ) internal virtual {
+    ) private {
         for (uint256 i = 0; i < path.length - 1; i++) {
             IStableSwap swap = getSwap(path[i], path[i + 1]);
             address to =
