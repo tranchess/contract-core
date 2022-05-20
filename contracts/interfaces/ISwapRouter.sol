@@ -30,7 +30,7 @@ interface ISwapRouter {
         uint256 amountIn,
         uint256 minAmountOut,
         address[] calldata path,
-        address to,
+        address recipient,
         address staking,
         uint256[] calldata versions,
         uint256 deadline
@@ -40,7 +40,7 @@ interface ISwapRouter {
         uint256 amountOut,
         uint256 maxAmountIn,
         address[] calldata path,
-        address to,
+        address recipient,
         address staking,
         uint256[] calldata versions,
         uint256 deadline
