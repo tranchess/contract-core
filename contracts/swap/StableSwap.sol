@@ -442,7 +442,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
 
     /// @dev Remove base liquidity only.
     /// @param lpIn Exact amount of LP token to burn
-    /// @param minBaseOut Lesat amount of base asset to withdrawl
+    /// @param minBaseOut Least amount of base asset to withdraw
     function removeBaseLiquidity(
         uint256 version,
         uint256 lpIn,
@@ -474,7 +474,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
 
     /// @dev Remove quote liquidity only.
     /// @param lpIn Exact amount of LP token to burn
-    /// @param minQuoteOut Lesat amount of quote asset to withdrawl
+    /// @param minQuoteOut Least amount of quote asset to withdraw
     function removeQuoteLiquidity(
         uint256 version,
         uint256 lpIn,
@@ -486,7 +486,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
 
     /// @dev Remove quote liquidity only and unwrap for native token.
     /// @param lpIn Exact amount of LP token to burn
-    /// @param minQuoteOut Lesat amount of quote asset to withdrawl
+    /// @param minQuoteOut Least amount of quote asset to withdraw
     function removeQuoteLiquidityUnwrap(
         uint256 version,
         uint256 lpIn,
