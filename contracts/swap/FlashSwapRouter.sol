@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router01.sol";
 
+import "../utils/CoreUtility.sol";
 import "../interfaces/ITranchessSwapCallee.sol";
 import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/ISwapRouter.sol";
@@ -13,7 +14,7 @@ import "../interfaces/ITrancheIndexV2.sol";
 
 /// @title Tranchess Flash Swap Router
 /// @notice Router for stateless execution of flash swaps against Tranchess stable swaps
-contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
+contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable, CoreUtility {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -68,7 +69,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
             abi.encode(
                 primaryMarket,
                 queenSwapOrPrimaryMarketRouter,
-                underlyingAmount,
+                totalQuoteAmount,
                 recipient,
                 version,
                 externalRouter,
@@ -119,7 +120,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         (
             address primaryMarket,
             address queenSwapOrPrimaryMarketRouter,
-            uint256 expectAmount,
+            uint256 expectQuoteAmount,
             address recipient,
             uint256 version,
             ,
@@ -151,25 +152,17 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
 
             // Trade underlying for quote asset
             uint256 totalQuoteAmount =
-                _externalSwap(data, underlyingAmount, 0, pm.fund().tokenUnderlying(), tokenQuote)[
-                    1
-                ];
+                _externalSwap(data, underlyingAmount, pm.fund().tokenUnderlying(), tokenQuote)[1];
             // Send back quote asset to tranchess swap
             IERC20(tokenQuote).safeTransfer(msg.sender, quoteAmount);
             // Send the rest of quote asset to user
             uint256 resultAmount = totalQuoteAmount.sub(quoteAmount);
-            require(resultAmount >= expectAmount, "Insufficient output");
+            require(resultAmount >= expectQuoteAmount, "Insufficient output");
             IERC20(tokenQuote).safeTransfer(recipient, resultAmount);
         } else {
             // Trade quote asset for underlying asset
             uint256 underlyingAmount =
-                _externalSwap(
-                    data,
-                    quoteDeltaOut,
-                    expectAmount,
-                    tokenQuote,
-                    pm.fund().tokenUnderlying()
-                )[1];
+                _externalSwap(data, expectQuoteAmount, tokenQuote, pm.fund().tokenUnderlying())[1];
 
             // Create or swap borrowed underlying for QUEEN
             IERC20(pm.fund().tokenUnderlying()).safeTransfer(
@@ -191,7 +184,6 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
     function _externalSwap(
         bytes memory data,
         uint256 amountIn,
-        uint256 minAmountOut,
         address tokenIn,
         address tokenOut
     ) private returns (uint256[] memory amounts) {
@@ -202,7 +194,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         require(externalPath[externalPath.length - 1] == tokenOut, "Invalid token out");
         amounts = IUniswapV2Router01(externalRouter).swapExactTokensForTokens(
             amountIn,
-            minAmountOut,
+            0,
             externalPath,
             address(this),
             block.timestamp

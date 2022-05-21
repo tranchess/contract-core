@@ -7,7 +7,7 @@ const { parseEther, parseUnits } = ethers.utils;
 const parseBtc = (value: string) => parseUnits(value, 8);
 import { deployMockForName } from "./mock";
 import { defaultAbiCoder } from "ethers/lib/utils";
-import { TRANCHE_Q, TRANCHE_B, TRANCHE_R } from "./utils";
+import { TRANCHE_Q, TRANCHE_B, TRANCHE_R, setNextBlockTime } from "./utils";
 
 const UNIT = BigNumber.from(10).pow(18);
 const n = BigNumber.from("2");
@@ -1709,7 +1709,16 @@ describe("Flash Swap", function () {
                 .withArgs(2, flashSwapRouter.address, outR, 0)
                 .returns();
             await externalRouter.mock.getAmountsIn.returns([parseEther("1"), 0]);
-            await externalRouter.mock.swapExactTokensForTokens.returns([0, parseBtc("0.002")]);
+            const nextBlockTime = (await ethers.provider.getBlock("latest")).timestamp + 60;
+            await externalRouter.mock.swapExactTokensForTokens
+                .withArgs(
+                    parseEther("1"),
+                    0,
+                    [usd.address, btc.address],
+                    flashSwapRouter.address,
+                    nextBlockTime
+                )
+                .returns([0, parseBtc("0.002")]);
 
             await btc.mint(flashSwapRouter.address, parseBtc("1"));
             await tokens[0].mint(stableSwap.address, outR);
@@ -1723,6 +1732,7 @@ describe("Flash Swap", function () {
 
             const beforeQuote = await usd.balanceOf(user1.address);
 
+            setNextBlockTime(nextBlockTime);
             await flashSwapRouter
                 .connect(user1)
                 .buyR(
