@@ -12,6 +12,7 @@ import "../interfaces/IWrappedERC20.sol";
 /// @title Tranchess Swap Router
 /// @notice Router for stateless execution of swaps against Tranchess stable swaps
 contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
+    using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
     event SwapAdded(address addr0, address addr1, address swap);
@@ -79,7 +80,9 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
     ) external payable override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
         require(versions.length == path.length - 1, "Invalid versions");
-        amounts = getAmountsOut(amountIn, path);
+        IStableSwap[] memory swaps;
+        bool[] memory isBuy;
+        (amounts, swaps, isBuy) = getAmountsOut(amountIn, path);
         require(amounts[amounts.length - 1] >= minAmountOut, "Insufficient output");
 
         if (msg.value > 0) {
@@ -95,7 +98,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         }
 
         if (staking == address(0)) {
-            _swap(amounts, path, versions, recipient);
+            _swap(amounts, swaps, isBuy, versions, recipient);
         } else {
             _swap(amounts, path, versions, staking);
             ShareStaking(staking).deposit(
@@ -118,7 +121,9 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
     ) external payable override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
         require(versions.length == path.length - 1, "Invalid versions");
-        amounts = getAmountsIn(amountOut, path);
+        IStableSwap[] memory swaps;
+        bool[] memory isBuy;
+        (amounts, swaps, isBuy) = getAmountsIn(amountOut, path);
         require(amounts[0] <= maxAmountIn, "Excessive input");
 
         if (msg.value > 0) {
@@ -134,7 +139,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         }
 
         if (staking == address(0)) {
-            _swap(amounts, path, versions, recipient);
+            _swap(amounts, swaps, isBuy, versions, recipient);
         } else {
             _swap(amounts, path, versions, staking);
             ShareStaking(staking).deposit(
@@ -161,14 +166,16 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
     ) external override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
         require(versions.length == path.length - 1, "Invalid versions");
-        amounts = getAmountsOut(amountIn, path);
+        IStableSwap[] memory swaps;
+        bool[] memory isBuy;
+        (amounts, swaps, isBuy) = getAmountsOut(amountIn, path);
         require(amounts[amounts.length - 1] >= minAmountOut, "Insufficient output");
         IERC20(path[0]).safeTransferFrom(
             msg.sender,
             address(getSwap(path[0], path[1])),
             amounts[0]
         );
-        _swap(amounts, path, versions, address(this));
+        _swap(amounts, swaps, isBuy, versions, address(this));
         IWrappedERC20(path[path.length - 1]).withdraw(amounts[amounts.length - 1]);
         (bool success, ) = recipient.call{value: amounts[amounts.length - 1]}("");
         require(success, "Transfer failed");
@@ -184,14 +191,16 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
     ) external override checkDeadline(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Invalid path");
         require(versions.length == path.length - 1, "Invalid versions");
-        amounts = getAmountsIn(amountOut, path);
+        IStableSwap[] memory swaps;
+        bool[] memory isBuy;
+        (amounts, swaps, isBuy) = getAmountsIn(amountOut, path);
         require(amounts[0] <= maxAmountIn, "Excessive input");
         IERC20(path[0]).safeTransferFrom(
             msg.sender,
             address(getSwap(path[0], path[1])),
             amounts[0]
         );
-        _swap(amounts, path, versions, address(this));
+        _swap(amounts, swaps, isBuy, versions, address(this));
         IWrappedERC20(path[path.length - 1]).withdraw(amountOut);
         (bool success, ) = recipient.call{value: amountOut}("");
         require(success, "Transfer failed");
@@ -201,17 +210,24 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         public
         view
         override
-        returns (uint256[] memory amounts)
+        returns (
+            uint256[] memory amounts,
+            IStableSwap[] memory swaps,
+            bool[] memory isBuy
+        )
     {
         amounts = new uint256[](path.length);
+        swaps = new IStableSwap[](path.length.sub(1));
+        isBuy = new bool[](path.length.sub(1));
         amounts[0] = amount;
         for (uint256 i; i < path.length - 1; i++) {
-            IStableSwap swap = getSwap(path[i], path[i + 1]);
-            require(address(swap) != address(0), "Unknown swap");
-            if (path[i] == swap.baseAddress()) {
-                amounts[i + 1] = swap.getQuoteOut(amounts[i]);
+            swaps[i] = getSwap(path[i], path[i + 1]);
+            require(address(swaps[i]) != address(0), "Unknown swap");
+            if (path[i] == swaps[i].baseAddress()) {
+                amounts[i + 1] = swaps[i].getQuoteOut(amounts[i]);
             } else {
-                amounts[i + 1] = swap.getBaseOut(amounts[i]);
+                isBuy[i] = true;
+                amounts[i + 1] = swaps[i].getBaseOut(amounts[i]);
             }
         }
     }
@@ -220,35 +236,41 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         public
         view
         override
-        returns (uint256[] memory amounts)
+        returns (
+            uint256[] memory amounts,
+            IStableSwap[] memory swaps,
+            bool[] memory isBuy
+        )
     {
         amounts = new uint256[](path.length);
+        swaps = new IStableSwap[](path.length.sub(1));
+        isBuy = new bool[](path.length.sub(1));
         amounts[amounts.length - 1] = amount;
         for (uint256 i = path.length - 1; i > 0; i--) {
-            IStableSwap swap = getSwap(path[i - 1], path[i]);
-            require(address(swap) != address(0), "Unknown swap");
-            if (path[i] == swap.baseAddress()) {
-                amounts[i - 1] = swap.getQuoteIn(amounts[i]);
+            swaps[i - 1] = getSwap(path[i - 1], path[i]);
+            require(address(swaps[i - 1]) != address(0), "Unknown swap");
+            if (path[i] == swaps[i - 1].baseAddress()) {
+                isBuy[i - 1] = true;
+                amounts[i - 1] = swaps[i - 1].getQuoteIn(amounts[i]);
             } else {
-                amounts[i - 1] = swap.getBaseIn(amounts[i]);
+                amounts[i - 1] = swaps[i - 1].getBaseIn(amounts[i]);
             }
         }
     }
 
     function _swap(
         uint256[] memory amounts,
-        address[] memory path,
+        IStableSwap[] memory swaps,
+        bool[] memory isBuy,
         uint256[] calldata versions,
         address recipient
     ) private {
-        for (uint256 i = 0; i < path.length - 1; i++) {
-            IStableSwap swap = getSwap(path[i], path[i + 1]);
-            address to =
-                i < path.length - 2 ? address(getSwap(path[i + 1], path[i + 2])) : recipient;
-            if (path[i] == swap.baseAddress()) {
-                swap.sell(versions[i], amounts[i + 1], to, new bytes(0));
+        for (uint256 i = 0; i < swaps.length; i++) {
+            address to = i < swaps.length - 1 ? address(swaps[i]) : recipient;
+            if (!isBuy[i]) {
+                swaps[i].sell(versions[i], amounts[i + 1], to, new bytes(0));
             } else {
-                swap.buy(versions[i], amounts[i + 1], to, new bytes(0));
+                swaps[i].buy(versions[i], amounts[i + 1], to, new bytes(0));
             }
         }
     }
