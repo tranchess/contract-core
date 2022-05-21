@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router01.sol";
 
-import "../utils/CoreUtility.sol";
 import "../interfaces/ITranchessSwapCallee.sol";
 import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/ISwapRouter.sol";
@@ -14,7 +13,7 @@ import "../interfaces/ITrancheIndexV2.sol";
 
 /// @title Tranchess Flash Swap Router
 /// @notice Router for stateless execution of flash swaps against Tranchess stable swaps
-contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable, CoreUtility {
+contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
