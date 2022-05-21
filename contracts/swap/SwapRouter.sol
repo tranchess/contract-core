@@ -97,7 +97,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         if (staking == address(0)) {
             _swap(amounts, path, versions, recipient);
         } else {
-            _swap(amounts, path, versions, address(this));
+            _swap(amounts, path, versions, staking);
             ShareStaking(staking).deposit(
                 TRANCHE_B,
                 amounts[amounts.length - 1],
@@ -136,7 +136,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         if (staking == address(0)) {
             _swap(amounts, path, versions, recipient);
         } else {
-            _swap(amounts, path, versions, address(this));
+            _swap(amounts, path, versions, staking);
             ShareStaking(staking).deposit(
                 TRANCHE_B,
                 amountOut,
