@@ -9,12 +9,20 @@ interface ISwapRouter {
     function getAmountsOut(uint256 amount, address[] memory path)
         external
         view
-        returns (uint256[] memory amounts);
+        returns (
+            uint256[] memory amounts,
+            IStableSwap[] memory swaps,
+            bool[] memory isBuy
+        );
 
     function getAmountsIn(uint256 amount, address[] memory path)
         external
         view
-        returns (uint256[] memory amounts);
+        returns (
+            uint256[] memory amounts,
+            IStableSwap[] memory swaps,
+            bool[] memory isBuy
+        );
 
     function addLiquidity(
         address baseToken,
