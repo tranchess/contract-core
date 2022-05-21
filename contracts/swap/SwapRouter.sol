@@ -100,7 +100,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         if (staking == address(0)) {
             _swap(amounts, swaps, isBuy, versions, recipient);
         } else {
-            _swap(amounts, path, versions, staking);
+            _swap(amounts, swaps, isBuy, versions, staking);
             ShareStaking(staking).deposit(
                 TRANCHE_B,
                 amounts[amounts.length - 1],
@@ -141,7 +141,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         if (staking == address(0)) {
             _swap(amounts, swaps, isBuy, versions, recipient);
         } else {
-            _swap(amounts, path, versions, staking);
+            _swap(amounts, swaps, isBuy, versions, staking);
             ShareStaking(staking).deposit(
                 TRANCHE_B,
                 amountOut,
@@ -217,8 +217,8 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         )
     {
         amounts = new uint256[](path.length);
-        swaps = new IStableSwap[](path.length.sub(1));
-        isBuy = new bool[](path.length.sub(1));
+        swaps = new IStableSwap[](path.length - 1);
+        isBuy = new bool[](path.length - 1);
         amounts[0] = amount;
         for (uint256 i; i < path.length - 1; i++) {
             swaps[i] = getSwap(path[i], path[i + 1]);
@@ -243,8 +243,8 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         )
     {
         amounts = new uint256[](path.length);
-        swaps = new IStableSwap[](path.length.sub(1));
-        isBuy = new bool[](path.length.sub(1));
+        swaps = new IStableSwap[](path.length - 1);
+        isBuy = new bool[](path.length - 1);
         amounts[amounts.length - 1] = amount;
         for (uint256 i = path.length - 1; i > 0; i--) {
             swaps[i - 1] = getSwap(path[i - 1], path[i]);
@@ -266,7 +266,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         address recipient
     ) private {
         for (uint256 i = 0; i < swaps.length; i++) {
-            address to = i < swaps.length - 1 ? address(swaps[i]) : recipient;
+            address to = i < swaps.length - 1 ? address(swaps[i + 1]) : recipient;
             if (!isBuy[i]) {
                 swaps[i].sell(versions[i], amounts[i + 1], to, new bytes(0));
             } else {
