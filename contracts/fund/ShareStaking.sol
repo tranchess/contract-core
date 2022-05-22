@@ -108,10 +108,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         _votingEscrow = IVotingEscrow(votingEscrow_);
         rewardStartTimestamp = rewardStartTimestamp_;
         _checkpointTimestamp = block.timestamp;
-        uint256 startWeek = _endOfWeek(block.timestamp) - 1 weeks;
-        _rate = IChessSchedule(chessSchedule_).getRate(startWeek).mul(
-            IChessController(chessController_).getFundRelativeWeight(fund_, startWeek)
-        );
     }
 
     function getRate() external view returns (uint256) {
