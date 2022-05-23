@@ -30,7 +30,7 @@ describe("QueenStableSwap", function () {
         readonly wallets: FixtureWalletMap;
         readonly btc: Contract;
         readonly fund: MockContract;
-        readonly tmpBase: MockContract;
+        readonly tokenQ: MockContract;
         readonly lpToken: Contract;
         readonly stableSwap: Contract;
         readonly swapRouter: Contract;
@@ -47,7 +47,7 @@ describe("QueenStableSwap", function () {
     let addr2: string;
     let btc: Contract;
     let fund: MockContract;
-    let tmpBase: MockContract;
+    let tokenQ: MockContract;
     let lpToken: Contract;
     let stableSwap: Contract;
     let swapRouter: Contract;
@@ -102,23 +102,23 @@ describe("QueenStableSwap", function () {
             swapBonus.address
         );
 
-        const tmpBase = await deployMockForName(owner, "ERC20");
-        await fund.mock.tokenShare.withArgs(TRANCHE_Q).returns(tmpBase.address);
+        const tokenQ = await deployMockForName(owner, "ERC20");
+        await fund.mock.tokenShare.withArgs(TRANCHE_Q).returns(tokenQ.address);
 
         // Add initial liquidity
-        await tmpBase.mock.balanceOf.withArgs(stableSwap.address).returns(INIT_Q);
+        await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, stableSwap.address).returns(INIT_Q);
         await btc.mint(stableSwap.address, INIT_BTC);
         await stableSwap.addLiquidity(0, user1.address);
 
         const SwapRouter = await ethers.getContractFactory("SwapRouter");
         const swapRouter = await SwapRouter.connect(owner).deploy();
-        await swapRouter.addSwap(tmpBase.address, btc.address, stableSwap.address);
+        await swapRouter.addSwap(tokenQ.address, btc.address, stableSwap.address);
 
         return {
             wallets: { user1, user2, owner, feeCollector },
             btc,
             fund,
-            tmpBase,
+            tokenQ,
             lpToken,
             stableSwap: stableSwap.connect(user1),
             swapRouter: swapRouter.connect(user1),
@@ -130,8 +130,10 @@ describe("QueenStableSwap", function () {
     }
 
     async function addBase(amount: BigNumberish): Promise<void> {
-        const oldBase = await tmpBase.balanceOf(stableSwap.address);
-        await tmpBase.mock.balanceOf.withArgs(stableSwap.address).returns(oldBase.add(amount));
+        const oldBase = await fund.trancheBalanceOf(TRANCHE_Q, stableSwap.address);
+        await fund.mock.trancheBalanceOf
+            .withArgs(TRANCHE_Q, stableSwap.address)
+            .returns(oldBase.add(amount));
     }
 
     async function addQuote(amount: BigNumberish): Promise<void> {
@@ -152,7 +154,7 @@ describe("QueenStableSwap", function () {
         addr2 = user2.address;
         btc = fixtureData.btc;
         fund = fixtureData.fund;
-        tmpBase = fixtureData.tmpBase;
+        tokenQ = fixtureData.tokenQ;
         lpToken = fixtureData.lpToken;
         stableSwap = fixtureData.stableSwap;
         swapRouter = fixtureData.swapRouter;
@@ -189,6 +191,7 @@ describe("QueenStableSwap", function () {
                 const fee = inBtc.mul(FEE_RATE).div(UNIT);
                 const swapPrice = inBtc.sub(fee).mul(BTC_TO_ETHER).mul(UNIT).div(outQ);
                 expect(swapPrice).to.be.closeTo(price, price.mul(slippageBps).div(10000));
+                await fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, outQ, 0).returns();
                 await addQuote(inBtc);
                 await stableSwap.buy(0, outQ, addr1, "0x");
             };
@@ -201,6 +204,7 @@ describe("QueenStableSwap", function () {
                 const fee = inBtc.mul(FEE_RATE).div(UNIT);
                 const swapPrice = inBtc.sub(fee).mul(BTC_TO_ETHER).mul(UNIT).div(outQ);
                 expect(swapPrice).to.be.closeTo(price, price.mul(slippageBps).div(10000));
+                await fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, outQ, 0).returns();
                 await addQuote(inBtc);
                 await stableSwap.buy(0, outQ, addr1, "0x");
             };
@@ -235,7 +239,7 @@ describe("QueenStableSwap", function () {
                 const inBtc = INIT_BTC.div(1000);
                 // Estimate LP token amount and fee (slippage ignored)
                 const oldBtc = await btc.balanceOf(stableSwap.address);
-                const oldQ = await tmpBase.balanceOf(stableSwap.address);
+                const oldQ = await fund.trancheBalanceOf(TRANCHE_Q, stableSwap.address);
                 const oldValue = oldQ.mul(price).div(UNIT).add(oldBtc.mul(BTC_TO_ETHER));
                 const newValue = oldValue.add(inBtc.mul(BTC_TO_ETHER));
                 const swappedBtc = inBtc.sub(oldBtc.mul(newValue.sub(oldValue)).div(oldValue));
@@ -261,7 +265,7 @@ describe("QueenStableSwap", function () {
                 const inQ = INIT_Q.div(1000);
                 // Estimate LP token amount and fee (slippage ignored)
                 const oldBtc = await btc.balanceOf(stableSwap.address);
-                const oldQ = await tmpBase.balanceOf(stableSwap.address);
+                const oldQ = await fund.trancheBalanceOf(TRANCHE_Q, stableSwap.address);
                 const oldValue = oldQ.mul(price).div(UNIT).add(oldBtc.mul(BTC_TO_ETHER));
                 const newValue = oldValue.add(inQ.mul(price).div(UNIT));
                 const swappedBtc = oldBtc.mul(newValue.sub(oldValue)).div(oldValue);
@@ -291,13 +295,14 @@ describe("QueenStableSwap", function () {
                 const inLp = INIT_LP.div(10000);
                 // Estimate output amount and fee (slippage ignored)
                 const oldBtc = await btc.balanceOf(stableSwap.address);
-                const oldQ = await tmpBase.balanceOf(stableSwap.address);
+                const oldQ = await fund.trancheBalanceOf(TRANCHE_Q, stableSwap.address);
                 const oldValue = oldQ.mul(price).div(UNIT).add(oldBtc.mul(BTC_TO_ETHER));
                 const removedValue = oldValue.div(10000);
                 const fee = oldBtc.div(10000).mul(FEE_RATE).div(UNIT);
                 const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
                 const outQ = removedValue.sub(fee.mul(BTC_TO_ETHER)).mul(UNIT).div(price);
                 // Check the estimation
+                await fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, outQ, 0);
                 expect(await stableSwap.callStatic.removeBaseLiquidity(0, inLp, 0)).to.be.closeTo(
                     outQ,
                     outQ.mul(slippageBps).div(10000)
@@ -315,7 +320,7 @@ describe("QueenStableSwap", function () {
                 const inLp = INIT_LP.div(10000);
                 // Estimate output amount and fee (slippage ignored)
                 const oldBtc = await btc.balanceOf(stableSwap.address);
-                const oldQ = await tmpBase.balanceOf(stableSwap.address);
+                const oldQ = await fund.trancheBalanceOf(TRANCHE_Q, stableSwap.address);
                 const oldValue = oldQ.mul(price).div(UNIT).add(oldBtc.mul(BTC_TO_ETHER));
                 const removedValue = oldValue.div(10000);
                 const fee = oldQ
@@ -342,7 +347,7 @@ describe("QueenStableSwap", function () {
 
         beforeEach(async function () {
             // Base token transfer is tested in other cases. This section focuses on price.
-            await tmpBase.mock.transfer.returns(true);
+            await fund.mock.trancheTransfer.returns();
         });
 
         describe("Balanced pool", function () {
@@ -492,6 +497,7 @@ describe("QueenStableSwap", function () {
         });
 
         it("Should revert if output exceeds liquidity", async function () {
+            await fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, INIT_Q, 0).returns();
             await expect(stableSwap.buy(0, INIT_Q, addr1, "0x")).to.be.revertedWith(
                 "Insufficient liquidity"
             );
@@ -499,7 +505,8 @@ describe("QueenStableSwap", function () {
 
         it("Should revert if input is not sufficient", async function () {
             await addQuote(inBtc.mul(9).div(10));
-            await tmpBase.mock.transfer.returns(true);
+            await fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, outQ, 0).returns();
+
             await expect(stableSwap.buy(0, outQ, addr1, "0x")).to.be.revertedWith(
                 "Invariant mismatch"
             );
@@ -508,14 +515,14 @@ describe("QueenStableSwap", function () {
         it("Should transfer base token to recipient", async function () {
             await addQuote(inBtc);
             await expect(() => stableSwap.buy(0, outQ, addr2, "0x")).to.callMocks({
-                func: tmpBase.mock.transfer.withArgs(addr2, outQ),
-                rets: [true],
+                func: fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr2, outQ, 0),
+                rets: [],
             });
         });
 
         it("Should update stored balance and admin fee", async function () {
             await addQuote(inBtc);
-            await tmpBase.mock.transfer.returns(true);
+            await fund.mock.trancheTransfer.returns();
             await stableSwap.buy(0, outQ, addr2, "0x");
             const [base, quote] = await stableSwap.allBalances();
             expect(base).to.equal(INIT_Q.sub(outQ));
@@ -525,7 +532,7 @@ describe("QueenStableSwap", function () {
 
         it("Should emit an event", async function () {
             await addQuote(inBtc);
-            await tmpBase.mock.transfer.returns(true);
+            await fund.mock.trancheTransfer.returns();
             await expect(stableSwap.buy(0, outQ, addr2, "0x"))
                 .to.emit(stableSwap, "Swap")
                 .withArgs(addr1, addr2, 0, inBtc, outQ, 0, fee, adminFee, parseEther("2"));
@@ -582,7 +589,7 @@ describe("QueenStableSwap", function () {
 
         it("Should emit an event", async function () {
             await addBase(inQ);
-            await tmpBase.mock.transfer.returns(true);
+            await fund.mock.trancheTransfer.returns();
             await expect(stableSwap.sell(0, outBtc, addr2, "0x"))
                 .to.emit(stableSwap, "Swap")
                 .withArgs(addr1, addr2, inQ, 0, 0, outBtc, fee, adminFee, parseEther("2"));
@@ -646,7 +653,7 @@ describe("QueenStableSwap", function () {
 
     describe("removeLiquidity()", function () {
         it("Should burn LP tokens", async function () {
-            await tmpBase.mock.transfer.returns(true);
+            await fund.mock.trancheTransfer.returns();
             await expect(() =>
                 stableSwap.removeLiquidity(0, INIT_LP.div(10), 0, 0)
             ).to.changeTokenBalance(lpToken, user1, INIT_LP.div(-10));
@@ -654,13 +661,13 @@ describe("QueenStableSwap", function () {
 
         it("Should transfer base tokens", async function () {
             await expect(() => stableSwap.removeLiquidity(0, INIT_LP.div(10), 0, 0)).to.callMocks({
-                func: tmpBase.mock.transfer.withArgs(addr1, INIT_Q.div(10)),
-                rets: [true],
+                func: fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, INIT_Q.div(10), 0),
+                rets: [],
             });
         });
 
         it("Should transfer quote tokens", async function () {
-            await tmpBase.mock.transfer.returns(true);
+            await fund.mock.trancheTransfer.returns();
             await expect(() =>
                 stableSwap.removeLiquidity(0, INIT_LP.div(10), 0, 0)
             ).to.changeTokenBalances(
@@ -671,14 +678,14 @@ describe("QueenStableSwap", function () {
         });
 
         it("Should return base and quote amount", async function () {
-            await tmpBase.mock.transfer.returns(true);
+            await fund.mock.trancheTransfer.returns();
             const ret = await stableSwap.callStatic.removeLiquidity(0, INIT_LP.div(10), 0, 0);
             expect(ret.baseOut).to.equal(INIT_Q.div(10));
             expect(ret.quoteOut).to.equal(INIT_BTC.div(10));
         });
 
         it("Should check min output", async function () {
-            await tmpBase.mock.transfer.returns(true);
+            await fund.mock.trancheTransfer.returns();
             await expect(
                 stableSwap.removeLiquidity(0, INIT_LP.div(10), INIT_Q.div(10).add(1), 0)
             ).to.be.revertedWith("Insufficient output");
@@ -689,7 +696,7 @@ describe("QueenStableSwap", function () {
         });
 
         it("Should update stored balance", async function () {
-            await tmpBase.mock.transfer.returns(true);
+            await fund.mock.trancheTransfer.returns();
             await stableSwap.removeLiquidity(0, INIT_LP.div(10), 0, 0);
             const [base, quote] = await stableSwap.allBalances();
             expect(base).to.equal(INIT_Q.mul(9).div(10));
@@ -697,7 +704,7 @@ describe("QueenStableSwap", function () {
         });
 
         it("Should emit an event", async function () {
-            await tmpBase.mock.transfer.returns(true);
+            await fund.mock.trancheTransfer.returns();
             await expect(stableSwap.removeLiquidity(0, INIT_LP.div(10), 0, 0))
                 .to.emit(stableSwap, "LiquidityRemoved")
                 .withArgs(addr1, INIT_LP.div(10), INIT_Q.div(10), INIT_BTC.div(10), 0, 0, 0);
@@ -710,7 +717,7 @@ describe("QueenStableSwap", function () {
 
         this.beforeEach(async function () {
             inLp = INIT_LP.div(1000);
-            await tmpBase.mock.transfer.returns(true);
+            await fund.mock.trancheTransfer.returns();
             outQ = await stableSwap.callStatic.removeBaseLiquidity(0, inLp, 0);
         });
 
@@ -724,8 +731,7 @@ describe("QueenStableSwap", function () {
 
         it("Should transfer base tokens", async function () {
             await expect(() => stableSwap.removeBaseLiquidity(0, inLp, 0)).to.callMocks({
-                func: tmpBase.mock.transfer.withArgs(addr1, outQ),
-                rets: [true],
+                func: fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, outQ, 0),
             });
         });
 
@@ -823,10 +829,10 @@ describe("QueenStableSwap", function () {
 
     describe("Empty pool", function () {
         beforeEach(async function () {
-            await tmpBase.mock.transfer.returns(true);
+            await fund.mock.trancheTransfer.returns();
             await stableSwap.removeLiquidity(0, INIT_LP, 0, 0);
             // Mock the transfer in removeLiquidity
-            await tmpBase.mock.balanceOf.withArgs(stableSwap.address).returns(0);
+            await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, stableSwap.address).returns(0);
         });
 
         it("getCurrentPriceOverOracle() and getCurrentPrice()", async function () {
@@ -835,12 +841,14 @@ describe("QueenStableSwap", function () {
         });
 
         it("Should require both assets for initial liquidity", async function () {
-            await tmpBase.mock.balanceOf.withArgs(stableSwap.address).returns(INIT_Q);
+            await fund.mock.trancheBalanceOf
+                .withArgs(TRANCHE_Q, stableSwap.address)
+                .returns(INIT_Q);
             await expect(stableSwap.addLiquidity(0, addr1)).to.be.revertedWith(
                 "Zero initial balance"
             );
 
-            await tmpBase.mock.balanceOf.withArgs(stableSwap.address).returns(0);
+            await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, stableSwap.address).returns(0);
             await btc.mint(stableSwap.address, INIT_BTC);
             await expect(stableSwap.addLiquidity(0, addr1)).to.be.revertedWith(
                 "Zero initial balance"
@@ -864,7 +872,7 @@ describe("QueenStableSwap", function () {
         }
 
         beforeEach(async function () {
-            await tmpBase.mock.transfer.returns(true);
+            await fund.mock.trancheTransfer.returns();
             startTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
             startIntegral = await stableSwap.getPriceOverOracleIntegral();
         });
@@ -916,7 +924,7 @@ describe("QueenStableSwap", function () {
             await setNextBlockTime(startTimestamp + 300);
             await stableSwap.removeLiquidity(0, INIT_LP, 0, 0);
             // Mock the transfer in removeLiquidity
-            await tmpBase.mock.balanceOf.withArgs(stableSwap.address).returns(0);
+            await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, stableSwap.address).returns(0);
 
             // The following removeLiquidity() does not update the integral. So, the value of
             // price over oracle after sync() is not accumulated.
@@ -1029,21 +1037,13 @@ describe("QueenStableSwap", function () {
 
         it("Should check deadline", async function () {
             await expect(
-                swapRouter.addLiquidity(
-                    tmpBase.address,
-                    btc.address,
-                    0,
-                    0,
-                    0,
-                    0,
-                    startTimestamp - 1
-                )
+                swapRouter.addLiquidity(tokenQ.address, btc.address, 0, 0, 0, 0, startTimestamp - 1)
             ).to.be.revertedWith("Transaction too old");
             await expect(
                 swapRouter.swapExactTokensForTokens(
                     0,
                     0,
-                    [tmpBase.address, btc.address],
+                    [tokenQ.address, btc.address],
                     addr1,
                     ethers.constants.AddressZero,
                     [0],
@@ -1054,7 +1054,7 @@ describe("QueenStableSwap", function () {
                 swapRouter.swapTokensForExactTokens(
                     0,
                     0,
-                    [tmpBase.address, btc.address],
+                    [tokenQ.address, btc.address],
                     addr1,
                     ethers.constants.AddressZero,
                     [0],
@@ -1070,7 +1070,7 @@ describe("QueenStableSwap", function () {
                 outLp: BigNumberish
             ) =>
                 swapRouter.addLiquidity(
-                    tmpBase.address,
+                    tokenQ.address,
                     btc.address,
                     inQ,
                     inBtc,
@@ -1088,17 +1088,18 @@ describe("QueenStableSwap", function () {
             it("Should transfer base tokens", async function () {
                 await addBase(parseEther("0.123")); // Mock effect of the base token transfer
                 await expect(() => routerAddLiquidity(parseEther("0.123"), 0, 0)).to.callMocks({
-                    func: tmpBase.mock.transferFrom.withArgs(
+                    func: fund.mock.trancheTransferFrom.withArgs(
+                        TRANCHE_Q,
                         addr1,
                         stableSwap.address,
-                        parseEther("0.123")
+                        parseEther("0.123"),
+                        0
                     ),
-                    rets: [true],
                 });
             });
 
             it("Should transfer quote tokens", async function () {
-                await tmpBase.mock.transferFrom.returns(true);
+                await fund.mock.trancheTransferFrom.returns();
                 await expect(() =>
                     routerAddLiquidity(0, parseBtc("0.123"), 0)
                 ).to.changeTokenBalances(
@@ -1110,7 +1111,7 @@ describe("QueenStableSwap", function () {
 
             it("Should check min output", async function () {
                 await addBase(INIT_Q.div(2)); // Mock effect of the base token transfer
-                await tmpBase.mock.transferFrom.returns(true);
+                await fund.mock.trancheTransferFrom.returns();
                 await expect(
                     routerAddLiquidity(INIT_Q.div(2), INIT_BTC.div(2), INIT_LP.div(2).add(1))
                 ).to.be.revertedWith("Insufficient output");
@@ -1135,13 +1136,13 @@ describe("QueenStableSwap", function () {
                     startTimestamp + DAY
                 );
             const callBuy = (amountIn: BigNumberish, minAmountOut: BigNumberish) =>
-                callSwap(amountIn, minAmountOut, [btc.address, tmpBase.address], [0]);
+                callSwap(amountIn, minAmountOut, [btc.address, tokenQ.address], [0]);
             const callSell = (amountIn: BigNumberish, minAmountOut: BigNumberish) =>
-                callSwap(amountIn, minAmountOut, [tmpBase.address, btc.address], [0]);
+                callSwap(amountIn, minAmountOut, [tokenQ.address, btc.address], [0]);
 
             it("Should reject invalid path or versions", async function () {
                 await expect(callSwap(0, 0, [btc.address], [0])).to.be.revertedWith("Invalid path");
-                await expect(callSwap(0, 0, [tmpBase.address, btc.address], [])).to.be.revertedWith(
+                await expect(callSwap(0, 0, [tokenQ.address, btc.address], [])).to.be.revertedWith(
                     "Invalid versions"
                 );
                 await expect(callSwap(0, 0, [addr1, btc.address], [0])).to.be.revertedWith(
@@ -1153,25 +1154,25 @@ describe("QueenStableSwap", function () {
                 // Sell
                 await addBase(parseEther("0.123")); // Mock effect of the base token transfer
                 await expect(() => callSell(parseEther("0.123"), 0)).to.callMocks({
-                    func: tmpBase.mock.transferFrom.withArgs(
+                    func: fund.mock.trancheTransferFrom.withArgs(
+                        TRANCHE_Q,
                         addr1,
                         stableSwap.address,
-                        parseEther("0.123")
+                        parseEther("0.123"),
+                        0
                     ),
-                    rets: [true],
                 });
                 // Buy
                 const inBtc = parseBtc("0.456");
                 const outQ = await stableSwap.getBaseOut(inBtc);
                 await expect(() => callBuy(inBtc, 0)).to.callMocks({
-                    func: tmpBase.mock.transfer.withArgs(addr2, outQ),
-                    rets: [true],
+                    func: fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr2, outQ, 0),
                 });
             });
 
             it("Should transfer quote tokens", async function () {
-                await tmpBase.mock.transfer.returns(true);
-                await tmpBase.mock.transferFrom.returns(true);
+                await fund.mock.trancheTransfer.returns();
+                await fund.mock.trancheTransferFrom.returns();
                 // Sell
                 const inQ = parseEther("0.123");
                 const outBtc = await stableSwap.getQuoteOut(inQ);
@@ -1190,8 +1191,8 @@ describe("QueenStableSwap", function () {
             });
 
             it("Should check min output", async function () {
-                await tmpBase.mock.transfer.returns(true);
-                await tmpBase.mock.transferFrom.returns(true);
+                await fund.mock.trancheTransfer.returns();
+                await fund.mock.trancheTransferFrom.returns();
                 // Sell
                 const inQ = parseEther("0.123");
                 const outBtc = await stableSwap.getQuoteOut(inQ);
@@ -1225,13 +1226,13 @@ describe("QueenStableSwap", function () {
                     startTimestamp + DAY
                 );
             const callBuy = (amountOut: BigNumberish, maxAmountIn: BigNumberish) =>
-                callSwap(amountOut, maxAmountIn, [btc.address, tmpBase.address], [0]);
+                callSwap(amountOut, maxAmountIn, [btc.address, tokenQ.address], [0]);
             const callSell = (amountOut: BigNumberish, maxAmountIn: BigNumberish) =>
-                callSwap(amountOut, maxAmountIn, [tmpBase.address, btc.address], [0]);
+                callSwap(amountOut, maxAmountIn, [tokenQ.address, btc.address], [0]);
 
             it("Should reject invalid path or versions", async function () {
                 await expect(callSwap(0, 0, [btc.address], [0])).to.be.revertedWith("Invalid path");
-                await expect(callSwap(0, 0, [tmpBase.address, btc.address], [])).to.be.revertedWith(
+                await expect(callSwap(0, 0, [tokenQ.address, btc.address], [])).to.be.revertedWith(
                     "Invalid versions"
                 );
                 await expect(callSwap(0, 0, [addr1, btc.address], [0])).to.be.revertedWith(
@@ -1245,19 +1246,28 @@ describe("QueenStableSwap", function () {
                 const inQ = await stableSwap.getBaseIn(outBtc);
                 await addBase(inQ); // Mock effect of the base token transfer
                 await expect(() => callSell(outBtc, parseEther("999"))).to.callMocks({
-                    func: tmpBase.mock.transferFrom.withArgs(addr1, stableSwap.address, inQ),
-                    rets: [true],
+                    func: fund.mock.trancheTransferFrom.withArgs(
+                        TRANCHE_Q,
+                        addr1,
+                        stableSwap.address,
+                        inQ,
+                        0
+                    ),
                 });
                 // Buy
                 await expect(() => callBuy(parseEther("0.456"), parseBtc("999"))).to.callMocks({
-                    func: tmpBase.mock.transfer.withArgs(addr2, parseEther("0.456")),
-                    rets: [true],
+                    func: fund.mock.trancheTransfer.withArgs(
+                        TRANCHE_Q,
+                        addr2,
+                        parseEther("0.456"),
+                        0
+                    ),
                 });
             });
 
             it("Should transfer quote tokens", async function () {
-                await tmpBase.mock.transfer.returns(true);
-                await tmpBase.mock.transferFrom.returns(true);
+                await fund.mock.trancheTransfer.returns();
+                await fund.mock.trancheTransferFrom.returns();
                 // Sell
                 const outBtc = parseBtc("0.123");
                 const inQ = await stableSwap.getBaseIn(outBtc);
@@ -1278,8 +1288,8 @@ describe("QueenStableSwap", function () {
             });
 
             it("Should check max input", async function () {
-                await tmpBase.mock.transfer.returns(true);
-                await tmpBase.mock.transferFrom.returns(true);
+                await fund.mock.trancheTransfer.returns();
+                await fund.mock.trancheTransferFrom.returns();
                 // Sell
                 const outBtc = parseBtc("0.123");
                 const inQ = await stableSwap.getBaseIn(outBtc);
