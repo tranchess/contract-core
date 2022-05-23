@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.10 <0.8.0;
 
+import "../interfaces/IFundV3.sol";
+
 interface IStableSwapCore {
     function getQuoteOut(uint256 baseIn) external view returns (uint256 quoteOut);
 
@@ -26,6 +28,10 @@ interface IStableSwapCore {
 }
 
 interface IStableSwap is IStableSwapCore {
+    function fund() external view returns (IFundV3);
+
+    function baseTranche() external view returns (uint256);
+
     function baseAddress() external view returns (address);
 
     function quoteAddress() external view returns (address);

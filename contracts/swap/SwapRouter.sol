@@ -56,7 +56,13 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         IStableSwap swap = getSwap(baseAddress, quoteAddress);
         require(address(swap) != address(0), "Unknown swap");
 
-        IERC20(baseAddress).safeTransferFrom(msg.sender, address(swap), baseIn);
+        swap.fund().trancheTransferFrom(
+            swap.baseTranche(),
+            msg.sender,
+            address(swap),
+            baseIn,
+            version
+        );
         if (msg.value > 0) {
             require(msg.value == quoteIn); // sanity check
             IWrappedERC20(quoteAddress).deposit{value: quoteIn}();
@@ -88,13 +94,19 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         if (msg.value > 0) {
             require(msg.value == amounts[0]); // sanity check
             IWrappedERC20(path[0]).deposit{value: amounts[0]}();
-            IERC20(path[0]).safeTransfer(address(getSwap(path[0], path[1])), amounts[0]);
+            IERC20(path[0]).safeTransfer(address(swaps[0]), amounts[0]);
         } else {
-            IERC20(path[0]).safeTransferFrom(
-                msg.sender,
-                address(getSwap(path[0], path[1])),
-                amounts[0]
-            );
+            if (isBuy[0]) {
+                IERC20(path[0]).safeTransferFrom(msg.sender, address(swaps[0]), amounts[0]);
+            } else {
+                swaps[0].fund().trancheTransferFrom(
+                    swaps[0].baseTranche(),
+                    msg.sender,
+                    address(swaps[0]),
+                    amounts[0],
+                    versions[0]
+                );
+            }
         }
 
         if (staking == address(0)) {
@@ -129,13 +141,19 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         if (msg.value > 0) {
             require(msg.value == maxAmountIn); // sanity check
             IWrappedERC20(path[0]).deposit{value: amounts[0]}();
-            IERC20(path[0]).safeTransfer(address(getSwap(path[0], path[1])), amounts[0]);
+            IERC20(path[0]).safeTransfer(address(swaps[0]), amounts[0]);
         } else {
-            IERC20(path[0]).safeTransferFrom(
-                msg.sender,
-                address(getSwap(path[0], path[1])),
-                amounts[0]
-            );
+            if (isBuy[0]) {
+                IERC20(path[0]).safeTransferFrom(msg.sender, address(swaps[0]), amounts[0]);
+            } else {
+                swaps[0].fund().trancheTransferFrom(
+                    swaps[0].baseTranche(),
+                    msg.sender,
+                    address(swaps[0]),
+                    amounts[0],
+                    versions[0]
+                );
+            }
         }
 
         if (staking == address(0)) {
@@ -170,11 +188,17 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         bool[] memory isBuy;
         (amounts, swaps, isBuy) = getAmountsOut(amountIn, path);
         require(amounts[amounts.length - 1] >= minAmountOut, "Insufficient output");
-        IERC20(path[0]).safeTransferFrom(
-            msg.sender,
-            address(getSwap(path[0], path[1])),
-            amounts[0]
-        );
+        if (isBuy[0]) {
+            IERC20(path[0]).safeTransferFrom(msg.sender, address(swaps[0]), amounts[0]);
+        } else {
+            swaps[0].fund().trancheTransferFrom(
+                swaps[0].baseTranche(),
+                msg.sender,
+                address(swaps[0]),
+                amounts[0],
+                versions[0]
+            );
+        }
         _swap(amounts, swaps, isBuy, versions, address(this));
         IWrappedERC20(path[path.length - 1]).withdraw(amounts[amounts.length - 1]);
         (bool success, ) = recipient.call{value: amounts[amounts.length - 1]}("");
@@ -195,11 +219,17 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         bool[] memory isBuy;
         (amounts, swaps, isBuy) = getAmountsIn(amountOut, path);
         require(amounts[0] <= maxAmountIn, "Excessive input");
-        IERC20(path[0]).safeTransferFrom(
-            msg.sender,
-            address(getSwap(path[0], path[1])),
-            amounts[0]
-        );
+        if (isBuy[0]) {
+            IERC20(path[0]).safeTransferFrom(msg.sender, address(swaps[0]), amounts[0]);
+        } else {
+            swaps[0].fund().trancheTransferFrom(
+                swaps[0].baseTranche(),
+                msg.sender,
+                address(swaps[0]),
+                amounts[0],
+                versions[0]
+            );
+        }
         _swap(amounts, swaps, isBuy, versions, address(this));
         IWrappedERC20(path[path.length - 1]).withdraw(amountOut);
         (bool success, ) = recipient.call{value: amountOut}("");

@@ -8,7 +8,6 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import "../interfaces/IStableSwap.sol";
 import "../interfaces/ILiquidityGauge.sol";
-import "../interfaces/IFundV3.sol";
 import "../interfaces/ITranchessSwapCallee.sol";
 import "../interfaces/IWrappedERC20.sol";
 
@@ -64,8 +63,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
     uint256 private constant MAX_ITERATION = 255;
 
     address public immutable lpToken;
-    IFundV3 public immutable fund;
-    uint256 public immutable baseTranche;
+    IFundV3 public immutable override fund;
+    uint256 public immutable override baseTranche;
     address public immutable override quoteAddress;
 
     /// @dev A multipler that normalizes a quote asset balance to 18 decimal places.
@@ -116,7 +115,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
 
     receive() external payable {}
 
-    function baseAddress() public view override returns (address) {
+    function baseAddress() external view override returns (address) {
         return fund.tokenShare(baseTranche);
     }
 
@@ -251,7 +250,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
         require(baseOut < oldBase, "Insufficient liquidity");
         // Optimistically transfer tokens.
-        IERC20(baseAddress()).safeTransfer(recipient, baseOut);
+        fund.trancheTransfer(baseTranche, recipient, baseOut, version);
         if (data.length > 0) {
             ITranchessSwapCallee(msg.sender).tranchessSwapCallback(baseOut, 0, data);
         }
@@ -288,7 +287,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         if (data.length > 0) {
             ITranchessSwapCallee(msg.sender).tranchessSwapCallback(0, quoteOut, data);
         }
-        uint256 newBase = IERC20(baseAddress()).balanceOf(address(this));
+        uint256 newBase = fund.trancheBalanceOf(baseTranche, address(this));
         uint256 baseIn = newBase.sub(oldBase);
         uint256 fee;
         {
@@ -326,7 +325,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         returns (uint256 lpOut)
     {
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
-        uint256 newBase = IERC20(baseAddress()).balanceOf(address(this));
+        uint256 newBase = fund.trancheBalanceOf(baseTranche, address(this));
         uint256 newQuote = _getNewQuoteBalance();
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
@@ -436,7 +435,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         baseBalance = oldBase.sub(baseOut);
         quoteBalance = oldQuote.sub(quoteOut);
         ILiquidityGauge(lpToken).burnFrom(msg.sender, lpIn);
-        IERC20(baseAddress()).safeTransfer(msg.sender, baseOut);
+        fund.trancheTransfer(baseTranche, msg.sender, baseOut, version);
         emit LiquidityRemoved(msg.sender, lpIn, baseOut, quoteOut, 0, 0, 0);
     }
 
@@ -458,18 +457,20 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
             _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, d0);
             d1 = d0.sub(d0.mul(lpIn).div(lpSupply));
         }
-        uint256 fee = oldQuote.mul(lpIn).div(lpSupply).multiplyDecimal(feeRate);
-        // Add 1 in case of rounding errors
-        uint256 newBase = _getBase(ampl, oldQuote.sub(fee), oraclePrice, d1) + 1;
-        baseOut = oldBase.sub(newBase);
-        require(baseOut >= minBaseOut, "Insufficient output");
-        ILiquidityGauge(lpToken).burnFrom(msg.sender, lpIn);
-        baseBalance = newBase;
-        uint256 adminFee = fee.multiplyDecimal(adminFeeRate);
-        totalAdminFee = totalAdminFee.add(adminFee);
-        quoteBalance = oldQuote.sub(adminFee);
-        IERC20(baseAddress()).safeTransfer(msg.sender, baseOut);
-        emit LiquidityRemoved(msg.sender, lpIn, baseOut, 0, fee, adminFee, oraclePrice);
+        {
+            uint256 fee = oldQuote.mul(lpIn).div(lpSupply).multiplyDecimal(feeRate);
+            // Add 1 in case of rounding errors
+            uint256 newBase = _getBase(ampl, oldQuote.sub(fee), oraclePrice, d1) + 1;
+            baseOut = oldBase.sub(newBase);
+            require(baseOut >= minBaseOut, "Insufficient output");
+            ILiquidityGauge(lpToken).burnFrom(msg.sender, lpIn);
+            baseBalance = newBase;
+            uint256 adminFee = fee.multiplyDecimal(adminFeeRate);
+            totalAdminFee = totalAdminFee.add(adminFee);
+            quoteBalance = oldQuote.sub(adminFee);
+            emit LiquidityRemoved(msg.sender, lpIn, baseOut, 0, fee, adminFee, oraclePrice);
+        }
+        fund.trancheTransfer(baseTranche, msg.sender, baseOut, version);
     }
 
     /// @dev Remove quote liquidity only.
@@ -533,7 +534,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 oraclePrice = getOraclePrice();
         uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice);
         _updatePriceOverOracleIntegral(oldBase, oldQuote, ampl, oraclePrice, d);
-        uint256 newBase = IERC20(baseAddress()).balanceOf(address(this));
+        uint256 newBase = fund.trancheBalanceOf(baseTranche, address(this));
         uint256 newQuote = _getNewQuoteBalance();
         baseBalance = newBase;
         quoteBalance = newQuote;
