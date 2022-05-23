@@ -300,7 +300,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     }
 
     /// @notice Equivalent QUEEN supply, as if all BISHOP and ROOK are merged.
-    function getEquivalentTotalQ() public view override returns (uint256) {
+    function getEquivalentTotalQ() external view override returns (uint256) {
         return
             _totalSupplies[TRANCHE_B]
                 .add(_totalSupplies[TRANCHE_R])

@@ -446,7 +446,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 version,
         uint256 lpIn,
         uint256 minBaseOut
-    ) public override nonReentrant checkVersion(version) returns (uint256 baseOut) {
+    ) external override nonReentrant checkVersion(version) returns (uint256 baseOut) {
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 ampl = getAmpl();
@@ -480,7 +480,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 version,
         uint256 lpIn,
         uint256 minQuoteOut
-    ) public override nonReentrant checkVersion(version) returns (uint256 quoteOut) {
+    ) external override nonReentrant checkVersion(version) returns (uint256 quoteOut) {
         quoteOut = _removeQuoteLiquidity(version, lpIn, minQuoteOut);
         IERC20(quoteAddress).safeTransfer(msg.sender, quoteOut);
     }
@@ -492,7 +492,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard {
         uint256 version,
         uint256 lpIn,
         uint256 minQuoteOut
-    ) public override nonReentrant checkVersion(version) returns (uint256 quoteOut) {
+    ) external override nonReentrant checkVersion(version) returns (uint256 quoteOut) {
         quoteOut = _removeQuoteLiquidity(version, lpIn, minQuoteOut);
         IWrappedERC20(quoteAddress).withdraw(quoteOut);
         (bool success, ) = msg.sender.call{value: quoteOut}("");

@@ -292,7 +292,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 amount,
         address recipient,
         uint256 version
-    ) public {
+    ) external {
         _checkpoint(version);
         _userCheckpoint(recipient, version);
         _balances[recipient][tranche] = _balances[recipient][tranche].add(amount);
