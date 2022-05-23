@@ -191,7 +191,6 @@ describe("QueenStableSwap", function () {
                 const fee = inBtc.mul(FEE_RATE).div(UNIT);
                 const swapPrice = inBtc.sub(fee).mul(BTC_TO_ETHER).mul(UNIT).div(outQ);
                 expect(swapPrice).to.be.closeTo(price, price.mul(slippageBps).div(10000));
-                await fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, outQ, 0).returns();
                 await addQuote(inBtc);
                 await stableSwap.buy(0, outQ, addr1, "0x");
             };
@@ -204,7 +203,6 @@ describe("QueenStableSwap", function () {
                 const fee = inBtc.mul(FEE_RATE).div(UNIT);
                 const swapPrice = inBtc.sub(fee).mul(BTC_TO_ETHER).mul(UNIT).div(outQ);
                 expect(swapPrice).to.be.closeTo(price, price.mul(slippageBps).div(10000));
-                await fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, outQ, 0).returns();
                 await addQuote(inBtc);
                 await stableSwap.buy(0, outQ, addr1, "0x");
             };
@@ -497,7 +495,6 @@ describe("QueenStableSwap", function () {
         });
 
         it("Should revert if output exceeds liquidity", async function () {
-            await fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, INIT_Q, 0).returns();
             await expect(stableSwap.buy(0, INIT_Q, addr1, "0x")).to.be.revertedWith(
                 "Insufficient liquidity"
             );
@@ -506,7 +503,6 @@ describe("QueenStableSwap", function () {
         it("Should revert if input is not sufficient", async function () {
             await addQuote(inBtc.mul(9).div(10));
             await fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, outQ, 0).returns();
-
             await expect(stableSwap.buy(0, outQ, addr1, "0x")).to.be.revertedWith(
                 "Invariant mismatch"
             );
