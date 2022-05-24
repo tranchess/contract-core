@@ -185,9 +185,13 @@ describe("QueenStableSwap", function () {
             };
         }
 
-        function testGetBaseOut(price: BigNumber, slippageBps: number): () => Promise<void> {
+        function testGetBaseOut(
+            price: BigNumber,
+            swapFraction: number,
+            slippageBps: number
+        ): () => Promise<void> {
             return async function () {
-                const inBtc = INIT_BTC.div(1000);
+                const inBtc = INIT_BTC.div(swapFraction);
                 const outQ = await stableSwap.getBaseOut(inBtc);
                 const fee = inBtc.mul(FEE_RATE).div(UNIT);
                 const swapPrice = inBtc.sub(fee).mul(BTC_TO_ETHER).mul(UNIT).div(outQ);
@@ -197,9 +201,13 @@ describe("QueenStableSwap", function () {
             };
         }
 
-        function testGetQuoteIn(price: BigNumber, slippageBps: number): () => Promise<void> {
+        function testGetQuoteIn(
+            price: BigNumber,
+            swapFraction: number,
+            slippageBps: number
+        ): () => Promise<void> {
             return async function () {
-                const outQ = INIT_Q.div(1000);
+                const outQ = INIT_Q.div(swapFraction);
                 const inBtc = await stableSwap.getQuoteIn(outQ);
                 const fee = inBtc.mul(FEE_RATE).div(UNIT);
                 const swapPrice = inBtc.sub(fee).mul(BTC_TO_ETHER).mul(UNIT).div(outQ);
@@ -209,9 +217,13 @@ describe("QueenStableSwap", function () {
             };
         }
 
-        function testGetQuoteOut(price: BigNumber, slippageBps: number): () => Promise<void> {
+        function testGetQuoteOut(
+            price: BigNumber,
+            swapFraction: number,
+            slippageBps: number
+        ): () => Promise<void> {
             return async function () {
-                const inQ = INIT_Q.div(1000);
+                const inQ = INIT_Q.div(swapFraction);
                 const outBtc = await stableSwap.getQuoteOut(inQ);
                 const fee = outBtc.mul(FEE_RATE).div(UNIT.sub(FEE_RATE));
                 const swapPrice = outBtc.add(fee).mul(BTC_TO_ETHER).mul(UNIT).div(inQ);
@@ -221,9 +233,13 @@ describe("QueenStableSwap", function () {
             };
         }
 
-        function testGetBaseIn(price: BigNumber, slippageBps: number): () => Promise<void> {
+        function testGetBaseIn(
+            price: BigNumber,
+            swapFraction: number,
+            slippageBps: number
+        ): () => Promise<void> {
             return async function () {
-                const outBtc = INIT_BTC.div(1000);
+                const outBtc = INIT_BTC.div(swapFraction);
                 const inQ = await stableSwap.getBaseIn(outBtc);
                 const fee = outBtc.mul(FEE_RATE).div(UNIT.sub(FEE_RATE));
                 const swapPrice = outBtc.add(fee).mul(BTC_TO_ETHER).mul(UNIT).div(inQ);
@@ -233,9 +249,13 @@ describe("QueenStableSwap", function () {
             };
         }
 
-        function testAddBase(price: BigNumber, slippageBps: number): () => Promise<void> {
+        function testAddBase(
+            price: BigNumber,
+            swapFraction: number,
+            slippageBps: number
+        ): () => Promise<void> {
             return async function () {
-                const inBtc = INIT_BTC.div(1000);
+                const inBtc = INIT_BTC.div(swapFraction);
                 // Estimate LP token amount and fee (slippage ignored)
                 const oldBtc = await btc.balanceOf(stableSwap.address);
                 const oldQ = await fund.trancheBalanceOf(TRANCHE_Q, stableSwap.address);
@@ -259,9 +279,13 @@ describe("QueenStableSwap", function () {
             };
         }
 
-        function testAddQuote(price: BigNumber, slippageBps: number): () => Promise<void> {
+        function testAddQuote(
+            price: BigNumber,
+            swapFraction: number,
+            slippageBps: number
+        ): () => Promise<void> {
             return async function () {
-                const inQ = INIT_Q.div(1000);
+                const inQ = INIT_Q.div(swapFraction);
                 // Estimate LP token amount and fee (slippage ignored)
                 const oldBtc = await btc.balanceOf(stableSwap.address);
                 const oldQ = await fund.trancheBalanceOf(TRANCHE_Q, stableSwap.address);
@@ -289,15 +313,19 @@ describe("QueenStableSwap", function () {
             };
         }
 
-        function testRemoveBase(price: BigNumber, slippageBps: number): () => Promise<void> {
+        function testRemoveBase(
+            price: BigNumber,
+            swapFraction: number,
+            slippageBps: number
+        ): () => Promise<void> {
             return async function () {
-                const inLp = INIT_LP.div(10000);
+                const inLp = INIT_LP.div(swapFraction);
                 // Estimate output amount and fee (slippage ignored)
                 const oldBtc = await btc.balanceOf(stableSwap.address);
                 const oldQ = await fund.trancheBalanceOf(TRANCHE_Q, stableSwap.address);
                 const oldValue = oldQ.mul(price).div(UNIT).add(oldBtc.mul(BTC_TO_ETHER));
-                const removedValue = oldValue.div(10000);
-                const fee = oldBtc.div(10000).mul(FEE_RATE).div(UNIT);
+                const removedValue = oldValue.div(swapFraction);
+                const fee = oldBtc.div(swapFraction).mul(FEE_RATE).div(UNIT);
                 const adminFee = fee.mul(ADMIN_FEE_RATE).div(UNIT);
                 const outQ = removedValue.sub(fee.mul(BTC_TO_ETHER)).mul(UNIT).div(price);
                 // Check the estimation
@@ -314,16 +342,20 @@ describe("QueenStableSwap", function () {
             };
         }
 
-        function testRemoveQuote(price: BigNumber, slippageBps: number): () => Promise<void> {
+        function testRemoveQuote(
+            price: BigNumber,
+            swapFraction: number,
+            slippageBps: number
+        ): () => Promise<void> {
             return async function () {
-                const inLp = INIT_LP.div(10000);
+                const inLp = INIT_LP.div(swapFraction);
                 // Estimate output amount and fee (slippage ignored)
                 const oldBtc = await btc.balanceOf(stableSwap.address);
                 const oldQ = await fund.trancheBalanceOf(TRANCHE_Q, stableSwap.address);
                 const oldValue = oldQ.mul(price).div(UNIT).add(oldBtc.mul(BTC_TO_ETHER));
-                const removedValue = oldValue.div(10000);
+                const removedValue = oldValue.div(swapFraction);
                 const fee = oldQ
-                    .div(10000)
+                    .div(swapFraction)
                     .mul(price)
                     .div(UNIT)
                     .div(BTC_TO_ETHER)
@@ -353,14 +385,14 @@ describe("QueenStableSwap", function () {
             const PRICE = parseEther("2");
 
             it("getCurrentPrice()", testGetPrice(PRICE));
-            it("getBaseOut()", testGetBaseOut(PRICE, 1));
-            it("getQuoteIn()", testGetQuoteIn(PRICE, 1));
-            it("getQuoteOut()", testGetQuoteOut(PRICE, 1));
-            it("getBaseIn()", testGetBaseIn(PRICE, 1));
-            it("Add base tokens", testAddBase(PRICE, 1));
-            it("Add quote tokens", testAddQuote(PRICE, 1));
-            it("Remove base tokens", testRemoveBase(PRICE, 1));
-            it("Remove quote tokens", testRemoveQuote(PRICE, 1));
+            it("getBaseOut()", testGetBaseOut(PRICE, 1000, 1));
+            it("getQuoteIn()", testGetQuoteIn(PRICE, 1000, 1));
+            it("getQuoteOut()", testGetQuoteOut(PRICE, 1000, 1));
+            it("getBaseIn()", testGetBaseIn(PRICE, 1000, 1));
+            it("Add base tokens", testAddBase(PRICE, 1000, 1));
+            it("Add quote tokens", testAddQuote(PRICE, 1000, 1));
+            it("Remove base tokens", testRemoveBase(PRICE, 2000, 1));
+            it("Remove quote tokens", testRemoveQuote(PRICE, 2000, 1));
         });
 
         describe("10 bps premium at base:quote=1:1.174 (Ampl=80)", function () {
@@ -372,14 +404,14 @@ describe("QueenStableSwap", function () {
             });
 
             it("getCurrentPrice()", testGetPrice(PRICE));
-            it("getBaseOut()", testGetBaseOut(PRICE, 1));
-            it("getQuoteIn()", testGetQuoteIn(PRICE, 1));
-            it("getQuoteOut()", testGetQuoteOut(PRICE, 1));
-            it("getBaseIn()", testGetBaseIn(PRICE, 1));
-            it("Add base tokens", testAddBase(PRICE, 1));
-            it("Add quote tokens", testAddQuote(PRICE, 1));
-            it("Remove base tokens", testRemoveBase(PRICE, 1));
-            it("Remove quote tokens", testRemoveQuote(PRICE, 1));
+            it("getBaseOut()", testGetBaseOut(PRICE, 1000, 1));
+            it("getQuoteIn()", testGetQuoteIn(PRICE, 1000, 1));
+            it("getQuoteOut()", testGetQuoteOut(PRICE, 1000, 1));
+            it("getBaseIn()", testGetBaseIn(PRICE, 1000, 1));
+            it("Add base tokens", testAddBase(PRICE, 1000, 1));
+            it("Add quote tokens", testAddQuote(PRICE, 1000, 1));
+            it("Remove base tokens", testRemoveBase(PRICE, 2000, 1));
+            it("Remove quote tokens", testRemoveQuote(PRICE, 2000, 1));
         });
 
         describe("10 bps discount at base:quote=1.174:1 (Ampl=80)", function () {
@@ -391,14 +423,14 @@ describe("QueenStableSwap", function () {
             });
 
             it("getCurrentPrice()", testGetPrice(PRICE));
-            it("getBaseOut()", testGetBaseOut(PRICE, 1));
-            it("getQuoteIn()", testGetQuoteIn(PRICE, 1));
-            it("getQuoteOut()", testGetQuoteOut(PRICE, 1));
-            it("getBaseIn()", testGetBaseIn(PRICE, 1));
-            it("Add base tokens", testAddBase(PRICE, 1));
-            it("Add quote tokens", testAddQuote(PRICE, 1));
-            it("Remove base tokens", testRemoveBase(PRICE, 1));
-            it("Remove quote tokens", testRemoveQuote(PRICE, 1));
+            it("getBaseOut()", testGetBaseOut(PRICE, 1000, 1));
+            it("getQuoteIn()", testGetQuoteIn(PRICE, 1000, 1));
+            it("getQuoteOut()", testGetQuoteOut(PRICE, 1000, 1));
+            it("getBaseIn()", testGetBaseIn(PRICE, 1000, 1));
+            it("Add base tokens", testAddBase(PRICE, 1000, 1));
+            it("Add quote tokens", testAddQuote(PRICE, 1000, 1));
+            it("Remove base tokens", testRemoveBase(PRICE, 2000, 1));
+            it("Remove quote tokens", testRemoveQuote(PRICE, 2000, 1));
         });
 
         describe("1% premium at base:quote=1:2.85 (Ampl=80)", async function () {
@@ -410,14 +442,14 @@ describe("QueenStableSwap", function () {
             });
 
             it("getCurrentPrice()", testGetPrice(PRICE));
-            it("getBaseOut()", testGetBaseOut(PRICE, 1));
-            it("getQuoteIn()", testGetQuoteIn(PRICE, 1));
-            it("getQuoteOut()", testGetQuoteOut(PRICE, 1));
-            it("getBaseIn()", testGetBaseIn(PRICE, 1));
-            it("Add base tokens", testAddBase(PRICE, 1));
-            it("Add quote tokens", testAddQuote(PRICE, 1));
-            it("Remove base tokens", testRemoveBase(PRICE, 1));
-            it("Remove quote tokens", testRemoveQuote(PRICE, 1));
+            it("getBaseOut()", testGetBaseOut(PRICE, 1000, 1));
+            it("getQuoteIn()", testGetQuoteIn(PRICE, 1000, 1));
+            it("getQuoteOut()", testGetQuoteOut(PRICE, 1000, 1));
+            it("getBaseIn()", testGetBaseIn(PRICE, 1000, 1));
+            it("Add base tokens", testAddBase(PRICE, 1000, 1));
+            it("Add quote tokens", testAddQuote(PRICE, 1000, 1));
+            it("Remove base tokens", testRemoveBase(PRICE, 2000, 1));
+            it("Remove quote tokens", testRemoveQuote(PRICE, 2000, 1));
         });
 
         describe("1% discount at base:quote=2.85:1 (Ampl=80)", function () {
@@ -429,14 +461,14 @@ describe("QueenStableSwap", function () {
             });
 
             it("getCurrentPrice()", testGetPrice(PRICE));
-            it("getBaseOut()", testGetBaseOut(PRICE, 1));
-            it("getQuoteIn()", testGetQuoteIn(PRICE, 1));
-            it("getQuoteOut()", testGetQuoteOut(PRICE, 1));
-            it("getBaseIn()", testGetBaseIn(PRICE, 1));
-            it("Add base tokens", testAddBase(PRICE, 1));
-            it("Add quote tokens", testAddQuote(PRICE, 1));
-            it("Remove base tokens", testRemoveBase(PRICE, 1));
-            it("Remove quote tokens", testRemoveQuote(PRICE, 1));
+            it("getBaseOut()", testGetBaseOut(PRICE, 1000, 1));
+            it("getQuoteIn()", testGetQuoteIn(PRICE, 1000, 1));
+            it("getQuoteOut()", testGetQuoteOut(PRICE, 1000, 1));
+            it("getBaseIn()", testGetBaseIn(PRICE, 1000, 1));
+            it("Add base tokens", testAddBase(PRICE, 1000, 1));
+            it("Add quote tokens", testAddQuote(PRICE, 1000, 1));
+            it("Remove base tokens", testRemoveBase(PRICE, 2000, 1));
+            it("Remove quote tokens", testRemoveQuote(PRICE, 2000, 1));
         });
 
         describe("100x price at base:quote=1:560.24 (Ampl=80)", async function () {
@@ -448,14 +480,14 @@ describe("QueenStableSwap", function () {
             });
 
             it("getCurrentPrice()", testGetPrice(PRICE));
-            it("getBaseOut()", testGetBaseOut(PRICE, 10));
-            it("getQuoteIn()", testGetQuoteIn(PRICE, 10));
-            it("getQuoteOut()", testGetQuoteOut(PRICE, 10));
-            it("getBaseIn()", testGetBaseIn(PRICE, 10));
-            it("Add base tokens", testAddBase(PRICE, 10));
-            it("Add quote tokens", testAddQuote(PRICE, 10));
-            it("Remove base tokens", testRemoveBase(PRICE, 10));
-            it("Remove quote tokens", testRemoveQuote(PRICE, 10));
+            it("getBaseOut()", testGetBaseOut(PRICE, 1000, 10));
+            it("getQuoteIn()", testGetQuoteIn(PRICE, 1000, 10));
+            it("getQuoteOut()", testGetQuoteOut(PRICE, 1000, 10));
+            it("getBaseIn()", testGetBaseIn(PRICE, 1000, 10));
+            it("Add base tokens", testAddBase(PRICE, 1000, 10));
+            it("Add quote tokens", testAddQuote(PRICE, 1000, 10));
+            it("Remove base tokens", testRemoveBase(PRICE, 10000, 10));
+            it("Remove quote tokens", testRemoveQuote(PRICE, 10000, 10));
         });
 
         describe("1/100 price at base:quote=560.24:1 (Ampl=80)", async function () {
@@ -467,14 +499,14 @@ describe("QueenStableSwap", function () {
             });
 
             it("getCurrentPrice()", testGetPrice(PRICE));
-            it("getBaseOut()", testGetBaseOut(PRICE, 10));
-            it("getQuoteIn()", testGetQuoteIn(PRICE, 10));
-            it("getQuoteOut()", testGetQuoteOut(PRICE, 10));
-            it("getBaseIn()", testGetBaseIn(PRICE, 10));
-            it("Add base tokens", testAddBase(PRICE, 10));
-            it("Add quote tokens", testAddQuote(PRICE, 10));
-            it("Remove base tokens", testRemoveBase(PRICE, 10));
-            it("Remove quote tokens", testRemoveQuote(PRICE, 10));
+            it("getBaseOut()", testGetBaseOut(PRICE, 1000, 10));
+            it("getQuoteIn()", testGetQuoteIn(PRICE, 1000, 10));
+            it("getQuoteOut()", testGetQuoteOut(PRICE, 1000, 10));
+            it("getBaseIn()", testGetBaseIn(PRICE, 1000, 10));
+            it("Add base tokens", testAddBase(PRICE, 1000, 10));
+            it("Add quote tokens", testAddQuote(PRICE, 1000, 10));
+            it("Remove base tokens", testRemoveBase(PRICE, 10000, 10));
+            it("Remove quote tokens", testRemoveQuote(PRICE, 10000, 10));
         });
     });
 
