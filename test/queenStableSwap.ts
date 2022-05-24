@@ -99,7 +99,8 @@ describe("QueenStableSwap", function () {
             chessController.address,
             fund.address,
             votingEscrow.address,
-            swapBonus.address
+            swapBonus.address,
+            0
         );
 
         const tokenQ = await deployMockForName(owner, "ERC20");
