@@ -63,7 +63,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         quoteAmount = tranchessPair.getQuoteOut(outR);
         // Send the user's portion of the payment to Tranchess swap
         uint256 resultAmount = totalQuoteAmount.sub(quoteAmount);
-        require(resultAmount <= maxQuote, "Insufficient input");
+        require(resultAmount <= maxQuote, "Excessive input");
         bytes memory data =
             abi.encode(
                 primaryMarket,
@@ -193,6 +193,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         require(externalPath.length > 1, "Invalid external path");
         require(externalPath[0] == tokenIn, "Invalid token in");
         require(externalPath[externalPath.length - 1] == tokenOut, "Invalid token out");
+        IERC20(tokenIn).safeApprove(externalRouter, amountIn);
         amounts = IUniswapV2Router01(externalRouter).swapExactTokensForTokens(
             amountIn,
             0,
