@@ -518,19 +518,6 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 rewards = _claimableRewards[account];
         uint256[TRANCHE_COUNT] storage balance = _balances[account];
         uint256 weight = _workingBalances[account];
-        if (weight == 0) {
-            // Loading available and locked is repeated to avoid "stake too deep" error.
-            weight = weightedBalance(
-                balance[TRANCHE_Q],
-                balance[TRANCHE_B],
-                balance[TRANCHE_R],
-                _historicalSplitRatio[oldVersion]
-            );
-            if (weight > 0) {
-                // The contract was just upgraded from an old version without boosting
-                _workingBalances[account] = weight;
-            }
-        }
         uint256 balanceQ = balance[TRANCHE_Q];
         uint256 balanceB = balance[TRANCHE_B];
         uint256 balanceR = balance[TRANCHE_R];
