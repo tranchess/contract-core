@@ -18,6 +18,9 @@ contract FeeDistributor is CoreUtility, Ownable {
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
+    event AdminUpdated(address newAdmin);
+    event AdminFeeRateUpdated(uint256 newAdminFeeRate);
+
     /// @notice 60% as the max admin fee rate
     uint256 public constant MAX_ADMIN_FEE_RATE = 6e17;
 
@@ -87,12 +90,11 @@ contract FeeDistributor is CoreUtility, Ownable {
         address admin_,
         uint256 adminFeeRate_
     ) public {
-        require(adminFeeRate_ <= MAX_ADMIN_FEE_RATE, "Cannot exceed max admin fee rate");
         rewardToken = IERC20(rewardToken_);
         votingEscrow = IVotingEscrow(votingEscrow_);
         _maxTime = IVotingEscrow(votingEscrow_).maxTime();
-        admin = admin_;
-        adminFeeRate = adminFeeRate_;
+        _updateAdmin(admin_);
+        _updateAdminFeeRate(adminFeeRate_);
         checkpointTimestamp = block.timestamp;
     }
 
@@ -284,13 +286,23 @@ contract FeeDistributor is CoreUtility, Ownable {
         checkpointTimestamp = block.timestamp;
     }
 
-    function updateAdmin(address newAdmin) external onlyOwner {
+    function _updateAdmin(address newAdmin) private {
         admin = newAdmin;
+        emit AdminUpdated(newAdmin);
+    }
+
+    function updateAdmin(address newAdmin) external onlyOwner {
+        _updateAdmin(newAdmin);
+    }
+
+    function _updateAdminFeeRate(uint256 newAdminFeeRate) private {
+        require(newAdminFeeRate <= MAX_ADMIN_FEE_RATE, "Cannot exceed max admin fee rate");
+        adminFeeRate = newAdminFeeRate;
+        emit AdminFeeRateUpdated(newAdminFeeRate);
     }
 
     function updateAdminFeeRate(uint256 newAdminFeeRate) external onlyOwner {
-        require(newAdminFeeRate <= MAX_ADMIN_FEE_RATE, "Cannot exceed max admin fee rate");
-        adminFeeRate = newAdminFeeRate;
+        _updateAdminFeeRate(newAdminFeeRate);
     }
 
     /// @dev Calculate rewards since a user's last checkpoint and make a new checkpoint.

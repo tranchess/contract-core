@@ -706,4 +706,32 @@ describe("FeeDistributor", function () {
             ).to.be.revertedWith("Must be current or future time");
         });
     });
+
+    describe("updateAdmin()", function () {
+        it("Should update admin", async function () {
+            await feeDistributor.connect(owner).updateAdmin(user1.address);
+            expect(await feeDistributor.admin()).to.equal(user1.address);
+        });
+
+        it("Should emit an event", async function () {
+            await expect(feeDistributor.connect(owner).updateAdmin(user1.address))
+                .to.emit(feeDistributor, "AdminUpdated")
+                .withArgs(user1.address);
+        });
+    });
+
+    describe("updateAdminFeeRate()", function () {
+        const adminFeeRateRate = parseEther("0.0001").mul(ADMIN_FEE_RATE_BPS - 1);
+
+        it("Should update admin fee rate", async function () {
+            await feeDistributor.connect(owner).updateAdminFeeRate(adminFeeRateRate);
+            expect(await feeDistributor.adminFeeRate()).to.equal(adminFeeRateRate);
+        });
+
+        it("Should emit an event", async function () {
+            await expect(feeDistributor.connect(owner).updateAdminFeeRate(adminFeeRateRate))
+                .to.emit(feeDistributor, "AdminFeeRateUpdated")
+                .withArgs(adminFeeRateRate);
+        });
+    });
 });
