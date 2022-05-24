@@ -395,6 +395,19 @@ describe("QueenStableSwap", function () {
             it("Remove quote tokens", testRemoveQuote(PRICE, 2000, 1));
         });
 
+        describe("Balanced pool with very small swap amount", function () {
+            const PRICE = parseEther("2");
+
+            it("getBaseOut()", testGetBaseOut(PRICE, 100000, 10));
+            it("getQuoteIn()", testGetQuoteIn(PRICE, 100000, 10));
+            it("getQuoteOut()", testGetQuoteOut(PRICE, 100000, 10));
+            it("getBaseIn()", testGetBaseIn(PRICE, 100000, 10));
+            it("Add base tokens", testAddBase(PRICE, 100000, 10));
+            it("Add quote tokens", testAddQuote(PRICE, 100000, 10));
+            it("Remove base tokens", testRemoveBase(PRICE, 200000, 10));
+            it("Remove quote tokens", testRemoveQuote(PRICE, 200000, 10));
+        });
+
         describe("10 bps premium at base:quote=1:1.174 (Ampl=80)", function () {
             const PRICE = parseEther("2.002");
 
