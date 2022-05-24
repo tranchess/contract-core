@@ -68,6 +68,13 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
     mapping(address => uint256) private _bonusUserIntegral;
     mapping(address => uint256) private _claimableBonus;
 
+    /// @notice Timestamp when rewards start.
+    uint256 public immutable rewardStartTimestamp;
+
+    /// @dev Per-gauge CHESS emission rate. The product of CHESS emission rate
+    ///      and weekly percentage of the gauge
+    uint256 private _rate;
+
     constructor(
         string memory name_,
         string memory symbol_,
@@ -76,7 +83,8 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         address chessController_,
         address fund_,
         address votingEscrow_,
-        address swapBonus_
+        address swapBonus_,
+        uint256 rewardStartTimestamp_
     ) public ERC20(name_, symbol_) {
         stableSwap = stableSwap_;
         _quoteToken = IERC20(IStableSwap(stableSwap_).quoteAddress());
@@ -86,12 +94,17 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         _votingEscrow = IVotingEscrow(votingEscrow_);
         swapBonus = swapBonus_;
         _bonusToken = IERC20(ISwapBonus(swapBonus_).bonusToken());
+        rewardStartTimestamp = rewardStartTimestamp_;
         _chessIntegralTimestamp = block.timestamp;
     }
 
     modifier onlyStableSwap() {
         require(msg.sender == stableSwap, "Only stable swap");
         _;
+    }
+
+    function getRate() external view returns (uint256) {
+        return _rate / 1e18;
     }
 
     function mint(address account, uint256 amount) external override onlyStableSwap {
@@ -276,23 +289,35 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         uint256 timestamp = _chessIntegralTimestamp;
         uint256 integral = _chessIntegral;
         if (totalWeight != 0 && timestamp < block.timestamp) {
+            uint256 endWeek = _endOfWeek(timestamp);
+            uint256 rate = _rate;
             for (uint256 i = 0; i < MAX_ITERATIONS && timestamp < block.timestamp; i++) {
-                uint256 nextWeek = _endOfWeek(timestamp);
-                uint256 currentWeek = nextWeek - 1 weeks;
-                uint256 rate = chessSchedule.getRate(currentWeek);
-                uint256 relativeWeight =
-                    chessController.getFundRelativeWeight(address(this), currentWeek);
-                uint256 endTimestamp = nextWeek.min(block.timestamp);
-                integral = integral.add(
-                    rate
-                        .mul(relativeWeight)
-                        .mul(endTimestamp - timestamp)
-                        .decimalToPreciseDecimal()
-                        .div(totalWeight)
-                );
+                uint256 endTimestamp = endWeek.min(block.timestamp);
+                if (endTimestamp > rewardStartTimestamp) {
+                    integral = integral.add(
+                        rate
+                            .mul(endTimestamp.sub(timestamp.max(rewardStartTimestamp)))
+                            .decimalToPreciseDecimal()
+                            .div(totalWeight)
+                    );
+                }
+                if (endTimestamp == endWeek) {
+                    rate = chessSchedule.getRate(endWeek).mul(
+                        chessController.getFundRelativeWeight(address(this), endWeek)
+                    );
+                    if (
+                        endWeek < rewardStartTimestamp && endWeek + 1 weeks > rewardStartTimestamp
+                    ) {
+                        // Rewards start in the middle of the next week. We adjust the rate to
+                        // compensate for the period between `endWeek` and `rewardStartTimestamp`.
+                        rate = rate.mul(1 weeks).div(endWeek + 1 weeks - rewardStartTimestamp);
+                    }
+                    endWeek += 1 weeks;
+                }
                 timestamp = endTimestamp;
             }
             _chessIntegral = integral;
+            _rate = rate;
         }
         _chessIntegralTimestamp = block.timestamp;
 
