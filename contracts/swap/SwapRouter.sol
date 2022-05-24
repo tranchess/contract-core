@@ -36,6 +36,11 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         address quoteAddress,
         address swap
     ) external onlyOwner {
+        require(
+            swap == address(0) ||
+                (baseAddress == IStableSwap(swap).baseAddress() &&
+                    quoteAddress == IStableSwap(swap).quoteAddress())
+        ); // sanity check
         (address addr0, address addr1) =
             baseAddress < quoteAddress ? (baseAddress, quoteAddress) : (quoteAddress, baseAddress);
         _swapMap[addr0][addr1] = IStableSwap(swap);
