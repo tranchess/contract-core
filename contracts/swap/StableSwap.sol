@@ -196,8 +196,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
         uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice) + 1;
         uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d) + 1;
         quoteOut = oldQuote.sub(newQuote);
-        uint256 fee = quoteOut.multiplyDecimal(feeRate);
-        quoteOut = quoteOut.sub(fee);
+        quoteOut = quoteOut.multiplyDecimal(uint256(1e18).sub(feeRate));
     }
 
     function getQuoteIn(uint256 baseOut) external view override returns (uint256 quoteIn) {
@@ -210,15 +209,14 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
         uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice) + 1;
         uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d) + 1;
         quoteIn = newQuote.sub(oldQuote);
-        uint256 fee = quoteIn.mul(feeRate).div(uint256(1e18).sub(feeRate));
-        quoteIn = quoteIn.add(fee);
+        quoteIn = quoteIn.divideDecimal(uint256(1e18).sub(feeRate));
     }
 
     function getBaseOut(uint256 quoteIn) external view override returns (uint256 baseOut) {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
-        uint256 fee = quoteIn.multiplyDecimal(feeRate);
-        uint256 newQuote = oldQuote.add(quoteIn.sub(fee));
+        uint256 quoteInAfterFee = quoteIn.multiplyDecimal(uint256(1e18).sub(feeRate));
+        uint256 newQuote = oldQuote.add(quoteInAfterFee);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
         // Add 1 in case of rounding errors
@@ -230,8 +228,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
     function getBaseIn(uint256 quoteOut) external view override returns (uint256 baseIn) {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
-        uint256 fee = quoteOut.mul(feeRate).div(uint256(1e18).sub(feeRate));
-        uint256 newQuote = oldQuote.sub(quoteOut.add(fee));
+        uint256 quoteOutBeforeFee = quoteOut.divideDecimal(uint256(1e18).sub(feeRate));
+        uint256 newQuote = oldQuote.sub(quoteOutBeforeFee);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
         // Add 1 in case of rounding errors
