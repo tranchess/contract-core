@@ -49,6 +49,8 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
     IVotingEscrow private immutable _votingEscrow;
     address public immutable swapBonus;
     IERC20 private immutable _bonusToken;
+    /// @notice Timestamp when rewards start.
+    uint256 public immutable rewardStartTimestamp;
 
     uint256 private _workingSupply;
     mapping(address => uint256) private _workingBalances;
@@ -67,9 +69,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
     uint256 private _bonusIntegral;
     mapping(address => uint256) private _bonusUserIntegral;
     mapping(address => uint256) private _claimableBonus;
-
-    /// @notice Timestamp when rewards start.
-    uint256 public immutable rewardStartTimestamp;
 
     /// @dev Per-gauge CHESS emission rate. The product of CHESS emission rate
     ///      and weekly percentage of the gauge
@@ -288,38 +287,34 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         // Update global state
         uint256 timestamp = _chessIntegralTimestamp;
         uint256 integral = _chessIntegral;
-        if (totalWeight != 0 && timestamp < block.timestamp) {
-            uint256 endWeek = _endOfWeek(timestamp);
-            uint256 rate = _rate;
-            for (uint256 i = 0; i < MAX_ITERATIONS && timestamp < block.timestamp; i++) {
-                uint256 endTimestamp = endWeek.min(block.timestamp);
-                if (endTimestamp > rewardStartTimestamp) {
-                    integral = integral.add(
-                        rate
-                            .mul(endTimestamp.sub(timestamp.max(rewardStartTimestamp)))
-                            .decimalToPreciseDecimal()
-                            .div(totalWeight)
-                    );
-                }
-                if (endTimestamp == endWeek) {
-                    rate = chessSchedule.getRate(endWeek).mul(
-                        chessController.getFundRelativeWeight(address(this), endWeek)
-                    );
-                    if (
-                        endWeek < rewardStartTimestamp && endWeek + 1 weeks > rewardStartTimestamp
-                    ) {
-                        // Rewards start in the middle of the next week. We adjust the rate to
-                        // compensate for the period between `endWeek` and `rewardStartTimestamp`.
-                        rate = rate.mul(1 weeks).div(endWeek + 1 weeks - rewardStartTimestamp);
-                    }
-                    endWeek += 1 weeks;
-                }
-                timestamp = endTimestamp;
+        uint256 endWeek = _endOfWeek(timestamp);
+        uint256 rate = _rate;
+        for (uint256 i = 0; i < MAX_ITERATIONS && timestamp < block.timestamp; i++) {
+            uint256 endTimestamp = endWeek.min(block.timestamp);
+            if (totalWeight != 0 && endTimestamp > rewardStartTimestamp) {
+                integral = integral.add(
+                    rate
+                        .mul(endTimestamp.sub(timestamp.max(rewardStartTimestamp)))
+                        .decimalToPreciseDecimal()
+                        .div(totalWeight)
+                );
             }
-            _chessIntegral = integral;
-            _rate = rate;
+            if (endTimestamp == endWeek) {
+                rate = chessSchedule.getRate(endWeek).mul(
+                    chessController.getFundRelativeWeight(address(this), endWeek)
+                );
+                if (endWeek < rewardStartTimestamp && endWeek + 1 weeks > rewardStartTimestamp) {
+                    // Rewards start in the middle of the next week. We adjust the rate to
+                    // compensate for the period between `endWeek` and `rewardStartTimestamp`.
+                    rate = rate.mul(1 weeks).div(endWeek + 1 weeks - rewardStartTimestamp);
+                }
+                endWeek += 1 weeks;
+            }
+            timestamp = endTimestamp;
         }
         _chessIntegralTimestamp = block.timestamp;
+        _chessIntegral = integral;
+        _rate = rate;
 
         // Update per-user state
         amount = _claimableChess[account].add(
