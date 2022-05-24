@@ -375,10 +375,10 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 minUnderlying,
         uint256 version
     ) private returns (uint256 underlying) {
-        fund.primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
-        _popRedemptionQueue(0);
         uint256 fee;
         (underlying, fee) = getRedemption(inQ);
+        fund.primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
+        _popRedemptionQueue(0);
         require(underlying >= minUnderlying && underlying > 0, "Min underlying redeemed");
         // Redundant check for user-friendly revert message.
         require(
@@ -404,9 +404,9 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 minUnderlying,
         uint256 version
     ) external override nonReentrant returns (uint256 underlying, uint256 index) {
-        fund.primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         uint256 fee;
         (underlying, fee) = getRedemption(inQ);
+        fund.primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         require(underlying >= minUnderlying && underlying > 0, "Min underlying redeemed");
         index = redemptionQueueTail;
         QueuedRedemption storage newRedemption = queuedRedemptions[index];
