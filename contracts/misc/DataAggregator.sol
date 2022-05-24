@@ -13,6 +13,7 @@ import "../utils/CoreUtility.sol";
 
 import "../fund/FundV3.sol";
 import "../fund/PrimaryMarketV3.sol";
+import "../fund/PrimaryMarketRouter.sol";
 import "../fund/ShareStaking.sol";
 import "../swap/StableSwap.sol";
 import "../swap/LiquidityGauge.sol";
@@ -240,7 +241,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
     }
 
     function getData(
-        FundV3[] calldata funds,
+        PrimaryMarketRouter[] calldata primaryMarketRouters,
         ShareStaking[] calldata shareStakings,
         FeeDistributor[] calldata feeDistributors,
         address account
@@ -248,9 +249,9 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         data.blockNumber = block.number;
         data.blockTimestamp = block.timestamp;
 
-        data.funds = new FundAllData[](funds.length);
-        for (uint256 i = 0; i < funds.length; i++) {
-            data.funds[i] = getFundAllData(funds[i], shareStakings[i], account);
+        data.funds = new FundAllData[](primaryMarketRouters.length);
+        for (uint256 i = 0; i < primaryMarketRouters.length; i++) {
+            data.funds[i] = getFundAllData(primaryMarketRouters[i], shareStakings[i], account);
         }
 
         data.governance = getGovernanceData(account);
@@ -264,10 +265,11 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
     }
 
     function getFundAllData(
-        FundV3 fund,
+        PrimaryMarketRouter primaryMarketRouter,
         ShareStaking shareStaking,
         address account
     ) public returns (FundAllData memory data) {
+        FundV3 fund = FundV3(address(primaryMarketRouter.fund()));
         data.fund = getFundData(fund);
 
         PrimaryMarketV3 primaryMarket = PrimaryMarketV3(payable(fund.primaryMarket()));
@@ -308,7 +310,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
 
         data.account.allowance.primaryMarketRouterUnderlying = underlyingToken.allowance(
             account,
-            address(primaryMarket)
+            address(primaryMarketRouter)
         );
         data.account.allowance.swapRouterUnderlying = underlyingToken.allowance(
             account,
