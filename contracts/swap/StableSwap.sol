@@ -196,7 +196,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
         uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice) + 1;
         uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d) + 1;
         quoteOut = oldQuote.sub(newQuote);
-        quoteOut = quoteOut.multiplyDecimal(uint256(1e18).sub(feeRate));
+        quoteOut = quoteOut.multiplyDecimal(1e18 - feeRate);
     }
 
     function getQuoteIn(uint256 baseOut) external view override returns (uint256 quoteIn) {
@@ -209,13 +209,13 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
         uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice) + 1;
         uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d) + 1;
         quoteIn = newQuote.sub(oldQuote);
-        quoteIn = quoteIn.divideDecimal(uint256(1e18).sub(feeRate));
+        quoteIn = quoteIn.divideDecimal(1e18 - feeRate);
     }
 
     function getBaseOut(uint256 quoteIn) external view override returns (uint256 baseOut) {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
-        uint256 quoteInAfterFee = quoteIn.multiplyDecimal(uint256(1e18).sub(feeRate));
+        uint256 quoteInAfterFee = quoteIn.multiplyDecimal(1e18 - feeRate);
         uint256 newQuote = oldQuote.add(quoteInAfterFee);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
@@ -228,7 +228,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
     function getBaseIn(uint256 quoteOut) external view override returns (uint256 baseIn) {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
-        uint256 quoteOutBeforeFee = quoteOut.divideDecimal(uint256(1e18).sub(feeRate));
+        uint256 quoteOutBeforeFee = quoteOut.divideDecimal(1e18 - feeRate);
         uint256 newQuote = oldQuote.sub(quoteOutBeforeFee);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
@@ -305,7 +305,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
         uint256 fee;
         {
             uint256 feeRate_ = feeRate;
-            fee = quoteOut.mul(feeRate_).div(uint256(1e18).sub(feeRate_));
+            fee = quoteOut.mul(feeRate_).div(1e18 - feeRate_);
         }
         require(quoteOut.add(fee) < oldQuote, "Insufficient liquidity");
         uint256 oraclePrice = getOraclePrice();
