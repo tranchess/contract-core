@@ -196,8 +196,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
         uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice) + 1;
         uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d) + 1;
         quoteOut = oldQuote.sub(newQuote);
-        uint256 fee = quoteOut.multiplyDecimal(feeRate);
-        quoteOut = quoteOut.sub(fee);
+        // Round down output after fee
+        quoteOut = quoteOut.multiplyDecimal(1e18 - feeRate);
     }
 
     function getQuoteIn(uint256 baseOut) external view override returns (uint256 quoteIn) {
@@ -210,15 +210,17 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
         uint256 d = _getD(oldBase, oldQuote, ampl, oraclePrice) + 1;
         uint256 newQuote = _getQuote(ampl, newBase, oraclePrice, d) + 1;
         quoteIn = newQuote.sub(oldQuote);
-        uint256 fee = quoteIn.mul(feeRate).div(uint256(1e18).sub(feeRate));
-        quoteIn = quoteIn.add(fee);
+        uint256 feeRate_ = feeRate;
+        // Round up input before fee
+        quoteIn = quoteIn.mul(1e18).add(1e18 - feeRate_ - 1) / (1e18 - feeRate_);
     }
 
     function getBaseOut(uint256 quoteIn) external view override returns (uint256 baseOut) {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
-        uint256 fee = quoteIn.multiplyDecimal(feeRate);
-        uint256 newQuote = oldQuote.add(quoteIn.sub(fee));
+        // Round down input after fee
+        uint256 quoteInAfterFee = quoteIn.multiplyDecimal(1e18 - feeRate);
+        uint256 newQuote = oldQuote.add(quoteInAfterFee);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
         // Add 1 in case of rounding errors
@@ -230,8 +232,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
     function getBaseIn(uint256 quoteOut) external view override returns (uint256 baseIn) {
         (uint256 oldBase, uint256 oldQuote, , , , , ) =
             _getRebalanceResult(fund.getRebalanceSize());
-        uint256 fee = quoteOut.mul(feeRate).div(uint256(1e18).sub(feeRate));
-        uint256 newQuote = oldQuote.sub(quoteOut.add(fee));
+        uint256 feeRate_ = feeRate;
+        // Round up output before fee
+        uint256 quoteOutBeforeFee = quoteOut.mul(1e18).add(1e18 - feeRate_ - 1) / (1e18 - feeRate_);
+        uint256 newQuote = oldQuote.sub(quoteOutBeforeFee);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
         // Add 1 in case of rounding errors
@@ -307,7 +311,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
         uint256 fee;
         {
             uint256 feeRate_ = feeRate;
-            fee = quoteOut.mul(feeRate_).div(uint256(1e18).sub(feeRate_));
+            fee = quoteOut.mul(feeRate_).div(1e18 - feeRate_);
         }
         require(quoteOut.add(fee) < oldQuote, "Insufficient liquidity");
         uint256 oraclePrice = getOraclePrice();
