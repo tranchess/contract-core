@@ -47,7 +47,6 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         IPrimaryMarketV3 pm = IPrimaryMarketV3(primaryMarket);
         uint256 underlyingAmount;
         uint256 totalQuoteAmount;
-        uint256 quoteAmount;
         {
             uint256 inQ = pm.getSplitForB(outR);
             underlyingAmount = IStableSwapCore(queenSwapOrPrimaryMarketRouter).getQuoteIn(inQ);
@@ -60,7 +59,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         // Arrange the stable swap path
         IStableSwap tranchessPair = tranchessRouter.getSwap(pm.fund().tokenB(), tokenQuote);
         // Calculate the amount of quote asset for selling BISHOP
-        quoteAmount = tranchessPair.getQuoteOut(outR);
+        uint256 quoteAmount = tranchessPair.getQuoteOut(outR);
         // Send the user's portion of the payment to Tranchess swap
         uint256 resultAmount = totalQuoteAmount.sub(quoteAmount);
         require(resultAmount <= maxQuote, "Excessive input");
