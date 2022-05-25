@@ -104,8 +104,8 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
     }
 
     function tranchessSwapCallback(
-        uint256 baseDeltaOut,
-        uint256 quoteDeltaOut,
+        uint256 baseOut,
+        uint256 quoteOut,
         bytes calldata data
     ) external override {
         (
@@ -122,12 +122,12 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
             msg.sender == address(tranchessRouter.getSwap(tokenQuote, fund.tokenB())),
             "Tranchess Pair check failed"
         );
-        if (baseDeltaOut > 0) {
-            require(quoteDeltaOut == 0, "Unidirectional check failed");
-            uint256 quoteAmount = IStableSwap(msg.sender).getQuoteIn(baseDeltaOut);
+        if (baseOut > 0) {
+            require(quoteOut == 0, "Unidirectional check failed");
+            uint256 quoteAmount = IStableSwap(msg.sender).getQuoteIn(baseOut);
             // Merge BISHOP and ROOK into QUEEN
             uint256 outQ =
-                IPrimaryMarketV3(fund.primaryMarket()).merge(address(this), baseDeltaOut, version);
+                IPrimaryMarketV3(fund.primaryMarket()).merge(address(this), baseOut, version);
 
             // Redeem or swap QUEEN for underlying
             fund.trancheTransfer(TRANCHE_Q, queenSwapOrPrimaryMarketRouter, outQ, version);
