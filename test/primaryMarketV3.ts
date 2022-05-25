@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { BigNumber, BigNumberish, Contract, Wallet } from "ethers";
+import { BigNumber, BigNumberish, constants, Contract, Wallet } from "ethers";
 import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
@@ -991,6 +991,274 @@ describe("PrimaryMarketV3", function () {
                 primaryMarket.claimRedemptionsAndUnwrap(addr2, [0])
             ).to.changeEtherBalance(user2, outEth);
             expect(await weth.balanceOf(primaryMarket.address)).to.equal(0);
+        });
+    });
+
+    describe("PrimaryMarketRouter", function () {
+        const inBtc = parseBtc("1");
+        const outQ = inBtc.mul(EQUIVALENT_TOTAL_Q).div(TOTAL_UNDERLYING);
+        const outB = outQ.mul(100);
+        const version = 1;
+        const minLpOut = parseEther("1");
+
+        let tokenB: MockContract;
+        let primaryMarket: MockContract;
+        let shareStaking: MockContract;
+        let swapRouter: MockContract;
+        let swap: MockContract;
+        let primaryMarketRouter: Contract;
+
+        beforeEach(async function () {
+            btc = await deployMockForName(owner, "IERC20");
+            tokenB = await deployMockForName(owner, "IERC20");
+            await fund.mock.tokenUnderlying.returns(btc.address);
+            await fund.mock.tokenB.returns(tokenB.address);
+
+            primaryMarket = await deployMockForName(owner, "PrimaryMarketV3");
+            await primaryMarket.mock.fund.returns(fund.address);
+
+            shareStaking = await deployMockForName(owner, "ShareStaking");
+
+            swap = await deployMockForName(owner, "StableSwap");
+            swapRouter = await deployMockForName(owner, "SwapRouter");
+            await swapRouter.mock.getSwap.returns(swap.address);
+
+            const PrimaryMarketRouter = await ethers.getContractFactory("PrimaryMarketRouter");
+            primaryMarketRouter = await PrimaryMarketRouter.connect(owner).deploy(
+                primaryMarket.address
+            );
+            primaryMarketRouter = primaryMarketRouter.connect(user1);
+        });
+
+        describe("split", function () {
+            beforeEach(async function () {
+                await fund.mock.trancheTransferFrom
+                    .withArgs(TRANCHE_Q, addr1, primaryMarketRouter.address, outQ, version)
+                    .returns();
+                await primaryMarket.mock.split
+                    .withArgs(primaryMarketRouter.address, outQ, version)
+                    .returns(outB);
+            });
+
+            it("Should revert if lp out less than minLpOut", async function () {
+                await fund.mock.trancheTransfer
+                    .withArgs(TRANCHE_B, swap.address, outB, version)
+                    .returns();
+                await swap.mock.addLiquidity.withArgs(version, addr1).returns(minLpOut);
+
+                await expect(
+                    primaryMarketRouter.splitAndStake(
+                        outQ,
+                        swapRouter.address,
+                        btc.address,
+                        minLpOut.add(1),
+                        shareStaking.address,
+                        version
+                    )
+                ).to.be.revertedWith("Insufficient output");
+            });
+
+            it("Should split and stake both bishop and rook", async function () {
+                await expect(() =>
+                    primaryMarketRouter.splitAndStake(
+                        outQ,
+                        swapRouter.address,
+                        btc.address,
+                        minLpOut,
+                        shareStaking.address,
+                        version
+                    )
+                ).to.callMocks(
+                    {
+                        func: fund.mock.trancheTransfer.withArgs(
+                            TRANCHE_B,
+                            swap.address,
+                            outB,
+                            version
+                        ),
+                    },
+                    {
+                        func: swap.mock.addLiquidity.withArgs(version, addr1),
+                        rets: [minLpOut],
+                    },
+                    {
+                        func: fund.mock.trancheTransfer.withArgs(
+                            TRANCHE_R,
+                            shareStaking.address,
+                            outB,
+                            version
+                        ),
+                    },
+                    {
+                        func: shareStaking.mock.deposit.withArgs(TRANCHE_R, outB, addr1, version),
+                    }
+                );
+            });
+
+            it("Should split and stake bishop and transfer back rook", async function () {
+                await expect(() =>
+                    primaryMarketRouter.splitAndStake(
+                        outQ,
+                        swapRouter.address,
+                        btc.address,
+                        minLpOut,
+                        constants.AddressZero,
+                        version
+                    )
+                ).to.callMocks(
+                    {
+                        func: fund.mock.trancheTransfer.withArgs(
+                            TRANCHE_B,
+                            swap.address,
+                            outB,
+                            version
+                        ),
+                    },
+                    {
+                        func: swap.mock.addLiquidity.withArgs(version, addr1),
+                        rets: [minLpOut],
+                    },
+                    {
+                        func: fund.mock.trancheTransfer.withArgs(TRANCHE_R, addr1, outB, version),
+                    }
+                );
+            });
+        });
+
+        describe("create()", function () {
+            it("Should create by calling primary market create", async function () {
+                await expect(() =>
+                    primaryMarketRouter.create(addr1, inBtc, outQ, version)
+                ).to.callMocks(
+                    {
+                        func: btc.mock.transferFrom.withArgs(addr1, primaryMarket.address, inBtc),
+                        rets: [true],
+                    },
+                    {
+                        func: primaryMarket.mock.create.withArgs(addr1, outQ, version),
+                        rets: [outQ],
+                    }
+                );
+            });
+
+            it("Should buy by calling primary market create", async function () {
+                await expect(() =>
+                    primaryMarketRouter.buy(version, outQ, addr1, "0x")
+                ).to.callMocks(
+                    {
+                        func: btc.mock.balanceOf.withArgs(primaryMarketRouter.address),
+                        rets: [inBtc],
+                    },
+                    {
+                        func: btc.mock.transfer.withArgs(primaryMarket.address, inBtc),
+                        rets: [true],
+                    },
+                    {
+                        func: primaryMarket.mock.create.withArgs(addr1, outQ, version),
+                        rets: [outQ],
+                    }
+                );
+            });
+
+            it("Should stake after creation", async function () {
+                await expect(() =>
+                    primaryMarketRouter.createAndStake(inBtc, outQ, shareStaking.address, version)
+                ).to.callMocks(
+                    {
+                        func: btc.mock.transferFrom.withArgs(addr1, primaryMarket.address, inBtc),
+                        rets: [true],
+                    },
+                    {
+                        func: primaryMarket.mock.create.withArgs(
+                            shareStaking.address,
+                            outQ,
+                            version
+                        ),
+                        rets: [outQ],
+                    },
+                    {
+                        func: shareStaking.mock.deposit.withArgs(TRANCHE_Q, outQ, addr1, version),
+                    }
+                );
+            });
+
+            it("Should split and stake after creation", async function () {
+                await expect(() =>
+                    primaryMarketRouter.createSplitAndStake(
+                        inBtc,
+                        outQ,
+                        swapRouter.address,
+                        btc.address,
+                        minLpOut,
+                        shareStaking.address,
+                        version
+                    )
+                ).to.callMocks(
+                    {
+                        func: btc.mock.transferFrom.withArgs(addr1, primaryMarket.address, inBtc),
+                        rets: [true],
+                    },
+                    {
+                        func: primaryMarket.mock.create.withArgs(
+                            primaryMarketRouter.address,
+                            outQ,
+                            version
+                        ),
+                        rets: [outQ],
+                    },
+                    {
+                        func: primaryMarket.mock.split.withArgs(
+                            primaryMarketRouter.address,
+                            outQ,
+                            version
+                        ),
+                        rets: [outB],
+                    },
+                    {
+                        func: fund.mock.trancheTransfer.withArgs(
+                            TRANCHE_B,
+                            swap.address,
+                            outB,
+                            version
+                        ),
+                    },
+                    {
+                        func: swap.mock.addLiquidity.withArgs(version, addr1),
+                        rets: [minLpOut],
+                    },
+                    {
+                        func: fund.mock.trancheTransfer.withArgs(
+                            TRANCHE_R,
+                            shareStaking.address,
+                            outB,
+                            version
+                        ),
+                    },
+                    {
+                        func: shareStaking.mock.deposit.withArgs(TRANCHE_R, outB, addr1, version),
+                    }
+                );
+            });
+        });
+
+        describe("redeem()", function () {
+            it("Should sell by calling primary market redeem", async function () {
+                await expect(() =>
+                    primaryMarketRouter.sell(version, inBtc, addr1, "0x")
+                ).to.callMocks(
+                    {
+                        func: fund.mock.trancheBalanceOf.withArgs(
+                            TRANCHE_Q,
+                            primaryMarketRouter.address
+                        ),
+                        rets: [outQ],
+                    },
+                    {
+                        func: primaryMarket.mock.redeem.withArgs(addr1, outQ, inBtc, version),
+                        rets: [inBtc],
+                    }
+                );
+            });
         });
     });
 });
