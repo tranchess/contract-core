@@ -126,7 +126,7 @@ contract InterestRateBallot is IBallot, CoreUtility {
         }
 
         IVotingEscrow.LockedBalance memory lockedBalance = votingEscrow.getLockedBalance(account);
-        if (lockedBalance.amount == 0 || lockedBalance.unlockTime <= block.timestamp) {
+        if (lockedBalance.unlockTime <= block.timestamp) {
             return;
         }
 

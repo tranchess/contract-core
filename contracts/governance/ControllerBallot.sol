@@ -192,7 +192,7 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
             return; // The account did not voted before
         }
         IVotingEscrow.LockedBalance memory lockedBalance = votingEscrow.getLockedBalance(account);
-        if (lockedBalance.amount == 0 || lockedBalance.unlockTime <= block.timestamp) {
+        if (lockedBalance.unlockTime <= block.timestamp) {
             return;
         }
 

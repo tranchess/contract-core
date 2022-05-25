@@ -29,8 +29,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
 
     event ProfitReported(uint256 profit, uint256 performanceFee);
     event LossReported(uint256 loss);
-    event ObsoletePrimaryMarketAdded(address obsoletePrimaryMarket);
-    event NewPrimaryMarketAdded(address newPrimaryMarket);
     event DailyProtocolFeeRateUpdated(uint256 newDailyProtocolFeeRate);
     event TwapOracleUpdated(address newTwapOracle);
     event AprOracleUpdated(address newAprOracle);
