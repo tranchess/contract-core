@@ -119,7 +119,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         } else {
             _swap(amounts, swaps, isBuy, versions, staking);
             ShareStaking(staking).deposit(
-                TRANCHE_B,
+                swaps[swaps.length - 1].baseTranche(),
                 amounts[amounts.length - 1],
                 recipient,
                 versions[versions.length - 1]
@@ -166,7 +166,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         } else {
             _swap(amounts, swaps, isBuy, versions, staking);
             ShareStaking(staking).deposit(
-                TRANCHE_B,
+                swaps[swaps.length - 1].baseTranche(),
                 amountOut,
                 recipient,
                 versions[versions.length - 1]
