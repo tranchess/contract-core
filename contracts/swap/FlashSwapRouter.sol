@@ -133,16 +133,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         );
         if (baseDeltaOut > 0) {
             require(quoteDeltaOut == 0, "Unidirectional check failed");
-            uint256 quoteAmount;
-            {
-                // Calculate the exact amount of quote asset to pay
-                address[] memory tranchessPath = new address[](2);
-                tranchessPath[0] = tokenQuote;
-                tranchessPath[1] = pm.fund().tokenB();
-                uint256[] memory amounts;
-                (amounts, , ) = tranchessRouter.getAmountsIn(baseDeltaOut, tranchessPath);
-                quoteAmount = amounts[0];
-            }
+            uint256 quoteAmount = IStableSwap(msg.sender).getQuoteIn(baseDeltaOut);
             // Merge BISHOP and ROOK into QUEEN
             uint256 outQ = pm.merge(address(this), baseDeltaOut, version);
 
