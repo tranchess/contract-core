@@ -144,15 +144,13 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
             require(resultAmount >= expectQuoteAmount, "Insufficient output");
             IERC20(tokenQuote).safeTransfer(recipient, resultAmount);
         } else {
+            address tokenUnderlying = fund.tokenUnderlying();
             // Trade quote asset for underlying asset
             uint256 underlyingAmount =
-                _externalSwap(data, expectQuoteAmount, tokenQuote, fund.tokenUnderlying())[1];
+                _externalSwap(data, expectQuoteAmount, tokenQuote, tokenUnderlying)[1];
 
             // Create or swap borrowed underlying for QUEEN
-            IERC20(fund.tokenUnderlying()).safeTransfer(
-                queenSwapOrPrimaryMarketRouter,
-                underlyingAmount
-            );
+            IERC20(tokenUnderlying).safeTransfer(queenSwapOrPrimaryMarketRouter, underlyingAmount);
             uint256 outQ =
                 IStableSwapCore(queenSwapOrPrimaryMarketRouter).buy(version, 0, address(this), "");
 
