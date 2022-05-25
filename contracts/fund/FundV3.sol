@@ -37,6 +37,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     event ActivityDelayTimeUpdated(uint256 delayTime);
     event SplitRatioUpdated(uint256 newSplitRatio);
     event FeeDebtPaid(uint256 amount);
+    event TotalDebtUpdated(uint256 newTotalDebt);
 
     uint256 private constant UNIT = 1e18;
     uint256 private constant MAX_INTEREST_RATE = 0.2e18; // 20% daily
@@ -857,18 +858,18 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     ) external override onlyPrimaryMarket {
         IERC20(tokenUnderlying).safeTransfer(recipient, amount);
         feeDebt = feeDebt.add(fee);
-        _totalDebt = _totalDebt.add(fee);
+        _updateTotalDebt(_totalDebt.add(fee));
     }
 
     function primaryMarketAddDebt(uint256 amount, uint256 fee) external override onlyPrimaryMarket {
         redemptionDebt = redemptionDebt.add(amount);
         feeDebt = feeDebt.add(fee);
-        _totalDebt = _totalDebt.add(amount).add(fee);
+        _updateTotalDebt(_totalDebt.add(amount).add(fee));
     }
 
     function primaryMarketPayDebt(uint256 amount) external override onlyPrimaryMarket {
         redemptionDebt = redemptionDebt.sub(amount);
-        _totalDebt = _totalDebt.sub(amount);
+        _updateTotalDebt(_totalDebt.sub(amount));
         IERC20(tokenUnderlying).safeTransfer(msg.sender, amount);
     }
 
@@ -876,7 +877,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         require(profit >= performanceFee, "Performance fee cannot exceed profit");
         _strategyUnderlying = _strategyUnderlying.add(profit);
         feeDebt = feeDebt.add(performanceFee);
-        _totalDebt = _totalDebt.add(performanceFee);
+        _updateTotalDebt(_totalDebt.add(performanceFee));
         emit ProfitReported(profit, performanceFee);
     }
 
@@ -976,7 +977,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         uint256 fee = currentUnderlying.multiplyDecimal(dailyProtocolFeeRate);
         if (fee > 0) {
             feeDebt = feeDebt.add(fee);
-            _totalDebt = _totalDebt.add(fee);
+            _updateTotalDebt(_totalDebt.add(fee));
         }
     }
 
@@ -993,7 +994,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         if (fee > 0) {
             uint256 amount = hot.min(fee);
             feeDebt = fee - amount;
-            _totalDebt = total - amount;
+            _updateTotalDebt(total - amount);
             // Call `feeCollector.checkpoint()` without errors.
             // This is a intended behavior because `feeCollector` may not have `checkpoint()`.
             (bool success, ) = feeCollector.call(abi.encodeWithSignature("checkpoint()"));
@@ -1108,6 +1109,11 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         emit InterestRateUpdated(baseInterestRate, floatingInterestRate);
 
         return rate;
+    }
+
+    function _updateTotalDebt(uint256 newTotalDebt) private {
+        _totalDebt = newTotalDebt;
+        emit TotalDebtUpdated(newTotalDebt);
     }
 
     /// @dev Transform share balance to a given rebalance version, or to the latest version
