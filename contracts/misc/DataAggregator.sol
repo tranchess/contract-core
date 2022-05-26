@@ -423,7 +423,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             splitRatio
         );
         data.workingSupply = shareStaking.workingSupply();
-        data.chessRate = 0; // TODO
+        data.chessRate = shareStaking.getRate();
         data.account.balanceQ = shareStaking.trancheBalanceOf(TRANCHE_Q, account);
         data.account.balanceB = shareStaking.trancheBalanceOf(TRANCHE_B, account);
         data.account.balanceR = shareStaking.trancheBalanceOf(TRANCHE_R, account);
@@ -449,7 +449,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         (data.baseBalance, data.quoteBalance) = stableSwap.allBalances();
         data.lpTotalSupply = lp.totalSupply();
         data.lpWorkingSupply = lp.workingSupply();
-        data.chessRate = 0; // TODO
+        data.chessRate = lp.getRate();
         data.bonusToken = swapBonus.bonusToken();
         data.bonusRate = block.timestamp < swapBonus.endTimestamp() ? swapBonus.ratePerSecond() : 0;
 
