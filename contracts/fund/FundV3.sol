@@ -212,7 +212,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         require(lastDayPrice != 0, "Price not available"); // required to do the first creation
         _historicalNavB[lastDay] = lastNavB;
         _historicalNavR[lastDay] = lastNavR;
-        uint256 lastInterestRate = MAX_INTEREST_RATE.min(aprOracle.capture()); // XXX
+        uint256 lastInterestRate = _updateInterestRate(lastDay);
         historicalInterestRate[lastDay] = lastInterestRate;
         emit Settled(lastDay, lastNavB, lastNavR, lastInterestRate);
         fundActivityStartTime = lastDay;
