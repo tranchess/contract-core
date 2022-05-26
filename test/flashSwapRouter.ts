@@ -44,7 +44,6 @@ describe("FlashSwapRouter", function () {
         readonly btc: Contract;
         readonly usdc: Contract;
         readonly fund: Contract;
-        readonly primaryMarket: Contract;
         readonly primaryMarketRouter: Contract;
         readonly externalRouter: Contract;
         readonly flashSwapRouter: Contract;
@@ -63,7 +62,6 @@ describe("FlashSwapRouter", function () {
     let buyPath: string[];
     let sellPath: string[];
     let fund: Contract;
-    let primaryMarket: Contract;
     let primaryMarketRouter: Contract;
     let externalRouter: Contract;
     let flashSwapRouter: Contract;
@@ -215,7 +213,6 @@ describe("FlashSwapRouter", function () {
             btc,
             usdc,
             fund: fund.connect(user1),
-            primaryMarket: primaryMarket.connect(user1),
             primaryMarketRouter: primaryMarketRouter.connect(user1),
             externalRouter,
             flashSwapRouter: flashSwapRouter.connect(user1),
@@ -238,7 +235,6 @@ describe("FlashSwapRouter", function () {
         buyPath = [usdc.address, btc.address];
         sellPath = [btc.address, usdc.address];
         fund = fixtureData.fund;
-        primaryMarket = fixtureData.primaryMarket;
         primaryMarketRouter = fixtureData.primaryMarketRouter;
         externalRouter = fixtureData.externalRouter;
         flashSwapRouter = fixtureData.flashSwapRouter;
@@ -258,7 +254,7 @@ describe("FlashSwapRouter", function () {
         it("Should transfer quote and ROOK tokens", async function () {
             await externalRouter.setNextSwap(buyPath, swappedUsdc, swappedBtc);
             await flashSwapRouter.buyR(
-                primaryMarket.address,
+                fund.address,
                 primaryMarketRouter.address,
                 USER_USDC,
                 addr2,
@@ -277,7 +273,7 @@ describe("FlashSwapRouter", function () {
             await externalRouter.setNextSwap(buyPath, swappedUsdc, swappedBtc);
             await expect(
                 flashSwapRouter.buyR(
-                    primaryMarket.address,
+                    fund.address,
                     primaryMarketRouter.address,
                     inUsdc.div(2),
                     addr2,
@@ -314,7 +310,7 @@ describe("FlashSwapRouter", function () {
             await fund.trancheApprove(TRANCHE_R, flashSwapRouter.address, inR, 0);
             await externalRouter.setNextSwap(sellPath, swappedBtc, swappedUsdc);
             await flashSwapRouter.sellR(
-                primaryMarket.address,
+                fund.address,
                 primaryMarketRouter.address,
                 0,
                 addr2,
@@ -335,7 +331,7 @@ describe("FlashSwapRouter", function () {
             await externalRouter.setNextSwap(sellPath, swappedBtc, swappedUsdc);
             await expect(
                 flashSwapRouter.sellR(
-                    primaryMarket.address,
+                    fund.address,
                     primaryMarketRouter.address,
                     outUsdc.mul(2),
                     addr2,
