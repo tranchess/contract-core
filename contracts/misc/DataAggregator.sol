@@ -100,6 +100,11 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         uint256 lpTotalSupply;
         uint256 lpWorkingSupply;
         uint256 chessRate;
+        uint256 lastDistributionQ;
+        uint256 lastDistributionB;
+        uint256 lastDistributionR;
+        uint256 lastDistributionQuote;
+        uint256 lastDistributionTotalSupply;
         address bonusToken;
         uint256 bonusRate;
         StableSwapAccountData account;
@@ -445,13 +450,37 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         LiquidityGauge lp = LiquidityGauge(stableSwap.lpToken());
         SwapBonus swapBonus = SwapBonus(lp.swapBonus());
 
+        // Trigger checkpoint
+        (
+            data.account.claimableChess,
+            data.account.claimableBonus,
+            data.account.claimableQ,
+            data.account.claimableB,
+            data.account.claimableR,
+            data.account.claimableQuote
+        ) = lp.claimableRewards(account);
+        data.account.lpBalance = lp.balanceOf(account);
+        data.account.workingBalance = lp.workingBalanceOf(account);
+
         data.feeRate = stableSwap.feeRate();
         data.adminFeeRate = stableSwap.adminFeeRate();
         data.ampl = stableSwap.getAmpl();
-        (data.baseBalance, data.quoteBalance) = stableSwap.allBalances();
         data.lpTotalSupply = lp.totalSupply();
+        if (data.lpTotalSupply != 0) {
+            // Handle rebalance
+            stableSwap.sync();
+        }
         data.lpWorkingSupply = lp.workingSupply();
+        (data.baseBalance, data.quoteBalance) = stableSwap.allBalances();
         data.chessRate = lp.getRate();
+        uint256 lpVersion = lp.latestVersion();
+        (
+            data.lastDistributionQ,
+            data.lastDistributionB,
+            data.lastDistributionR,
+            data.lastDistributionQuote
+        ) = lp.distributions(lpVersion);
+        data.lastDistributionTotalSupply = lp.distributionTotalSupplies(lpVersion);
         data.bonusToken = swapBonus.bonusToken();
         data.bonusRate = block.timestamp < swapBonus.endTimestamp() ? swapBonus.ratePerSecond() : 0;
 
@@ -462,17 +491,6 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             data.currentPrice = stableSwap.getCurrentPrice();
             data.oraclePrice = abi.decode(encodedOraclePrice, (uint256));
         }
-
-        data.account.lpBalance = lp.balanceOf(account);
-        data.account.workingBalance = lp.workingBalanceOf(account);
-        (
-            data.account.claimableChess,
-            data.account.claimableBonus,
-            data.account.claimableQ,
-            data.account.claimableB,
-            data.account.claimableR,
-            data.account.claimableQuote
-        ) = lp.claimableRewards(account);
     }
 
     function getGovernanceData(address account) public view returns (GovernanceData memory data) {
