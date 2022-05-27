@@ -244,6 +244,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         PrimaryMarketRouter[] calldata primaryMarketRouters,
         ShareStaking[] calldata shareStakings,
         FeeDistributor[] calldata feeDistributors,
+        address[] calldata externalSwaps,
         address account
     ) public returns (Data memory data) {
         data.blockNumber = block.number;
@@ -261,7 +262,14 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             data.feeDistributors[i] = getFeeDistributorData(feeDistributors[i], account);
         }
 
-        // data.externalSwaps; // TODO
+        data.externalSwaps = new ExternalSwapData[](externalSwaps.length / 3);
+        for (uint256 i = 0; i < externalSwaps.length / 3; i++) {
+            data.externalSwaps[i] = getExternalSwapData(
+                IUniswapV2Router01(externalSwaps[i * 3]),
+                externalSwaps[i * 3 + 1],
+                externalSwaps[i * 3 + 2]
+            );
+        }
     }
 
     function getFundAllData(
@@ -415,7 +423,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             splitRatio
         );
         data.workingSupply = shareStaking.workingSupply();
-        data.chessRate = 0; // TODO
+        data.chessRate = shareStaking.getRate();
         data.account.balanceQ = shareStaking.trancheBalanceOf(TRANCHE_Q, account);
         data.account.balanceB = shareStaking.trancheBalanceOf(TRANCHE_B, account);
         data.account.balanceR = shareStaking.trancheBalanceOf(TRANCHE_R, account);
@@ -441,7 +449,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         (data.baseBalance, data.quoteBalance) = stableSwap.allBalances();
         data.lpTotalSupply = lp.totalSupply();
         data.lpWorkingSupply = lp.workingSupply();
-        data.chessRate = 0; // TODO
+        data.chessRate = lp.getRate();
         data.bonusToken = swapBonus.bonusToken();
         data.bonusRate = block.timestamp < swapBonus.endTimestamp() ? swapBonus.ratePerSecond() : 0;
 
