@@ -510,6 +510,7 @@ abstract contract StakingV3 is ITrancheIndex, CoreUtility, ManagedPausable {
 
         uint256[TRANCHE_COUNT] storage available = _availableBalances[account];
         uint256[TRANCHE_COUNT] storage locked = _lockedBalances[account];
+        // These amounts of tokens will be burnt by the upgrade tool.
         amountM = available[TRANCHE_M].add(locked[TRANCHE_M]);
         amountA = available[TRANCHE_A].add(locked[TRANCHE_A]);
         amountB = available[TRANCHE_B].add(locked[TRANCHE_B]);
@@ -517,19 +518,16 @@ abstract contract StakingV3 is ITrancheIndex, CoreUtility, ManagedPausable {
             available[TRANCHE_M] = 0;
             locked[TRANCHE_M] = 0;
             _totalSupplies[TRANCHE_M] = _totalSupplies[TRANCHE_M].sub(amountM);
-            tokenM.safeTransfer(msg.sender, amountM);
         }
         if (amountA > 0) {
             available[TRANCHE_A] = 0;
             locked[TRANCHE_A] = 0;
             _totalSupplies[TRANCHE_A] = _totalSupplies[TRANCHE_A].sub(amountA);
-            tokenA.safeTransfer(msg.sender, amountA);
         }
         if (amountB > 0) {
             available[TRANCHE_B] = 0;
             locked[TRANCHE_B] = 0;
             _totalSupplies[TRANCHE_B] = _totalSupplies[TRANCHE_B].sub(amountB);
-            tokenB.safeTransfer(msg.sender, amountB);
         }
         _updateWorkingBalance(account);
 

@@ -643,26 +643,11 @@ describe("Exchange upgrade V2 to V3", function () {
             );
         });
 
-        it("Should transfer tokens", async function () {
+        it("Should succeed without transferring tokens", async function () {
             await upgradeToV3();
             await advanceBlockAtTime(upgradeEpoch);
-            await expect(() => upgradeTool.call(exchange, "protocolUpgrade", addr1)).to.callMocks(
-                {
-                    func: shareM.mock.transfer.withArgs(upgradeTool.address, USER1_M),
-                    rets: [true],
-                },
-                {
-                    func: shareA.mock.transfer.withArgs(upgradeTool.address, USER1_A),
-                    rets: [true],
-                },
-                {
-                    func: shareB.mock.transfer.withArgs(upgradeTool.address, USER1_B),
-                    rets: [true],
-                },
-                {
-                    func: chessSchedule.mock.mint,
-                }
-            );
+            await chessSchedule.mock.mint.returns();
+            await upgradeTool.call(exchange, "protocolUpgrade", addr1);
         });
     });
 });
