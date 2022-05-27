@@ -49,7 +49,8 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         uint256 activityDelayTimeAfterRebalance;
         uint256 currentDay;
         uint256 dailyProtocolFeeRate;
-        uint256 equivalentTotalQ;
+        uint256 totalSupplyQ;
+        uint256 totalSupplyB;
         uint256 totalUnderlying;
         uint256 strategyUnderlying;
         uint256 rebalanceSize;
@@ -372,7 +373,8 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         data.activityDelayTimeAfterRebalance = fund.activityDelayTimeAfterRebalance();
         data.currentDay = fund.currentDay();
         data.dailyProtocolFeeRate = fund.dailyProtocolFeeRate();
-        data.equivalentTotalQ = fund.getEquivalentTotalQ();
+        data.totalSupplyQ = fund.trancheTotalSupply(TRANCHE_Q);
+        data.totalSupplyB = fund.trancheTotalSupply(TRANCHE_B);
         data.totalUnderlying = fund.getTotalUnderlying();
         data.strategyUnderlying = fund.getStrategyUnderlying();
         data.rebalanceSize = fund.getRebalanceSize();
