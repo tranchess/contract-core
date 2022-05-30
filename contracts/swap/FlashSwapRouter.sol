@@ -6,6 +6,8 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router01.sol";
 
+import "../fund/ShareStaking.sol";
+
 import "../interfaces/ITranchessSwapCallee.sol";
 import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/ISwapRouter.sol";
@@ -18,6 +20,13 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
     using SafeERC20 for IERC20;
 
     event SwapToggled(address externalRouter, bool enabled);
+    event SwapRook(
+        address indexed recipient,
+        uint256 baseIn,
+        uint256 quoteIn,
+        uint256 baseOut,
+        uint256 quoteOut
+    );
 
     ISwapRouter public immutable tranchessRouter;
     mapping(address => bool) public externalRouterAllowlist;
@@ -40,12 +49,14 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         address tokenQuote,
         address externalRouter,
         address[] memory externalPath,
+        address staking,
         uint256 version,
         uint256 outR
     ) external {
         require(externalRouterAllowlist[externalRouter], "Invalid external router");
         uint256 underlyingAmount;
         uint256 totalQuoteAmount;
+        bytes memory data;
         {
             uint256 inQ = IPrimaryMarketV3(fund.primaryMarket()).getSplitForB(outR);
             underlyingAmount = IStableSwapCore(queenSwapOrPrimaryMarketRouter).getQuoteIn(inQ);
@@ -54,26 +65,31 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
                 underlyingAmount,
                 externalPath
             )[0];
+            data = abi.encode(
+                fund,
+                queenSwapOrPrimaryMarketRouter,
+                totalQuoteAmount,
+                staking == address(0) ? recipient : staking,
+                version,
+                externalRouter,
+                externalPath
+            );
         }
         // Arrange the stable swap path
         IStableSwap tranchessPair = tranchessRouter.getSwap(fund.tokenB(), tokenQuote);
+        address recipient_ = recipient;
+        address tokenQuote_ = tokenQuote;
         // Calculate the amount of quote asset for selling BISHOP
         uint256 quoteAmount = tranchessPair.getQuoteOut(outR);
         // Send the user's portion of the payment to Tranchess swap
         uint256 resultAmount = totalQuoteAmount.sub(quoteAmount);
         require(resultAmount <= maxQuote, "Excessive input");
-        bytes memory data =
-            abi.encode(
-                fund,
-                queenSwapOrPrimaryMarketRouter,
-                totalQuoteAmount,
-                recipient,
-                version,
-                externalRouter,
-                externalPath
-            );
-        IERC20(tokenQuote).safeTransferFrom(msg.sender, address(this), resultAmount);
+        IERC20(tokenQuote_).safeTransferFrom(msg.sender, address(this), resultAmount);
         tranchessPair.sell(version, quoteAmount, address(this), data);
+        if (staking != address(0)) {
+            ShareStaking(staking).deposit(TRANCHE_R, outR, recipient_, version);
+        }
+        emit SwapRook(recipient_, 0, resultAmount, outR, 0);
     }
 
     function sellR(
@@ -123,26 +139,35 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
             "Tranchess Pair check failed"
         );
         if (baseOut > 0) {
-            require(quoteOut == 0, "Unidirectional check failed");
-            uint256 quoteAmount = IStableSwap(msg.sender).getQuoteIn(baseOut);
-            // Merge BISHOP and ROOK into QUEEN
-            uint256 outQ =
-                IPrimaryMarketV3(fund.primaryMarket()).merge(address(this), baseOut, version);
+            uint256 resultAmount;
+            {
+                require(quoteOut == 0, "Unidirectional check failed");
+                uint256 quoteAmount = IStableSwap(msg.sender).getQuoteIn(baseOut);
+                // Merge BISHOP and ROOK into QUEEN
+                uint256 outQ =
+                    IPrimaryMarketV3(fund.primaryMarket()).merge(address(this), baseOut, version);
 
-            // Redeem or swap QUEEN for underlying
-            fund.trancheTransfer(TRANCHE_Q, queenSwapOrPrimaryMarketRouter, outQ, version);
-            uint256 underlyingAmount =
-                IStableSwapCore(queenSwapOrPrimaryMarketRouter).sell(version, 0, address(this), "");
+                // Redeem or swap QUEEN for underlying
+                fund.trancheTransfer(TRANCHE_Q, queenSwapOrPrimaryMarketRouter, outQ, version);
+                uint256 underlyingAmount =
+                    IStableSwapCore(queenSwapOrPrimaryMarketRouter).sell(
+                        version,
+                        0,
+                        address(this),
+                        ""
+                    );
 
-            // Trade underlying for quote asset
-            uint256 totalQuoteAmount =
-                _externalSwap(data, underlyingAmount, fund.tokenUnderlying(), tokenQuote)[1];
-            // Send back quote asset to tranchess swap
-            IERC20(tokenQuote).safeTransfer(msg.sender, quoteAmount);
-            // Send the rest of quote asset to user
-            uint256 resultAmount = totalQuoteAmount.sub(quoteAmount);
-            require(resultAmount >= expectQuoteAmount, "Insufficient output");
-            IERC20(tokenQuote).safeTransfer(recipient, resultAmount);
+                // Trade underlying for quote asset
+                uint256 totalQuoteAmount =
+                    _externalSwap(data, underlyingAmount, fund.tokenUnderlying(), tokenQuote)[1];
+                // Send back quote asset to tranchess swap
+                IERC20(tokenQuote).safeTransfer(msg.sender, quoteAmount);
+                // Send the rest of quote asset to user
+                resultAmount = totalQuoteAmount.sub(quoteAmount);
+                require(resultAmount >= expectQuoteAmount, "Insufficient output");
+                IERC20(tokenQuote).safeTransfer(recipient, resultAmount);
+            }
+            emit SwapRook(recipient, baseOut, 0, 0, resultAmount);
         } else {
             address tokenUnderlying = fund.tokenUnderlying();
             // Trade quote asset for underlying asset

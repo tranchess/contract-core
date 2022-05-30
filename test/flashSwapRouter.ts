@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { BigNumber, Contract, Wallet } from "ethers";
+import { BigNumber, constants, Contract, Wallet } from "ethers";
 import type { Fixture, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
@@ -253,17 +253,22 @@ describe("FlashSwapRouter", function () {
 
         it("Should transfer quote and ROOK tokens", async function () {
             await externalRouter.setNextSwap(buyPath, swappedUsdc, swappedBtc);
-            await flashSwapRouter.buyR(
-                fund.address,
-                primaryMarketRouter.address,
-                USER_USDC,
-                addr2,
-                usdc.address,
-                externalRouter.address,
-                buyPath,
-                0,
-                outR
-            );
+            await expect(
+                flashSwapRouter.buyR(
+                    fund.address,
+                    primaryMarketRouter.address,
+                    USER_USDC,
+                    addr2,
+                    usdc.address,
+                    externalRouter.address,
+                    buyPath,
+                    constants.AddressZero,
+                    0,
+                    outR
+                )
+            )
+                .to.emit(flashSwapRouter, "SwapRook")
+                .withArgs(addr2, 0, inUsdc.add(1), outR, 0);
             expect(await fund.trancheBalanceOf(TRANCHE_R, addr2)).to.equal(outR);
             const spentUsdc = USER_USDC.sub(await usdc.balanceOf(addr1));
             expect(spentUsdc).to.be.closeTo(inUsdc, inUsdc.div(10000));
@@ -280,6 +285,7 @@ describe("FlashSwapRouter", function () {
                     usdc.address,
                     externalRouter.address,
                     buyPath,
+                    constants.AddressZero,
                     0,
                     outR
                 )
@@ -309,17 +315,21 @@ describe("FlashSwapRouter", function () {
             await fund.connect(owner).trancheTransfer(TRANCHE_R, addr1, inR, 0);
             await fund.trancheApprove(TRANCHE_R, flashSwapRouter.address, inR, 0);
             await externalRouter.setNextSwap(sellPath, swappedBtc, swappedUsdc);
-            await flashSwapRouter.sellR(
-                fund.address,
-                primaryMarketRouter.address,
-                0,
-                addr2,
-                usdc.address,
-                externalRouter.address,
-                sellPath,
-                0,
-                inR
-            );
+            await expect(
+                flashSwapRouter.sellR(
+                    fund.address,
+                    primaryMarketRouter.address,
+                    0,
+                    addr2,
+                    usdc.address,
+                    externalRouter.address,
+                    sellPath,
+                    0,
+                    inR
+                )
+            )
+                .to.emit(flashSwapRouter, "SwapRook")
+                .withArgs(addr2, inR, 0, 0, outUsdc.sub(2));
             expect(await fund.trancheBalanceOf(TRANCHE_R, addr1)).to.equal(0);
             const diffUsdc = (await usdc.balanceOf(addr2)).sub(USER_USDC);
             expect(diffUsdc).to.be.closeTo(outUsdc, outUsdc.div(10000));
