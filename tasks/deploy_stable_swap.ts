@@ -148,7 +148,7 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
         const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
         const liquidityGauge = await LiquidityGauge.deploy(
             `Tranchess ${baseSymbol}-${quoteSymbol}`,
-            `tranchess${baseSymbol}-${quoteSymbol}`,
+            `${baseSymbol}-LP`,
             stableSwap.address,
             chessSchedule.address,
             governanceAddresses.chessController,
