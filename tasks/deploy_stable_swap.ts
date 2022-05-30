@@ -179,7 +179,8 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
         }
 
         console.log("Transfering ownership to TimelockController");
-        await swapBonus.transferOwnership(governanceAddresses.timelockController);
+        // await swapBonus.transferOwnership(governanceAddresses.timelockController);
+        console.log("NOTE: Please transfer ownership of SwapBonus to Timelock later");
         await stableSwap.transferOwnership(governanceAddresses.timelockController);
 
         const addresses: StableSwapAddresses = {
