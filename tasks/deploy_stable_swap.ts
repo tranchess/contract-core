@@ -140,12 +140,17 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
         }
         console.log(`StableSwap: ${stableSwap.address}`);
 
+        const chessSchedule = await ethers.getContractAt(
+            "ChessSchedule",
+            governanceAddresses.chessSchedule
+        );
+
         const LiquidityGauge = await ethers.getContractFactory("LiquidityGauge");
         const liquidityGauge = await LiquidityGauge.deploy(
             `Tranchess ${baseSymbol}-${quoteSymbol}`,
             `tranchess${baseSymbol}-${quoteSymbol}`,
             stableSwap.address,
-            governanceAddresses.chessSchedule,
+            chessSchedule.address,
             governanceAddresses.chessController,
             fundAddresses.fund,
             governanceAddresses.votingEscrow,
@@ -168,6 +173,9 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
             } else {
                 console.log("NOTE: Please add LiquidityGauge to ControllerBallot");
             }
+
+            console.log("Adding LiquidityGauge to ChessSchedule");
+            await chessSchedule.addMinter(liquidityGauge.address);
         }
 
         console.log("Transfering ownership to TimelockController");

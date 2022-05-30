@@ -196,15 +196,22 @@ task("deploy_fund", "Deploy fund contracts")
             assert.strictEqual(strategyAddresses.strategy, strategyAddress);
         }
 
+        const chessSchedule = await ethers.getContractAt(
+            "ChessSchedule",
+            governanceAddresses.chessSchedule
+        );
         const ShareStaking = await ethers.getContractFactory("ShareStaking");
         const shareStaking = await ShareStaking.deploy(
             fund.address,
-            governanceAddresses.chessSchedule,
+            chessSchedule.address,
             governanceAddresses.chessController,
             governanceAddresses.votingEscrow,
             0
         );
         console.log(`ShareStaking: ${shareStaking.address}`);
+
+        console.log("Adding ShareStaking to ChessSchedule");
+        await chessSchedule.addMinter(shareStaking.address);
 
         const PrimaryMarketRouter = await ethers.getContractFactory("PrimaryMarketRouter");
         const primaryMarketRouter = await PrimaryMarketRouter.deploy(primaryMarket.address);
