@@ -454,7 +454,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
             }
             if (endTimestamp == endWeek) {
                 rate = chessSchedule.getRate(endWeek).mul(
-                    chessController.getFundRelativeWeight(address(fund), endWeek)
+                    chessController.getFundRelativeWeight(address(this), endWeek)
                 );
                 if (endWeek < rewardStartTimestamp && endWeek + 1 weeks > rewardStartTimestamp) {
                     // Rewards start in the middle of the next week. We adjust the rate to
