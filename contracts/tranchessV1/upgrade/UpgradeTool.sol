@@ -178,6 +178,14 @@ contract UpgradeTool is
     /// @dev For IPrimaryMarketV2.
     function updateDelayedRedemptionDay() external override {}
 
+    /// @dev For IPrimaryMarketV3.
+    function canBeRemovedFromFund() external view returns (bool) {
+        return stage == STAGE_UPGRADED;
+    }
+
+    /// @dev For IPrimaryMarketV3.
+    function settle(uint256) external {}
+
     function settle(
         uint256 day,
         uint256, // fundTotalShares
