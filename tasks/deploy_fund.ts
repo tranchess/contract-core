@@ -209,9 +209,7 @@ task("deploy_fund", "Deploy fund contracts")
             0
         );
         console.log(`ShareStaking: ${shareStaking.address}`);
-
-        console.log("Adding ShareStaking to ChessSchedule");
-        await chessSchedule.addMinter(shareStaking.address);
+        console.log("NOTE: Please add ShareStaking to ChessSchedule");
 
         const PrimaryMarketRouter = await ethers.getContractFactory("PrimaryMarketRouter");
         const primaryMarketRouter = await PrimaryMarketRouter.deploy(primaryMarket.address);

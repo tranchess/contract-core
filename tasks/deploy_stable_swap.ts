@@ -174,8 +174,7 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
                 console.log("NOTE: Please add LiquidityGauge to ControllerBallot");
             }
 
-            console.log("Adding LiquidityGauge to ChessSchedule");
-            await chessSchedule.addMinter(liquidityGauge.address);
+            console.log("Please add LiquidityGauge to ChessSchedule");
         }
 
         console.log("Transfering ownership to TimelockController");
