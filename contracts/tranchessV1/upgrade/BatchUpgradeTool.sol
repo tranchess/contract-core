@@ -18,6 +18,8 @@ contract BatchUpgradeTool {
     ///      a maker/taker flag (32 bits, 0 for maker, 1 for taker) and the epoch timestamp.
     /// @return tokenAmounts An array of (upgradeTools.length * 3) values, containing the amount
     ///         of three tokens upgraded for each Fund
+    /// @return underlyingAmounts An array of (oldPrimaryMarkets.length + oldWrappedPrimaryMarkets.length)
+    ///         values, containing the amount of underlying tokens claimed from each primary market
     /// @return totalQuoteAmount Total amount of quote tokens returned to the account.
     /// @return totalRewards Total amount of CHESS claimed by the account.
     function batchProtocolUpgrade(
@@ -30,15 +32,22 @@ contract BatchUpgradeTool {
         external
         returns (
             uint256[] memory tokenAmounts,
+            uint256[] memory underlyingAmounts,
             uint256 totalQuoteAmount,
             uint256 totalRewards
         )
     {
+        underlyingAmounts = new uint256[](
+            oldPrimaryMarkets.length + oldWrappedPrimaryMarkets.length
+        );
         for (uint256 i = 0; i < oldPrimaryMarkets.length; i++) {
-            IPrimaryMarket(oldPrimaryMarkets[i]).claim(account);
+            (, underlyingAmounts[i]) = IPrimaryMarket(oldPrimaryMarkets[i]).claim(account);
         }
         for (uint256 i = 0; i < oldWrappedPrimaryMarkets.length; i++) {
-            IPrimaryMarketV2(oldWrappedPrimaryMarkets[i]).claimAndUnwrap(account);
+            (, underlyingAmounts[i + oldPrimaryMarkets.length]) = IPrimaryMarketV2(
+                oldWrappedPrimaryMarkets[i]
+            )
+                .claimAndUnwrap(account);
         }
 
         for (uint256 i = 0; i < encodedEpochs.length; i++) {
