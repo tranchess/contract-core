@@ -243,6 +243,12 @@ contract UpgradeTool is
         stage = STAGE_UPGRADED;
     }
 
+    /// @notice Transfer the new fund's ownership back to admin in case that `createNewTokens()`
+    ///         fails unexpectedly.
+    function transferNewFundOwnership() external onlyOwner {
+        newFund.transferOwnership(owner());
+    }
+
     function protocolUpgrade(address account)
         external
         onlyStage(STAGE_UPGRADED)
