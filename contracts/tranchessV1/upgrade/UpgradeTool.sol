@@ -62,6 +62,17 @@ contract UpgradeTool is
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
+    event Upgraded(
+        address account,
+        uint256 oldM,
+        uint256 oldA,
+        uint256 oldB,
+        uint256 newM,
+        uint256 newA,
+        uint256 newB,
+        uint256 claimedRewards
+    );
+
     uint256 private constant STAGE_START = 0;
     uint256 private constant STAGE_SETTLED = 1;
     uint256 private constant STAGE_UPGRADED = 2;
@@ -332,5 +343,16 @@ contract UpgradeTool is
         newStaking.deposit(TRANCHE_A, amountA, account, newVersion);
         newFund.trancheTransfer(TRANCHE_B, address(newStaking), amountB, newVersion);
         newStaking.deposit(TRANCHE_B, amountB, account, newVersion);
+
+        emit Upgraded(
+            account,
+            oldBalanceM,
+            oldBalanceA,
+            oldBalanceB,
+            amountM,
+            amountA,
+            amountB,
+            claimedRewards
+        );
     }
 }
