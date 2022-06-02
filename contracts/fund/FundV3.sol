@@ -302,12 +302,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
 
     /// @notice Equivalent QUEEN supply, as if all BISHOP and ROOK are merged.
     function getEquivalentTotalQ() external view override returns (uint256) {
-        return
-            _totalSupplies[TRANCHE_B]
-                .add(_totalSupplies[TRANCHE_R])
-                .divideDecimal(splitRatio)
-                .div(2)
-                .add(_totalSupplies[TRANCHE_Q]);
+        return _totalSupplies[TRANCHE_B].divideDecimal(splitRatio).add(_totalSupplies[TRANCHE_Q]);
     }
 
     /// @notice Return the rebalance matrix at a given index. A zero struct is returned
