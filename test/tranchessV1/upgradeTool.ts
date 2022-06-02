@@ -61,6 +61,8 @@ describe("UpgradeTool", function () {
     let chessSchedule: MockContract;
     let oldFund: Contract;
     let oldShareM: Contract;
+    let oldShareA: Contract;
+    let oldShareB: Contract;
     let oldPrimaryMarket: Contract;
     let newFund: Contract;
     let newShareM: Contract;
@@ -281,6 +283,8 @@ describe("UpgradeTool", function () {
                 btc,
                 oldFund: oldFund.connect(user1),
                 oldShareM: oldShareM.connect(user1),
+                oldShareA: oldShareA.connect(user1),
+                oldShareB: oldShareB.connect(user1),
                 oldPrimaryMarket: oldPrimaryMarket.connect(user1),
                 newFund: newFund.connect(user1),
                 newShareM,
@@ -318,6 +322,8 @@ describe("UpgradeTool", function () {
         chessSchedule = fixtureData.mockContracts.chessSchedule;
         oldFund = fixtureData.contracts.oldFund;
         oldShareM = fixtureData.contracts.oldShareM;
+        oldShareA = fixtureData.contracts.oldShareA;
+        oldShareB = fixtureData.contracts.oldShareB;
         oldPrimaryMarket = fixtureData.contracts.oldPrimaryMarket;
         newFund = fixtureData.contracts.newFund;
         newShareM = fixtureData.contracts.newShareM;
@@ -546,6 +552,29 @@ describe("UpgradeTool", function () {
             expect(ret2ag.amountA).to.equal(0);
             expect(ret2ag.amountB).to.equal(0);
             expect(ret2ag.claimedRewards).to.equal(0);
+        });
+
+        it("Should transfer old tokens to the upgrade tool", async function () {
+            const totalSupplyM = await oldShareM.totalSupply();
+            const totalSupplyA = await oldShareA.totalSupply();
+            const totalSupplyB = await oldShareB.totalSupply();
+
+            await goToStageUpgraded();
+            await chessSchedule.mock.mint.returns();
+            await upgradeTool.protocolUpgrade(addr1);
+            expect(await oldShareM.balanceOf(upgradeTool.address)).to.equal(parseEther("3000"));
+            expect(await oldShareA.balanceOf(upgradeTool.address)).to.equal(parseEther("2000"));
+            expect(await oldShareB.balanceOf(upgradeTool.address)).to.equal(parseEther("2000"));
+
+            await oldPrimaryMarket.claim(addr2);
+            await upgradeTool.protocolUpgrade(addr2);
+            expect(await oldShareM.balanceOf(upgradeTool.address)).to.equal(parseEther("5000"));
+            expect(await oldShareA.balanceOf(upgradeTool.address)).to.equal(parseEther("2000"));
+            expect(await oldShareB.balanceOf(upgradeTool.address)).to.equal(parseEther("2000"));
+
+            expect(await oldShareM.totalSupply()).to.equal(totalSupplyM);
+            expect(await oldShareA.totalSupply()).to.equal(totalSupplyA);
+            expect(await oldShareB.totalSupply()).to.equal(totalSupplyB);
         });
 
         it("Should stake new shares", async function () {

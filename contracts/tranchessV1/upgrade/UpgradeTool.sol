@@ -62,6 +62,17 @@ contract UpgradeTool is
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
+    event Upgraded(
+        address account,
+        uint256 oldM,
+        uint256 oldA,
+        uint256 oldB,
+        uint256 newM,
+        uint256 newA,
+        uint256 newB,
+        uint256 claimedRewards
+    );
+
     uint256 private constant STAGE_START = 0;
     uint256 private constant STAGE_SETTLED = 1;
     uint256 private constant STAGE_UPGRADED = 2;
@@ -269,47 +280,54 @@ contract UpgradeTool is
             );
         }
 
-        // Burn staked old tokens
-        (amountM, amountA, amountB, claimedRewards) = oldExchange.protocolUpgrade(account);
-        if (amountM > 0) {
-            oldFund.burn(TRANCHE_M, address(oldExchange), amountM);
-        }
-        if (amountA > 0) {
-            oldFund.burn(TRANCHE_A, address(oldExchange), amountA);
-        }
-        if (amountB > 0) {
-            oldFund.burn(TRANCHE_B, address(oldExchange), amountB);
-        }
-
         // Burn unstaked old tokens
         (uint256 oldBalanceM, uint256 oldBalanceA, uint256 oldBalanceB) =
             oldFund.allShareBalanceOf(account);
         if (oldBalanceM > 0) {
             oldFund.burn(TRANCHE_M, account, oldBalanceM);
-            amountM = amountM.add(oldBalanceM);
         }
         if (oldBalanceA > 0) {
             oldFund.burn(TRANCHE_A, account, oldBalanceA);
-            amountA = amountA.add(oldBalanceA);
         }
         if (oldBalanceB > 0) {
             oldFund.burn(TRANCHE_B, account, oldBalanceB);
-            amountB = amountB.add(oldBalanceB);
+        }
+
+        // Burn staked old tokens
+        {
+            uint256 stakedM;
+            uint256 stakedA;
+            uint256 stakedB;
+            (stakedM, stakedA, stakedB, claimedRewards) = oldExchange.protocolUpgrade(account);
+            if (stakedM > 0) {
+                oldFund.burn(TRANCHE_M, address(oldExchange), stakedM);
+                oldBalanceM = oldBalanceM.add(stakedM);
+            }
+            if (stakedA > 0) {
+                oldFund.burn(TRANCHE_A, address(oldExchange), stakedA);
+                oldBalanceA = oldBalanceA.add(stakedA);
+            }
+            if (stakedB > 0) {
+                oldFund.burn(TRANCHE_B, address(oldExchange), stakedB);
+                oldBalanceB = oldBalanceB.add(stakedB);
+            }
         }
 
         // Mint all collected old tokens so that their total supplies do not change
-        amountM = amountM.divideDecimal(initialSplitRatio.mul(2));
-        if (amountM > 0) {
-            oldFund.mint(TRANCHE_M, address(this), amountM);
+        if (oldBalanceM > 0) {
+            oldFund.mint(TRANCHE_M, address(this), oldBalanceM);
         }
-        if (amountA > 0) {
-            oldFund.mint(TRANCHE_A, address(this), amountA);
+        if (oldBalanceA > 0) {
+            oldFund.mint(TRANCHE_A, address(this), oldBalanceA);
         }
-        if (amountB > 0) {
-            oldFund.mint(TRANCHE_B, address(this), amountB);
+        if (oldBalanceB > 0) {
+            oldFund.mint(TRANCHE_B, address(this), oldBalanceB);
         }
 
         uint256 newVersion = newFund.getRebalanceSize();
+        amountM = oldBalanceM.divideDecimal(initialSplitRatio.mul(2));
+        amountA = oldBalanceA;
+        amountB = oldBalanceB;
         if (newVersion > 0) {
             (amountM, amountA, amountB) = newFund.batchRebalance(
                 amountM,
@@ -326,5 +344,16 @@ contract UpgradeTool is
         newStaking.deposit(TRANCHE_A, amountA, account, newVersion);
         newFund.trancheTransfer(TRANCHE_B, address(newStaking), amountB, newVersion);
         newStaking.deposit(TRANCHE_B, amountB, account, newVersion);
+
+        emit Upgraded(
+            account,
+            oldBalanceM,
+            oldBalanceA,
+            oldBalanceB,
+            amountM,
+            amountA,
+            amountB,
+            claimedRewards
+        );
     }
 }
