@@ -94,7 +94,7 @@ task("deploy_mock", "Deploy mock contracts")
         let mockBusdAddress = "";
         if (args.silent || keyInYNStrict("Deploy MockBusd?", { guide: true })) {
             const MockToken = await ethers.getContractFactory("MockToken");
-            const mockBusd = await MockToken.deploy("Mock BUSDF", "BUSD", 6);
+            const mockBusd = await MockToken.deploy("Mock BUSD", "BUSD", 6);
             console.log(`MockBusd: ${mockBusd.address}`);
             mockBusdAddress = mockBusd.address;
             await mockBusd.mint(deployer.address, 1000000e6);

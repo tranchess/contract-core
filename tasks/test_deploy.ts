@@ -132,7 +132,6 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     });
     await hre.run("deploy_chess_schedule_impl");
     await hre.run("deploy_voting_escrow_impl");
-    // await hre.run("deploy_exchange_impl", { underlyingSymbol: "BTC" });
 
     console.log();
     console.log("[+] Deploying two vesting escrows");
@@ -173,7 +172,7 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
             feeRate: "0.03",
             adminFeeRate: "0.4",
             tradingCurbThreshold: "0.35",
-            rewardStartTimestamp: "0"
+            rewardStartTimestamp: "0",
         });
     }
 

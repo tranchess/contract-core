@@ -17,8 +17,6 @@ task("deploy_misc", "Deploy misc contracts interactively")
         const { ethers } = hre;
         await hre.run("compile");
 
-        // const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
-
         const addresses: MiscAddresses = newAddresses(hre);
         if (
             args.deployProtocolDataProvider ||
