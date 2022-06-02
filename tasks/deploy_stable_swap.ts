@@ -47,7 +47,7 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
         const { parseEther } = ethers.utils;
         await hre.run("compile");
 
-        assert.match(args.kind, /^Queen|Bishop+$/, "Invalid kind");
+        assert.match(args.kind, /^Queen|Bishop$/, "Invalid kind");
         const kind: "Queen" | "Bishop" = args.kind;
 
         const underlyingSymbol: string = args.underlyingSymbol;
