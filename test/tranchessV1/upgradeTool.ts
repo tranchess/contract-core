@@ -24,7 +24,7 @@ const UPPER_REBALANCE_THRESHOLD = parseEther("2");
 const LOWER_REBALANCE_THRESHOLD = parseEther("0.5");
 const REDEMPTION_FEE_BPS = 40;
 const MERGE_FEE_BPS = 30;
-const DAILY_PROTOCOL_FEE_BPS = 1; // 0.01% per day
+const DAILY_PROTOCOL_FEE_BPS = 0;
 const INTEREST_RATE_BPS = 10; // 0.1% per day
 
 describe("UpgradeTool", function () {

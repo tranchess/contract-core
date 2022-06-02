@@ -225,9 +225,10 @@ contract UpgradeTool is
     ///         When this function is called, this contract should be the primary market of the
     ///         new Fund and the new Fund should be empty.
     function createNewTokens() external onlyOwner onlyStage(STAGE_SETTLED) {
-        uint256 splitRatio = originTwapOracle.getTwap(upgradeTimestamp).div(2);
-        initialSplitRatio = splitRatio;
         (, uint256 navA, uint256 navB) = oldFund.historicalNavs(upgradeTimestamp);
+        uint256 splitRatio =
+            originTwapOracle.getTwap(upgradeTimestamp).divideDecimal(navA.add(navB));
+        initialSplitRatio = splitRatio;
         newFund.initialize(splitRatio, navA, navB);
         newFund.transferOwnership(owner());
 
