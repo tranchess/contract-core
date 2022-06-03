@@ -43,9 +43,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     uint256 private constant MAX_INTEREST_RATE = 0.2e18; // 20% daily
     uint256 private constant MAX_DAILY_PROTOCOL_FEE_RATE = 0.05e18; // 5% daily rate
 
-    uint256 private constant STRATEGY_UPDATE_MIN_DELAY = 3 days;
-    uint256 private constant STRATEGY_UPDATE_MAX_DELAY = 7 days;
-
     /// @notice Upper bound of `NAV_R / NAV_B` to trigger a rebalance.
     uint256 public immutable upperRebalanceThreshold;
 
