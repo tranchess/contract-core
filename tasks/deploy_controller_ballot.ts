@@ -2,6 +2,8 @@ import { strict as assert } from "assert";
 import { task } from "hardhat/config";
 import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./address_file";
 import type { GovernanceAddresses } from "./deploy_governance";
+import type { FundAddresses } from "./deploy_fund";
+import type { StableSwapAddresses } from "./deploy_stable_swap";
 import { updateHreSigner } from "./signers";
 
 export interface ControllerBallotAddresses extends Addresses {
@@ -31,6 +33,21 @@ task("deploy_controller_ballot", "Deploy ControllerBallot")
         const ControllerBallot = await ethers.getContractFactory("ControllerBallot");
         const controllerBallot = await ControllerBallot.deploy(votingEscrowAddress);
         console.log(`ControllerBallot: ${controllerBallot.address}`);
+
+        for (const symbol of symbols) {
+            console.log(`Adding ${symbol} staking`);
+            const fundAddresses = loadAddressFile<FundAddresses>(
+                hre,
+                `fund_${symbol.toLowerCase()}`
+            );
+            await controllerBallot.addPool(fundAddresses.shareStaking);
+            console.log(`Adding ${symbol} BISHOP stable swap's liquidity gauge`);
+            const stableSwapAddresses = loadAddressFile<StableSwapAddresses>(
+                hre,
+                `bishop_stable_swap_${symbol.toLowerCase()}`
+            );
+            await controllerBallot.addPool(stableSwapAddresses.liquidityGauge);
+        }
 
         if (timelockControllerAddress) {
             console.log("Transfering ownership to TimelockController");
