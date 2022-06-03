@@ -1,5 +1,6 @@
 import { strict as assert } from "assert";
 import { task } from "hardhat/config";
+import { endOfWeek } from "../config";
 import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./address_file";
 import type { GovernanceAddresses } from "./deploy_governance";
 import type { TwapOracleAddresses } from "./deploy_mock_twap_oracle";
@@ -24,6 +25,16 @@ export interface FundAddresses extends Addresses {
     primaryMarket: string;
     primaryMarketRouter: string;
     shareStaking: string;
+    upgradeTool: string;
+}
+
+// The old exchange for deploying UpgradeTool
+interface ExchangeAddresses extends Addresses {
+    underlyingSymbol: string;
+    quoteSymbol: string;
+    fund: string;
+    exchangeImpl: string;
+    exchange: string;
 }
 
 task("deploy_fund", "Deploy fund contracts")
@@ -44,6 +55,7 @@ task("deploy_fund", "Deploy fund contracts")
         "Parameters to call Fund.initialize() in JSON (param names in camelCase)",
         ""
     )
+    .addOptionalParam("upgradeDate", "Upgrade date")
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
         const { ethers } = hre;
@@ -57,6 +69,13 @@ task("deploy_fund", "Deploy fund contracts")
         const shareSymbolPrefix: string = args.shareSymbolPrefix;
         assert.match(shareSymbolPrefix, /^[a-zA-Z.]+$/, "Invalid symbol prefix");
         assert.ok(shareSymbolPrefix.length <= 5, "Symbol prefix too long");
+        const upgradeTimestamp = args.upgradeDate
+            ? endOfWeek(new Date(args.upgradeDate).getTime() / 1000)
+            : 0;
+        assert.ok(
+            !args.upgradeDate ||
+                new Date(args.upgradeDate).getTime() / 1000 > upgradeTimestamp - 86400
+        );
 
         const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
         const twapOracleAddresses = loadAddressFile<TwapOracleAddresses>(
@@ -107,21 +126,29 @@ task("deploy_fund", "Deploy fund contracts")
         // +1 ShareB
         // +2 ShareR
         // +3 Fund
-        // +4 PrimaryMarket
-        // +5 Strategy
+        // +4 ShareStaking
+        // if (upgradeTimestamp > 0) {
+        //   +5 UpgradeTool
+        //   +6 PrimaryMarket
+        //   +7 Strategy
+        // } else {
+        //   +5 PrimaryMarket
+        //   +6 Strategy
+        // }
         const fundAddress = ethers.utils.getContractAddress({
             from: deployer.address,
             nonce: (await deployer.getTransactionCount("pending")) + 3,
         });
-        const primaryMarketAddress = ethers.utils.getContractAddress({
+        const primaryMarketOrUpgradeToolAddress = ethers.utils.getContractAddress({
             from: deployer.address,
-            nonce: (await deployer.getTransactionCount("pending")) + 4,
+            nonce: (await deployer.getTransactionCount("pending")) + 5,
         });
         let strategyAddress = ethers.constants.AddressZero;
         if (strategyName !== "NONE") {
+            const nonce = upgradeTimestamp > 0 ? 7 : 6;
             strategyAddress = ethers.utils.getContractAddress({
                 from: deployer.address,
-                nonce: (await deployer.getTransactionCount("pending")) + 5,
+                nonce: (await deployer.getTransactionCount("pending")) + nonce,
             });
         }
 
@@ -159,7 +186,7 @@ task("deploy_fund", "Deploy fund contracts")
             shareQ.address,
             shareB.address,
             shareR.address,
-            primaryMarketAddress,
+            primaryMarketOrUpgradeToolAddress,
             strategyAddress,
             0,
             UPPER_REBALANCE_THRESHOLD,
@@ -176,6 +203,40 @@ task("deploy_fund", "Deploy fund contracts")
             "Before setting protocol fee rate, make sure people have synced in FeeDistributor"
         );
 
+        const ShareStaking = await ethers.getContractFactory("ShareStaking");
+        const shareStaking = await ShareStaking.deploy(
+            fund.address,
+            governanceAddresses.chessSchedule,
+            governanceAddresses.chessController,
+            governanceAddresses.votingEscrow,
+            upgradeTimestamp === 0 ? 0 : upgradeTimestamp + 86400
+        );
+        console.log(`ShareStaking: ${shareStaking.address}`);
+        console.log("NOTE: Please add ShareStaking to ChessSchedule");
+
+        let upgradeTool = null;
+        if (upgradeTimestamp > 0) {
+            const oldFundAddresses = loadAddressFile<FundAddresses>(
+                hre,
+                `fund_${underlyingSymbol.toLowerCase()}`
+            );
+            const oldExchangeAddresses = loadAddressFile<ExchangeAddresses>(
+                hre,
+                `exchange_${underlyingSymbol.toLowerCase()}`
+            );
+            const UpgradeTool = await ethers.getContractFactory("UpgradeTool");
+            upgradeTool = await UpgradeTool.deploy(
+                oldFundAddresses.fund,
+                oldFundAddresses.underlyingSymbol === "WBNB" ? 2 : 1,
+                oldExchangeAddresses.exchange,
+                fund.address,
+                shareStaking.address,
+                upgradeTimestamp
+            );
+            assert.strictEqual(upgradeTool.address, primaryMarketOrUpgradeToolAddress);
+            console.log(`UpgradeTool: ${upgradeTool.address}`);
+        }
+
         const redemptionFeeRate = parseEther(args.redemptionFeeRate);
         const mergeFeeRate = parseEther(args.mergeFeeRate);
         const PrimaryMarket = await ethers.getContractFactory("PrimaryMarketV3");
@@ -186,7 +247,9 @@ task("deploy_fund", "Deploy fund contracts")
             fundCap,
             { gasLimit: 5e6 } // Gas estimation may fail
         );
-        assert.strictEqual(primaryMarket.address, primaryMarketAddress);
+        if (upgradeTimestamp === 0) {
+            assert.strictEqual(primaryMarket.address, primaryMarketOrUpgradeToolAddress);
+        }
         console.log(`PrimaryMarket: ${primaryMarket.address}`);
 
         if (strategyName !== "NONE") {
@@ -195,21 +258,6 @@ task("deploy_fund", "Deploy fund contracts")
             const strategyAddresses = loadAddressFile<StrategyAddresses>(hre, strategyName);
             assert.strictEqual(strategyAddresses.strategy, strategyAddress);
         }
-
-        const chessSchedule = await ethers.getContractAt(
-            "ChessSchedule",
-            governanceAddresses.chessSchedule
-        );
-        const ShareStaking = await ethers.getContractFactory("ShareStaking");
-        const shareStaking = await ShareStaking.deploy(
-            fund.address,
-            chessSchedule.address,
-            governanceAddresses.chessController,
-            governanceAddresses.votingEscrow,
-            0
-        );
-        console.log(`ShareStaking: ${shareStaking.address}`);
-        console.log("NOTE: Please add ShareStaking to ChessSchedule");
 
         const PrimaryMarketRouter = await ethers.getContractFactory("PrimaryMarketRouter");
         const primaryMarketRouter = await PrimaryMarketRouter.deploy(primaryMarket.address);
@@ -224,9 +272,17 @@ task("deploy_fund", "Deploy fund contracts")
             console.log("NOTE: Please call fund.initialize()");
         }
 
-        console.log("Transfering ownership to TimelockController");
+        console.log("Transfering PrimaryMarket's ownership to TimelockController");
         await primaryMarket.transferOwnership(governanceAddresses.timelockController);
-        await fund.transferOwnership(governanceAddresses.timelockController);
+
+        if (upgradeTool === null) {
+            console.log("Transfering Fund's ownership to TimelockController");
+            await fund.transferOwnership(governanceAddresses.timelockController);
+        } else {
+            console.log("Transfering UpgradeTool's ownership to TimelockController");
+            await upgradeTool.transferOwnership(governanceAddresses.timelockController);
+            console.log("NOTE: Please transfer Fund's ownership to UpgradeTool before the upgrade");
+        }
 
         const controllerBallot = await ethers.getContractAt(
             "ControllerBallot",
@@ -256,6 +312,7 @@ task("deploy_fund", "Deploy fund contracts")
             primaryMarket: primaryMarket.address,
             primaryMarketRouter: primaryMarketRouter.address,
             shareStaking: shareStaking.address,
+            upgradeTool: upgradeTool === null ? "" : upgradeTool.address,
         };
         saveAddressFile(hre, `fund_${underlyingSymbol.toLowerCase()}`, addresses);
     });
