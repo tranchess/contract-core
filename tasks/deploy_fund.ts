@@ -281,7 +281,10 @@ task("deploy_fund", "Deploy fund contracts")
         } else {
             console.log("Transfering UpgradeTool's ownership to TimelockController");
             await upgradeTool.transferOwnership(governanceAddresses.timelockController);
-            console.log("NOTE: Please transfer Fund's ownership to UpgradeTool before the upgrade");
+            console.log("Proposing primary market update");
+            await fund.proposePrimaryMarketUpdate(primaryMarket.address);
+            console.log("Transfering Fund's ownership to UpgradeTool");
+            await fund.transferOwnership(upgradeTool.address);
         }
 
         const controllerBallot = await ethers.getContractAt(
