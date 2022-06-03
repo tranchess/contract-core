@@ -9,6 +9,7 @@ import "./tasks/deploy_bsc_staking_strategy";
 import "./tasks/deploy_chess_controller_impl";
 import "./tasks/deploy_chess_schedule_impl";
 import "./tasks/deploy_controller_ballot";
+import "./tasks/deploy_exchange_impl";
 import "./tasks/deploy_fee_distributor";
 import "./tasks/deploy_fund";
 import "./tasks/deploy_governance";

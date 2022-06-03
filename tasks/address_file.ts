@@ -1,6 +1,7 @@
 import fs = require("fs");
 import path = require("path");
 import { strict as assert } from "assert";
+import { questionInt } from "readline-sync";
 import { execSync } from "child_process";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
@@ -80,13 +81,42 @@ export function listAddressFile(directory: string, module: string): string[] {
 
 export function loadAddressFile<T extends Addresses>(
     hre: HardhatRuntimeEnvironment,
-    module: string
+    module: string,
+    interactive = false
 ): T {
     const dir = getAddressDir(hre);
     const candidates = listAddressFile(dir, module);
-    assert.ok(candidates.length > 0, `No address file of module '${module}' is found`);
-    assert.ok(candidates.length === 1, `Multiple address files of module '${module}' are found`);
-    const [filename] = candidates;
+    let filename: string;
+    if (interactive) {
+        while (true) {
+            // Ask user to select an address file
+            console.log();
+            console.table(
+                candidates.reduce(
+                    (map, f, index) => ((map[index + 1] = f), map),
+                    {} as { [key: number]: string }
+                )
+            );
+            const index = questionInt(
+                `Please choose an address file of module '${module}' [${candidates.length}]:`,
+                {
+                    defaultInput: candidates.length.toString(),
+                }
+            );
+            if (index > 0 && index <= candidates.length) {
+                filename = candidates[index - 1];
+                break;
+            }
+            console.log("Error: index out of range");
+        }
+    } else {
+        assert.ok(candidates.length > 0, `No address file of module '${module}' is found`);
+        assert.ok(
+            candidates.length === 1,
+            `Multiple address files of module '${module}' are found`
+        );
+        filename = candidates[0];
+    }
     const addresses: T = JSON.parse(fs.readFileSync(path.join(dir, filename), "utf-8"));
     assert.ok(addresses.time, `Malformed address file '${filename}'`);
     assert.ok(addresses.gitVersion, `Malformed address file '${filename}'`);
