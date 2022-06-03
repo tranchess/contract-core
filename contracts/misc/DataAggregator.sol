@@ -57,7 +57,9 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         uint256 upperRebalanceThreshold;
         uint256 lowerRebalanceThreshold;
         uint256 splitRatio;
-        uint256 lastTwap;
+        uint256 latestUnderlyingPrice;
+        uint256 navB;
+        uint256 navR;
         uint256 currentInterestRate;
         FundV3.Rebalance lastRebalance;
     }
@@ -136,6 +138,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
 
     struct FundAccountAllowanceData {
         uint256 primaryMarketRouterUnderlying;
+        uint256 primaryMarketRouterTrancheQ;
         uint256 swapRouterUnderlying;
         uint256 swapRouterTrancheQ;
         uint256 swapRouterTrancheB;
@@ -326,6 +329,11 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             account,
             address(primaryMarketRouter)
         );
+        data.account.allowance.primaryMarketRouterTrancheQ = fund.trancheAllowance(
+            TRANCHE_Q,
+            account,
+            address(primaryMarketRouter)
+        );
         data.account.allowance.swapRouterUnderlying = underlyingToken.allowance(
             account,
             address(swapRouter)
@@ -386,21 +394,31 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         data.upperRebalanceThreshold = fund.upperRebalanceThreshold();
         data.lowerRebalanceThreshold = fund.lowerRebalanceThreshold();
         data.splitRatio = fund.splitRatio();
-        uint256 lastEpoch = (block.timestamp / 30 minutes) * 30 minutes;
-        for (uint256 i = 0; i < 48; i++) {
-            // Search for the latest TWAP
-            uint256 twap = twapOracle.getTwap(lastEpoch - i * 30 minutes);
-            if (twap != 0) {
-                data.lastTwap = twap;
-                break;
-            }
-        }
+        data.latestUnderlyingPrice = getLatestPrice(twapOracle);
+        (, data.navB, data.navR) = fund.extrapolateNav(data.latestUnderlyingPrice);
         data.currentInterestRate = fund.historicalInterestRate(
             _endOfWeek(data.currentDay - 1 days)
         );
         data.lastRebalance = fund.getRebalance(
             data.rebalanceSize == 0 ? 0 : data.rebalanceSize - 1
         );
+    }
+
+    function getLatestPrice(ITwapOracleV2 twapOracle) public view returns (uint256) {
+        (bool success, bytes memory encodedPrice) =
+            address(twapOracle).staticcall(abi.encodeWithSignature("getLatest()"));
+        if (success) {
+            return abi.decode(encodedPrice, (uint256));
+        } else {
+            uint256 lastEpoch = (block.timestamp / 30 minutes) * 30 minutes;
+            for (uint256 i = 0; i < 48; i++) {
+                // Search for the latest TWAP
+                uint256 twap = twapOracle.getTwap(lastEpoch - i * 30 minutes);
+                if (twap != 0) {
+                    return twap;
+                }
+            }
+        }
     }
 
     function getPrimaryMarketData(PrimaryMarketV3 primaryMarket)
