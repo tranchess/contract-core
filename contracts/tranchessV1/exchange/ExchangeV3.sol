@@ -438,10 +438,7 @@ contract ExchangeV3 is ExchangeRoles, StakingV3, ProxyUtility {
         OrderQueue storage orderQueue = bids[version][tranche][pdLevel];
         Order storage order = orderQueue.list[index];
         address maker = order.maker;
-        // Bid orders can be canceled by anyone after the upgrade
-        if (block.timestamp < upgradeTimestamp) {
-            require(maker == msg.sender, "Maker address mismatched");
-        }
+        require(maker == msg.sender, "Maker address mismatched");
 
         uint256 fillable = order.fillable;
         emit BidOrderCanceled(maker, tranche, pdLevel, order.amount, version, index, fillable);

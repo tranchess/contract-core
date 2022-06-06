@@ -523,25 +523,6 @@ describe("Exchange upgrade V2 to V3", function () {
             );
         });
 
-        it("Should allow bid orders to be canceled by others", async function () {
-            await upgradeToV3();
-            await advanceBlockAtTime(upgradeEpoch);
-            // Canceled by self
-            await expect(() => exchange.cancelBid(0, TRANCHE_A, 41, 1)).to.changeTokenBalances(
-                usdc,
-                [user1, exchange],
-                [BID_1_PD_0.div(USDC_TO_ETHER), BID_1_PD_0.div(USDC_TO_ETHER).mul(-1)]
-            );
-            // Canceled by other
-            await expect(() =>
-                exchange.connect(user2).cancelBid(0, TRANCHE_B, 41, 1)
-            ).to.changeTokenBalances(
-                usdc,
-                [user1, exchange],
-                [BID_1_PD_0.div(USDC_TO_ETHER), BID_1_PD_0.div(USDC_TO_ETHER).mul(-1)]
-            );
-        });
-
         it("Should reject deposits", async function () {
             await upgradeToV3();
             await advanceBlockAtTime(upgradeEpoch);
