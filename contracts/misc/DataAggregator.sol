@@ -395,10 +395,10 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         data.lowerRebalanceThreshold = fund.lowerRebalanceThreshold();
         data.splitRatio = fund.splitRatio();
         data.latestUnderlyingPrice = getLatestPrice(twapOracle);
-        (, data.navB, data.navR) = fund.extrapolateNav(data.latestUnderlyingPrice);
-        data.currentInterestRate = fund.historicalInterestRate(
-            _endOfWeek(data.currentDay - 1 days)
-        );
+        if (data.splitRatio != 0) {
+            (, data.navB, data.navR) = fund.extrapolateNav(data.latestUnderlyingPrice);
+            data.currentInterestRate = fund.historicalInterestRate(data.currentDay - 1 days);
+        }
         data.lastRebalance = fund.getRebalance(
             data.rebalanceSize == 0 ? 0 : data.rebalanceSize - 1
         );
