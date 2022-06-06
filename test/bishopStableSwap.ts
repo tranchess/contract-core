@@ -7,7 +7,9 @@ const { parseEther, parseUnits } = ethers.utils;
 const parseUsdc = (value: string) => parseUnits(value, 6);
 import { deployMockForName } from "./mock";
 import {
+    TRANCHE_Q,
     TRANCHE_B,
+    TRANCHE_R,
     DAY,
     WEEK,
     FixtureWalletMap,
@@ -1302,6 +1304,99 @@ describe("BishopStableSwap", function () {
                 await expect(callBuy(outQ, inUsdc.sub(1))).to.be.revertedWith("Excessive input");
                 await callBuy(outQ, inUsdc);
             });
+        });
+    });
+
+    describe("Rebalance", function () {
+        const excessiveQ = parseEther("1");
+        let primaryMarket: MockContract;
+
+        this.beforeEach(async function () {
+            primaryMarket = await deployMockForName(owner, "IPrimaryMarketV3");
+            await fund.mock.getRebalanceSize.returns(1);
+            await fund.mock.primaryMarket.returns(primaryMarket.address);
+        });
+
+        it("Should handle lower rebalance with less BISHOP after split", async function () {
+            const afterSplitB = INIT_B.div(4);
+            const splittedB = INIT_B.div(8);
+            const afterRebalanceQuote = INIT_USDC.mul(afterSplitB.add(splittedB)).div(INIT_B);
+            await fund.mock.batchRebalance
+                .withArgs(0, INIT_B, 0, 0, 1)
+                .returns(excessiveQ, afterSplitB, 0);
+            await fund.mock.trancheTransfer
+                .withArgs(TRANCHE_R, lpToken.address, splittedB, 1)
+                .returns();
+            await fund.mock.trancheBalanceOf
+                .withArgs(TRANCHE_B, stableSwap.address)
+                .returns(afterSplitB.add(splittedB));
+            await primaryMarket.mock.getSplit.returns(splittedB);
+            await primaryMarket.mock.split
+                .withArgs(stableSwap.address, excessiveQ, 1)
+                .returns(splittedB);
+            await expect(stableSwap.sync())
+                .to.emit(stableSwap, "Rebalanced")
+                .withArgs(afterSplitB.add(splittedB), afterRebalanceQuote, 1);
+            const dist1 = await lpToken.distributions(1);
+            const totalSupply1 = await lpToken.distributionTotalSupplies(1);
+            expect(dist1.amountQ).to.equal(0);
+            expect(dist1.amountB).to.equal(0);
+            expect(dist1.amountR).to.equal(splittedB);
+            expect(dist1.quoteAmount).to.equal(INIT_USDC.sub(afterRebalanceQuote));
+            expect(totalSupply1).to.equal(await lpToken.totalSupply());
+        });
+
+        it("Should handle lower rebalance with more BISHOP after split", async function () {
+            const afterSplitB = INIT_B.div(8);
+            const splittedB = INIT_B;
+            await fund.mock.batchRebalance
+                .withArgs(0, INIT_B, 0, 0, 1)
+                .returns(excessiveQ, afterSplitB, 0);
+            await fund.mock.trancheTransfer
+                .withArgs(TRANCHE_B, lpToken.address, afterSplitB.add(splittedB).sub(INIT_B), 1)
+                .returns();
+            await fund.mock.trancheTransfer
+                .withArgs(TRANCHE_R, lpToken.address, splittedB, 1)
+                .returns();
+            await fund.mock.trancheBalanceOf
+                .withArgs(TRANCHE_B, stableSwap.address)
+                .returns(afterSplitB.add(splittedB));
+            await primaryMarket.mock.getSplit.returns(splittedB);
+            await primaryMarket.mock.split
+                .withArgs(stableSwap.address, excessiveQ, 1)
+                .returns(splittedB);
+            await expect(stableSwap.sync())
+                .to.emit(stableSwap, "Rebalanced")
+                .withArgs(INIT_B, INIT_USDC, 1);
+            const dist1 = await lpToken.distributions(1);
+            const totalSupply1 = await lpToken.distributionTotalSupplies(1);
+            expect(dist1.amountQ).to.equal(0);
+            expect(dist1.amountB).to.equal(afterSplitB.add(splittedB).sub(INIT_B));
+            expect(dist1.amountR).to.equal(splittedB);
+            expect(dist1.quoteAmount).to.equal(0);
+            expect(totalSupply1).to.equal(await lpToken.totalSupply());
+        });
+
+        it("Should handle upper rebalance", async function () {
+            await fund.mock.batchRebalance
+                .withArgs(0, INIT_B, 0, 0, 1)
+                .returns(excessiveQ, INIT_B, 0);
+            await fund.mock.trancheTransfer
+                .withArgs(TRANCHE_Q, lpToken.address, excessiveQ, 1)
+                .returns();
+            await fund.mock.trancheBalanceOf
+                .withArgs(TRANCHE_B, stableSwap.address)
+                .returns(INIT_B);
+            await expect(stableSwap.sync())
+                .to.emit(stableSwap, "Rebalanced")
+                .withArgs(INIT_B, INIT_USDC, 1);
+            const dist1 = await lpToken.distributions(1);
+            const totalSupply1 = await lpToken.distributionTotalSupplies(1);
+            expect(dist1.amountQ).to.equal(excessiveQ);
+            expect(dist1.amountB).to.equal(0);
+            expect(dist1.amountR).to.equal(0);
+            expect(dist1.quoteAmount).to.equal(0);
+            expect(totalSupply1).to.equal(await lpToken.totalSupply());
         });
     });
 });
