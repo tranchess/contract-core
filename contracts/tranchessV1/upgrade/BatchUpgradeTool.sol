@@ -10,8 +10,21 @@ import "./UpgradeTool.sol";
 contract BatchUpgradeTool {
     using SafeMath for uint256;
 
-    /// @dev Each value of `encodedEpochs` encodes an exchange index (32 bits),
-    ///      a maker/taker flag (32 bits, 0 for maker, 1 for taker) and the epoch timestamp.
+    /// @dev `encodedData` consists of two types of data:
+    ///      - unsettled epochs
+    ///      - bid orders
+    //       Unsettled epochs are encoded as follows:
+    //       Bit  255       | 0 (constant)
+    //       Bit [224, 228) | exchangeIndex
+    //       Bit 192        | 0 (maker), 1(taker)
+    //       Bit [0, 64)    | epoch
+    //       Bid orders are encoded as follows:
+    //       Bit  255       | 1 (constant)
+    //       Bit [224, 228) | exchangeIndex
+    //       Bit [76, 80)   | version
+    //       Bit [72, 76)   | tranche
+    //       Bit [64, 72)   | pdLevel
+    //       Bit [0, 64)    | index
     /// @return tokenAmounts An array of (upgradeTools.length * 3) values, containing the amount
     ///         of three tokens upgraded for each Fund
     /// @return underlyingAmounts An array of (oldPrimaryMarkets.length + oldWrappedPrimaryMarkets.length)
@@ -46,21 +59,6 @@ contract BatchUpgradeTool {
                 .claimAndUnwrap(account);
         }
 
-        /// @dev `encodedData` contains two types of data:
-        ///      - unsettled epochs
-        ///      - bid orders
-        //       Unsettled epochs are encoded as follows:
-        //       Bit  255       | 0 (constant)
-        //       Bit [224, 228) | exchangeIndex
-        //       Bit 192        | 0 (maker), 1(taker)
-        //       Bit [0, 64)    | epoch
-        //       Bid orders are encoded as follows:
-        //       Bit  255       | 1 (constant)
-        //       Bit [224, 228) | exchangeIndex
-        //       Bit [76, 80)   | version
-        //       Bit [72, 76)   | tranche
-        //       Bit [64, 72)   | pdLevel
-        //       Bit [0, 64)    | index
         for (uint256 i = 0; i < encodedData.length; i++) {
             uint256 encodedDatum = encodedData[i];
             uint256 exchangeIndex = (encodedDatum >> 224) & 0xF;
