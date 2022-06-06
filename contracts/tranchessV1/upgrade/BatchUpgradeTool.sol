@@ -4,18 +4,27 @@ pragma solidity >=0.6.10 <0.8.0;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
 import "../interfaces/IPrimaryMarketV2.sol";
-import "../exchange/Exchange.sol";
+import "../exchange/ExchangeV3.sol";
 import "./UpgradeTool.sol";
 
 contract BatchUpgradeTool {
     using SafeMath for uint256;
 
-    uint256 private constant ENCODED_EXCHANGE_BIT = 224;
-    uint256 private constant ENCODED_MAKER_BIT = 192;
-    uint256 private constant ENCODED_EPOCH_MASK = 2**64 - 1;
-
-    /// @dev Each value of `encodedEpochs` encodes an exchange index (32 bits),
-    ///      a maker/taker flag (32 bits, 0 for maker, 1 for taker) and the epoch timestamp.
+    /// @dev `encodedData` consists of two types of data:
+    ///      - unsettled epochs
+    ///      - bid orders
+    //       Unsettled epochs are encoded as follows:
+    //       Bit  255       | 0 (constant)
+    //       Bit [224, 228) | exchangeIndex
+    //       Bit 192        | 0 (maker), 1(taker)
+    //       Bit [0, 64)    | epoch
+    //       Bid orders are encoded as follows:
+    //       Bit  255       | 1 (constant)
+    //       Bit [224, 228) | exchangeIndex
+    //       Bit [76, 80)   | version
+    //       Bit [72, 76)   | tranche
+    //       Bit [64, 72)   | pdLevel
+    //       Bit [0, 64)    | index
     /// @return tokenAmounts An array of (upgradeTools.length * 3) values, containing the amount
     ///         of three tokens upgraded for each Fund
     /// @return underlyingAmounts An array of (oldPrimaryMarkets.length + oldWrappedPrimaryMarkets.length)
@@ -26,7 +35,7 @@ contract BatchUpgradeTool {
         address[] calldata oldPrimaryMarkets,
         address[] calldata oldWrappedPrimaryMarkets,
         address[] calldata upgradeTools,
-        uint256[] calldata encodedEpochs,
+        uint256[] calldata encodedData,
         address account
     )
         external
@@ -50,16 +59,26 @@ contract BatchUpgradeTool {
                 .claimAndUnwrap(account);
         }
 
-        for (uint256 i = 0; i < encodedEpochs.length; i++) {
-            uint256 encodedEpoch = encodedEpochs[i];
-            uint256 exchangeIndex = encodedEpoch >> ENCODED_EXCHANGE_BIT;
-            Exchange exchange =
-                Exchange(address(UpgradeTool(upgradeTools[exchangeIndex]).oldExchange()));
-            uint256 epoch = encodedEpoch & ENCODED_EPOCH_MASK;
-            (, , , uint256 quoteAmount) =
-                ((encodedEpoch >> ENCODED_MAKER_BIT) & 0x1 == 0)
+        for (uint256 i = 0; i < encodedData.length; i++) {
+            uint256 encodedDatum = encodedData[i];
+            uint256 exchangeIndex = (encodedDatum >> 224) & 0xF;
+            ExchangeV3 exchange =
+                ExchangeV3(address(UpgradeTool(upgradeTools[exchangeIndex]).oldExchange()));
+            uint256 quoteAmount;
+            if ((encodedDatum >> 255) == 0) {
+                // unsettled epochs
+                uint256 epoch = encodedDatum & 0xFFFFFFFFFFFFFFFF;
+                (, , , quoteAmount) = ((encodedDatum >> 192) & 0x1 == 0)
                     ? exchange.settleMaker(account, epoch)
                     : exchange.settleTaker(account, epoch);
+            } else {
+                // bid orders
+                uint256 version = (encodedDatum >> 76) & 0xF;
+                uint256 tranche = (encodedDatum >> 72) & 0xF;
+                uint256 pdLevel = (encodedDatum >> 64) & 0xFF;
+                uint256 index = encodedDatum & 0xFFFFFFFFFFFFFFFF;
+                quoteAmount = exchange.cancelBid(version, tranche, pdLevel, index);
+            }
             totalQuoteAmount = totalQuoteAmount.add(quoteAmount);
         }
 
