@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
 
 import "../interfaces/IStableSwap.sol";
 import "../interfaces/ILiquidityGauge.sol";
@@ -14,8 +13,9 @@ import "../interfaces/IWrappedERC20.sol";
 
 import "../utils/SafeDecimalMath.sol";
 import "../utils/AdvancedMath.sol";
+import "../utils/ManagedPausable.sol";
 
-abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable {
+abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPausable {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
@@ -62,6 +62,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
     uint256 private constant MAX_FEE_RATE = 0.5e18;
     uint256 private constant MAX_ADMIN_FEE_RATE = 1e18;
     uint256 private constant MAX_ITERATION = 255;
+    uint256 private constant MINIMUM_LIQUIDITY = 1e3;
 
     address public immutable lpToken;
     IFundV3 public immutable override fund;
@@ -112,6 +113,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
         _updateFeeCollector(feeCollector_);
         _updateFeeRate(feeRate_);
         _updateAdminFeeRate(adminFeeRate_);
+
+        _initializeManagedPausable(msg.sender);
     }
 
     receive() external payable {}
@@ -358,7 +361,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
             _priceOverOracleIntegral += 1e18 * (block.timestamp - _priceOverOracleTimestamp);
             _priceOverOracleTimestamp = block.timestamp;
             uint256 d1 = _getD(newBase, newQuote, ampl, oraclePrice);
-            ILiquidityGauge(lpToken).mint(recipient, d1);
+            ILiquidityGauge(lpToken).mint(address(this), MINIMUM_LIQUIDITY);
+            ILiquidityGauge(lpToken).mint(recipient, d1.sub(MINIMUM_LIQUIDITY));
             emit LiquidityAdded(msg.sender, recipient, newBase, newQuote, d1, 0, 0, oraclePrice);
             return d1;
         }
@@ -731,14 +735,6 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, Pausable 
 
     function updateAdminFeeRate(uint256 newAdminFeeRate) external onlyOwner {
         _updateAdminFeeRate(newAdminFeeRate);
-    }
-
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    function unpause() external onlyOwner {
-        _unpause();
     }
 
     /// @dev Check if the user-specified version is correct.

@@ -9,7 +9,6 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
-import "../utils/ManagedPausable.sol";
 
 import "../interfaces/IFundV3.sol";
 import "../interfaces/IChessController.sol";

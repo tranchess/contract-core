@@ -641,7 +641,7 @@ describe("QueenStableSwap", function () {
     describe("addLiquidity()", function () {
         it("Should mint initial LP tokens", async function () {
             expect(await lpToken.totalSupply()).to.equal(INIT_LP);
-            expect(await lpToken.balanceOf(addr1)).to.equal(INIT_LP);
+            expect(await lpToken.balanceOf(addr1)).to.equal(INIT_LP.sub(1000));
             const [base, quote] = await stableSwap.allBalances();
             expect(base).to.equal(INIT_Q);
             expect(quote).to.equal(INIT_BTC);
@@ -871,10 +871,23 @@ describe("QueenStableSwap", function () {
 
     describe("Empty pool", function () {
         beforeEach(async function () {
-            await fund.mock.trancheTransfer.returns();
-            await stableSwap.removeLiquidity(0, INIT_LP, 0, 0);
-            // Mock the transfer in removeLiquidity
-            await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, stableSwap.address).returns(0);
+            const stableSwapAddress = ethers.utils.getContractAddress({
+                from: owner.address,
+                nonce: (await owner.getTransactionCount("pending")) + 1,
+            });
+            await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, stableSwapAddress).returns(0);
+            const MockToken = await ethers.getContractFactory("MockToken");
+            const lpToken = await MockToken.connect(owner).deploy("LP", "LP", 18);
+            const StableSwap = await ethers.getContractFactory("QueenStableSwap");
+            stableSwap = await StableSwap.connect(owner).deploy(
+                lpToken.address,
+                fund.address,
+                8,
+                AMPL,
+                feeCollector.address,
+                FEE_RATE,
+                ADMIN_FEE_RATE
+            );
         });
 
         it("getCurrentPriceOverOracle() and getCurrentPrice()", async function () {
@@ -964,19 +977,23 @@ describe("QueenStableSwap", function () {
             await stableSwap.sync();
 
             await setNextBlockTime(startTimestamp + 300);
-            await stableSwap.removeLiquidity(0, INIT_LP, 0, 0);
+            await stableSwap.removeLiquidity(0, INIT_LP.sub(1000), 0, 0);
             // Mock the transfer in removeLiquidity
-            await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, stableSwap.address).returns(0);
+            await fund.mock.trancheBalanceOf
+                .withArgs(TRANCHE_Q, stableSwap.address)
+                .returns(INIT_Q.mul(1000).div(INIT_LP));
+            // Effective from t=100 to t=1000
+            const priceOverOracle = await stableSwap.getCurrentPriceOverOracle();
 
             // The following removeLiquidity() does not update the integral. So, the value of
             // price over oracle after sync() is not accumulated.
             await advanceBlockAtTime(startTimestamp + 600);
             expect(await stableSwap.getPriceOverOracleIntegral()).to.equal(
-                startIntegral.add(UNIT.mul(600))
+                startIntegral.add(UNIT.mul(100)).add(priceOverOracle.mul(500))
             );
 
             await addBase(INIT_Q);
-            await addQuote(INIT_BTC.mul(2));
+            await addQuote(INIT_BTC.mul(3));
             await setNextBlockTime(startTimestamp + 1000);
             await stableSwap.addLiquidity(0, addr1);
             // Effective from t=1000 to t=1500
@@ -984,7 +1001,10 @@ describe("QueenStableSwap", function () {
 
             await advanceBlockAtTime(startTimestamp + 1500);
             expect(await stableSwap.getPriceOverOracleIntegral()).to.equal(
-                startIntegral.add(UNIT.mul(1000)).add(priceOverOracle2.mul(500))
+                startIntegral
+                    .add(UNIT.mul(100))
+                    .add(priceOverOracle.mul(900))
+                    .add(priceOverOracle2.mul(500))
             );
         });
     });
