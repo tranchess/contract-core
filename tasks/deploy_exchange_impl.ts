@@ -1,6 +1,13 @@
 import { strict as assert } from "assert";
 import { task } from "hardhat/config";
-import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./address_file";
+import {
+    Addresses,
+    saveAddressFile,
+    getAddressDir,
+    listAddressFile,
+    loadAddressFile,
+    newAddresses,
+} from "./address_file";
 import type { GovernanceAddresses } from "./deploy_governance";
 import type { FundAddresses } from "./deploy_fund";
 import { GOVERNANCE_CONFIG, FUND_CONFIG, EXCHANGE_CONFIG } from "../config";
@@ -25,17 +32,25 @@ task("deploy_exchange_impl", "Deploy Exchange implementation contract")
         assert.match(underlyingSymbol, /^[a-zA-Z]+$/, "Invalid symbol");
 
         const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
-        console.log("Please choose the old fund");
+        const fundAddressesList = listAddressFile(
+            getAddressDir(hre),
+            `fund_${underlyingSymbol.toLowerCase()}`
+        );
+        assert.strictEqual(
+            fundAddressesList.length,
+            2,
+            "There should be exactly 2 fund address files"
+        );
         const oldFundAddresses = loadAddressFile<FundAddresses>(
             hre,
             `fund_${underlyingSymbol.toLowerCase()}`,
-            true
+            fundAddressesList[0]
         );
         console.log("Please choose the new fund");
         const newFundAddresses = loadAddressFile<FundAddresses>(
             hre,
             `fund_${underlyingSymbol.toLowerCase()}`,
-            true
+            fundAddressesList[1]
         );
 
         const fund = await ethers.getContractAt("Fund", oldFundAddresses.fund);
