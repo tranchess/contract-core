@@ -113,7 +113,7 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     );
     const ControllerBallot = await ethers.getContractFactory("ControllerBallot");
     const controllerBallot = ControllerBallot.attach(controllerBallotAddresses.controllerBallot);
-    // console.log(`ControllerBallot: ${controllerBallot.address}`);
+    console.log(`ControllerBallot: ${controllerBallot.address}`);
 
     await hre.run("deploy_chess_controller_impl", {
         firstUnderlyingSymbol: "NONE",
