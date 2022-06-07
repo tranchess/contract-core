@@ -1,5 +1,6 @@
 import { strict as assert } from "assert";
 import { task } from "hardhat/config";
+import { GOVERNANCE_CONFIG } from "../config";
 import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./address_file";
 import type { GovernanceAddresses } from "./deploy_governance";
 import { updateHreSigner } from "./signers";
@@ -16,10 +17,7 @@ export interface StableSwapAddresses extends Addresses {
     quoteSymbol: string;
     bonus: string;
     bonusSymbol: string;
-    feeDistributorSymbol: string;
     feeDistributor: string;
-    chainlinkAggregator?: string;
-    tradingCurbThreshold?: string;
     swapBonus: string;
     liquidityGauge: string;
     stableSwap: string;
@@ -177,15 +175,22 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
             console.log("Please add LiquidityGauge to ChessSchedule");
         }
 
-        console.log("Transfering ownership to TimelockController");
-        // await swapBonus.transferOwnership(governanceAddresses.timelockController);
-        console.log("NOTE: Please transfer ownership of SwapBonus to Timelock later");
+        console.log("Transfering StableSwap's ownership to TimelockController");
         await stableSwap.transferOwnership(governanceAddresses.timelockController);
+        if (GOVERNANCE_CONFIG.TREASURY) {
+            console.log("Transfering StableSwap's pauser and SwapBonus's ownership to treasury");
+            await stableSwap.transferPauserRole(GOVERNANCE_CONFIG.TREASURY);
+            await swapBonus.transferOwnership(GOVERNANCE_CONFIG.TREASURY);
+        } else {
+            console.log(
+                "NOTE: Please transfer StableSwap's pauser and SwapBonus's ownership to treasury"
+            );
+        }
 
         const addresses: StableSwapAddresses = {
             ...newAddresses(hre),
-            underlyingSymbol,
             kind: kind,
+            underlyingSymbol,
             base: base.address,
             baseSymbol: baseSymbol,
             quote: quote.address,
@@ -193,7 +198,6 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
             bonus: bonus.address,
             bonusSymbol: bonusSymbol,
             feeDistributor: feeDistributorAddresses.feeDistributor,
-            feeDistributorSymbol: bonusSymbol,
             swapBonus: swapBonus.address,
             liquidityGauge: liquidityGauge.address,
             stableSwap: stableSwap.address,
