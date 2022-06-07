@@ -190,7 +190,26 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         address token1;
     }
 
-    string public constant VERSION = "1.2.1";
+    string public constant VERSION = "2.0.0";
+
+    VotingEscrowV2 public immutable votingEscrow;
+    IChessSchedule public immutable chessSchedule;
+    IERC20 public immutable chess;
+    ControllerBallot public immutable controllerBallot;
+    InterestRateBallot public immutable interestRateBallot;
+
+    constructor(
+        VotingEscrowV2 votingEscrow_,
+        IChessSchedule chessSchedule_,
+        ControllerBallot controllerBallot_,
+        InterestRateBallot interestRateBallot_
+    ) public {
+        votingEscrow = votingEscrow_;
+        chessSchedule = chessSchedule_;
+        chess = IERC20(votingEscrow_.token());
+        controllerBallot = controllerBallot_;
+        interestRateBallot = interestRateBallot_;
+    }
 
     /// @dev This function should be call as a "view" function off-chain to get the return value,
     ///      e.g. using `contract.getProtocolData.call()` in web3
@@ -225,11 +244,8 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         address account
     ) public view returns (WalletData memory data) {
         Fund fund = Fund(address(ExchangeV2(exchange).fund()));
-        VotingEscrowV2 votingEscrow =
-            VotingEscrowV2(address(InterestRateBallot(address(fund.ballot())).votingEscrow()));
         IERC20 underlyingToken = IERC20(fund.tokenUnderlying());
         IERC20 quoteToken = IERC20(ExchangeV2(exchange).quoteAssetAddress());
-        IERC20 chessToken = IERC20(votingEscrow.token());
 
         data.balance.nativeCurrency = account.balance;
         data.balance.underlyingToken = underlyingToken.balanceOf(account);
@@ -237,14 +253,14 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         (data.balance.tokenM, data.balance.tokenA, data.balance.tokenB) = fund.allShareBalanceOf(
             account
         );
-        data.balance.chess = chessToken.balanceOf(account);
+        data.balance.chess = chess.balanceOf(account);
 
         data.allowance.primaryMarketUnderlying = underlyingToken.allowance(account, primaryMarket);
         data.allowance.exchange.quoteToken = quoteToken.allowance(account, exchange);
         data.allowance.exchange.tokenM = fund.shareAllowance(TRANCHE_M, account, exchange);
         data.allowance.exchange.tokenA = fund.shareAllowance(TRANCHE_A, account, exchange);
         data.allowance.exchange.tokenB = fund.shareAllowance(TRANCHE_B, account, exchange);
-        data.allowance.votingEscrowChess = chessToken.allowance(account, address(votingEscrow));
+        data.allowance.votingEscrowChess = chess.allowance(account, address(votingEscrow));
     }
 
     function getFundData(
@@ -347,14 +363,8 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         address feeDistributor,
         address account
     ) public returns (GovernanceData memory data) {
-        Fund fund = Fund(address(ExchangeV2(exchange).fund()));
-        VotingEscrowV2 votingEscrow =
-            VotingEscrowV2(address(InterestRateBallot(address(fund.ballot())).votingEscrow()));
-        IERC20 chessToken = IERC20(votingEscrow.token());
-        IChessSchedule chessSchedule = ExchangeV2(exchange).chessSchedule();
-
         uint256 blockCurrentWeek = _endOfWeek(block.timestamp);
-        data.chessTotalSupply = chessToken.totalSupply();
+        data.chessTotalSupply = chess.totalSupply();
         data.chessRate = chessSchedule.getRate(block.timestamp);
         data.nextWeekChessRate = chessSchedule.getRate(block.timestamp + 7 days);
         data.votingEscrow.totalLocked = votingEscrow.totalLocked();
@@ -363,11 +373,10 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
             blockCurrentWeek
         );
         data.votingEscrow.account = votingEscrow.getLockedBalance(account);
-        data.interestRateBallot.tradingWeekTotalSupply = InterestRateBallot(address(fund.ballot()))
-            .totalSupplyAtTimestamp(blockCurrentWeek);
-        data.interestRateBallot.account = InterestRateBallot(address(fund.ballot())).getReceipt(
-            account
+        data.interestRateBallot.tradingWeekTotalSupply = interestRateBallot.totalSupplyAtTimestamp(
+            blockCurrentWeek
         );
+        data.interestRateBallot.account = interestRateBallot.getReceipt(account);
 
         data.controllerBallot = getControllerBallotData(exchange, account);
 
@@ -392,15 +401,11 @@ contract ProtocolDataProvider is ITrancheIndex, CoreUtility {
         }
     }
 
-    function getControllerBallotData(address exchange, address account)
+    function getControllerBallotData(address, address account)
         public
         view
         returns (ControllerBallotData memory data)
     {
-        ChessControllerV4 chessController =
-            ChessControllerV4(address(ExchangeV2(exchange).chessController()));
-        ControllerBallot controllerBallot =
-            ControllerBallot(address(chessController.controllerBallot()));
         data.pools = controllerBallot.getPools();
         data.currentSums = new uint256[](data.pools.length);
         (data.account.amount, data.account.unlockTime) = controllerBallot.userLockedBalances(
