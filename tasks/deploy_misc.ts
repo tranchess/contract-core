@@ -1,6 +1,7 @@
 import { task } from "hardhat/config";
 import { keyInYNStrict } from "readline-sync";
-import { Addresses, saveAddressFile, newAddresses } from "./address_file";
+import { Addresses, saveAddressFile, newAddresses, loadAddressFile } from "./address_file";
+import type { GovernanceAddresses } from "./deploy_governance";
 import { updateHreSigner } from "./signers";
 
 export interface MiscAddresses extends Addresses {
@@ -17,6 +18,7 @@ task("deploy_misc", "Deploy misc contracts interactively")
         const { ethers } = hre;
         await hre.run("compile");
 
+        const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
         const addresses: MiscAddresses = newAddresses(hre);
         if (
             args.deployProtocolDataProvider ||
