@@ -124,7 +124,7 @@ describe("FundV3", function () {
             interestRateBallot.address,
             feeCollector.address,
         ]);
-        await fund.initialize(parseEther("500"), parseEther("1"), parseEther("1"));
+        await fund.initialize(parseEther("500"), parseEther("1"), parseEther("1"), 0);
 
         return {
             wallets: { user1, user2, owner, feeCollector, strategy },
@@ -925,7 +925,7 @@ describe("FundV3", function () {
             f.interestRateBallot.address,
             f.wallets.feeCollector.address,
         ]);
-        await f.fund.initialize(parseEther("500"), parseEther("1"), parseEther("1"));
+        await f.fund.initialize(parseEther("500"), parseEther("1"), parseEther("1"), 0);
         return f;
     }
 

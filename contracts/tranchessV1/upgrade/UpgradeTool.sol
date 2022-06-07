@@ -134,7 +134,8 @@ contract UpgradeTool is
 
     /// @dev This is used by 3rd-party tools to calculate TVL in the SETTLED stage.
     function currentCreatingUnderlying() external view returns (uint256) {
-        return tokenUnderlying.balanceOf(address(this));
+        return
+            stage <= STAGE_SETTLED ? upgradeUnderlying : tokenUnderlying.balanceOf(address(this));
     }
 
     /// @notice As a special TWAP oracle of the old Fund, it returns the same value as the original
@@ -240,10 +241,11 @@ contract UpgradeTool is
         uint256 splitRatio =
             originTwapOracle.getTwap(upgradeTimestamp).divideDecimal(navA.add(navB));
         initialSplitRatio = splitRatio;
-        newFund.initialize(splitRatio, navA, navB);
+        uint256 hotBalance = tokenUnderlying.balanceOf(address(this));
+        newFund.initialize(splitRatio, navA, navB, upgradeUnderlying.sub(hotBalance));
         newFund.transferOwnership(owner());
 
-        tokenUnderlying.safeTransfer(address(newFund), tokenUnderlying.balanceOf(address(this)));
+        tokenUnderlying.safeTransfer(address(newFund), hotBalance);
         newFund.primaryMarketMint(
             TRANCHE_M,
             address(this),
@@ -253,6 +255,11 @@ contract UpgradeTool is
         newFund.primaryMarketMint(TRANCHE_A, address(this), oldFund.shareTotalSupply(TRANCHE_A), 0);
         newFund.primaryMarketMint(TRANCHE_B, address(this), oldFund.shareTotalSupply(TRANCHE_B), 0);
         stage = STAGE_UPGRADED;
+    }
+
+    /// @notice Transfer all underlying tokens back to the old Fund in case of emergency rollback.
+    function rollback() external onlyOwner onlyStage(STAGE_SETTLED) {
+        tokenUnderlying.safeTransfer(address(oldFund), tokenUnderlying.balanceOf(address(this)));
     }
 
     /// @notice Transfer the new fund's ownership back to admin in case that `createNewTokens()`
