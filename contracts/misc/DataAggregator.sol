@@ -289,7 +289,8 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         FundV3 fund = FundV3(address(primaryMarketRouter.fund()));
         data.fund = getFundData(fund);
 
-        PrimaryMarketV3 primaryMarket = PrimaryMarketV3(payable(fund.primaryMarket()));
+        PrimaryMarketV3 primaryMarket =
+            PrimaryMarketV3(payable(address(primaryMarketRouter.primaryMarket())));
         data.primaryMarket = getPrimaryMarketData(primaryMarket);
 
         data.shareStaking = getShareStakingData(shareStaking, data.fund.splitRatio, account);
