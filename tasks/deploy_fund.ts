@@ -1,6 +1,6 @@
 import { strict as assert } from "assert";
 import { task } from "hardhat/config";
-import { endOfWeek } from "../config";
+import { endOfWeek, GOVERNANCE_CONFIG } from "../config";
 import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./address_file";
 import type { GovernanceAddresses } from "./deploy_governance";
 import type { TwapOracleAddresses } from "./deploy_mock_twap_oracle";
@@ -279,8 +279,12 @@ task("deploy_fund", "Deploy fund contracts")
             console.log("Transfering Fund's ownership to TimelockController");
             await fund.transferOwnership(governanceAddresses.timelockController);
         } else {
-            console.log("Transfering UpgradeTool's ownership to TimelockController");
-            await upgradeTool.transferOwnership(governanceAddresses.timelockController);
+            if (GOVERNANCE_CONFIG.TREASURY) {
+                console.log("Transfering UpgradeTool's ownership to treasury");
+                await upgradeTool.transferOwnership(GOVERNANCE_CONFIG.TREASURY);
+            } else {
+                console.log("NOTE: Please transfer UpgradeTool's ownership to treasury");
+            }
             console.log("Proposing primary market update");
             await fund.proposePrimaryMarketUpdate(primaryMarket.address);
             console.log("Transfering Fund's ownership to UpgradeTool");
