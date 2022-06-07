@@ -130,7 +130,7 @@ describe("FlashSwapRouter", function () {
         const primaryMarketRouter = await PrimaryMarketRouter.connect(owner).deploy(
             primaryMarket.address
         );
-        await fund.initialize(INIT_SPLIT_RATIO, parseEther("1"), parseEther("1"));
+        await fund.initialize(INIT_SPLIT_RATIO, parseEther("1"), parseEther("1"), 0);
 
         const chessSchedule = await deployMockForName(owner, "ChessSchedule");
         await chessSchedule.mock.getRate.returns(UNIT);
