@@ -46,7 +46,6 @@ task("deploy_exchange_impl", "Deploy Exchange implementation contract")
             `fund_${underlyingSymbol.toLowerCase()}`,
             fundAddressesList[0]
         );
-        console.log("Please choose the new fund");
         const newFundAddresses = loadAddressFile<FundAddresses>(
             hre,
             `fund_${underlyingSymbol.toLowerCase()}`,
