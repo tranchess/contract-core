@@ -35,7 +35,12 @@ task("deploy_misc", "Deploy misc contracts interactively")
                 keyInYNStrict("Deploy ProtocolDataProvider implementation?", { guide: true }))
         ) {
             const ProtocolDataProvider = await ethers.getContractFactory("ProtocolDataProvider");
-            const protocolDataProvider = await ProtocolDataProvider.deploy();
+            const protocolDataProvider = await ProtocolDataProvider.deploy(
+                governanceAddresses.votingEscrow,
+                governanceAddresses.chessSchedule,
+                governanceAddresses.controllerBallot,
+                governanceAddresses.interestRateBallot
+            );
             console.log(`ProtocolDataProvider: ${protocolDataProvider.address}`);
             addresses.protocolDataProvier = protocolDataProvider.address;
         }

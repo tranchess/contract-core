@@ -219,7 +219,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         uint112 reserve1;
     }
 
-    string public constant VERSION = "1.2.1";
+    string public constant VERSION = "2.0.0";
 
     VotingEscrowV2 public immutable votingEscrow;
     IChessSchedule public immutable chessSchedule;
