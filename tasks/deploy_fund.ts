@@ -267,7 +267,7 @@ task("deploy_fund", "Deploy fund contracts")
             console.log(
                 `Initializing fund with ${fundNewSplitRatio}, ${fundLastNavB}, ${fundLastNavR}`
             );
-            await fund.initialize(fundNewSplitRatio, fundLastNavB, fundLastNavR);
+            await fund.initialize(fundNewSplitRatio, fundLastNavB, fundLastNavR, 0);
         } else {
             console.log("NOTE: Please call fund.initialize()");
         }
