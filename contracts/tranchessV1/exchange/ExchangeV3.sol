@@ -441,6 +441,8 @@ contract ExchangeV3 is ExchangeRoles, StakingV3, ProxyUtility {
         // Bid orders can be canceled by anyone after the upgrade
         if (block.timestamp < upgradeTimestamp) {
             require(maker == msg.sender, "Maker address mismatched");
+        } else {
+            require(maker != address(0), "Maker address mismatched");
         }
 
         fillable = order.fillable;
