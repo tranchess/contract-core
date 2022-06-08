@@ -361,6 +361,18 @@ describe("LiquidityGauge", function () {
             });
         });
 
+        it("Should mint rewards on claimRewards() after checkpoint", async function () {
+            await advanceBlockAtTime(rewardStartTimestamp + 100);
+            await liquidityGauge.claimableRewards(addr1);
+
+            await expect(async () => {
+                await setNextBlockTime(rewardStartTimestamp + 300);
+                await liquidityGauge.claimRewards(addr1);
+            }).to.callMocks({
+                func: chessSchedule.mock.mint.withArgs(addr1, rate1.mul(300)),
+            });
+        });
+
         it("Should calculate rewards according to boosted working balance", async function () {
             await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE);
             await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
@@ -421,6 +433,14 @@ describe("LiquidityGauge", function () {
             expect(await usdc.balanceOf(addr1)).to.equal(rate1.mul(1000));
             await liquidityGauge.claimRewards(addr2);
             expect(await usdc.balanceOf(addr2)).to.equal(rate2.mul(1000));
+        });
+
+        it("Should transfer bonus on claimRewards() after checkpoint", async function () {
+            await advanceBlockAtTime(rewardStartTimestamp + 100);
+            await liquidityGauge.claimableRewards(addr1);
+            await setNextBlockTime(rewardStartTimestamp + 300);
+            await liquidityGauge.claimRewards(addr1);
+            expect(await usdc.balanceOf(addr1)).to.equal(rate1.mul(300));
         });
 
         it("Should calculate rewards according to boosted working balance", async function () {
@@ -559,6 +579,26 @@ describe("LiquidityGauge", function () {
             const amountQ = distQ1.mul(USER1_LP).div(TOTAL_LP);
             const amountB = distB1.mul(USER1_LP).div(TOTAL_LP);
             const amountR = distR1.mul(USER1_LP).div(TOTAL_LP);
+            await expect(() => liquidityGauge.claimRewards(addr1)).to.callMocks(
+                {
+                    func: fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, amountQ, 1),
+                },
+                {
+                    func: fund.mock.trancheTransfer.withArgs(TRANCHE_B, addr1, amountB, 1),
+                },
+                {
+                    func: fund.mock.trancheTransfer.withArgs(TRANCHE_R, addr1, amountR, 1),
+                }
+            );
+            expect(await usdc.balanceOf(addr1)).to.equal(distU1.mul(USER1_LP).div(TOTAL_LP));
+        });
+
+        it("Should transfer tokens on claimRewards() after checkpoint", async function () {
+            await usdc.mint(liquidityGauge.address, parseUsdc("4"));
+            const amountQ = distQ1.mul(USER1_LP).div(TOTAL_LP);
+            const amountB = distB1.mul(USER1_LP).div(TOTAL_LP);
+            const amountR = distR1.mul(USER1_LP).div(TOTAL_LP);
+            await liquidityGauge.claimableRewards(addr1);
             await expect(() => liquidityGauge.claimRewards(addr1)).to.callMocks(
                 {
                     func: fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, amountQ, 1),

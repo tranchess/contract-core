@@ -360,9 +360,6 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
     {
         uint256 version = userVersions[account];
         uint256 newVersion = latestVersion;
-        if (newVersion == 0 || version == newVersion) {
-            return (0, 0, 0, 0);
-        }
 
         // Update per-user state
         Distribution storage userDist = userDistributions[account];
@@ -370,6 +367,9 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         amountB = userDist.amountB;
         amountR = userDist.amountR;
         quoteAmount = userDist.quoteAmount;
+        if (version == newVersion) {
+            return (amountQ, amountB, amountR, quoteAmount);
+        }
         for (uint256 i = version; i < newVersion; i++) {
             if (amountQ != 0 || amountB != 0 || amountR != 0) {
                 (amountQ, amountB, amountR) = fund.doRebalance(amountQ, amountB, amountR, i);
