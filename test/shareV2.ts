@@ -118,7 +118,7 @@ describe("ShareV2", function () {
         const shareR = await Share.connect(owner).deploy("ROOK", "R", fund.address, TRANCHE_R);
 
         await advanceBlockAtTime(startDay);
-        await fund.initialize(SPLIT_RATIO, parseEther("1"), parseEther("1"));
+        await fund.initialize(SPLIT_RATIO, parseEther("1"), parseEther("1"), 0);
         const addr1 = user1.address;
         const addr2 = user2.address;
         await primaryMarket.call(fund, "primaryMarketMint", TRANCHE_Q, addr1, INIT_Q_1, 0);

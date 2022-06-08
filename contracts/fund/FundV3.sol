@@ -193,7 +193,8 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     function initialize(
         uint256 newSplitRatio,
         uint256 lastNavB,
-        uint256 lastNavR
+        uint256 lastNavR,
+        uint256 strategyUnderlying
     ) external onlyOwner {
         require(splitRatio == 0 && currentDay == 0, "Already initialized");
         require(
@@ -209,6 +210,7 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         require(lastDayPrice != 0, "Price not available"); // required to do the first creation
         _historicalNavB[lastDay] = lastNavB;
         _historicalNavR[lastDay] = lastNavR;
+        _strategyUnderlying = strategyUnderlying;
         uint256 lastInterestRate = _updateInterestRate(lastDay);
         historicalInterestRate[lastDay] = lastInterestRate;
         emit Settled(lastDay, lastNavB, lastNavR, lastInterestRate);
