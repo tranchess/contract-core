@@ -154,7 +154,7 @@ task("deploy_fund", "Deploy fund contracts")
 
         const Share = await ethers.getContractFactory("ShareV2");
         const shareQ = await Share.deploy(
-            `Tranchess ${underlyingSymbol} QUEEN`,
+            `TranchessV2 ${underlyingSymbol} QUEEN`,
             `${shareSymbolPrefix}QUEEN`,
             fundAddress,
             0
@@ -162,7 +162,7 @@ task("deploy_fund", "Deploy fund contracts")
         console.log(`ShareQ: ${shareQ.address}`);
 
         const shareB = await Share.deploy(
-            `Tranchess ${underlyingSymbol} BISHOP`,
+            `TranchessV2 ${underlyingSymbol} BISHOP`,
             `${shareSymbolPrefix}BISHOP`,
             fundAddress,
             1
@@ -170,7 +170,7 @@ task("deploy_fund", "Deploy fund contracts")
         console.log(`ShareB: ${shareB.address}`);
 
         const shareR = await Share.deploy(
-            `Tranchess ${underlyingSymbol} ROOK`,
+            `TranchessV2 ${underlyingSymbol} ROOK`,
             `${shareSymbolPrefix}ROOK`,
             fundAddress,
             2
