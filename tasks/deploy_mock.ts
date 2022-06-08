@@ -1,17 +1,16 @@
-import { strict as assert } from "assert";
 import { task } from "hardhat/config";
-import { keyInYNStrict, questionFloat } from "readline-sync";
+import { keyInYNStrict } from "readline-sync";
 import { Addresses, saveAddressFile, newAddresses } from "./address_file";
 import { updateHreSigner } from "./signers";
 
 export interface MockAddresses extends Addresses {
-    mockTwapOracle: string;
     mockAprOracle: string;
     mockVToken: string;
     mockBtc: string;
     mockEth: string;
     mockWbnb: string;
     mockUsdc: string;
+    mockBusd: string;
     mockUniswapV2Pair: string;
 }
 
@@ -25,24 +24,6 @@ task("deploy_mock", "Deploy mock contracts")
         const { deployMockContract } = waffle;
         await hre.run("compile");
         const [deployer] = await ethers.getSigners();
-
-        let mockTwapOracleAddress = "";
-        if (args.silent || keyInYNStrict("Deploy MockTwapOracle?", { guide: true })) {
-            if (args.silent) {
-                assert.ok(args.initialTwap, "Please specify --initialTwap");
-            } else if (args.initialTwap === "") {
-                args.initialTwap = questionFloat("Please enter the initial TWAP: ").toString();
-            }
-            const initialTwap = parseEther(args.initialTwap);
-            const MockTwapOracle = await ethers.getContractFactory("MockTwapOracle");
-            const mockTwapOracle = await MockTwapOracle.deploy(
-                initialTwap,
-                ethers.constants.AddressZero,
-                0
-            );
-            console.log(`MockTwapOracle: ${mockTwapOracle.address}`);
-            mockTwapOracleAddress = mockTwapOracle.address;
-        }
 
         let mockAprOracleAddress = "";
         if (args.silent || keyInYNStrict("Deploy MockAprOracle?", { guide: true })) {
@@ -110,6 +91,14 @@ task("deploy_mock", "Deploy mock contracts")
             mockUsdcAddress = mockUsdc.address;
             await mockUsdc.mint(deployer.address, 1000000e6);
         }
+        let mockBusdAddress = "";
+        if (args.silent || keyInYNStrict("Deploy MockBusd?", { guide: true })) {
+            const MockToken = await ethers.getContractFactory("MockToken");
+            const mockBusd = await MockToken.deploy("Mock BUSD", "BUSD", 6);
+            console.log(`MockBusd: ${mockBusd.address}`);
+            mockBusdAddress = mockBusd.address;
+            await mockBusd.mint(deployer.address, 1000000e6);
+        }
 
         let mockUniswapV2PairAddress = "";
         if (args.silent || keyInYNStrict("Deploy MockUniswapV2Pair?", { guide: true })) {
@@ -130,13 +119,13 @@ task("deploy_mock", "Deploy mock contracts")
 
         const addresses: MockAddresses = {
             ...newAddresses(hre),
-            mockTwapOracle: mockTwapOracleAddress,
             mockAprOracle: mockAprOracleAddress,
             mockVToken: mockVTokenAddress,
             mockBtc: mockBtcAddress,
             mockEth: mockEthAddress,
             mockWbnb: mockWbnbAddress,
             mockUsdc: mockUsdcAddress,
+            mockBusd: mockBusdAddress,
             mockUniswapV2Pair: mockUniswapV2PairAddress,
         };
         saveAddressFile(hre, "mock", addresses);

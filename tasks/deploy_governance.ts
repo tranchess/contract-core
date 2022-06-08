@@ -121,9 +121,9 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     });
     const chessControllerImplAddresses = loadAddressFile<ChessControllerImplAddresses>(
         hre,
-        "chess_controller_v4_impl"
+        "chess_controller_v5_impl"
     );
-    const ChessController = await ethers.getContractFactory("ChessControllerV4");
+    const ChessController = await ethers.getContractFactory("ChessControllerV5");
     const chessControllerImpl = ChessController.attach(
         chessControllerImplAddresses.chessControllerImpl
     );

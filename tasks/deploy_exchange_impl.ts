@@ -1,6 +1,13 @@
 import { strict as assert } from "assert";
 import { task } from "hardhat/config";
-import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./address_file";
+import {
+    Addresses,
+    saveAddressFile,
+    getAddressDir,
+    listAddressFile,
+    loadAddressFile,
+    newAddresses,
+} from "./address_file";
 import type { GovernanceAddresses } from "./deploy_governance";
 import type { FundAddresses } from "./deploy_fund";
 import { GOVERNANCE_CONFIG, FUND_CONFIG, EXCHANGE_CONFIG } from "../config";
@@ -25,18 +32,33 @@ task("deploy_exchange_impl", "Deploy Exchange implementation contract")
         assert.match(underlyingSymbol, /^[a-zA-Z]+$/, "Invalid symbol");
 
         const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
-        const fundAddresses = loadAddressFile<FundAddresses>(
-            hre,
+        const fundAddressesList = listAddressFile(
+            getAddressDir(hre),
             `fund_${underlyingSymbol.toLowerCase()}`
         );
+        assert.strictEqual(
+            fundAddressesList.length,
+            2,
+            "There should be exactly 2 fund address files"
+        );
+        const oldFundAddresses = loadAddressFile<FundAddresses>(
+            hre,
+            `fund_${underlyingSymbol.toLowerCase()}`,
+            fundAddressesList[0]
+        );
+        const newFundAddresses = loadAddressFile<FundAddresses>(
+            hre,
+            `fund_${underlyingSymbol.toLowerCase()}`,
+            fundAddressesList[1]
+        );
 
-        const fund = await ethers.getContractAt("Fund", fundAddresses.fund);
+        const fund = await ethers.getContractAt("Fund", oldFundAddresses.fund);
         const underlyingToken = await ethers.getContractAt("ERC20", await fund.tokenUnderlying());
         assert.strictEqual(underlyingSymbol, await underlyingToken.symbol());
-        const quoteToken = await ethers.getContractAt("ERC20", fundAddresses.quote);
+        const quoteToken = await ethers.getContractAt("ERC20", oldFundAddresses.quote);
         const quoteSymbol: string = await quoteToken.symbol();
         const quoteDecimals = await quoteToken.decimals();
-        const Exchange = await ethers.getContractFactory("ExchangeV2");
+        const Exchange = await ethers.getContractFactory("ExchangeV3");
         const exchangeImpl = await Exchange.deploy(
             fund.address,
             governanceAddresses.chessSchedule,
@@ -46,9 +68,9 @@ task("deploy_exchange_impl", "Deploy Exchange implementation contract")
             governanceAddresses.votingEscrow,
             parseEther(EXCHANGE_CONFIG.MIN_ORDER_AMOUNT),
             parseEther(EXCHANGE_CONFIG.MIN_ORDER_AMOUNT),
-            parseEther(EXCHANGE_CONFIG.MAKER_REQUIREMENT),
             FUND_CONFIG.GUARDED_LAUNCH ? GOVERNANCE_CONFIG.LAUNCH_TIMESTAMP : 0,
-            parseEther(EXCHANGE_CONFIG.GUARDED_LAUNCH_MIN_ORDER_AMOUNT)
+            parseEther(EXCHANGE_CONFIG.GUARDED_LAUNCH_MIN_ORDER_AMOUNT),
+            newFundAddresses.upgradeTool
         );
         console.log(`Exchange implementation: ${exchangeImpl.address}`);
 
@@ -62,5 +84,5 @@ task("deploy_exchange_impl", "Deploy Exchange implementation contract")
             fund: fund.address,
             exchangeImpl: exchangeImpl.address,
         };
-        saveAddressFile(hre, `exchange_v2_impl_${underlyingSymbol.toLowerCase()}`, addresses);
+        saveAddressFile(hre, `exchange_v3_impl_${underlyingSymbol.toLowerCase()}`, addresses);
     });
