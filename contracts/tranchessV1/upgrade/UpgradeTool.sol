@@ -278,14 +278,7 @@ contract UpgradeTool is
             uint256 claimedRewards
         )
     {
-        if (Address.isContract(account)) {
-            // It is unsafe to upgrade for a smart contract. Such operation is only allowed by
-            // the contract itself or the owner.
-            require(
-                msg.sender == account || msg.sender == owner(),
-                "Smart contracts can only be upgraded by itself or admin"
-            );
-        }
+        require(msg.sender == account || msg.sender == owner(), "Only self or owner");
 
         // Burn unstaked old tokens
         (uint256 oldBalanceM, uint256 oldBalanceA, uint256 oldBalanceB) =

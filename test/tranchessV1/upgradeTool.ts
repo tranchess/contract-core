@@ -522,13 +522,13 @@ describe("UpgradeTool", function () {
     });
 
     describe("Stage UPGRADED", function () {
-        it("Should not upgrade shares in smart contracts", async function () {
+        it("Should revert if not upgraded by self or owner", async function () {
             await goToStageUpgraded();
             await expect(upgradeTool.protocolUpgrade(oldPrimaryMarket.address)).to.be.revertedWith(
-                "Smart contracts can only be upgraded by itself or admin"
+                "Only self or owner"
             );
-            await expect(upgradeTool.protocolUpgrade(upgradeTool.address)).to.be.revertedWith(
-                "Smart contracts can only be upgraded by itself or admin"
+            await expect(upgradeTool.protocolUpgrade(addr2)).to.be.revertedWith(
+                "Only self or owner"
             );
         });
 
@@ -540,14 +540,14 @@ describe("UpgradeTool", function () {
             expect(ret1.amountA).to.equal(parseEther("2000"));
             expect(ret1.amountB).to.equal(parseEther("2000"));
             expect(ret1.claimedRewards).to.equal(0);
-            const ret2 = await upgradeTool.callStatic.protocolUpgrade(addr2);
+            const ret2 = await upgradeTool.connect(user2).callStatic.protocolUpgrade(addr2);
             expect(ret2.amountM).to.equal(0); // User2's creation is not claimed yet
             expect(ret2.amountA).to.equal(0);
             expect(ret2.amountB).to.equal(0);
             expect(ret2.claimedRewards).to.equal(0);
 
             await oldPrimaryMarket.claim(addr2);
-            const ret2ag = await upgradeTool.callStatic.protocolUpgrade(addr2);
+            const ret2ag = await upgradeTool.connect(user2).callStatic.protocolUpgrade(addr2);
             expect(ret2ag.amountM).to.equal(parseEther("2"));
             expect(ret2ag.amountA).to.equal(0);
             expect(ret2ag.amountB).to.equal(0);
@@ -567,7 +567,7 @@ describe("UpgradeTool", function () {
             expect(await oldShareB.balanceOf(upgradeTool.address)).to.equal(parseEther("2000"));
 
             await oldPrimaryMarket.claim(addr2);
-            await upgradeTool.protocolUpgrade(addr2);
+            await upgradeTool.connect(user2).protocolUpgrade(addr2);
             expect(await oldShareM.balanceOf(upgradeTool.address)).to.equal(parseEther("5000"));
             expect(await oldShareA.balanceOf(upgradeTool.address)).to.equal(parseEther("2000"));
             expect(await oldShareB.balanceOf(upgradeTool.address)).to.equal(parseEther("2000"));
@@ -593,7 +593,7 @@ describe("UpgradeTool", function () {
             expect(await newStaking.totalSupply(TRANCHE_B)).to.equal(parseEther("2000"));
 
             await oldPrimaryMarket.claim(addr2);
-            await upgradeTool.protocolUpgrade(addr2);
+            await upgradeTool.connect(user2).protocolUpgrade(addr2);
             expect(await newStaking.trancheBalanceOf(TRANCHE_M, addr2)).to.equal(parseEther("2"));
             expect(await newStaking.trancheBalanceOf(TRANCHE_A, addr2)).to.equal(0);
             expect(await newStaking.trancheBalanceOf(TRANCHE_B, addr2)).to.equal(0);
