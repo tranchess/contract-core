@@ -7,12 +7,14 @@ import { updateHreSigner } from "./signers";
 export interface MiscAddresses extends Addresses {
     protocolDataProvier?: string;
     batchOperationHelper?: string;
+    batchUpgradeTool?: string;
 }
 
 task("deploy_misc", "Deploy misc contracts interactively")
     .addFlag("silent", "Run non-interactively and only deploy contracts specified by --deploy-*")
     .addFlag("deployProtocolDataProvider", "Deploy ProtocolDataProvider without prompt")
     .addFlag("deployBatchOperationHelper", "Deploy BatchOperationHelper without prompt")
+    .addFlag("deployBatchUpgradeTool", "Deploy BatchUpgradeTool without prompt")
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
         const { ethers } = hre;
@@ -44,6 +46,16 @@ task("deploy_misc", "Deploy misc contracts interactively")
             const batchOperationHelper = await BatchOperationHelper.deploy();
             console.log(`BatchOperationHelper: ${batchOperationHelper.address}`);
             addresses.batchOperationHelper = batchOperationHelper.address;
+        }
+        if (
+            args.deployBatchUpgradeTool ||
+            (!args.silent &&
+                keyInYNStrict("Deploy BatchUpgradeTool implementation?", { guide: true }))
+        ) {
+            const BatchUpgradeTool = await ethers.getContractFactory("BatchUpgradeTool");
+            const batchUpgradeTool = await BatchUpgradeTool.deploy();
+            console.log(`BatchUpgradeTool: ${batchUpgradeTool.address}`);
+            addresses.batchUpgradeTool = batchUpgradeTool.address;
         }
         saveAddressFile(hre, "misc", addresses);
     });
