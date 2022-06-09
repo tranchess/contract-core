@@ -4,6 +4,7 @@ pragma solidity >=0.6.10 <0.8.0;
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
 import "../interfaces/IPrimaryMarketV2.sol";
+import "../fund/PrimaryMarket.sol";
 import "../exchange/ExchangeV3.sol";
 import "./UpgradeTool.sol";
 
@@ -85,6 +86,9 @@ contract BatchUpgradeTool {
         tokenAmounts = new uint256[](upgradeTools.length * 3);
         for (uint256 i = 0; i < upgradeTools.length; i++) {
             UpgradeTool tool = UpgradeTool(upgradeTools[i]);
+            if (address(tool) == address(0)) {
+                continue;
+            }
             uint256 claimedRewards;
             (
                 tokenAmounts[i * 3],
@@ -93,6 +97,142 @@ contract BatchUpgradeTool {
                 claimedRewards
             ) = tool.protocolUpgrade(account);
             totalRewards = totalRewards.add(claimedRewards);
+        }
+    }
+
+    /// @notice Same as `batchProtocolUpgrade` but returns minimal parameters that should be used
+    ///         to call `batchProtocolUpgrade`.
+    function batchProtocolUpgradeParameters(
+        address[] memory oldPrimaryMarkets,
+        address[] memory oldWrappedPrimaryMarkets,
+        address[] memory upgradeTools,
+        uint256[] memory encodedData,
+        address account
+    )
+        external
+        returns (
+            address[] memory,
+            address[] memory,
+            address[] memory,
+            uint256[] memory
+        )
+    {
+        bool[] memory requiredTools = new bool[](upgradeTools.length);
+        _filterPrimaryMarkets(1, oldPrimaryMarkets, upgradeTools, requiredTools, account);
+        _filterPrimaryMarkets(2, oldWrappedPrimaryMarkets, upgradeTools, requiredTools, account);
+        _filterEncodedData(encodedData, upgradeTools, requiredTools, account);
+        _filterUpgradeTools(upgradeTools, requiredTools, account);
+        return (oldPrimaryMarkets, oldWrappedPrimaryMarkets, upgradeTools, encodedData);
+    }
+
+    function _filterPrimaryMarkets(
+        uint256 fundVersion,
+        address[] memory primaryMarkets,
+        address[] memory upgradeTools,
+        bool[] memory requiredTools,
+        address account
+    ) private {
+        for (uint256 i = 0; i < primaryMarkets.length; i++) {
+            (uint256 shares, uint256 underlying) =
+                fundVersion == 1
+                    ? IPrimaryMarket(primaryMarkets[i]).claim(account)
+                    : IPrimaryMarketV2(primaryMarkets[i]).claimAndUnwrap(account);
+            if (shares | underlying == 0) {
+                primaryMarkets[i] = address(0);
+            } else if (shares != 0) {
+                address tokenUnderlying = PrimaryMarket(primaryMarkets[i]).fund().tokenUnderlying();
+                for (uint256 j = 0; j < upgradeTools.length; j++) {
+                    if (
+                        address(UpgradeTool(upgradeTools[j]).tokenUnderlying()) == tokenUnderlying
+                    ) {
+                        requiredTools[j] = true;
+                        break;
+                    }
+                }
+            }
+        }
+        _packAddressArray(primaryMarkets);
+    }
+
+    function _filterEncodedData(
+        uint256[] memory encodedData,
+        address[] memory upgradeTools,
+        bool[] memory requiredTools,
+        address account
+    ) private {
+        for (uint256 i = 0; i < encodedData.length; i++) {
+            uint256 encodedDatum = encodedData[i];
+            uint256 exchangeIndex = (encodedDatum >> 224) & 0xF;
+            ExchangeV3 exchange =
+                ExchangeV3(address(UpgradeTool(upgradeTools[exchangeIndex]).oldExchange()));
+            if ((encodedDatum >> 255) == 0) {
+                // unsettled epochs
+                uint256 epoch = encodedDatum & 0xFFFFFFFFFFFFFFFF;
+                (uint256 amountM, uint256 amountA, uint256 amountB, uint256 quoteAmount) =
+                    ((encodedDatum >> 192) & 0x1 == 0)
+                        ? exchange.settleMaker(account, epoch)
+                        : exchange.settleTaker(account, epoch);
+                if (amountM | amountA | amountB | quoteAmount == 0) {
+                    encodedData[i] = 0;
+                } else {
+                    requiredTools[exchangeIndex] = true;
+                }
+            } else {
+                // bid orders
+                uint256 version = (encodedDatum >> 76) & 0xF;
+                uint256 tranche = (encodedDatum >> 72) & 0xF;
+                uint256 pdLevel = (encodedDatum >> 64) & 0xFF;
+                uint256 index = encodedDatum & 0xFFFFFFFFFFFFFFFF;
+                (address maker, , ) = exchange.getBidOrder(version, tranche, pdLevel, index);
+                if (maker != account) {
+                    encodedData[i] = 0;
+                } else {
+                    exchange.cancelBid(version, tranche, pdLevel, index);
+                    requiredTools[exchangeIndex] = true;
+                }
+            }
+        }
+        _packUintArray(encodedData);
+    }
+
+    function _filterUpgradeTools(
+        address[] memory upgradeTools,
+        bool[] memory requiredTools,
+        address account
+    ) private {
+        for (uint256 i = 0; i < upgradeTools.length; i++) {
+            UpgradeTool tool = UpgradeTool(upgradeTools[i]);
+            (uint256 r1, uint256 r2, uint256 r3, uint256 r4) = tool.protocolUpgrade(account);
+            if (r1 | r2 | r3 | r4 == 0 && !requiredTools[i]) {
+                upgradeTools[i] = address(0);
+            }
+        }
+        // Do not pack upgradeTools because encodedData has references to it
+    }
+
+    function _packAddressArray(address[] memory array) private pure {
+        uint256 newLength = 0;
+        for (uint256 i = 0; i < array.length; i++) {
+            if (array[i] != address(0)) {
+                array[newLength] = array[i];
+                newLength += 1;
+            }
+        }
+        assembly {
+            mstore(array, newLength)
+        }
+    }
+
+    function _packUintArray(uint256[] memory array) private pure {
+        uint256 newLength = 0;
+        for (uint256 i = 0; i < array.length; i++) {
+            if (array[i] != 0) {
+                array[newLength] = array[i];
+                newLength += 1;
+            }
+        }
+        assembly {
+            mstore(array, newLength)
         }
     }
 }
