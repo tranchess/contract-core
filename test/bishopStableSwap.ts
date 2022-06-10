@@ -1376,17 +1376,17 @@ describe("BishopStableSwap", function () {
                 },
                 {
                     func: fund.mock.trancheTransfer.withArgs(
-                        TRANCHE_R,
+                        TRANCHE_B,
                         lpToken.address,
-                        splittedB,
+                        afterSplitB.add(splittedB).sub(INIT_B),
                         1
                     ),
                 },
                 {
                     func: fund.mock.trancheTransfer.withArgs(
-                        TRANCHE_B,
+                        TRANCHE_R,
                         lpToken.address,
-                        afterSplitB.add(splittedB).sub(INIT_B),
+                        splittedB,
                         1
                     ),
                 }

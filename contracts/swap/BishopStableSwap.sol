@@ -82,7 +82,6 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
             // than before.
             excessiveR = IPrimaryMarketV3(fund.primaryMarket()).getSplit(excessiveQ);
             newBase = newBase.add(excessiveR);
-            excessiveQ = 0;
         }
         if (newBase < oldBaseBalance) {
             // If BISHOP amount is still smaller than before, we remove quote tokens proportionally.
@@ -121,7 +120,16 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
             currentVersion = latestVersion;
             emit Rebalanced(newBase, newQuote, latestVersion);
             if (excessiveQ > 0) {
-                fund.trancheTransfer(TRANCHE_Q, lpToken, excessiveQ, latestVersion);
+                if (excessiveR > 0) {
+                    IPrimaryMarketV3(fund.primaryMarket()).split(
+                        address(this),
+                        excessiveQ,
+                        latestVersion
+                    );
+                    excessiveQ = 0;
+                } else {
+                    fund.trancheTransfer(TRANCHE_Q, lpToken, excessiveQ, latestVersion);
+                }
             }
             if (excessiveB > 0) {
                 fund.trancheTransfer(TRANCHE_B, lpToken, excessiveB, latestVersion);
