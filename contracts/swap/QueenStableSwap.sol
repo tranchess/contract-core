@@ -41,12 +41,13 @@ contract QueenStableSwap is StableSwap, ITrancheIndexV2 {
             uint256 newBase,
             uint256 newQuote,
             uint256 excessiveQ,
-            uint256 splitQ,
+            uint256 excessiveB,
+            uint256 excessiveR,
             uint256 excessiveQuote,
             bool isRebalanced
         )
     {
-        return (baseBalance, quoteBalance, 0, 0, 0, false);
+        return (baseBalance, quoteBalance, 0, 0, 0, 0, false);
     }
 
     function _handleRebalance(uint256)

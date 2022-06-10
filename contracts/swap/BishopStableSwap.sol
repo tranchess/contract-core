@@ -56,13 +56,14 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
             uint256 newBase,
             uint256 newQuote,
             uint256 excessiveQ,
-            uint256 splitQ,
+            uint256 excessiveB,
+            uint256 excessiveR,
             uint256 excessiveQuote,
             bool isRebalanced
         )
     {
         if (latestVersion == currentVersion) {
-            return (baseBalance, quoteBalance, 0, 0, 0, false);
+            return (baseBalance, quoteBalance, 0, 0, 0, 0, false);
         }
         isRebalanced = true;
 
@@ -79,9 +80,8 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
             // We split all QUEEN from rebalance if the amount of BISHOP is smaller than before.
             // In almost all cases, the total amount of BISHOP after the split is still smaller
             // than before.
-            uint256 excessiveR = IPrimaryMarketV3(fund.primaryMarket()).getSplit(excessiveQ);
+            excessiveR = IPrimaryMarketV3(fund.primaryMarket()).getSplit(excessiveQ);
             newBase = newBase.add(excessiveR);
-            splitQ = excessiveQ;
             excessiveQ = 0;
         }
         if (newBase < oldBaseBalance) {
@@ -91,6 +91,7 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
         } else {
             // In most cases when we reach here, the BISHOP amount remains the same (ratioBR = 1).
             newQuote = oldQuoteBalance;
+            excessiveB = newBase - oldBaseBalance;
             newBase = oldBaseBalance;
         }
     }
@@ -101,12 +102,19 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
         returns (uint256 newBase, uint256 newQuote)
     {
         uint256 excessiveQ;
-        uint256 splitQ;
+        uint256 excessiveB;
+        uint256 excessiveR;
         uint256 excessiveQuote;
         bool isRebalanced;
-        (newBase, newQuote, excessiveQ, splitQ, excessiveQuote, isRebalanced) = _getRebalanceResult(
-            latestVersion
-        );
+        (
+            newBase,
+            newQuote,
+            excessiveQ,
+            excessiveB,
+            excessiveR,
+            excessiveQuote,
+            isRebalanced
+        ) = _getRebalanceResult(latestVersion);
         if (isRebalanced) {
             baseBalance = newBase;
             quoteBalance = newQuote;
@@ -115,18 +123,11 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
             if (excessiveQ > 0) {
                 fund.trancheTransfer(TRANCHE_Q, lpToken, excessiveQ, latestVersion);
             }
-            uint256 excessiveR;
-            if (splitQ > 0) {
-                excessiveR = IPrimaryMarketV3(fund.primaryMarket()).split(
-                    address(this),
-                    splitQ,
-                    latestVersion
-                );
-                fund.trancheTransfer(TRANCHE_R, lpToken, excessiveR, latestVersion);
-            }
-            uint256 excessiveB = fund.trancheBalanceOf(TRANCHE_B, address(this)).sub(newBase);
             if (excessiveB > 0) {
                 fund.trancheTransfer(TRANCHE_B, lpToken, excessiveB, latestVersion);
+            }
+            if (excessiveR > 0) {
+                fund.trancheTransfer(TRANCHE_R, lpToken, excessiveR, latestVersion);
             }
             if (excessiveQuote > 0) {
                 IERC20(quoteAddress).safeTransfer(lpToken, excessiveQuote);

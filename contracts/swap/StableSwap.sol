@@ -124,7 +124,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     function allBalances() external view override returns (uint256, uint256) {
-        (uint256 base, uint256 quote, , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
         return (base, quote);
     }
 
@@ -151,12 +151,12 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     function getCurrentD() external view override returns (uint256) {
-        (uint256 base, uint256 quote, , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
         return _getD(base, quote, getAmpl(), getOraclePrice());
     }
 
     function getCurrentPriceOverOracle() public view override returns (uint256) {
-        (uint256 base, uint256 quote, , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
         if (base == 0 || quote == 0) {
             return 1e18;
         }
@@ -172,7 +172,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     ///         value has a different order of magnitude than the ratio of quote amount to base
     ///         amount in a swap.
     function getCurrentPrice() external view override returns (uint256) {
-        (uint256 base, uint256 quote, , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 base, uint256 quote, , , , , ) = _getRebalanceResult(fund.getRebalanceSize());
         uint256 oraclePrice = getOraclePrice();
         if (base == 0 || quote == 0) {
             return oraclePrice;
@@ -190,7 +190,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     function getQuoteOut(uint256 baseIn) external view override returns (uint256 quoteOut) {
-        (uint256 oldBase, uint256 oldQuote, , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 oldBase, uint256 oldQuote, , , , , ) =
+            _getRebalanceResult(fund.getRebalanceSize());
         uint256 newBase = oldBase.add(baseIn);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
@@ -203,7 +204,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     function getQuoteIn(uint256 baseOut) external view override returns (uint256 quoteIn) {
-        (uint256 oldBase, uint256 oldQuote, , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 oldBase, uint256 oldQuote, , , , , ) =
+            _getRebalanceResult(fund.getRebalanceSize());
         uint256 newBase = oldBase.sub(baseOut);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
@@ -217,7 +219,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     function getBaseOut(uint256 quoteIn) external view override returns (uint256 baseOut) {
-        (uint256 oldBase, uint256 oldQuote, , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 oldBase, uint256 oldQuote, , , , , ) =
+            _getRebalanceResult(fund.getRebalanceSize());
         // Round down input after fee
         uint256 quoteInAfterFee = quoteIn.multiplyDecimal(1e18 - feeRate);
         uint256 newQuote = oldQuote.add(quoteInAfterFee);
@@ -230,7 +233,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     function getBaseIn(uint256 quoteOut) external view override returns (uint256 baseIn) {
-        (uint256 oldBase, uint256 oldQuote, , , , ) = _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 oldBase, uint256 oldQuote, , , , , ) =
+            _getRebalanceResult(fund.getRebalanceSize());
         uint256 feeRate_ = feeRate;
         // Round up output before fee
         uint256 quoteOutBeforeFee = quoteOut.mul(1e18).add(1e18 - feeRate_ - 1) / (1e18 - feeRate_);
@@ -745,7 +749,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     /// @return newBase Amount of base tokens after rebalance
     /// @return newQuote Amount of quote tokens after rebalance
     /// @return excessiveQ Amount of QUEEN that should be distributed to LP holders due to rebalance
-    /// @return splitQ Amount of QUEEN that should be split and distributed to LP holders due to rebalance
+    /// @return excessiveB Amount of BISHOP that should be distributed to LP holders due to rebalance
+    /// @return excessiveR Amount of ROOK that should be distributed to LP holders due to rebalance
     /// @return excessiveQuote Amount of quote tokens that should be distributed to LP holders due to rebalance
     /// @return isRebalanced Whether the stored base and quote amount are rebalanced
     function _getRebalanceResult(uint256 latestVersion)
@@ -756,7 +761,8 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
             uint256 newBase,
             uint256 newQuote,
             uint256 excessiveQ,
-            uint256 splitQ,
+            uint256 excessiveB,
+            uint256 excessiveR,
             uint256 excessiveQuote,
             bool isRebalanced
         );
