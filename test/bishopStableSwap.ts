@@ -1321,22 +1321,31 @@ describe("BishopStableSwap", function () {
             const afterSplitB = INIT_B.div(4);
             const splittedB = INIT_B.div(8);
             const afterRebalanceQuote = INIT_USDC.mul(afterSplitB.add(splittedB)).div(INIT_B);
-            await fund.mock.batchRebalance
-                .withArgs(0, INIT_B, 0, 0, 1)
-                .returns(excessiveQ, afterSplitB, 0);
-            await fund.mock.trancheTransfer
-                .withArgs(TRANCHE_R, lpToken.address, splittedB, 1)
-                .returns();
             await fund.mock.trancheBalanceOf
                 .withArgs(TRANCHE_B, stableSwap.address)
                 .returns(afterSplitB.add(splittedB));
-            await primaryMarket.mock.getSplit.returns(splittedB);
-            await primaryMarket.mock.split
-                .withArgs(stableSwap.address, excessiveQ, 1)
-                .returns(splittedB);
-            await expect(stableSwap.sync())
-                .to.emit(stableSwap, "Rebalanced")
-                .withArgs(afterSplitB.add(splittedB), afterRebalanceQuote, 1);
+            await expect(() => stableSwap.sync()).to.callMocks(
+                {
+                    func: fund.mock.batchRebalance.withArgs(0, INIT_B, 0, 0, 1),
+                    rets: [excessiveQ, afterSplitB, 0],
+                },
+                {
+                    func: primaryMarket.mock.getSplit.withArgs(excessiveQ),
+                    rets: [splittedB],
+                },
+                {
+                    func: primaryMarket.mock.split.withArgs(stableSwap.address, excessiveQ, 1),
+                    rets: [splittedB],
+                },
+                {
+                    func: fund.mock.trancheTransfer.withArgs(
+                        TRANCHE_R,
+                        lpToken.address,
+                        splittedB,
+                        1
+                    ),
+                }
+            );
             const dist1 = await lpToken.distributions(1);
             const totalSupply1 = await lpToken.distributionTotalSupplies(1);
             expect(dist1.amountQ).to.equal(0);
@@ -1349,25 +1358,39 @@ describe("BishopStableSwap", function () {
         it("Should handle lower rebalance with more BISHOP after split", async function () {
             const afterSplitB = INIT_B.div(8);
             const splittedB = INIT_B;
-            await fund.mock.batchRebalance
-                .withArgs(0, INIT_B, 0, 0, 1)
-                .returns(excessiveQ, afterSplitB, 0);
-            await fund.mock.trancheTransfer
-                .withArgs(TRANCHE_B, lpToken.address, afterSplitB.add(splittedB).sub(INIT_B), 1)
-                .returns();
-            await fund.mock.trancheTransfer
-                .withArgs(TRANCHE_R, lpToken.address, splittedB, 1)
-                .returns();
             await fund.mock.trancheBalanceOf
                 .withArgs(TRANCHE_B, stableSwap.address)
                 .returns(afterSplitB.add(splittedB));
-            await primaryMarket.mock.getSplit.returns(splittedB);
-            await primaryMarket.mock.split
-                .withArgs(stableSwap.address, excessiveQ, 1)
-                .returns(splittedB);
-            await expect(stableSwap.sync())
-                .to.emit(stableSwap, "Rebalanced")
-                .withArgs(INIT_B, INIT_USDC, 1);
+            await expect(() => stableSwap.sync()).to.callMocks(
+                {
+                    func: fund.mock.batchRebalance.withArgs(0, INIT_B, 0, 0, 1),
+                    rets: [excessiveQ, afterSplitB, 0],
+                },
+                {
+                    func: primaryMarket.mock.getSplit.withArgs(excessiveQ),
+                    rets: [splittedB],
+                },
+                {
+                    func: primaryMarket.mock.split.withArgs(stableSwap.address, excessiveQ, 1),
+                    rets: [splittedB],
+                },
+                {
+                    func: fund.mock.trancheTransfer.withArgs(
+                        TRANCHE_B,
+                        lpToken.address,
+                        afterSplitB.add(splittedB).sub(INIT_B),
+                        1
+                    ),
+                },
+                {
+                    func: fund.mock.trancheTransfer.withArgs(
+                        TRANCHE_R,
+                        lpToken.address,
+                        splittedB,
+                        1
+                    ),
+                }
+            );
             const dist1 = await lpToken.distributions(1);
             const totalSupply1 = await lpToken.distributionTotalSupplies(1);
             expect(dist1.amountQ).to.equal(0);
@@ -1378,18 +1401,23 @@ describe("BishopStableSwap", function () {
         });
 
         it("Should handle upper rebalance", async function () {
-            await fund.mock.batchRebalance
-                .withArgs(0, INIT_B, 0, 0, 1)
-                .returns(excessiveQ, INIT_B, 0);
-            await fund.mock.trancheTransfer
-                .withArgs(TRANCHE_Q, lpToken.address, excessiveQ, 1)
-                .returns();
             await fund.mock.trancheBalanceOf
                 .withArgs(TRANCHE_B, stableSwap.address)
                 .returns(INIT_B);
-            await expect(stableSwap.sync())
-                .to.emit(stableSwap, "Rebalanced")
-                .withArgs(INIT_B, INIT_USDC, 1);
+            await expect(() => stableSwap.sync()).to.callMocks(
+                {
+                    func: fund.mock.batchRebalance.withArgs(0, INIT_B, 0, 0, 1),
+                    rets: [excessiveQ, INIT_B, 0],
+                },
+                {
+                    func: fund.mock.trancheTransfer.withArgs(
+                        TRANCHE_Q,
+                        lpToken.address,
+                        excessiveQ,
+                        1
+                    ),
+                }
+            );
             const dist1 = await lpToken.distributions(1);
             const totalSupply1 = await lpToken.distributionTotalSupplies(1);
             expect(dist1.amountQ).to.equal(excessiveQ);
