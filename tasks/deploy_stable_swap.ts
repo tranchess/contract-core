@@ -64,7 +64,7 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
         );
         const feeDistributorAddresses = loadAddressFile<FeeDistrubtorAddresses>(
             hre,
-            `fee_distributor_${bonusSymbol.toLowerCase()}`
+            `fee_distributor_${quoteSymbol.toLowerCase()}`
         );
         const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
 
