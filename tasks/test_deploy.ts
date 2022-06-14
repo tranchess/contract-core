@@ -158,7 +158,7 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         kind: "Queen",
         underlyingSymbol: "WBNB",
         quote: mockAddresses.mockWbnb,
-        bonus: mockAddresses.mockWbnb,
+        bonus: mockAddresses.mockBusd,
         ampl: "85",
         feeRate: "0.03",
         adminFeeRate: "0.4",
