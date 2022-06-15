@@ -145,17 +145,21 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
                 uint256 quoteAmount = IStableSwap(msg.sender).getQuoteIn(baseOut);
                 // Merge BISHOP and ROOK into QUEEN
                 uint256 outQ =
-                    IPrimaryMarketV3(fund.primaryMarket()).merge(address(this), baseOut, version);
+                    IPrimaryMarketV3(fund.primaryMarket()).merge(
+                        queenSwapOrPrimaryMarketRouter,
+                        baseOut,
+                        version
+                    );
 
                 // Redeem or swap QUEEN for underlying
-                fund.trancheTransfer(TRANCHE_Q, queenSwapOrPrimaryMarketRouter, outQ, version);
                 uint256 underlyingAmount =
-                    IStableSwapCore(queenSwapOrPrimaryMarketRouter).sell(
-                        version,
-                        0,
-                        address(this),
-                        ""
-                    );
+                    IStableSwapCore(queenSwapOrPrimaryMarketRouter).getQuoteOut(outQ);
+                underlyingAmount = IStableSwapCore(queenSwapOrPrimaryMarketRouter).sell(
+                    version,
+                    underlyingAmount,
+                    address(this),
+                    ""
+                );
 
                 // Trade underlying for quote asset
                 uint256 totalQuoteAmount =
@@ -175,9 +179,15 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
                 _externalSwap(data, expectQuoteAmount, tokenQuote, tokenUnderlying)[1];
 
             // Create or swap borrowed underlying for QUEEN
-            IERC20(tokenUnderlying).safeTransfer(queenSwapOrPrimaryMarketRouter, underlyingAmount);
             uint256 outQ =
-                IStableSwapCore(queenSwapOrPrimaryMarketRouter).buy(version, 0, address(this), "");
+                IStableSwapCore(queenSwapOrPrimaryMarketRouter).getBaseOut(underlyingAmount);
+            IERC20(tokenUnderlying).safeTransfer(queenSwapOrPrimaryMarketRouter, underlyingAmount);
+            outQ = IStableSwapCore(queenSwapOrPrimaryMarketRouter).buy(
+                version,
+                outQ,
+                address(this),
+                ""
+            );
 
             // Split QUEEN into BISHOP and ROOK
             uint256 outB =
