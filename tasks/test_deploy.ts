@@ -1,14 +1,5 @@
-import fs = require("fs");
-import path = require("path");
 import { task } from "hardhat/config";
-import {
-    getAddressDir,
-    listAddressFile,
-    loadAddressFile,
-    newAddresses,
-    saveAddressFile,
-} from "./address_file";
-import type { TwapOracleAddresses } from "./deploy_twap_oracle";
+import { loadAddressFile } from "./address_file";
 import type { MockAddresses } from "./deploy_mock";
 import { endOfWeek, GOVERNANCE_CONFIG, FUND_CONFIG } from "../config";
 
@@ -19,18 +10,31 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
 
     console.log();
     console.log("[+] Deploying mock contracts");
-    await hre.run("deploy_mock", { silent: true, initialTwap: "10000" });
+    await hre.run("deploy_mock", { silent: true });
     const mockAddresses = loadAddressFile<MockAddresses>(hre, "mock");
 
     console.log();
-    console.log("[+] Deploying TwapOracle");
-    await hre.run("deploy_twap_oracle", { token: mockAddresses.mockBtc, oracleSymbol: "BTC" });
-    await hre.run("deploy_twap_oracle", { token: mockAddresses.mockEth, oracleSymbol: "ETH" });
+    console.log("[+] Deploying mock TwapOracle");
+    await hre.run("deploy_mock_twap_oracle", {
+        token: mockAddresses.mockBtc,
+        oracleSymbol: "BTC",
+        initialTwap: "10000",
+    });
+    await hre.run("deploy_mock_twap_oracle", {
+        token: mockAddresses.mockEth,
+        oracleSymbol: "ETH",
+        initialTwap: "3000",
+    });
+    await hre.run("deploy_mock_twap_oracle", {
+        token: mockAddresses.mockWbnb,
+        oracleSymbol: "WBNB",
+        initialTwap: "500",
+    });
 
     console.log();
     console.log("[+] Deploying BscAprOracle");
     await hre.run("deploy_bsc_apr_oracle", {
-        token: mockAddresses.mockUsdc,
+        token: mockAddresses.mockBusd,
         vToken: mockAddresses.mockVToken,
     });
 
@@ -40,72 +44,79 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     await hre.run("deploy_governance");
 
     console.log();
-    console.log("[+] Changing TwapOracle address files for test");
-    const addressDir = getAddressDir(hre);
-    for (const symbol of ["btc", "eth"]) {
-        const twapAddresses = loadAddressFile<TwapOracleAddresses>(hre, `twap_oracle_${symbol}`);
-        const twapAddressFilename = path.join(
-            addressDir,
-            listAddressFile(addressDir, `twap_oracle_${symbol}`)[0]
-        );
-        fs.renameSync(twapAddressFilename, twapAddressFilename + ".orig");
-        twapAddresses.twapOracle = mockAddresses.mockTwapOracle;
-        saveAddressFile(hre, `twap_oracle_${symbol}`, twapAddresses);
-    }
-    {
-        const wbnbTwapAddresses: TwapOracleAddresses = {
-            ...newAddresses(hre),
-            token: mockAddresses.mockWbnb,
-            oracleSymbol: "BNB",
-            twapOracle: mockAddresses.mockTwapOracle,
-        };
-        saveAddressFile(hre, `twap_oracle_wbnb`, wbnbTwapAddresses);
-    }
-
-    console.log();
     console.log("[+] Deploying fund contracts");
     FUND_CONFIG.MIN_CREATION = "0.1";
     FUND_CONFIG.GUARDED_LAUNCH = true;
+    await hre.run("deploy_fee_distributor", {
+        underlying: mockAddresses.mockBtc,
+        adminFeeRate: "0.5",
+    });
+    await hre.run("deploy_fee_distributor", {
+        underlying: mockAddresses.mockEth,
+        adminFeeRate: "0.5",
+    });
+    await hre.run("deploy_fee_distributor", {
+        underlying: mockAddresses.mockWbnb,
+        adminFeeRate: "0.5",
+    });
+    await hre.run("deploy_fee_distributor", {
+        underlying: mockAddresses.mockBusd,
+        adminFeeRate: "0.5",
+    });
     await hre.run("deploy_fund", {
         underlyingSymbol: "BTC",
-        quoteSymbol: "USDC",
+        quoteSymbol: "BUSD",
         shareSymbolPrefix: "b",
-        adminFeeRate: "0.5",
+        redemptionFeeRate: "0.0035",
+        mergeFeeRate: "0.0045",
+        fundCap: "-1",
+        strategy: "NONE",
+        fundInitializationParams: JSON.stringify({
+            newSplitRatio: "500",
+            lastNavB: "1",
+            lastNavR: "1",
+        }),
     });
     await hre.run("deploy_fund", {
         underlyingSymbol: "ETH",
-        quoteSymbol: "USDC",
+        quoteSymbol: "BUSD",
         shareSymbolPrefix: "e",
-        adminFeeRate: "0.5",
+        redemptionFeeRate: "0.0035",
+        mergeFeeRate: "0.0045",
+        fundCap: "-1",
+        strategy: "NONE",
+        fundInitializationParams: JSON.stringify({
+            newSplitRatio: "500",
+            lastNavB: "1",
+            lastNavR: "1",
+        }),
     });
-    await hre.run("deploy_fund_v2", {
+    await hre.run("deploy_fund", {
         underlyingSymbol: "WBNB",
-        quoteSymbol: "USDC",
+        quoteSymbol: "BUSD",
         shareSymbolPrefix: "n",
-        adminFeeRate: "0.5",
+        redemptionFeeRate: "0.0035",
+        mergeFeeRate: "0.0045",
         fundCap: "1000000",
         strategy: "bsc_staking_strategy",
         strategyParams: JSON.stringify({
             staker: deployer.address,
             performanceFeeRate: "0.2",
         }),
+        fundInitializationParams: JSON.stringify({
+            newSplitRatio: "500",
+            lastNavB: "1",
+            lastNavR: "1",
+        }),
     });
-
-    console.log();
-    console.log("[+] Deploying exchange contracts");
-    await hre.run("deploy_exchange", { underlyingSymbol: "BTC" });
-    await hre.run("deploy_exchange", { underlyingSymbol: "ETH" });
-    await hre.run("deploy_exchange", { underlyingSymbol: "WBNB" });
 
     console.log();
     console.log("[+] Deploying misc contracts");
     await hre.run("deploy_misc", {
         silent: true,
         deployProtocolDataProvider: true,
-        deployBatchSettleHelper: true,
         deployBatchOperationHelper: true,
-        deployVotingEscrowHelper: true,
-        underlyingSymbols: "BTC,ETH,WBNB",
+        deployBatchUpgradeTool: true,
     });
 
     console.log();
@@ -122,7 +133,6 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     });
     await hre.run("deploy_chess_schedule_impl");
     await hre.run("deploy_voting_escrow_impl");
-    await hre.run("deploy_exchange_impl", { underlyingSymbol: "BTC" });
 
     console.log();
     console.log("[+] Deploying two vesting escrows");
@@ -140,5 +150,47 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         startWeek: "20",
         durationWeek: "1",
         cliffPercent: "10",
+    });
+
+    console.log();
+    console.log("[+] Deploying stable swaps");
+    await hre.run("deploy_stable_swap", {
+        kind: "Queen",
+        underlyingSymbol: "WBNB",
+        quote: mockAddresses.mockWbnb,
+        bonus: mockAddresses.mockBusd,
+        ampl: "85",
+        feeRate: "0.03",
+        adminFeeRate: "0.4",
+    });
+    for (const underlyingSymbol of ["BTC", "ETH", "WBNB"]) {
+        await hre.run("deploy_stable_swap", {
+            kind: "Bishop",
+            underlyingSymbol: underlyingSymbol,
+            quote: mockAddresses.mockBusd,
+            bonus: mockAddresses.mockBusd,
+            ampl: "85",
+            feeRate: "0.03",
+            adminFeeRate: "0.4",
+            tradingCurbThreshold: "0.35",
+            rewardStartTimestamp: "0",
+        });
+    }
+
+    console.log();
+    console.log("[+] Deploying swap router");
+    await hre.run("deploy_swap_router", {
+        queenSwaps: "WBNB",
+        bishopSwaps: "BTC,ETH,WBNB",
+    });
+
+    console.log();
+    console.log("[+] Deploying flash swap router");
+    await hre.run("deploy_flash_swap_router");
+
+    console.log();
+    console.log("[+] Deploying DataAggregator");
+    await hre.run("deploy_data_aggregator", {
+        firstUnderlyingSymbol: "BTC",
     });
 });

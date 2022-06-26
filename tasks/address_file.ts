@@ -80,13 +80,24 @@ export function listAddressFile(directory: string, module: string): string[] {
 
 export function loadAddressFile<T extends Addresses>(
     hre: HardhatRuntimeEnvironment,
-    module: string
+    module: string,
+    filename?: string
 ): T {
     const dir = getAddressDir(hre);
     const candidates = listAddressFile(dir, module);
-    assert.ok(candidates.length > 0, `No address file of module '${module}' is found`);
-    assert.ok(candidates.length === 1, `Multiple address files of module '${module}' are found`);
-    const [filename] = candidates;
+    if (filename !== undefined) {
+        assert.ok(
+            candidates.indexOf(filename) >= 0,
+            `Specified address file '${filename}' does not exist`
+        );
+    } else {
+        assert.ok(candidates.length > 0, `No address file of module '${module}' is found`);
+        assert.ok(
+            candidates.length === 1,
+            `Multiple address files of module '${module}' are found`
+        );
+        filename = candidates[0];
+    }
     const addresses: T = JSON.parse(fs.readFileSync(path.join(dir, filename), "utf-8"));
     assert.ok(addresses.time, `Malformed address file '${filename}'`);
     assert.ok(addresses.gitVersion, `Malformed address file '${filename}'`);
