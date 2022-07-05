@@ -163,7 +163,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
 
                 // Trade underlying for quote asset
                 uint256 totalQuoteAmount =
-                    _externalSwap(data, underlyingAmount, fund.tokenUnderlying(), tokenQuote)[1];
+                    _externalSwap(data, underlyingAmount, fund.tokenUnderlying(), tokenQuote);
                 // Send back quote asset to tranchess swap
                 IERC20(tokenQuote).safeTransfer(msg.sender, quoteAmount);
                 // Send the rest of quote asset to user
@@ -176,7 +176,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
             address tokenUnderlying = fund.tokenUnderlying();
             // Trade quote asset for underlying asset
             uint256 underlyingAmount =
-                _externalSwap(data, expectQuoteAmount, tokenQuote, tokenUnderlying)[1];
+                _externalSwap(data, expectQuoteAmount, tokenQuote, tokenUnderlying);
 
             // Create or swap borrowed underlying for QUEEN
             uint256 outQ =
@@ -204,19 +204,19 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         uint256 amountIn,
         address tokenIn,
         address tokenOut
-    ) private returns (uint256[] memory amounts) {
+    ) private returns (uint256 amountOut) {
         (, , , , , address externalRouter, address[] memory externalPath) =
             abi.decode(data, (address, address, uint256, address, uint256, address, address[]));
         require(externalPath.length > 1, "Invalid external path");
         require(externalPath[0] == tokenIn, "Invalid token in");
         require(externalPath[externalPath.length - 1] == tokenOut, "Invalid token out");
         IERC20(tokenIn).safeApprove(externalRouter, amountIn);
-        amounts = IUniswapV2Router01(externalRouter).swapExactTokensForTokens(
+        amountOut = IUniswapV2Router01(externalRouter).swapExactTokensForTokens(
             amountIn,
             0,
             externalPath,
             address(this),
             block.timestamp
-        );
+        )[externalPath.length - 1];
     }
 }
