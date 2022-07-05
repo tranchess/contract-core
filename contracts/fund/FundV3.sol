@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
-pragma experimental ABIEncoderV2;
+pragma solidity ^0.8.0;
+pragma abicoder v2;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import "@openzeppelin/contracts/math/Math.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
@@ -167,7 +167,6 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     }
 
     constructor(ConstructorParameters memory params)
-        public
         Ownable()
         FundRolesV2(
             params.tokenQ,
@@ -368,10 +367,10 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
     {
         uint256 settledDay = currentDay - 1 days;
         uint256 underlying = getTotalUnderlying();
-        uint256 protocolFee =
-            underlying.multiplyDecimal(dailyProtocolFeeRate).mul(block.timestamp - settledDay).div(
-                1 days
-            );
+        uint256 protocolFee = underlying
+            .multiplyDecimal(dailyProtocolFeeRate)
+            .mul(block.timestamp - settledDay)
+            .div(1 days);
         underlying = underlying.sub(protocolFee);
         return
             _extrapolateNav(block.timestamp, settledDay, price, getEquivalentTotalB(), underlying);
@@ -627,11 +626,10 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         uint256 version
     ) external override onlyCurrentVersion(version) {
         _refreshAllowance(sender, msg.sender, version);
-        uint256 newAllowance =
-            _allowances[sender][msg.sender][tranche].sub(
-                amount,
-                "ERC20: transfer amount exceeds allowance"
-            );
+        uint256 newAllowance = _allowances[sender][msg.sender][tranche].sub(
+            amount,
+            "ERC20: transfer amount exceeds allowance"
+        );
         _approve(tranche, sender, msg.sender, newAllowance);
         _refreshBalance(sender, version);
         _refreshBalance(recipient, version);
@@ -810,8 +808,13 @@ contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
         // Calculate NAV
         uint256 equivalentTotalB = getEquivalentTotalB();
         uint256 underlying = getTotalUnderlying();
-        (uint256 navSum, uint256 navB, uint256 navR) =
-            _extrapolateNav(day, day - 1 days, price, equivalentTotalB, underlying);
+        (uint256 navSum, uint256 navB, uint256 navR) = _extrapolateNav(
+            day,
+            day - 1 days,
+            price,
+            equivalentTotalB,
+            underlying
+        );
 
         if (_shouldTriggerRebalance(navB, navR)) {
             uint256 newSplitRatio = splitRatio.multiplyDecimal(navSum) / 2;

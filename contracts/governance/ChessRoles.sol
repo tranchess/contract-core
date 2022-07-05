@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/utils/EnumerableSet.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 abstract contract ChessRoles {
     using EnumerableSet for EnumerableSet.AddressSet;

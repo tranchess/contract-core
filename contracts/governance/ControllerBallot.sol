@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
-pragma experimental ABIEncoderV2;
+pragma solidity ^0.8.0;
+pragma abicoder v2;
 
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../utils/CoreUtility.sol";
@@ -49,7 +49,7 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
     /// @notice Mapping of pool => status of the pool
     mapping(uint256 => bool) public disabledPools;
 
-    constructor(address votingEscrow_) public {
+    constructor(address votingEscrow_) {
         votingEscrow = IVotingEscrow(votingEscrow_);
         _maxTime = IVotingEscrow(votingEscrow_).maxTime();
     }
@@ -176,8 +176,9 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
         }
 
         IVotingEscrow.LockedBalance memory oldLockedBalance = userLockedBalances[msg.sender];
-        IVotingEscrow.LockedBalance memory lockedBalance =
-            votingEscrow.getLockedBalance(msg.sender);
+        IVotingEscrow.LockedBalance memory lockedBalance = votingEscrow.getLockedBalance(
+            msg.sender
+        );
         require(
             lockedBalance.amount > 0 && lockedBalance.unlockTime > block.timestamp,
             "No veCHESS"
@@ -217,13 +218,11 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
             address pool = _pools[i];
             poolScheduledUnlock[pool][oldLockedBalance.unlockTime] = poolScheduledUnlock[pool][
                 oldLockedBalance.unlockTime
-            ]
-                .sub(oldLockedBalance.amount.multiplyDecimal(oldWeights[i]));
+            ].sub(oldLockedBalance.amount.multiplyDecimal(oldWeights[i]));
 
             poolScheduledUnlock[pool][lockedBalance.unlockTime] = poolScheduledUnlock[pool][
                 lockedBalance.unlockTime
-            ]
-                .add(lockedBalance.amount.multiplyDecimal(weights[i]));
+            ].add(lockedBalance.amount.multiplyDecimal(weights[i]));
             userWeights[account][pool] = weights[i];
         }
         userLockedBalances[account] = lockedBalance;

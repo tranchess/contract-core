@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
 import "../interfaces/ITrancheIndexV2.sol";
 import "../utils/SafeDecimalMath.sol";
 import "./StableSwap.sol";
 
 contract QueenStableSwap is StableSwap, ITrancheIndexV2 {
+    using SafeMath for uint256;
     using SafeDecimalMath for uint256;
 
     constructor(
@@ -17,7 +18,6 @@ contract QueenStableSwap is StableSwap, ITrancheIndexV2 {
         uint256 feeRate_,
         uint256 adminFeeRate_
     )
-        public
         StableSwap(
             lpToken_,
             fund_,
@@ -52,6 +52,7 @@ contract QueenStableSwap is StableSwap, ITrancheIndexV2 {
 
     function _handleRebalance(uint256)
         internal
+        view
         override
         returns (uint256 newBase, uint256 newQuote)
     {

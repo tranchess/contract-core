@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
-pragma experimental ABIEncoderV2;
+pragma solidity ^0.8.0;
+pragma abicoder v2;
 
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../utils/SafeDecimalMath.sol";
@@ -89,7 +89,7 @@ contract FeeDistributor is CoreUtility, Ownable {
         address votingEscrow_,
         address admin_,
         uint256 adminFeeRate_
-    ) public {
+    ) {
         rewardToken = IERC20(rewardToken_);
         votingEscrow = IVotingEscrow(votingEscrow_);
         _maxTime = IVotingEscrow(votingEscrow_).maxTime();
@@ -149,8 +149,9 @@ contract FeeDistributor is CoreUtility, Ownable {
         userCheckpoint(account);
 
         uint256 nextWeek = _endOfWeek(block.timestamp);
-        IVotingEscrow.LockedBalance memory newLockedBalance =
-            votingEscrow.getLockedBalance(account);
+        IVotingEscrow.LockedBalance memory newLockedBalance = votingEscrow.getLockedBalance(
+            account
+        );
         if (newLockedBalance.unlockTime <= nextWeek) {
             return;
         }
@@ -162,8 +163,7 @@ contract FeeDistributor is CoreUtility, Ownable {
         if (oldLockedBalance.amount > 0 && oldLockedBalance.unlockTime > nextWeek) {
             scheduledUnlock[oldLockedBalance.unlockTime] = scheduledUnlock[
                 oldLockedBalance.unlockTime
-            ]
-                .sub(oldLockedBalance.amount);
+            ].sub(oldLockedBalance.amount);
             newNextWeekLocked = newNextWeekLocked.sub(oldLockedBalance.amount);
             newNextWeekSupply = newNextWeekSupply.sub(
                 oldLockedBalance.amount.mul(oldLockedBalance.unlockTime - nextWeek) / _maxTime
@@ -326,10 +326,9 @@ contract FeeDistributor is CoreUtility, Ownable {
 
         // The week of the last user checkpoint has ended.
         uint256 lastBalance = userLastBalances[account];
-        uint256 rewards =
-            lastBalance > 0
-                ? lastBalance.mul(rewardsPerWeek[weekCursor]) / veSupplyPerWeek[weekCursor]
-                : 0;
+        uint256 rewards = lastBalance > 0
+            ? lastBalance.mul(rewardsPerWeek[weekCursor]) / veSupplyPerWeek[weekCursor]
+            : 0;
         weekCursor += 1 weeks;
 
         // Iterate over succeeding weeks and calculate rewards.

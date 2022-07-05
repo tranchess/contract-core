@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../interfaces/ISwapRouter.sol";
@@ -26,8 +26,9 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         override
         returns (IStableSwap)
     {
-        (address addr0, address addr1) =
-            baseAddress < quoteAddress ? (baseAddress, quoteAddress) : (quoteAddress, baseAddress);
+        (address addr0, address addr1) = baseAddress < quoteAddress
+            ? (baseAddress, quoteAddress)
+            : (quoteAddress, baseAddress);
         return _swapMap[addr0][addr1];
     }
 
@@ -41,8 +42,9 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
                 (baseAddress == IStableSwap(swap).baseAddress() &&
                     quoteAddress == IStableSwap(swap).quoteAddress())
         ); // sanity check
-        (address addr0, address addr1) =
-            baseAddress < quoteAddress ? (baseAddress, quoteAddress) : (quoteAddress, baseAddress);
+        (address addr0, address addr1) = baseAddress < quoteAddress
+            ? (baseAddress, quoteAddress)
+            : (quoteAddress, baseAddress);
         _swapMap[addr0][addr1] = IStableSwap(swap);
         emit SwapAdded(addr0, addr1, swap);
     }

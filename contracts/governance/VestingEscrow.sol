@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
 /// @notice Vests `Chess` tokens for a single address
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 contract VestingEscrow is Ownable {
     using SafeMath for uint256;
@@ -33,7 +33,7 @@ contract VestingEscrow is Ownable {
         uint256 startTime_,
         uint256 endTime_,
         bool canDisable_
-    ) public {
+    ) {
         token = token_;
         recipient = recipient_;
         startTime = startTime_;

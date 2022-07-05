@@ -53,7 +53,7 @@ if (ETH_RPC && ETH_CHAIN_ID) {
 const config: HardhatUserConfig = {
     networks: networks,
     solidity: {
-        version: "0.6.12",
+        version: "0.8.12",
         settings: {
             optimizer: {
                 enabled: true,

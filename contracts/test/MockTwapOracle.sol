@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -7,6 +7,8 @@ import "../interfaces/ITwapOracleV2.sol";
 import "../utils/CoreUtility.sol";
 
 contract MockTwapOracle is ITwapOracleV2, CoreUtility, Ownable {
+    using SafeMath for uint256;
+
     struct StoredEpoch {
         uint256 twap;
         uint256 nextEpoch;
@@ -44,7 +46,7 @@ contract MockTwapOracle is ITwapOracleV2, CoreUtility, Ownable {
         uint256 initialTwap_,
         address fallbackOracle_,
         uint256 fallbackTimestamp_
-    ) public {
+    ) {
         lastStoredEpoch = _endOfDay(block.timestamp) - 1 days;
         storedEpochs[lastStoredEpoch].twap = initialTwap_;
         fallbackOracle = ITwapOracle(fallbackOracle_);
@@ -115,13 +117,13 @@ contract MockTwapOracle is ITwapOracleV2, CoreUtility, Ownable {
     function digHole(uint256 timestamp) external onlyReporter {
         require(timestamp % EPOCH == 0, "Unaligned timestamp");
         require(timestamp > block.timestamp, "Can only dig hole in the future");
-        holes[timestamp] = uint256(-1);
+        holes[timestamp] = type(uint256).max;
     }
 
     function fillHole(uint256 timestamp, uint256 twap) external onlyReporter {
         require(timestamp % EPOCH == 0, "Unaligned timestamp");
         require(timestamp < block.timestamp, "Can only fill hole in the past");
-        require(holes[timestamp] == uint256(-1), "Not a hole or already filled");
+        require(holes[timestamp] == type(uint256).max, "Not a hole or already filled");
         holes[timestamp] = twap;
         emit Update(timestamp, twap, UpdateType.OWNER);
     }
@@ -140,7 +142,7 @@ contract MockTwapOracle is ITwapOracleV2, CoreUtility, Ownable {
 
         uint256 holeTwap = holes[timestamp];
         if (holeTwap != 0) {
-            return holeTwap == uint256(-1) ? 0 : holeTwap;
+            return holeTwap == type(uint256).max ? 0 : holeTwap;
         }
 
         // Search for the nearest stored epoch. The search starts at the latest 00:00 UTC

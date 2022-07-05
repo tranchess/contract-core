@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/math/Math.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 import "../utils/CoreUtility.sol";
 import "../utils/SafeDecimalMath.sol";
@@ -32,7 +32,7 @@ contract ChessControllerV5 is IChessController, CoreUtility {
         address fund0_,
         uint256 guardedLaunchStart_,
         address controllerBallot_
-    ) public {
+    ) {
         fund0 = fund0_;
         guardedLaunchStart = guardedLaunchStart_;
         require(_endOfWeek(guardedLaunchStart_) == guardedLaunchStart_ + 1 weeks);
@@ -85,8 +85,9 @@ contract ChessControllerV5 is IChessController, CoreUtility {
         private
         returns (uint256 weight)
     {
-        (uint256[] memory ballotWeights, address[] memory funds) =
-            IControllerBallot(controllerBallot).count(weekTimestamp);
+        (uint256[] memory ballotWeights, address[] memory funds) = IControllerBallot(
+            controllerBallot
+        ).count(weekTimestamp);
 
         uint256 totalWeight;
         for (uint256 i = 0; i < ballotWeights.length; i++) {

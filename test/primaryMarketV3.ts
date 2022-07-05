@@ -504,53 +504,53 @@ describe("PrimaryMarketV3", function () {
             }
 
             it("Should return a slice of the queue", async function () {
-                expect(await getQueuedRedemptions(null, 0, 0)).to.eql({
-                    indices: [0, 1, 2, 3],
-                    underlying: outPrefixSum[3],
-                });
-                expect(await getQueuedRedemptions(null, 1, 0)).to.eql({
-                    indices: [1, 2, 3],
-                    underlying: outBtcList[1].add(outBtcList[2]).add(outBtcList[3]),
-                });
-                expect(await getQueuedRedemptions(null, 1, 2)).to.eql({
-                    indices: [1, 2],
-                    underlying: outBtcList[1].add(outBtcList[2]),
-                });
-                expect(await getQueuedRedemptions(null, 1, 100)).to.eql({
-                    indices: [1, 2, 3],
-                    underlying: outBtcList[1].add(outBtcList[2]).add(outBtcList[3]),
-                });
-                expect(await getQueuedRedemptions(null, 4, 0)).to.eql({
-                    indices: [],
-                    underlying: BigNumber.from(0),
-                });
+                expect((await getQueuedRedemptions(null, 0, 0)).indices).to.eql([0, 1, 2, 3]);
+                expect((await getQueuedRedemptions(null, 0, 0)).underlying).to.equal(
+                    outPrefixSum[3]
+                );
+                expect((await getQueuedRedemptions(null, 1, 0)).indices).to.eql([1, 2, 3]);
+                expect((await getQueuedRedemptions(null, 1, 0)).underlying).to.equal(
+                    outBtcList[1].add(outBtcList[2]).add(outBtcList[3])
+                );
+                expect((await getQueuedRedemptions(null, 1, 2)).indices).to.eql([1, 2]);
+                expect((await getQueuedRedemptions(null, 1, 2)).underlying).to.equal(
+                    outBtcList[1].add(outBtcList[2])
+                );
+                expect((await getQueuedRedemptions(null, 1, 100)).indices).to.eql([1, 2, 3]);
+                expect((await getQueuedRedemptions(null, 1, 100)).underlying).to.equal(
+                    outBtcList[1].add(outBtcList[2]).add(outBtcList[3])
+                );
+                expect((await getQueuedRedemptions(null, 4, 0)).indices).to.eql([]);
+                expect((await getQueuedRedemptions(null, 4, 0)).underlying).to.equal(
+                    BigNumber.from(0)
+                );
             });
 
             it("Should filter by address", async function () {
-                expect(await getQueuedRedemptions(addr1, 0, 0)).to.eql({
-                    indices: [1],
-                    underlying: outBtcList[1],
-                });
-                expect(await getQueuedRedemptions(addr1, 0, 1)).to.eql({
-                    indices: [],
-                    underlying: BigNumber.from(0),
-                });
-                expect(await getQueuedRedemptions(addr2, 0, 0)).to.eql({
-                    indices: [0, 2, 3],
-                    underlying: outBtcList[0].add(outBtcList[2]).add(outBtcList[3]),
-                });
-                expect(await getQueuedRedemptions(addr2, 0, 3)).to.eql({
-                    indices: [0, 2],
-                    underlying: outBtcList[0].add(outBtcList[2]),
-                });
-                expect(await getQueuedRedemptions(addr2, 1, 100)).to.eql({
-                    indices: [2, 3],
-                    underlying: outBtcList[2].add(outBtcList[3]),
-                });
-                expect(await getQueuedRedemptions(owner.address, 0, 0)).to.eql({
-                    indices: [],
-                    underlying: BigNumber.from(0),
-                });
+                expect((await getQueuedRedemptions(addr1, 0, 0)).indices).to.eql([1]);
+                expect((await getQueuedRedemptions(addr1, 0, 0)).underlying).to.equal(
+                    outBtcList[1]
+                );
+                expect((await getQueuedRedemptions(addr1, 0, 1)).indices).to.eql([]);
+                expect((await getQueuedRedemptions(addr1, 0, 1)).underlying).to.equal(
+                    BigNumber.from(0)
+                );
+                expect((await getQueuedRedemptions(addr2, 0, 0)).indices).to.eql([0, 2, 3]);
+                expect((await getQueuedRedemptions(addr2, 0, 0)).underlying).to.equal(
+                    outBtcList[0].add(outBtcList[2]).add(outBtcList[3])
+                );
+                expect((await getQueuedRedemptions(addr2, 0, 3)).indices).to.eql([0, 2]);
+                expect((await getQueuedRedemptions(addr2, 0, 3)).underlying).to.equal(
+                    outBtcList[0].add(outBtcList[2])
+                );
+                expect((await getQueuedRedemptions(addr2, 1, 100)).indices).to.eql([2, 3]);
+                expect((await getQueuedRedemptions(addr2, 1, 100)).underlying).to.equal(
+                    outBtcList[2].add(outBtcList[3])
+                );
+                expect((await getQueuedRedemptions(owner.address, 0, 0)).indices).to.eql([]);
+                expect((await getQueuedRedemptions(owner.address, 0, 0)).underlying).to.equal(
+                    BigNumber.from(0)
+                );
             });
 
             it("Should revert if start index is out of bound", async function () {

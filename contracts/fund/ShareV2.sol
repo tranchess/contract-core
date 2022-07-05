@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
 import "../interfaces/IFundV3.sol";
 import "../interfaces/IShareV2.sol";
@@ -17,7 +17,7 @@ contract ShareV2 is IShareV2 {
         string memory symbol_,
         address fund_,
         uint256 tranche_
-    ) public {
+    ) {
         name = name_;
         symbol = symbol_;
         fund = IFundV3(fund_);

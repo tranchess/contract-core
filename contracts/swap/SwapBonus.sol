@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/math/Math.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 contract SwapBonus is Ownable {
     using Math for uint256;
@@ -19,7 +19,7 @@ contract SwapBonus is Ownable {
     uint256 public endTimestamp;
     uint256 public lastTimestamp;
 
-    constructor(address liquidityGauge_, address bonusToken_) public {
+    constructor(address liquidityGauge_, address bonusToken_) {
         liquidityGauge = liquidityGauge_;
         bonusToken = bonusToken_;
     }

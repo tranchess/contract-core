@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
-pragma experimental ABIEncoderV2;
+pragma solidity ^0.8.0;
+pragma abicoder v2;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/math/Math.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
@@ -97,7 +97,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         address chessController_,
         address votingEscrow_,
         uint256 rewardStartTimestamp_
-    ) public {
+    ) {
         fund = IFundV3(fund_);
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
@@ -199,8 +199,11 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 version = _totalSupplyVersion;
         uint256 rebalanceSize = _fundRebalanceSize();
         if (version < rebalanceSize) {
-            (uint256 totalSupplyQ, uint256 totalSupplyB, uint256 totalSupplyR) =
-                _fundBatchRebalance(
+            (
+                uint256 totalSupplyQ,
+                uint256 totalSupplyB,
+                uint256 totalSupplyR
+            ) = _fundBatchRebalance(
                     _totalSupplies[TRANCHE_Q],
                     _totalSupplies[TRANCHE_B],
                     _totalSupplies[TRANCHE_R],
@@ -558,27 +561,28 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
             splitRatio = fund.historicalSplitRatio(rebalanceSize);
             _historicalSplitRatio[rebalanceSize] = splitRatio;
         }
-        uint256 weightedSupply =
-            weightedBalance(
-                _totalSupplies[TRANCHE_Q],
-                _totalSupplies[TRANCHE_B],
-                _totalSupplies[TRANCHE_R],
-                splitRatio
-            );
+        uint256 weightedSupply = weightedBalance(
+            _totalSupplies[TRANCHE_Q],
+            _totalSupplies[TRANCHE_B],
+            _totalSupplies[TRANCHE_R],
+            splitRatio
+        );
         uint256[TRANCHE_COUNT] storage balance = _balances[account];
-        uint256 newWorkingBalance =
-            weightedBalance(balance[TRANCHE_Q], balance[TRANCHE_B], balance[TRANCHE_R], splitRatio);
+        uint256 newWorkingBalance = weightedBalance(
+            balance[TRANCHE_Q],
+            balance[TRANCHE_B],
+            balance[TRANCHE_R],
+            splitRatio
+        );
         uint256 veBalance = _votingEscrow.balanceOf(account);
         if (veBalance > 0) {
             uint256 veTotalSupply = _votingEscrow.totalSupply();
             uint256 maxWorkingBalance = newWorkingBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
-            uint256 boostedWorkingBalance =
-                newWorkingBalance.add(
-                    weightedSupply
-                        .mul(veBalance)
-                        .multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
-                        .div(veTotalSupply)
-                );
+            uint256 boostedWorkingBalance = newWorkingBalance.add(
+                weightedSupply.mul(veBalance).multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE).div(
+                    veTotalSupply
+                )
+            );
             newWorkingBalance = maxWorkingBalance.min(boostedWorkingBalance);
         }
 

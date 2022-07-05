@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 library SafeDecimalMath {
     using SafeMath for uint256;
@@ -84,7 +84,10 @@ library SafeDecimalMath {
         if (a == 0) {
             return 0;
         }
-        uint256 c = a * b;
+        uint256 c;
+        unchecked {
+            c = a * b;
+        }
         return c / a != b ? type(uint256).max : c;
     }
 

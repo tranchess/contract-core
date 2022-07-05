@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
 import "./MockTwapOracle.sol";
-import "@chainlink/contracts/src/v0.6/interfaces/KeeperCompatibleInterface.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/KeeperCompatibleInterface.sol";
 
 contract MockTwapOracleKeeper is KeeperCompatibleInterface, CoreUtility {
+    using SafeMath for uint256;
+
     MockTwapOracle private immutable mockTwap;
 
-    constructor(address mockTwap_) public {
+    constructor(address mockTwap_) {
         mockTwap = MockTwapOracle(mockTwap_);
     }
 
     function checkUpkeep(
         bytes calldata /*checkData*/
-    ) external override returns (bool upkeepNeeded, bytes memory performData) {
+    ) external view override returns (bool upkeepNeeded, bytes memory performData) {
         return (block.timestamp > _endOfDay(mockTwap.lastStoredEpoch()), bytes(""));
     }
 

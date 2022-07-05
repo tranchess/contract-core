@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../utils/SafeDecimalMath.sol";
@@ -76,7 +76,7 @@ contract BscStakingStrategy is Ownable {
         address fund_,
         address staker_,
         uint256 performanceFeeRate_
-    ) public {
+    ) {
         fund = IFundV3(fund_);
         _tokenUnderlying = IFundV3(fund_).tokenUnderlying();
         staker = staker_;

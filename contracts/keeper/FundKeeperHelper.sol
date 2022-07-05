@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
 import "./BatchKeeperHelperBase.sol";
 import "../interfaces/IFundV3.sol";
@@ -15,7 +15,7 @@ interface IDistributor {
 contract FundKeeperHelper is BatchKeeperHelperBase {
     uint256 public delay;
 
-    constructor(address[] memory funds_, uint256 delay_) public BatchKeeperHelperBase(funds_) {
+    constructor(address[] memory funds_, uint256 delay_) BatchKeeperHelperBase(funds_) {
         delay = delay_;
     }
 
@@ -23,7 +23,7 @@ contract FundKeeperHelper is BatchKeeperHelperBase {
         delay = newDelay;
     }
 
-    function _checkUpkeep(address contractAddress) internal override returns (bool) {
+    function _checkUpkeep(address contractAddress) internal view override returns (bool) {
         IFundSettlement fund = IFundSettlement(contractAddress);
         uint256 currentDay = fund.currentDay();
         uint256 price = fund.twapOracle().getTwap(currentDay);

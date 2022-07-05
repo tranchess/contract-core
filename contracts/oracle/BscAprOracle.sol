@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 import "../interfaces/IAprOracle.sol";
 import "../utils/SafeDecimalMath.sol";
@@ -30,7 +30,7 @@ contract BscAprOracle is IAprOracle, Exponential, CoreUtility {
     uint256 public timestamp;
     uint256 public currentDailyRate;
 
-    constructor(string memory name_, address vUsdc_) public {
+    constructor(string memory name_, address vUsdc_) {
         name = name_;
         vUsdc = vUsdc_;
         venusBorrowIndex = getVenusBorrowIndex(vUsdc_);
@@ -48,8 +48,10 @@ contract BscAprOracle is IAprOracle, Exponential, CoreUtility {
 
         (, uint256 blockDelta) = subUInt(block.number, accrualBlockNumber);
 
-        (, Exp memory simpleInterestFactor) =
-            mulScalar(Exp({mantissa: borrowRateMantissa}), blockDelta);
+        (, Exp memory simpleInterestFactor) = mulScalar(
+            Exp({mantissa: borrowRateMantissa}),
+            blockDelta
+        );
         (, newBorrowIndex) = mulScalarTruncateAddUInt(
             simpleInterestFactor,
             borrowIndexPrior,
@@ -68,8 +70,9 @@ contract BscAprOracle is IAprOracle, Exponential, CoreUtility {
     {
         uint256 newVenusBorrowIndex = getVenusBorrowIndex(vUsdc);
 
-        uint256 venusPeriodicRate =
-            newVenusBorrowIndex.sub(venusBorrowIndex).divideDecimal(venusBorrowIndex);
+        uint256 venusPeriodicRate = newVenusBorrowIndex.sub(venusBorrowIndex).divideDecimal(
+            venusBorrowIndex
+        );
 
         uint256 dailyRate = venusPeriodicRate.mul(1 days).div(block.timestamp.sub(timestamp));
 

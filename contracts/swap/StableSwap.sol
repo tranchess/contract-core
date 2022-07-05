@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 import "../interfaces/IStableSwap.sol";
 import "../interfaces/ILiquidityGauge.sol";
@@ -98,7 +98,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
         address feeCollector_,
         uint256 feeRate_,
         uint256 adminFeeRate_
-    ) public {
+    ) {
         lpToken = lpToken_;
         fund = IFundV3(fund_);
         baseTranche = baseTranche_;
@@ -190,8 +190,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     function getQuoteOut(uint256 baseIn) external view override returns (uint256 quoteOut) {
-        (uint256 oldBase, uint256 oldQuote, , , , , ) =
-            _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 oldBase, uint256 oldQuote, , , , , ) = _getRebalanceResult(
+            fund.getRebalanceSize()
+        );
         uint256 newBase = oldBase.add(baseIn);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
@@ -204,8 +205,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     function getQuoteIn(uint256 baseOut) external view override returns (uint256 quoteIn) {
-        (uint256 oldBase, uint256 oldQuote, , , , , ) =
-            _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 oldBase, uint256 oldQuote, , , , , ) = _getRebalanceResult(
+            fund.getRebalanceSize()
+        );
         uint256 newBase = oldBase.sub(baseOut);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
@@ -219,8 +221,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     function getBaseOut(uint256 quoteIn) external view override returns (uint256 baseOut) {
-        (uint256 oldBase, uint256 oldQuote, , , , , ) =
-            _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 oldBase, uint256 oldQuote, , , , , ) = _getRebalanceResult(
+            fund.getRebalanceSize()
+        );
         // Round down input after fee
         uint256 quoteInAfterFee = quoteIn.multiplyDecimal(1e18 - feeRate);
         uint256 newQuote = oldQuote.add(quoteInAfterFee);
@@ -233,8 +236,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     function getBaseIn(uint256 quoteOut) external view override returns (uint256 baseIn) {
-        (uint256 oldBase, uint256 oldQuote, , , , , ) =
-            _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 oldBase, uint256 oldQuote, , , , , ) = _getRebalanceResult(
+            fund.getRebalanceSize()
+        );
         uint256 feeRate_ = feeRate;
         // Round up output before fee
         uint256 quoteOutBeforeFee = quoteOut.mul(1e18).add(1e18 - feeRate_ - 1) / (1e18 - feeRate_);
@@ -358,7 +362,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
             baseBalance = newBase;
             quoteBalance = newQuote;
             // Overflow is desired
-            _priceOverOracleIntegral += 1e18 * (block.timestamp - _priceOverOracleTimestamp);
+            unchecked {
+                _priceOverOracleIntegral += 1e18 * (block.timestamp - _priceOverOracleTimestamp);
+            }
             _priceOverOracleTimestamp = block.timestamp;
             uint256 d1 = _getD(newBase, newQuote, ampl, oraclePrice);
             ILiquidityGauge(lpToken).mint(address(this), MINIMUM_LIQUIDITY);
@@ -376,8 +382,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
                 // New invariant before charging fee
                 uint256 d1 = _getD(newBase, newQuote, ampl, oraclePrice);
                 uint256 idealQuote = d1.mul(oldQuote) / d0;
-                uint256 difference =
-                    idealQuote > newQuote ? idealQuote - newQuote : newQuote - idealQuote;
+                uint256 difference = idealQuote > newQuote
+                    ? idealQuote - newQuote
+                    : newQuote - idealQuote;
                 fee = difference.multiplyDecimal(feeRate);
             }
             adminFee = fee.multiplyDecimal(adminFeeRate);
@@ -596,9 +603,11 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
         uint256 d
     ) private {
         // Overflow is desired
-        _priceOverOracleIntegral +=
-            _getPriceOverOracle(base, quote, ampl, oraclePrice, d) *
-            (block.timestamp - _priceOverOracleTimestamp);
+        unchecked {
+            _priceOverOracleIntegral +=
+                _getPriceOverOracle(base, quote, ampl, oraclePrice, d) *
+                (block.timestamp - _priceOverOracleTimestamp);
+        }
         _priceOverOracleTimestamp = block.timestamp;
     }
 
@@ -738,7 +747,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     /// @dev Check if the user-specified version is correct.
-    modifier checkVersion(uint256 version) virtual {_;}
+    modifier checkVersion(uint256 version) virtual {
+        _;
+    }
 
     /// @dev Compute the new base and quote amount after rebalanced to the latest version.
     ///      If any tokens should be distributed to LP holders, their amounts are also returned.

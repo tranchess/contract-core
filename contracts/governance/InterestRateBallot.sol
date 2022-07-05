@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
-pragma experimental ABIEncoderV2;
+pragma solidity ^0.8.0;
+pragma abicoder v2;
 
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 import "../utils/CoreUtility.sol";
 
@@ -36,7 +36,7 @@ contract InterestRateBallot is IBallot, CoreUtility {
     mapping(uint256 => uint256) public scheduledUnlock;
     mapping(uint256 => uint256) public scheduledWeightedUnlock;
 
-    constructor(address votingEscrow_) public {
+    constructor(address votingEscrow_) {
         votingEscrow = IVotingEscrow(votingEscrow_);
         _maxTime = IVotingEscrow(votingEscrow_).maxTime();
     }
@@ -81,8 +81,9 @@ contract InterestRateBallot is IBallot, CoreUtility {
     function cast(uint256 option) external {
         require(option < maxOption, "Invalid option");
 
-        IVotingEscrow.LockedBalance memory lockedBalance =
-            votingEscrow.getLockedBalance(msg.sender);
+        IVotingEscrow.LockedBalance memory lockedBalance = votingEscrow.getLockedBalance(
+            msg.sender
+        );
         Voter memory voter = voters[msg.sender];
         uint256 weight = getWeight(option);
         require(lockedBalance.amount > 0, "Zero value");
@@ -98,8 +99,7 @@ contract InterestRateBallot is IBallot, CoreUtility {
         );
         scheduledWeightedUnlock[lockedBalance.unlockTime] = scheduledWeightedUnlock[
             lockedBalance.unlockTime
-        ]
-            .add(lockedBalance.amount * weight);
+        ].add(lockedBalance.amount * weight);
 
         emit Voted(
             msg.sender,
@@ -141,8 +141,7 @@ contract InterestRateBallot is IBallot, CoreUtility {
         );
         scheduledWeightedUnlock[lockedBalance.unlockTime] = scheduledWeightedUnlock[
             lockedBalance.unlockTime
-        ]
-            .add(lockedBalance.amount * voter.weight);
+        ].add(lockedBalance.amount * voter.weight);
 
         emit Voted(
             account,
