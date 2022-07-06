@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.0;
+pragma solidity ^0.8.0;
 
 /**
  * @title Careful Math
@@ -11,7 +11,12 @@ abstract contract CarefulMath {
     /**
      * @dev Possible error codes that we can return
      */
-    enum MathError {NO_ERROR, DIVISION_BY_ZERO, INTEGER_OVERFLOW, INTEGER_UNDERFLOW}
+    enum MathError {
+        NO_ERROR,
+        DIVISION_BY_ZERO,
+        INTEGER_OVERFLOW,
+        INTEGER_UNDERFLOW
+    }
 
     /**
      * @dev Multiplies two numbers, returns an error on overflow.

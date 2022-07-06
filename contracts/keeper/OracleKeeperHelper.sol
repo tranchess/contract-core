@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
 import "./BatchKeeperHelperBase.sol";
 
@@ -14,7 +14,7 @@ contract OracleKeeperHelper is BatchKeeperHelperBase {
 
     uint256 public delay;
 
-    constructor(address[] memory oracles_, uint256 delay_) public BatchKeeperHelperBase(oracles_) {
+    constructor(address[] memory oracles_, uint256 delay_) BatchKeeperHelperBase(oracles_) {
         delay = delay_;
     }
 
@@ -22,7 +22,7 @@ contract OracleKeeperHelper is BatchKeeperHelperBase {
         delay = newDelay;
     }
 
-    function _checkUpkeep(address contractAddress) internal override returns (bool) {
+    function _checkUpkeep(address contractAddress) internal view override returns (bool) {
         IChainlinkTwapOracle chainlinkTwap = IChainlinkTwapOracle(contractAddress);
         uint256 lastTimestamp = chainlinkTwap.lastTimestamp();
         return block.timestamp > lastTimestamp + EPOCH + delay;

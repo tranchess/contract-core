@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
-import "@chainlink/contracts/src/v0.6/interfaces/AggregatorV3Interface.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "./StableSwap.sol";
 
 contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
+    using SafeMath for uint256;
+    using SafeDecimalMath for uint256;
+    using SafeERC20 for IERC20;
+
     event Rebalanced(uint256 base, uint256 quote, uint256 version);
 
     uint256 public immutable tradingCurbThreshold;
@@ -25,7 +29,6 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
         uint256 adminFeeRate_,
         uint256 tradingCurbThreshold_
     )
-        public
         StableSwap(
             lpToken_,
             fund_,

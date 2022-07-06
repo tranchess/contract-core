@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@chainlink/contracts/src/v0.6/interfaces/AggregatorV3Interface.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "@uniswap/v2-periphery/contracts/libraries/UniswapV2OracleLibrary.sol";
 import "@uniswap/lib/contracts/libraries/FixedPoint.sol";
 
@@ -95,7 +95,7 @@ contract ChainlinkTwapOracle is ITwapOracleV2, Ownable {
         address fallbackOracle_,
         uint256 fallbackTimestamp_,
         string memory symbol_
-    ) public {
+    ) {
         chainlinkAggregator = chainlinkAggregator_;
         chainlinkMinMessageCount = chainlinkMinMessageCount_;
         uint256 decimal = AggregatorV3Interface(chainlinkAggregator_).decimals();
@@ -131,8 +131,8 @@ contract ChainlinkTwapOracle is ITwapOracleV2, Ownable {
 
     /// @notice Return the latest price with 18 decimal places.
     function getLatest() external view override returns (uint256) {
-        (, int256 answer, , uint256 updatedAt, ) =
-            AggregatorV3Interface(chainlinkAggregator).latestRoundData();
+        (, int256 answer, , uint256 updatedAt, ) = AggregatorV3Interface(chainlinkAggregator)
+            .latestRoundData();
         require(updatedAt > block.timestamp - EPOCH, "Stale price oracle");
         return uint256(answer).mul(_chainlinkPriceMultiplier);
     }
@@ -206,8 +206,9 @@ contract ChainlinkTwapOracle is ITwapOracleV2, Ownable {
         view
         returns (uint256 twap, uint80 newRoundID)
     {
-        (uint80 roundID, int256 oldAnswer, , uint256 oldUpdatedAt, ) =
-            _getChainlinkRoundData(lastRoundID);
+        (uint80 roundID, int256 oldAnswer, , uint256 oldUpdatedAt, ) = _getChainlinkRoundData(
+            lastRoundID
+        );
         uint256 sum = 0;
         uint256 sumTimestamp = timestamp - EPOCH;
         uint256 messageCount = 0;
@@ -268,10 +269,9 @@ contract ChainlinkTwapOracle is ITwapOracleV2, Ownable {
             uint80
         )
     {
-        (bool success, bytes memory returnData) =
-            chainlinkAggregator.staticcall(
-                abi.encodePacked(AggregatorV3Interface.getRoundData.selector, abi.encode(roundID))
-            );
+        (bool success, bytes memory returnData) = chainlinkAggregator.staticcall(
+            abi.encodePacked(AggregatorV3Interface.getRoundData.selector, abi.encode(roundID))
+        );
         if (success) {
             return abi.decode(returnData, (uint80, int256, uint256, uint256, uint80));
         } else {
@@ -280,8 +280,8 @@ contract ChainlinkTwapOracle is ITwapOracleV2, Ownable {
     }
 
     function _observeSwap() private view returns (uint256) {
-        (uint256 price0Cumulative, uint256 price1Cumulative, ) =
-            UniswapV2OracleLibrary.currentCumulativePrices(swapPair);
+        (uint256 price0Cumulative, uint256 price1Cumulative, ) = UniswapV2OracleLibrary
+            .currentCumulativePrices(swapPair);
         return _swapTokenIndex == 0 ? price0Cumulative : price1Cumulative;
     }
 
@@ -294,10 +294,11 @@ contract ChainlinkTwapOracle is ITwapOracleV2, Ownable {
         return
             FixedPoint
                 .uq112x112(
-                uint224(
-                    (endCumulativePrice - startCumulativePrice) / (endTimestamp - startTimestamp)
+                    uint224(
+                        (endCumulativePrice - startCumulativePrice) /
+                            (endTimestamp - startTimestamp)
+                    )
                 )
-            )
                 .mul(_swapPriceMultiplier)
                 .decode144();
     }

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
-pragma experimental ABIEncoderV2;
+pragma solidity ^0.8.0;
+pragma abicoder v2;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import "@openzeppelin/contracts/math/Math.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 import "../interfaces/ILiquidityGauge.sol";
 import "../interfaces/IChessSchedule.sol";
@@ -84,7 +84,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         address votingEscrow_,
         address swapBonus_,
         uint256 rewardStartTimestamp_
-    ) public ERC20(name_, symbol_) {
+    ) ERC20(name_, symbol_) {
         stableSwap = stableSwap_;
         _quoteToken = IERC20(IStableSwap(stableSwap_).quoteAddress());
         chessSchedule = IChessSchedule(chessSchedule_);
@@ -142,7 +142,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         address,
         address,
         uint256
-    ) internal override {
+    ) internal pure override {
         revert("Transfer is not allowed");
     }
 
@@ -245,13 +245,11 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         if (veBalance > 0) {
             uint256 veTotalSupply = _votingEscrow.totalSupply();
             uint256 maxWorkingBalance = newWorkingBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
-            uint256 boostedWorkingBalance =
-                newWorkingBalance.add(
-                    newTotalSupply
-                        .mul(veBalance)
-                        .multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
-                        .div(veTotalSupply)
-                );
+            uint256 boostedWorkingBalance = newWorkingBalance.add(
+                newTotalSupply.mul(veBalance).multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE).div(
+                    veTotalSupply
+                )
+            );
             newWorkingBalance = maxWorkingBalance.min(boostedWorkingBalance);
         }
         _workingSupply = oldWorkingSupply.sub(oldWorkingBalance).add(newWorkingBalance);

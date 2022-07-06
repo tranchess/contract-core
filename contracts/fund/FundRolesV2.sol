@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
 import "../interfaces/ITrancheIndexV2.sol";
 
@@ -41,7 +41,7 @@ abstract contract FundRolesV2 is ITrancheIndexV2 {
         address tokenR_,
         address primaryMarket_,
         address strategy_
-    ) public {
+    ) {
         _tokenQ = tokenQ_;
         _tokenB = tokenB_;
         _tokenR = tokenR_;

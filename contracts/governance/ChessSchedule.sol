@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 import "../interfaces/IChessSchedule.sol";
@@ -40,7 +40,7 @@ contract ChessSchedule is IChessSchedule, OwnableUpgradeable, ChessRoles, CoreUt
 
     uint256 public minted;
 
-    constructor(address chess_, uint256 startTimestamp_) public ChessRoles() {
+    constructor(address chess_, uint256 startTimestamp_) ChessRoles() {
         require(
             _endOfWeek(startTimestamp_ - 1) == startTimestamp_,
             "Start timestamp is not start of a trading week"

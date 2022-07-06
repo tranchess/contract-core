@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/EnumerableSet.sol";
-import "@chainlink/contracts/src/v0.6/interfaces/KeeperCompatibleInterface.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@chainlink/contracts/src/v0.8/interfaces/KeeperCompatibleInterface.sol";
 
 contract BatchKeeperHelperBase is KeeperCompatibleInterface, Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -13,7 +13,7 @@ contract BatchKeeperHelperBase is KeeperCompatibleInterface, Ownable {
 
     EnumerableSet.AddressSet private _allowlist;
 
-    constructor(address[] memory contracts_) public {
+    constructor(address[] memory contracts_) {
         for (uint256 i = 0; i < contracts_.length; i++) {
             _allowlist.add(contracts_[i]);
             emit AllowlistAdded(contracts_[i]);

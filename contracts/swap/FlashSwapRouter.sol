@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
+pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router01.sol";
 
@@ -31,7 +31,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
     ISwapRouter public immutable tranchessRouter;
     mapping(address => bool) public externalRouterAllowlist;
 
-    constructor(address tranchessRouter_) public {
+    constructor(address tranchessRouter_) {
         tranchessRouter = ISwapRouter(tranchessRouter_);
     }
 
@@ -106,16 +106,15 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         require(externalRouterAllowlist[externalRouter], "Invalid external router");
         // Send the user's ROOK to this router
         fund.trancheTransferFrom(TRANCHE_R, msg.sender, address(this), inR, version);
-        bytes memory data =
-            abi.encode(
-                fund,
-                queenSwapOrPrimaryMarketRouter,
-                minQuote,
-                recipient,
-                version,
-                externalRouter,
-                externalPath
-            );
+        bytes memory data = abi.encode(
+            fund,
+            queenSwapOrPrimaryMarketRouter,
+            minQuote,
+            recipient,
+            version,
+            externalRouter,
+            externalPath
+        );
         tranchessRouter.getSwap(fund.tokenB(), tokenQuote).buy(version, inR, address(this), data);
     }
 
@@ -144,16 +143,15 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
                 require(quoteOut == 0, "Unidirectional check failed");
                 uint256 quoteAmount = IStableSwap(msg.sender).getQuoteIn(baseOut);
                 // Merge BISHOP and ROOK into QUEEN
-                uint256 outQ =
-                    IPrimaryMarketV3(fund.primaryMarket()).merge(
-                        queenSwapOrPrimaryMarketRouter,
-                        baseOut,
-                        version
-                    );
+                uint256 outQ = IPrimaryMarketV3(fund.primaryMarket()).merge(
+                    queenSwapOrPrimaryMarketRouter,
+                    baseOut,
+                    version
+                );
 
                 // Redeem or swap QUEEN for underlying
-                uint256 underlyingAmount =
-                    IStableSwapCore(queenSwapOrPrimaryMarketRouter).getQuoteOut(outQ);
+                uint256 underlyingAmount = IStableSwapCore(queenSwapOrPrimaryMarketRouter)
+                    .getQuoteOut(outQ);
                 underlyingAmount = IStableSwapCore(queenSwapOrPrimaryMarketRouter).sell(
                     version,
                     underlyingAmount,
@@ -162,8 +160,12 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
                 );
 
                 // Trade underlying for quote asset
-                uint256 totalQuoteAmount =
-                    _externalSwap(data, underlyingAmount, fund.tokenUnderlying(), tokenQuote);
+                uint256 totalQuoteAmount = _externalSwap(
+                    data,
+                    underlyingAmount,
+                    fund.tokenUnderlying(),
+                    tokenQuote
+                );
                 // Send back quote asset to tranchess swap
                 IERC20(tokenQuote).safeTransfer(msg.sender, quoteAmount);
                 // Send the rest of quote asset to user
@@ -175,12 +177,17 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         } else {
             address tokenUnderlying = fund.tokenUnderlying();
             // Trade quote asset for underlying asset
-            uint256 underlyingAmount =
-                _externalSwap(data, expectQuoteAmount, tokenQuote, tokenUnderlying);
+            uint256 underlyingAmount = _externalSwap(
+                data,
+                expectQuoteAmount,
+                tokenQuote,
+                tokenUnderlying
+            );
 
             // Create or swap borrowed underlying for QUEEN
-            uint256 outQ =
-                IStableSwapCore(queenSwapOrPrimaryMarketRouter).getBaseOut(underlyingAmount);
+            uint256 outQ = IStableSwapCore(queenSwapOrPrimaryMarketRouter).getBaseOut(
+                underlyingAmount
+            );
             IERC20(tokenUnderlying).safeTransfer(queenSwapOrPrimaryMarketRouter, underlyingAmount);
             outQ = IStableSwapCore(queenSwapOrPrimaryMarketRouter).buy(
                 version,
@@ -190,8 +197,11 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
             );
 
             // Split QUEEN into BISHOP and ROOK
-            uint256 outB =
-                IPrimaryMarketV3(fund.primaryMarket()).split(address(this), outQ, version);
+            uint256 outB = IPrimaryMarketV3(fund.primaryMarket()).split(
+                address(this),
+                outQ,
+                version
+            );
             // Send back BISHOP to tranchess swap
             fund.trancheTransfer(TRANCHE_B, msg.sender, outB, version);
             // Send ROOK to user
@@ -205,8 +215,10 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         address tokenIn,
         address tokenOut
     ) private returns (uint256 amountOut) {
-        (, , , , , address externalRouter, address[] memory externalPath) =
-            abi.decode(data, (address, address, uint256, address, uint256, address, address[]));
+        (, , , , , address externalRouter, address[] memory externalPath) = abi.decode(
+            data,
+            (address, address, uint256, address, uint256, address, address[])
+        );
         require(externalPath.length > 1, "Invalid external path");
         require(externalPath[0] == tokenIn, "Invalid token in");
         require(externalPath[externalPath.length - 1] == tokenOut, "Invalid token out");

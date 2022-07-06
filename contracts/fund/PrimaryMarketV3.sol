@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
-pragma experimental ABIEncoderV2;
+pragma solidity ^0.8.0;
+pragma abicoder v2;
 
-import "@openzeppelin/contracts/math/Math.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../utils/SafeDecimalMath.sol";
@@ -80,7 +80,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 redemptionFeeRate_,
         uint256 mergeFeeRate_,
         uint256 fundCap_
-    ) public Ownable() {
+    ) Ownable() {
         fund = IFundV3(fund_);
         _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
         _updateRedemptionFeeRate(redemptionFeeRate_);
@@ -254,16 +254,18 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 r = redemptionQueueTail;
         uint256 startPrefixSum = queuedRedemptions[l].previousPrefixSum;
         // overflow is desired
-        if (queuedRedemptions[r].previousPrefixSum - startPrefixSum <= available) {
-            return r;
-        }
-        // Iteration count is bounded by log2(tail - head), which is at most 256.
-        while (l + 1 < r) {
-            uint256 m = (l + r) / 2;
-            if (queuedRedemptions[m].previousPrefixSum - startPrefixSum <= available) {
-                l = m;
-            } else {
-                r = m;
+        unchecked {
+            if (queuedRedemptions[r].previousPrefixSum - startPrefixSum <= available) {
+                return r;
+            }
+            // Iteration count is bounded by log2(tail - head), which is at most 256.
+            while (l + 1 < r) {
+                uint256 m = (l + r) / 2;
+                if (queuedRedemptions[m].previousPrefixSum - startPrefixSum <= available) {
+                    l = m;
+                } else {
+                    r = m;
+                }
             }
         }
         return l;
@@ -413,9 +415,11 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         newRedemption.account = recipient;
         newRedemption.underlying = underlying;
         // overflow is desired
-        queuedRedemptions[index + 1].previousPrefixSum =
-            newRedemption.previousPrefixSum +
-            underlying;
+        unchecked {
+            queuedRedemptions[index + 1].previousPrefixSum =
+                newRedemption.previousPrefixSum +
+                underlying;
+        }
         redemptionQueueTail = index + 1;
         fund.primaryMarketAddDebt(underlying, fee);
         emit Redeemed(recipient, inQ, underlying, fee);
@@ -444,9 +448,12 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
             require(newHead <= oldTail, "Redemption queue out of bound");
         }
         // overflow is desired
-        uint256 requiredUnderlying =
-            queuedRedemptions[newHead].previousPrefixSum -
+        uint256 requiredUnderlying;
+        unchecked {
+            requiredUnderlying =
+                queuedRedemptions[newHead].previousPrefixSum -
                 queuedRedemptions[oldHead].previousPrefixSum;
+        }
         // Redundant check for user-friendly revert message.
         require(
             requiredUnderlying <= _tokenUnderlying.balanceOf(address(fund)),

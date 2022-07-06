@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
-pragma experimental ABIEncoderV2;
+pragma solidity ^0.8.0;
+pragma abicoder v2;
 
 import "../fund/ShareStaking.sol";
 
@@ -19,7 +19,7 @@ contract PrimaryMarketRouter is IPrimaryMarketRouter, ITrancheIndexV2 {
     IERC20 private immutable _tokenUnderlying;
     address private immutable _tokenB;
 
-    constructor(address pm) public {
+    constructor(address pm) {
         primaryMarket = IPrimaryMarketV3(pm);
         IFundV3 fund_ = IPrimaryMarketV3(pm).fund();
         fund = fund_;

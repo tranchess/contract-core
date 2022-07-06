@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.6.10 <0.8.0;
-pragma experimental ABIEncoderV2;
+pragma solidity ^0.8.0;
+pragma abicoder v2;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
@@ -238,7 +238,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         SwapRouter swapRouter_,
         address flashSwapRouter_,
         IERC20 bishopQuoteToken_
-    ) public {
+    ) {
         votingEscrow = votingEscrow_;
         chessSchedule = chessSchedule_;
         chess = IERC20(votingEscrow_.token());
@@ -289,31 +289,26 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         FundV3 fund = FundV3(address(primaryMarketRouter.fund()));
         data.fund = getFundData(fund);
 
-        PrimaryMarketV3 primaryMarket =
-            PrimaryMarketV3(payable(address(primaryMarketRouter.primaryMarket())));
+        PrimaryMarketV3 primaryMarket = PrimaryMarketV3(
+            payable(address(primaryMarketRouter.primaryMarket()))
+        );
         data.primaryMarket = getPrimaryMarketData(primaryMarket);
 
         data.shareStaking = getShareStakingData(shareStaking, data.fund.splitRatio, account);
 
-        StableSwap bishopStableSwap =
-            StableSwap(
-                payable(
-                    address(
-                        swapRouter.getSwap(fund.tokenShare(TRANCHE_B), address(bishopQuoteToken))
-                    )
-                )
-            );
+        StableSwap bishopStableSwap = StableSwap(
+            payable(
+                address(swapRouter.getSwap(fund.tokenShare(TRANCHE_B), address(bishopQuoteToken)))
+            )
+        );
         data.bishopStableSwap = getStableSwapData(bishopStableSwap, account);
 
         IERC20 underlyingToken = IERC20(fund.tokenUnderlying());
-        StableSwap queenStableSwap =
-            StableSwap(
-                payable(
-                    address(
-                        swapRouter.getSwap(fund.tokenShare(TRANCHE_Q), address(underlyingToken))
-                    )
-                )
-            );
+        StableSwap queenStableSwap = StableSwap(
+            payable(
+                address(swapRouter.getSwap(fund.tokenShare(TRANCHE_Q), address(underlyingToken)))
+            )
+        );
         if (address(queenStableSwap) != address(0)) {
             data.queenStableSwap = getStableSwapData(queenStableSwap, account);
         }
@@ -406,8 +401,9 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
     }
 
     function getLatestPrice(ITwapOracleV2 twapOracle) public view returns (uint256) {
-        (bool success, bytes memory encodedPrice) =
-            address(twapOracle).staticcall(abi.encodeWithSignature("getLatest()"));
+        (bool success, bytes memory encodedPrice) = address(twapOracle).staticcall(
+            abi.encodeWithSignature("getLatest()")
+        );
         if (success) {
             return abi.decode(encodedPrice, (uint256));
         } else {
@@ -420,6 +416,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
                 }
             }
         }
+        return 0;
     }
 
     function getPrimaryMarketData(PrimaryMarketV3 primaryMarket)
@@ -503,8 +500,9 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         data.bonusToken = swapBonus.bonusToken();
         data.bonusRate = block.timestamp < swapBonus.endTimestamp() ? swapBonus.ratePerSecond() : 0;
 
-        (bool success, bytes memory encodedOraclePrice) =
-            address(stableSwap).call(abi.encodeWithSignature("getOraclePrice()"));
+        (bool success, bytes memory encodedOraclePrice) = address(stableSwap).call(
+            abi.encodeWithSignature("getOraclePrice()")
+        );
         if (success) {
             data.currentD = stableSwap.getCurrentD();
             data.currentPrice = stableSwap.getCurrentPrice();
@@ -575,8 +573,9 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         address token0,
         address token1
     ) public view returns (ExternalSwapData memory data) {
-        IUniswapV2Pair pair =
-            IUniswapV2Pair(IUniswapV2Factory(router.factory()).getPair(token0, token1));
+        IUniswapV2Pair pair = IUniswapV2Pair(
+            IUniswapV2Factory(router.factory()).getPair(token0, token1)
+        );
         data.symbol0 = ERC20(token0).symbol();
         data.symbol1 = ERC20(token1).symbol();
         if (pair.token0() == token0) {
