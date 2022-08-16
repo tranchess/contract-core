@@ -18,6 +18,7 @@ contract MockTwapOracle is ITwapOracleV2, CoreUtility, Ownable {
     event ReporterAdded(address reporter);
     event ReporterRemoved(address reporter);
 
+    uint256 public constant decimals = 18;
     uint256 private constant EPOCH = 30 minutes;
     uint256 private constant MAX_ITERATION = 500;
 
