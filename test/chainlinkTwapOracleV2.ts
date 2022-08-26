@@ -5,7 +5,7 @@ import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 import { deployMockForName } from "./mock";
-import { HOUR, FixtureWalletMap, advanceBlockAtTime } from "./utils";
+import { HOUR, FixtureWalletMap, advanceBlockAtTime, setNextBlockTime } from "./utils";
 
 const EPOCH = HOUR / 2;
 const MIN_MESSAGE_COUNT = 10;
@@ -22,6 +22,7 @@ describe("ChainlinkTwapOracleV2", function () {
         readonly wallets: FixtureWalletMap;
         readonly startEpoch: number;
         readonly aggregator: MockContract;
+        readonly fund: MockContract;
         readonly twapOracle: Contract;
         readonly firstRoundID: number;
         readonly nextRoundID: number;
@@ -33,6 +34,7 @@ describe("ChainlinkTwapOracleV2", function () {
     let user1: Wallet;
     let startEpoch: number;
     let aggregator: MockContract;
+    let fund: MockContract;
     let twapOracle: Contract;
     let firstRoundID: number;
     let nextRoundID: number;
@@ -46,13 +48,17 @@ describe("ChainlinkTwapOracleV2", function () {
 
         const aggregator = await deployMockForName(owner, "AggregatorV3Interface");
         await aggregator.mock.decimals.returns(CHAINLINK_DECIMAL);
+        const fund = await deployMockForName(owner, "IFundV3");
+        await fund.mock.getRebalanceSize.returns(0);
+        await fund.mock.getRebalanceTimestamp.returns(0);
 
         const ChainlinkTwapOracle = await ethers.getContractFactory("ChainlinkTwapOracleV2");
         const twapOracle = await ChainlinkTwapOracle.connect(owner).deploy(
             aggregator.address,
             MIN_MESSAGE_COUNT,
             MESSAGE_EXPIRATION,
-            "BTC"
+            "BTC",
+            fund.address
         );
 
         const firstRoundID = 123000;
@@ -90,6 +96,7 @@ describe("ChainlinkTwapOracleV2", function () {
             wallets: { user1, owner },
             startEpoch,
             aggregator,
+            fund,
             twapOracle,
             firstRoundID,
             nextRoundID,
@@ -117,6 +124,7 @@ describe("ChainlinkTwapOracleV2", function () {
         user1 = fixtureData.wallets.user1;
         startEpoch = fixtureData.startEpoch;
         aggregator = fixtureData.aggregator;
+        fund = fixtureData.fund;
         twapOracle = fixtureData.twapOracle;
         firstRoundID = fixtureData.firstRoundID;
         nextRoundID = fixtureData.nextRoundID;
@@ -323,6 +331,12 @@ describe("ChainlinkTwapOracleV2", function () {
             expect(await twapOracle.getLatest()).to.equal(parseEther("12345"));
             await advanceBlockAtTime(startEpoch + MESSAGE_EXPIRATION + 1);
             await expect(twapOracle.getLatest()).to.be.revertedWith("Stale price oracle");
+        });
+
+        it("Should revert if queried at the same time when a rebalance is triggered", async function () {
+            await setNextBlockTime(startEpoch + 100);
+            await fund.mock.getRebalanceTimestamp.returns(startEpoch + 100);
+            await expect(twapOracle.getLatest()).to.be.revertedWith("Rebalance in the same block");
         });
     });
 

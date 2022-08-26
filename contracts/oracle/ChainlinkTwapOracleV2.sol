@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@chainlink/contracts/src/v0.6/interfaces/AggregatorV3Interface.sol";
 
 import "../interfaces/ITwapOracleV2.sol";
+import "../interfaces/IFundV3.sol";
 
 /// @title Time-weighted average price oracle
 /// @notice This contract extends the Chainlink Oracle, computes 30-minute
@@ -43,6 +44,9 @@ contract ChainlinkTwapOracleV2 is ITwapOracleV2, Ownable {
 
     string public symbol;
 
+    /// @dev The fund that uses this oracle. This is used to workaround an issue in `StableSwap`.
+    IFundV3 private immutable _fund;
+
     /// @dev Mapping of epoch end timestamp => TWAP
     mapping(uint256 => uint256) private _ownerUpdatedPrices;
 
@@ -50,7 +54,8 @@ contract ChainlinkTwapOracleV2 is ITwapOracleV2, Ownable {
         address chainlinkAggregator_,
         uint256 chainlinkMinMessageCount_,
         uint256 chainlinkMessageExpiration_,
-        string memory symbol_
+        string memory symbol_,
+        address fund_
     ) public {
         chainlinkAggregator = chainlinkAggregator_;
         require(chainlinkMinMessageCount_ > 0);
@@ -59,6 +64,7 @@ contract ChainlinkTwapOracleV2 is ITwapOracleV2, Ownable {
         uint256 decimal = AggregatorV3Interface(chainlinkAggregator_).decimals();
         _chainlinkPriceMultiplier = 10**(uint256(18).sub(decimal));
         symbol = symbol_;
+        _fund = IFundV3(fund_);
     }
 
     /// @notice Return the latest price with 18 decimal places.
@@ -66,6 +72,12 @@ contract ChainlinkTwapOracleV2 is ITwapOracleV2, Ownable {
         (, int256 answer, , uint256 updatedAt, ) =
             AggregatorV3Interface(chainlinkAggregator).latestRoundData();
         require(updatedAt >= block.timestamp - chainlinkMessageExpiration, "Stale price oracle");
+        // This check is to workaround an issue in `StableSwap` that may be triggered
+        // in the same block of a rebalance.
+        require(
+            _fund.getRebalanceTimestamp(_fund.getRebalanceSize()) != block.timestamp,
+            "Rebalance in the same block"
+        );
         return uint256(answer).mul(_chainlinkPriceMultiplier);
     }
 
