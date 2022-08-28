@@ -113,7 +113,9 @@ contract ChainlinkTwapOracleV2 is ITwapOracleV2, Ownable {
                 (, answer, , updatedAt, ) = _getChainlinkRoundData(roundID);
             }
         } else {
-            // Slow path: binary search
+            // Slow path: binary search. During the search, the `roundID` round is always updated
+            // at or after the given timestamp, and the `leftRoundID` round is either invalid or
+            // updated before the given timestamp.
             uint80 step = 1;
             uint80 leftRoundID = 0;
             while (step <= roundID) {
