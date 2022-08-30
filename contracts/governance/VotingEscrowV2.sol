@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
+import "./VotingEscrowCheckpoint.sol";
 import "../utils/CoreUtility.sol";
 import "../utils/ManagedPausable.sol";
 import "../interfaces/IVotingEscrow.sol";
@@ -27,6 +28,7 @@ contract VotingEscrowV2 is
     OwnableUpgradeable,
     ReentrancyGuard,
     CoreUtility,
+    VotingEscrowCheckpoint,
     ManagedPausable,
     ProxyUtility
 {
@@ -81,7 +83,7 @@ contract VotingEscrowV2 is
     /// @notice Start timestamp of the trading week in which the last checkpoint is made
     uint256 public checkpointWeek;
 
-    constructor(address token_, uint256 maxTime_) public {
+    constructor(address token_, uint256 maxTime_) public VotingEscrowCheckpoint(maxTime_) {
         token = token_;
         maxTime = maxTime_;
     }
@@ -160,30 +162,7 @@ contract VotingEscrowV2 is
     }
 
     function totalSupply() external view override returns (uint256) {
-        uint256 weekCursor = checkpointWeek;
-        uint256 nextWeek = _endOfWeek(block.timestamp);
-        uint256 currentWeek = nextWeek - 1 weeks;
-        uint256 newNextWeekSupply = nextWeekSupply;
-        uint256 newTotalLocked = totalLocked;
-        if (weekCursor < currentWeek) {
-            weekCursor += 1 weeks;
-            for (; weekCursor < currentWeek; weekCursor += 1 weeks) {
-                // Remove Chess unlocked at the beginning of the next week from total locked amount.
-                newTotalLocked = newTotalLocked.sub(scheduledUnlock[weekCursor]);
-                // Calculate supply at the end of the next week.
-                newNextWeekSupply = newNextWeekSupply.sub(newTotalLocked.mul(1 weeks) / maxTime);
-            }
-            newTotalLocked = newTotalLocked.sub(scheduledUnlock[weekCursor]);
-            newNextWeekSupply = newNextWeekSupply.sub(
-                newTotalLocked.mul(block.timestamp - currentWeek) / maxTime
-            );
-        } else {
-            newNextWeekSupply = newNextWeekSupply.add(
-                newTotalLocked.mul(nextWeek - block.timestamp) / maxTime
-            );
-        }
-
-        return newNextWeekSupply;
+        return _veTotalSupply(scheduledUnlock, checkpointWeek, nextWeekSupply, totalLocked);
     }
 
     function getLockedBalance(address account)
@@ -225,8 +204,7 @@ contract VotingEscrowV2 is
             "Voting lock cannot exceed max lock time"
         );
 
-        _checkpoint(lockedBalance.amount, lockedBalance.unlockTime, amount, unlockTime);
-        scheduledUnlock[unlockTime] = scheduledUnlock[unlockTime].add(amount);
+        _checkpointAndUpdateLock(0, 0, amount, unlockTime);
         locked[msg.sender].unlockTime = unlockTime;
         locked[msg.sender].amount = amount;
 
@@ -246,14 +224,11 @@ contract VotingEscrowV2 is
         require(lockedBalance.unlockTime > block.timestamp, "Cannot add to expired lock");
 
         uint256 newAmount = lockedBalance.amount.add(amount);
-        _checkpoint(
+        _checkpointAndUpdateLock(
             lockedBalance.amount,
             lockedBalance.unlockTime,
             newAmount,
             lockedBalance.unlockTime
-        );
-        scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime].add(
-            amount
         );
         locked[account].amount = newAmount;
 
@@ -280,16 +255,12 @@ contract VotingEscrowV2 is
             "Voting lock cannot exceed max lock time"
         );
 
-        _checkpoint(
+        _checkpointAndUpdateLock(
             lockedBalance.amount,
             lockedBalance.unlockTime,
             lockedBalance.amount,
             unlockTime
         );
-        scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime].sub(
-            lockedBalance.amount
-        );
-        scheduledUnlock[unlockTime] = scheduledUnlock[unlockTime].add(lockedBalance.amount);
         locked[msg.sender].unlockTime = unlockTime;
 
         if (callback != address(0)) {
@@ -369,44 +340,31 @@ contract VotingEscrowV2 is
     ///      - `newUnlockTime > block.timestamp`
     ///      - `newUnlockTime + 1 weeks == _endOfWeek(newUnlockTime)`, i.e. aligned to a trading week
     ///
-    ///      The latter two conditions gaurantee that `newUnlockTime` is no smaller than the local
-    ///      variable `nextWeek` in the function.
-    function _checkpoint(
+    ///      The latter two conditions gaurantee that `newUnlockTime` is no smaller than
+    ///      `_endOfWeek(block.timestamp)`.
+    function _checkpointAndUpdateLock(
         uint256 oldAmount,
         uint256 oldUnlockTime,
         uint256 newAmount,
         uint256 newUnlockTime
     ) private {
-        // Update veCHESS supply at the beginning of each week since the last checkpoint.
-        uint256 weekCursor = checkpointWeek;
-        uint256 nextWeek = _endOfWeek(block.timestamp);
-        uint256 currentWeek = nextWeek - 1 weeks;
-        uint256 newTotalLocked = totalLocked;
-        uint256 newNextWeekSupply = nextWeekSupply;
-        if (weekCursor < currentWeek) {
-            for (uint256 w = weekCursor + 1 weeks; w <= currentWeek; w += 1 weeks) {
-                veSupplyPerWeek[w] = newNextWeekSupply;
-                // Remove Chess unlocked at the beginning of this week from total locked amount.
-                newTotalLocked = newTotalLocked.sub(scheduledUnlock[w]);
-                // Calculate supply at the end of the next week.
-                newNextWeekSupply = newNextWeekSupply.sub(newTotalLocked.mul(1 weeks) / maxTime);
-            }
-            checkpointWeek = currentWeek;
-        }
-
-        // Remove the old schedule if there is one
-        if (oldAmount > 0 && oldUnlockTime >= nextWeek) {
-            newTotalLocked = newTotalLocked.sub(oldAmount);
-            newNextWeekSupply = newNextWeekSupply.sub(
-                oldAmount.mul(oldUnlockTime - nextWeek) / maxTime
-            );
-        }
-
-        totalLocked = newTotalLocked.add(newAmount);
-        // Round up on division when added to the total supply, so that the total supply is never
-        // smaller than the sum of all accounts' veCHESS balance.
-        nextWeekSupply = newNextWeekSupply.add(
-            newAmount.mul(newUnlockTime - nextWeek).add(maxTime - 1) / maxTime
+        uint256 newNextWeekSupply;
+        uint256 newTotalLocked;
+        (checkpointWeek, newNextWeekSupply, newTotalLocked) = _veCheckpoint(
+            scheduledUnlock,
+            checkpointWeek,
+            nextWeekSupply,
+            totalLocked,
+            veSupplyPerWeek
+        );
+        (nextWeekSupply, totalLocked) = _veUpdateLock(
+            newNextWeekSupply,
+            newTotalLocked,
+            oldAmount,
+            oldUnlockTime,
+            newAmount,
+            newUnlockTime,
+            scheduledUnlock
         );
     }
 

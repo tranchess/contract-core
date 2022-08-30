@@ -8,11 +8,18 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../utils/CoreUtility.sol";
 import "../utils/SafeDecimalMath.sol";
 
+import "../governance/VotingEscrowCheckpoint.sol";
 import {IVotingEscrowCallback} from "../governance/VotingEscrowV2.sol";
 import "../interfaces/IControllerBallot.sol";
 import "../interfaces/IVotingEscrow.sol";
 
-contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, CoreUtility {
+contract ControllerBallot is
+    IControllerBallot,
+    IVotingEscrowCallback,
+    Ownable,
+    CoreUtility,
+    VotingEscrowCheckpoint
+{
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
 
@@ -29,7 +36,6 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
     );
 
     IVotingEscrow public immutable votingEscrow;
-    uint256 private immutable _maxTime;
 
     address[65535] private _pools;
     uint256 public poolSize;
@@ -46,12 +52,20 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
     ///         unlocked at unlockTime
     mapping(address => mapping(uint256 => uint256)) public poolScheduledUnlock;
 
+    mapping(address => mapping(uint256 => uint256)) public poolVeSupplyPerWeek;
+    mapping(address => uint256) public poolTotalLocked;
+    mapping(address => uint256) public poolNextWeekSupply;
+    uint256 public checkpointWeek;
+
     /// @notice Mapping of pool => status of the pool
     mapping(uint256 => bool) public disabledPools;
 
-    constructor(address votingEscrow_) public {
+    constructor(address votingEscrow_)
+        public
+        VotingEscrowCheckpoint(IVotingEscrow(votingEscrow_).maxTime())
+    {
         votingEscrow = IVotingEscrow(votingEscrow_);
-        _maxTime = IVotingEscrow(votingEscrow_).maxTime();
+        checkpointWeek = _endOfWeek(block.timestamp) - 1 weeks;
     }
 
     function getPools() external view returns (address[] memory) {
@@ -113,17 +127,17 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
     }
 
     function sumAtTimestamp(address pool, uint256 timestamp) public view returns (uint256) {
-        uint256 sum = 0;
-        for (
-            uint256 weekCursor = _endOfWeek(timestamp);
-            weekCursor <= timestamp + _maxTime;
-            weekCursor += 1 weeks
-        ) {
-            sum = sum.add(
-                poolScheduledUnlock[pool][weekCursor].mul(weekCursor - timestamp) / _maxTime
-            );
-        }
-        return sum;
+        uint256 week = _endOfWeek(timestamp) - 1 weeks;
+        return
+            week <= checkpointWeek
+                ? poolVeSupplyPerWeek[pool][week]
+                : _veTotalSupplyAtWeek(
+                    week,
+                    poolScheduledUnlock[pool],
+                    checkpointWeek,
+                    poolNextWeekSupply[pool],
+                    poolTotalLocked[pool]
+                );
     }
 
     function count(uint256 timestamp)
@@ -213,19 +227,31 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
         IVotingEscrow.LockedBalance memory oldLockedBalance,
         IVotingEscrow.LockedBalance memory lockedBalance
     ) private {
+        uint256 oldCheckpointWeek = checkpointWeek;
+        uint256 newCheckpointWeek;
         for (uint256 i = 0; i < size; i++) {
             address pool = _pools[i];
-            poolScheduledUnlock[pool][oldLockedBalance.unlockTime] = poolScheduledUnlock[pool][
-                oldLockedBalance.unlockTime
-            ]
-                .sub(oldLockedBalance.amount.multiplyDecimal(oldWeights[i]));
-
-            poolScheduledUnlock[pool][lockedBalance.unlockTime] = poolScheduledUnlock[pool][
-                lockedBalance.unlockTime
-            ]
-                .add(lockedBalance.amount.multiplyDecimal(weights[i]));
+            uint256 newNextWeekSupply;
+            uint256 newTotalLocked;
+            (newCheckpointWeek, newNextWeekSupply, newTotalLocked) = _veCheckpoint(
+                poolScheduledUnlock[pool],
+                oldCheckpointWeek,
+                poolNextWeekSupply[pool],
+                poolTotalLocked[pool],
+                poolVeSupplyPerWeek[pool]
+            );
+            (poolNextWeekSupply[pool], poolTotalLocked[pool]) = _veUpdateLock(
+                newNextWeekSupply,
+                newTotalLocked,
+                oldLockedBalance.amount.multiplyDecimal(oldWeights[i]),
+                oldLockedBalance.unlockTime,
+                lockedBalance.amount.multiplyDecimal(weights[i]),
+                lockedBalance.unlockTime,
+                poolScheduledUnlock[pool]
+            );
             userWeights[account][pool] = weights[i];
         }
+        checkpointWeek = newCheckpointWeek;
         userLockedBalances[account] = lockedBalance;
         emit Voted(
             account,

@@ -7,13 +7,14 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+import "./VotingEscrowCheckpoint.sol";
 import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
 
 import "../interfaces/IVotingEscrow.sol";
 import "../interfaces/IWrappedERC20.sol";
 
-contract FeeDistributor is CoreUtility, Ownable {
+contract FeeDistributor is CoreUtility, Ownable, VotingEscrowCheckpoint {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
@@ -24,7 +25,6 @@ contract FeeDistributor is CoreUtility, Ownable {
     /// @notice 60% as the max admin fee rate
     uint256 public constant MAX_ADMIN_FEE_RATE = 6e17;
 
-    uint256 private immutable _maxTime;
     IERC20 public immutable rewardToken;
     IVotingEscrow public immutable votingEscrow;
 
@@ -89,10 +89,9 @@ contract FeeDistributor is CoreUtility, Ownable {
         address votingEscrow_,
         address admin_,
         uint256 adminFeeRate_
-    ) public {
+    ) public VotingEscrowCheckpoint(IVotingEscrow(votingEscrow_).maxTime()) {
         rewardToken = IERC20(rewardToken_);
         votingEscrow = IVotingEscrow(votingEscrow_);
-        _maxTime = IVotingEscrow(votingEscrow_).maxTime();
         _updateAdmin(admin_);
         _updateAdminFeeRate(adminFeeRate_);
         checkpointTimestamp = block.timestamp;
@@ -155,29 +154,14 @@ contract FeeDistributor is CoreUtility, Ownable {
             return;
         }
         IVotingEscrow.LockedBalance memory oldLockedBalance = userLockedBalances[account];
-        uint256 newNextWeekLocked = nextWeekLocked;
-        uint256 newNextWeekSupply = nextWeekSupply;
-
-        // Remove the old schedule if there is one
-        if (oldLockedBalance.amount > 0 && oldLockedBalance.unlockTime > nextWeek) {
-            scheduledUnlock[oldLockedBalance.unlockTime] = scheduledUnlock[
-                oldLockedBalance.unlockTime
-            ]
-                .sub(oldLockedBalance.amount);
-            newNextWeekLocked = newNextWeekLocked.sub(oldLockedBalance.amount);
-            newNextWeekSupply = newNextWeekSupply.sub(
-                oldLockedBalance.amount.mul(oldLockedBalance.unlockTime - nextWeek) / _maxTime
-            );
-        }
-
-        scheduledUnlock[newLockedBalance.unlockTime] = scheduledUnlock[newLockedBalance.unlockTime]
-            .add(newLockedBalance.amount);
-        nextWeekLocked = newNextWeekLocked.add(newLockedBalance.amount);
-        // Round up on division when added to the total supply, so that the total supply is never
-        // smaller than the sum of all accounts' veCHESS balance.
-        nextWeekSupply = newNextWeekSupply.add(
-            newLockedBalance.amount.mul(newLockedBalance.unlockTime - nextWeek).add(_maxTime - 1) /
-                _maxTime
+        (nextWeekSupply, nextWeekLocked) = _veUpdateLock(
+            nextWeekSupply,
+            nextWeekLocked,
+            oldLockedBalance.amount,
+            oldLockedBalance.unlockTime,
+            newLockedBalance.amount,
+            newLockedBalance.unlockTime,
+            scheduledUnlock
         );
         userLockedBalances[account] = newLockedBalance;
 
@@ -244,19 +228,13 @@ contract FeeDistributor is CoreUtility, Ownable {
         uint256 currentWeek = _endOfWeek(block.timestamp) - 1 weeks;
 
         // Update veCHESS supply at the beginning of each week since the last checkpoint.
-        if (weekCursor < currentWeek) {
-            uint256 newLocked = nextWeekLocked;
-            uint256 newSupply = nextWeekSupply;
-            for (uint256 w = weekCursor + 1 weeks; w <= currentWeek; w += 1 weeks) {
-                veSupplyPerWeek[w] = newSupply;
-                // Calculate supply at the end of the next week.
-                newSupply = newSupply.sub(newLocked.mul(1 weeks) / _maxTime);
-                // Remove Chess unlocked at the end of the next week from total locked amount.
-                newLocked = newLocked.sub(scheduledUnlock[w + 1 weeks]);
-            }
-            nextWeekLocked = newLocked;
-            nextWeekSupply = newSupply;
-        }
+        (, nextWeekSupply, nextWeekLocked) = _veCheckpoint(
+            scheduledUnlock,
+            weekCursor,
+            nextWeekSupply,
+            nextWeekLocked,
+            veSupplyPerWeek
+        );
 
         // Distribute rewards received since the last checkpoint.
         if (tokensToDistribute > 0) {
