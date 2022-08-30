@@ -4,6 +4,7 @@ pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 
+import "./VotingEscrowCheckpoint.sol";
 import "../utils/CoreUtility.sol";
 import "../utils/SafeDecimalMath.sol";
 
@@ -11,7 +12,7 @@ import "../interfaces/IBallot.sol";
 import "../interfaces/IFundV3.sol";
 import "../interfaces/IVotingEscrow.sol";
 
-contract InterestRateBallotV2 is IBallot, CoreUtility {
+contract InterestRateBallotV2 is IBallot, CoreUtility, VotingEscrowCheckpoint {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
 
@@ -25,51 +26,45 @@ contract InterestRateBallotV2 is IBallot, CoreUtility {
         uint256 indexed weight
     );
 
-    uint256 private immutable _maxTime;
-
     IVotingEscrow public immutable votingEscrow;
 
     mapping(address => Voter) public voters;
 
     // unlockTime => amount that will be unlocked at unlockTime
     mapping(uint256 => uint256) public scheduledUnlock;
-    mapping(uint256 => uint256) public scheduledWeightedUnlock;
+    mapping(uint256 => uint256) public veSupplyPerWeek;
+    uint256 public totalLocked;
+    uint256 public nextWeekSupply;
 
-    constructor(address votingEscrow_) public {
+    mapping(uint256 => uint256) public weightedScheduledUnlock;
+    mapping(uint256 => uint256) public weightedVeSupplyPerWeek;
+    uint256 public weightedTotalLocked;
+    uint256 public weightedNextWeekSupply;
+
+    uint256 public checkpointWeek;
+
+    constructor(address votingEscrow_)
+        public
+        VotingEscrowCheckpoint(IVotingEscrow(votingEscrow_).maxTime())
+    {
         votingEscrow = IVotingEscrow(votingEscrow_);
-        _maxTime = IVotingEscrow(votingEscrow_).maxTime();
+        checkpointWeek = _endOfWeek(block.timestamp) - 1 weeks;
     }
 
     function getReceipt(address account) external view returns (Voter memory) {
         return voters[account];
     }
 
-    function balanceOf(address account) external view returns (uint256) {
-        return _balanceOfAtTimestamp(account, block.timestamp);
+    function totalSupplyAtWeek(uint256 week) external view returns (uint256) {
+        return _totalSupplyAtWeek(week);
     }
 
-    function totalSupply() external view returns (uint256) {
-        return _totalSupplyAtTimestamp(block.timestamp);
+    function weightedTotalSupplyAtWeek(uint256 week) external view returns (uint256) {
+        return _weightedTotalSupplyAtWeek(week);
     }
 
-    function balanceOfAtTimestamp(address account, uint256 timestamp)
-        external
-        view
-        returns (uint256)
-    {
-        return _balanceOfAtTimestamp(account, timestamp);
-    }
-
-    function totalSupplyAtTimestamp(uint256 timestamp) external view returns (uint256) {
-        return _totalSupplyAtTimestamp(timestamp);
-    }
-
-    function sumAtTimestamp(uint256 timestamp) external view returns (uint256) {
-        return _sumAtTimestamp(timestamp);
-    }
-
-    function averageAtTimestamp(uint256 timestamp) external view returns (uint256) {
-        return _averageAtTimestamp(timestamp);
+    function averageAtWeek(uint256 week) external view returns (uint256) {
+        return _averageAtWeek(week);
     }
 
     /// @notice Return a fund's relative income since the last settlement.
@@ -112,7 +107,7 @@ contract InterestRateBallotV2 is IBallot, CoreUtility {
         if (income == 0) {
             return 0;
         } else {
-            return income.mul(365).multiplyDecimal(_averageAtTimestamp(timestamp));
+            return income.mul(365).multiplyDecimal(_averageAtWeek(_endOfWeek(timestamp) - 1 weeks));
         }
     }
 
@@ -127,19 +122,14 @@ contract InterestRateBallotV2 is IBallot, CoreUtility {
             "No veCHESS"
         );
 
-        // update scheduled unlock
-        scheduledUnlock[voter.unlockTime] = scheduledUnlock[voter.unlockTime].sub(voter.amount);
-        scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime].add(
-            lockedBalance.amount
+        _checkpointAndUpdateLock(
+            voter.amount,
+            voter.unlockTime,
+            voter.weight,
+            lockedBalance.amount,
+            lockedBalance.unlockTime,
+            weight
         );
-
-        scheduledWeightedUnlock[voter.unlockTime] = scheduledWeightedUnlock[voter.unlockTime].sub(
-            voter.amount * voter.weight
-        );
-        scheduledWeightedUnlock[lockedBalance.unlockTime] = scheduledWeightedUnlock[
-            lockedBalance.unlockTime
-        ]
-            .add(lockedBalance.amount * weight);
 
         emit Voted(
             msg.sender,
@@ -170,19 +160,14 @@ contract InterestRateBallotV2 is IBallot, CoreUtility {
             return;
         }
 
-        // update scheduled unlock
-        scheduledUnlock[voter.unlockTime] = scheduledUnlock[voter.unlockTime].sub(voter.amount);
-        scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime].add(
-            lockedBalance.amount
+        _checkpointAndUpdateLock(
+            voter.amount,
+            voter.unlockTime,
+            voter.weight,
+            lockedBalance.amount,
+            lockedBalance.unlockTime,
+            voter.weight
         );
-
-        scheduledWeightedUnlock[voter.unlockTime] = scheduledWeightedUnlock[voter.unlockTime].sub(
-            voter.amount * voter.weight
-        );
-        scheduledWeightedUnlock[lockedBalance.unlockTime] = scheduledWeightedUnlock[
-            lockedBalance.unlockTime
-        ]
-            .add(lockedBalance.amount * voter.weight);
 
         emit Voted(
             account,
@@ -199,60 +184,83 @@ contract InterestRateBallotV2 is IBallot, CoreUtility {
         voters[account].unlockTime = lockedBalance.unlockTime;
     }
 
-    function _balanceOfAtTimestamp(address account, uint256 timestamp)
-        private
-        view
-        returns (uint256)
-    {
-        require(timestamp >= block.timestamp, "Must be current or future time");
-        Voter memory voter = voters[account];
-        if (timestamp > voter.unlockTime) {
-            return 0;
-        }
-        return (voter.amount * (voter.unlockTime - timestamp)) / _maxTime;
+    function _totalSupplyAtWeek(uint256 week) private view returns (uint256) {
+        return
+            week <= checkpointWeek
+                ? veSupplyPerWeek[week]
+                : _veTotalSupplyAtWeek(
+                    week,
+                    scheduledUnlock,
+                    checkpointWeek,
+                    nextWeekSupply,
+                    totalLocked
+                );
     }
 
-    function _totalSupplyAtTimestamp(uint256 timestamp) private view returns (uint256) {
-        uint256 total = 0;
-        for (
-            uint256 weekCursor = _endOfWeek(timestamp);
-            weekCursor <= timestamp + _maxTime;
-            weekCursor += 1 weeks
-        ) {
-            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / _maxTime;
-        }
-
-        return total;
+    function _weightedTotalSupplyAtWeek(uint256 week) private view returns (uint256) {
+        return
+            week <= checkpointWeek
+                ? weightedVeSupplyPerWeek[week]
+                : _veTotalSupplyAtWeek(
+                    week,
+                    weightedScheduledUnlock,
+                    checkpointWeek,
+                    weightedNextWeekSupply,
+                    weightedTotalLocked
+                );
     }
 
-    function _sumAtTimestamp(uint256 timestamp) private view returns (uint256) {
-        uint256 sum = 0;
-        for (
-            uint256 weekCursor = _endOfWeek(timestamp);
-            weekCursor <= timestamp + _maxTime;
-            weekCursor += 1 weeks
-        ) {
-            sum += (scheduledWeightedUnlock[weekCursor] * (weekCursor - timestamp)) / _maxTime;
-        }
-
-        return sum;
-    }
-
-    function _averageAtTimestamp(uint256 timestamp) private view returns (uint256) {
-        uint256 sum = 0;
-        uint256 total = 0;
-        for (
-            uint256 weekCursor = _endOfWeek(timestamp);
-            weekCursor <= timestamp + _maxTime;
-            weekCursor += 1 weeks
-        ) {
-            sum += (scheduledWeightedUnlock[weekCursor] * (weekCursor - timestamp)) / _maxTime;
-            total += (scheduledUnlock[weekCursor] * (weekCursor - timestamp)) / _maxTime;
-        }
-
+    function _averageAtWeek(uint256 week) private view returns (uint256) {
+        uint256 total = _totalSupplyAtWeek(week);
         if (total == 0) {
             return 0.5e18;
         }
-        return sum / total;
+        return _weightedTotalSupplyAtWeek(week) / total;
+    }
+
+    function _checkpointAndUpdateLock(
+        uint256 oldAmount,
+        uint256 oldUnlockTime,
+        uint256 oldWeight,
+        uint256 newAmount,
+        uint256 newUnlockTime,
+        uint256 newWeight
+    ) private {
+        uint256 oldCheckpointWeek = checkpointWeek;
+        (, uint256 newNextWeekSupply, uint256 newTotalLocked) =
+            _veCheckpoint(
+                scheduledUnlock,
+                oldCheckpointWeek,
+                nextWeekSupply,
+                totalLocked,
+                veSupplyPerWeek
+            );
+        (nextWeekSupply, totalLocked) = _veUpdateLock(
+            newNextWeekSupply,
+            newTotalLocked,
+            oldAmount,
+            oldUnlockTime,
+            newAmount,
+            newUnlockTime,
+            scheduledUnlock
+        );
+        uint256 newWeightedNextWeekSupply;
+        uint256 newWeightedTotalLocked;
+        (checkpointWeek, newWeightedNextWeekSupply, newWeightedTotalLocked) = _veCheckpoint(
+            weightedScheduledUnlock,
+            oldCheckpointWeek,
+            weightedNextWeekSupply,
+            weightedTotalLocked,
+            weightedVeSupplyPerWeek
+        );
+        (weightedNextWeekSupply, weightedTotalLocked) = _veUpdateLock(
+            newWeightedNextWeekSupply,
+            newWeightedTotalLocked,
+            oldAmount * oldWeight,
+            oldUnlockTime,
+            newAmount * newWeight,
+            newUnlockTime,
+            weightedScheduledUnlock
+        );
     }
 }

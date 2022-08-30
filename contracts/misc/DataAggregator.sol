@@ -19,7 +19,7 @@ import "../swap/StableSwap.sol";
 import "../swap/LiquidityGauge.sol";
 import "../swap/SwapBonus.sol";
 import "../swap/SwapRouter.sol";
-import "../governance/InterestRateBallot.sol";
+import "../governance/InterestRateBallotV2.sol";
 import "../governance/FeeDistributor.sol";
 import "../governance/VotingEscrowV2.sol";
 import "../governance/ControllerBallot.sol";
@@ -225,7 +225,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
     IChessSchedule public immutable chessSchedule;
     IERC20 public immutable chess;
     ControllerBallot public immutable controllerBallot;
-    InterestRateBallot public immutable interestRateBallot;
+    InterestRateBallotV2 public immutable interestRateBallot;
     SwapRouter public immutable swapRouter;
     address public immutable flashSwapRouter;
     IERC20 public immutable bishopQuoteToken;
@@ -234,7 +234,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         VotingEscrowV2 votingEscrow_,
         IChessSchedule chessSchedule_,
         ControllerBallot controllerBallot_,
-        InterestRateBallot interestRateBallot_,
+        InterestRateBallotV2 interestRateBallot_,
         SwapRouter swapRouter_,
         address flashSwapRouter_,
         IERC20 bishopQuoteToken_
@@ -525,7 +525,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         );
         data.votingEscrow.account = votingEscrow.getLockedBalance(account);
 
-        data.interestRateBallot.tradingWeekTotalSupply = interestRateBallot.totalSupplyAtTimestamp(
+        data.interestRateBallot.tradingWeekTotalSupply = interestRateBallot.totalSupplyAtWeek(
             blockCurrentWeek
         );
         data.interestRateBallot.account = interestRateBallot.getReceipt(account);

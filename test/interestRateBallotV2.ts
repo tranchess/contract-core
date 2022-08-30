@@ -194,8 +194,6 @@ describe("InterestRateBallotV2", function () {
             expect(voter.amount).to.equal(amount);
             expect(voter.unlockTime).to.equal(unlockTime);
             expect(voter.weight).to.equal(parseEther("0.7"));
-            expect(await ballot.balanceOf(addr1)).to.equal(parseEther("10"));
-            expect(await ballot.balanceOfAtTimestamp(addr1, startWeek)).to.equal(parseEther("10"));
         });
 
         it("Should change the vote", async function () {
@@ -213,8 +211,6 @@ describe("InterestRateBallotV2", function () {
             expect(voter.amount).to.equal(amount);
             expect(voter.unlockTime).to.equal(unlockTime);
             expect(voter.weight).to.equal(parseEther("0.9"));
-            expect(await ballot.balanceOf(addr1)).to.equal(parseEther("40"));
-            expect(await ballot.balanceOfAtTimestamp(addr1, startWeek)).to.equal(parseEther("40"));
         });
 
         it("Should update the result", async function () {
@@ -222,25 +218,23 @@ describe("InterestRateBallotV2", function () {
             await votingEscrow.mock.getLockedBalance
                 .withArgs(addr1)
                 .returns([parseEther("40"), w50]);
-            await setNextBlockTime(startWeek);
             await ballot.cast(parseEther("0.7"));
-            expect(await ballot.scheduledWeightedUnlock(w50)).to.equal(
+            expect(await ballot.weightedScheduledUnlock(w50)).to.equal(
                 parseEther("40").mul(parseEther("0.7"))
             );
-            expect(await ballot.totalSupply()).to.equal(parseEther("10"));
-            expect(await ballot.totalSupplyAtTimestamp(startWeek)).to.equal(parseEther("10"));
-            expect(await ballot.averageAtTimestamp(startWeek)).to.equal(parseEther("0.7"));
+            expect(await ballot.totalSupplyAtWeek(startWeek)).to.equal(parseEther("10"));
+            expect(await ballot.averageAtWeek(startWeek)).to.equal(parseEther("0.7"));
 
             const w100 = startWeek + WEEK * 100;
             await votingEscrow.mock.getLockedBalance
                 .withArgs(addr2)
                 .returns([parseEther("80"), w100]);
             await ballot.connect(user2).cast(parseEther("0.9"));
-            expect(await ballot.scheduledWeightedUnlock(w100)).to.equal(
+            expect(await ballot.weightedScheduledUnlock(w100)).to.equal(
                 parseEther("80").mul(parseEther("0.9"))
             );
-            expect(await ballot.totalSupplyAtTimestamp(startWeek)).to.equal(parseEther("50"));
-            expect(await ballot.averageAtTimestamp(startWeek)).to.equal(parseEther("0.86"));
+            expect(await ballot.totalSupplyAtWeek(startWeek)).to.equal(parseEther("50"));
+            expect(await ballot.averageAtWeek(startWeek)).to.equal(parseEther("0.86"));
         });
 
         it("Should emit event", async function () {
@@ -272,7 +266,11 @@ describe("InterestRateBallotV2", function () {
                 .withArgs(addr1)
                 .returns([parseEther("1"), startWeek + WEEK * 10]);
             await ballot.syncWithVotingEscrow(addr1);
-            expect(await ballot.balanceOf(addr1)).to.equal(0);
+            expect(await ballot.averageAtWeek(startWeek)).to.equal(parseEther("0.5"));
+            const voter = await ballot.voters(addr1);
+            expect(voter.amount).to.equal(0);
+            expect(voter.unlockTime).to.equal(0);
+            expect(voter.weight).to.equal(0);
         });
 
         it("Should do nothing if the user owns no veCHESS", async function () {
@@ -280,9 +278,16 @@ describe("InterestRateBallotV2", function () {
                 .withArgs(addr1)
                 .returns([parseEther("10"), startWeek + WEEK * 10]);
             await ballot.cast(parseEther("0.7"));
-            await advanceBlockAtTime(startWeek + WEEK * 10);
+            await advanceBlockAtTime(startWeek + WEEK * 20);
+            await votingEscrow.mock.getLockedBalance
+                .withArgs(addr1)
+                .returns([parseEther("20"), startWeek + WEEK * 15]);
             await ballot.syncWithVotingEscrow(addr1);
-            expect(await ballot.balanceOf(addr1)).to.equal(0);
+            expect(await ballot.averageAtWeek(startWeek + WEEK * 20)).to.equal(parseEther("0.5"));
+            const voter = await ballot.voters(addr1);
+            expect(voter.amount).to.equal(parseEther("10"));
+            expect(voter.unlockTime).to.equal(startWeek + WEEK * 10);
+            expect(voter.weight).to.equal(parseEther("0.7"));
         });
 
         it("Should update the vote", async function () {
@@ -300,8 +305,6 @@ describe("InterestRateBallotV2", function () {
             expect(voter.amount).to.equal(amount);
             expect(voter.unlockTime).to.equal(unlockTime);
             expect(voter.weight).to.equal(parseEther("0.7"));
-            expect(await ballot.balanceOf(addr1)).to.equal(parseEther("40"));
-            expect(await ballot.balanceOfAtTimestamp(addr1, startWeek)).to.equal(parseEther("40"));
         });
     });
 
