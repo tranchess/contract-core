@@ -99,7 +99,7 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     const votingEscrow = VotingEscrow.attach(votingEscrowProxy.address);
     console.log(`VotingEscrow: ${votingEscrow.address}`);
 
-    const InterestRateBallot = await ethers.getContractFactory("InterestRateBallot");
+    const InterestRateBallot = await ethers.getContractFactory("InterestRateBallotV2");
     const interestRateBallot = await InterestRateBallot.deploy(
         votingEscrow.address,
         { gasLimit: 2e6 } // Gas estimation may fail
