@@ -12,9 +12,6 @@ import "./IAnyswapV6ERC20.sol";
 contract AnyswapV6ERC20 is IAnyswapV6ERC20, ERC20, ChessRoles, Ownable {
     using SafeERC20 for IERC20;
 
-    event LogSwapin(bytes32 indexed txhash, address indexed account, uint256 amount);
-    event LogSwapout(address indexed account, address indexed bindaddr, uint256 amount);
-
     address public immutable override underlying;
 
     constructor(
@@ -42,31 +39,6 @@ contract AnyswapV6ERC20 is IAnyswapV6ERC20, ERC20, ChessRoles, Ownable {
 
     function burn(address from, uint256 amount) external override onlyMinter returns (bool) {
         _burn(from, amount);
-        return true;
-    }
-
-    function Swapin(
-        bytes32 txhash,
-        address account,
-        uint256 amount
-    ) external onlyMinter returns (bool) {
-        if (IERC20(underlying).balanceOf(address(this)) >= amount) {
-            IERC20(underlying).safeTransfer(account, amount);
-        } else {
-            _mint(account, amount);
-        }
-        emit LogSwapin(txhash, account, amount);
-        return true;
-    }
-
-    function Swapout(uint256 amount, address bindaddr) external returns (bool) {
-        require(bindaddr != address(0), "AnyswapV6ERC20: address(0)");
-        if (balanceOf(msg.sender) < amount) {
-            IERC20(underlying).safeTransferFrom(msg.sender, address(this), amount);
-        } else {
-            _burn(msg.sender, amount);
-        }
-        emit LogSwapout(msg.sender, bindaddr, amount);
         return true;
     }
 
