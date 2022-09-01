@@ -168,6 +168,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
 
     struct InterestRateBallotData {
         uint256 tradingWeekTotalSupply;
+        uint256 tradingWeekAverage;
         IBallot.Voter account;
     }
 
@@ -526,6 +527,9 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         data.votingEscrow.account = votingEscrow.getLockedBalance(account);
 
         data.interestRateBallot.tradingWeekTotalSupply = interestRateBallot.totalSupplyAtWeek(
+            blockCurrentWeek
+        );
+        data.interestRateBallot.tradingWeekAverage = interestRateBallot.averageAtWeek(
             blockCurrentWeek
         );
         data.interestRateBallot.account = interestRateBallot.getReceipt(account);
