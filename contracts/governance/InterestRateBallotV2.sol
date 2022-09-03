@@ -10,6 +10,7 @@ import "../utils/SafeDecimalMath.sol";
 
 import "../interfaces/IBallot.sol";
 import "../interfaces/IFundV3.sol";
+import "../interfaces/ITwapOracleV2.sol";
 import "../interfaces/IVotingEscrow.sol";
 
 contract InterestRateBallotV2 is IBallot, CoreUtility, VotingEscrowCheckpoint {
@@ -67,47 +68,64 @@ contract InterestRateBallotV2 is IBallot, CoreUtility, VotingEscrowCheckpoint {
         return _averageAtWeek(week);
     }
 
-    /// @notice Return a fund's relative income since the last settlement.
-    function getFundRelativeIncome(IFundV3 fund) public view returns (uint256) {
+    /// @notice Return a fund's relative income since the last settlement. Note that denominators
+    ///         of the returned ratios are the latest value instead of that at the last settlement.
+    ///         If the amount of underlying token increases from 100 to 110 and assume that there's
+    ///         no creation/redemption or underlying price change, return value `incomeOverQ` will
+    ///         be 1/11 rather than 1/10.
+    /// @param fund Address of the fund
+    /// @return incomeOverQ The ratio of income to the fund's total value
+    /// @return incomeOverB The ratio of income to equivalent BISHOP total value if all QUEEN are split
+    function getFundRelativeIncome(IFundV3 fund)
+        public
+        view
+        returns (uint256 incomeOverQ, uint256 incomeOverB)
+    {
         (bool success, bytes memory encodedDay) =
             address(fund).staticcall(abi.encodeWithSignature("currentDay()"));
         if (!success || encodedDay.length != 0x20) {
-            return 0;
+            return (0, 0);
         }
         uint256 currentDay = abi.decode(encodedDay, (uint256));
         if (currentDay == 0) {
-            return 0;
+            return (0, 0);
         }
         uint256 version = fund.getRebalanceSize();
         if (version != 0 && fund.getRebalanceTimestamp(version - 1) == block.timestamp) {
-            return 0; // Rebalance is triggered
+            return (0, 0); // Rebalance is triggered
         }
         uint256 lastUnderlying = fund.historicalUnderlying(currentDay - 1 days);
         uint256 lastEquivalentTotalB = fund.historicalEquivalentTotalB(currentDay - 1 days);
         if (lastUnderlying == 0 || lastEquivalentTotalB == 0) {
-            return 0;
+            return (0, 0);
         }
         uint256 currentUnderlying = fund.getTotalUnderlying();
         uint256 currentEquivalentTotalB = fund.getEquivalentTotalB();
         if (currentUnderlying == 0 || currentEquivalentTotalB == 0) {
-            return 0;
+            return (0, 0);
         }
-        uint256 ratio =
-            ((currentUnderlying * lastEquivalentTotalB) / lastUnderlying).divideDecimal(
-                currentEquivalentTotalB
-            );
-        return ratio < 1e18 ? 0 : ratio - 1e18;
+        {
+            uint256 ratio =
+                ((lastUnderlying * currentEquivalentTotalB) / currentUnderlying).divideDecimal(
+                    lastEquivalentTotalB
+                );
+            incomeOverQ = ratio > 1e18 ? 0 : 1e18 - ratio;
+        }
+        uint256 underlyingPrice = ITwapOracleV2(fund.twapOracle()).getTwap(currentDay);
+        (uint256 navSum, uint256 navB, ) = fund.extrapolateNav(underlyingPrice);
+        incomeOverB = incomeOverQ.mul(navSum) / navB;
     }
 
     /// @notice Return the fraction of annualized relative income of the calling fund that should
     ///         be added to BISHOP NAV. Zero is returned when this function is not called by
     ///         an `IFundV3` contract or the fund is just rebalanced in the same block.
     function count(uint256 timestamp) external view override returns (uint256) {
-        uint256 income = getFundRelativeIncome(IFundV3(msg.sender));
-        if (income == 0) {
+        (, uint256 incomeOverB) = getFundRelativeIncome(IFundV3(msg.sender));
+        if (incomeOverB == 0) {
             return 0;
         } else {
-            return income.mul(365).multiplyDecimal(_averageAtWeek(_endOfWeek(timestamp) - 1 weeks));
+            return
+                incomeOverB.multiplyDecimal(_averageAtWeek(_endOfWeek(timestamp) - 1 weeks) * 365);
         }
     }
 

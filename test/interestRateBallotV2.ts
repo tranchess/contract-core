@@ -310,17 +310,23 @@ describe("InterestRateBallotV2", function () {
 
     describe("getFundRelativeIncome()", function () {
         it("Should return zero if the parameter is an EOA", async function () {
-            expect(await ballot.getFundRelativeIncome(addr1)).to.equal(0);
+            const ret = await ballot.getFundRelativeIncome(addr1);
+            expect(ret.incomeOverQ).to.equal(0);
+            expect(ret.incomeOverB).to.equal(0);
         });
 
         it("Should return zero if the parameter is a non-fund contract", async function () {
-            expect(await ballot.getFundRelativeIncome(votingEscrow.address)).to.equal(0);
+            const ret = await ballot.getFundRelativeIncome(votingEscrow.address);
+            expect(ret.incomeOverQ).to.equal(0);
+            expect(ret.incomeOverB).to.equal(0);
         });
 
         it("Should return zero if the fund is not initialized", async function () {
             const uninitializedFund = await deployMockForName(owner, "IFundV3");
             await uninitializedFund.mock.currentDay.returns(0);
-            expect(await ballot.getFundRelativeIncome(uninitializedFund.address)).to.equal(0);
+            const ret = await ballot.getFundRelativeIncome(uninitializedFund.address);
+            expect(ret.incomeOverQ).to.equal(0);
+            expect(ret.incomeOverB).to.equal(0);
         });
 
         it("Should return zero if the fund was just rebalanced in the same block", async function () {
@@ -331,12 +337,16 @@ describe("InterestRateBallotV2", function () {
             await setAutomine(true);
             // This tx and the last settlement are in the same block
             await btc.mint(fund.address, parseBtc("0.5"));
-            expect(await ballot.getFundRelativeIncome(fund.address)).to.equal(0);
+            const ret = await ballot.getFundRelativeIncome(fund.address);
+            expect(ret.incomeOverQ).to.equal(0);
+            expect(ret.incomeOverB).to.equal(0);
         });
 
         it("Should return zero if the fund was empty at the last settlement", async function () {
             await btc.mint(fund.address, parseBtc("0.5"));
-            expect(await ballot.getFundRelativeIncome(fund.address)).to.equal(0);
+            const ret = await ballot.getFundRelativeIncome(fund.address);
+            expect(ret.incomeOverQ).to.equal(0);
+            expect(ret.incomeOverB).to.equal(0);
         });
 
         it("Should return zero if the fund is empty now", async function () {
@@ -344,14 +354,18 @@ describe("InterestRateBallotV2", function () {
             await fund.settle();
             await pmRedeem(addr1, parseEther("1"), parseBtc("1"));
             await btc.mint(fund.address, parseBtc("0.1"));
-            expect(await ballot.getFundRelativeIncome(fund.address)).to.equal(0);
+            const ret = await ballot.getFundRelativeIncome(fund.address);
+            expect(ret.incomeOverQ).to.equal(0);
+            expect(ret.incomeOverB).to.equal(0);
         });
 
         it("Should return zero if the fund loses some value", async function () {
             await advanceBlockAtTime(startWeek - DAY);
             await fund.settle();
             await btc.burn(fund.address, parseBtc("0.3"));
-            expect(await ballot.getFundRelativeIncome(fund.address)).to.equal(0);
+            const ret = await ballot.getFundRelativeIncome(fund.address);
+            expect(ret.incomeOverQ).to.equal(0);
+            expect(ret.incomeOverB).to.equal(0);
         });
 
         it("Should return relative income", async function () {
@@ -359,64 +373,64 @@ describe("InterestRateBallotV2", function () {
             await fund.settle();
             // 30% income (1 QUEEN, 1.3 BTC)
             await btc.mint(fund.address, parseBtc("0.3"));
-            expect(await ballot.getFundRelativeIncome(fund.address)).to.equal(parseEther("0.3"));
+            const ret1 = await ballot.getFundRelativeIncome(fund.address);
+            expect(ret1.incomeOverQ).to.closeTo(parseEther("3").div(13), 10); // 0.3 / 1.3
+            expect(ret1.incomeOverB).to.closeTo(parseEther("3").div(5), 10); // 0.3 / 0.5
             // Use 1.3 BTC to create 1 QUEEN
             await pmCreate(addr2, parseBtc("1.3"), parseEther("1"));
             // 2 QUEEN, 2.6 BTC
-            expect(await ballot.getFundRelativeIncome(fund.address)).to.equal(parseEther("0.3"));
+            const ret2 = await ballot.getFundRelativeIncome(fund.address);
+            expect(ret2.incomeOverQ).to.closeTo(parseEther("3").div(13), 10); // 0.6 / 2.6
+            expect(ret2.incomeOverB).to.closeTo(parseEther("3").div(5), 10); // 0.6 / 1.0
             // Another 10% income (2 QUEEN, 2.8 BTC)
             await btc.mint(fund.address, parseBtc("0.2"));
             // Redeem 0.5 QUEEN for 0.7 BTC
             await pmRedeem(addr1, parseEther("0.5"), parseBtc("0.7"));
             // 1.5 QUEEN, 2.1 BTC
-            expect(await ballot.getFundRelativeIncome(fund.address)).to.equal(parseEther("0.4"));
+            const ret3 = await ballot.getFundRelativeIncome(fund.address);
+            expect(ret3.incomeOverQ).to.closeTo(parseEther("6").div(21), 10); // 0.6 / 2.1
+            expect(ret3.incomeOverB).to.closeTo(parseEther("60").div(75), 10); // 0.6 / 0.75
         });
     });
 
     describe("count() called by the fund", function () {
-        const BASE_INTEREST = parseEther("0.01"); // daily
-        const RELATIVE_INCOME = parseEther("0.3"); // daily
-
         beforeEach(async function () {
-            await advanceBlockAtTime(startWeek - DAY);
-            await aprOracle.mock.capture.returns(BASE_INTEREST);
-            await fund.settle();
-            await btc.mint(fund.address, parseBtc("1").mul(RELATIVE_INCOME).div(parseEther("1")));
-            // Just a arbitrary new price. It should not affect relative income calculation
-            // unless rebalance is triggered.
-            await twapOracle.mock.getTwap.withArgs(startWeek).returns(parseEther("1123"));
-        });
+            // Ballot result is 60%
+            await votingEscrow.mock.getLockedBalance
+                .withArgs(addr1)
+                .returns([parseEther("1"), startWeek + WEEK * 10]);
+            await ballot.cast(parseEther("0.6"));
 
-        it("Should return half relative income if no one votes", async function () {
-            await advanceBlockAtTime(startWeek);
+            await aprOracle.mock.capture.returns(parseEther("0.2"));
+            await setNextBlockTime(startWeek - DAY);
             await fund.settle();
-            expect(await fund.historicalInterestRate(startWeek)).to.equal(
-                BASE_INTEREST.add(RELATIVE_INCOME.div(2))
-            );
+            await twapOracle.mock.getTwap.withArgs(startWeek).returns(parseEther("1250"));
+            await setNextBlockTime(startWeek);
+            await fund.settle(); // navSum = 2.5, navB = 1.2, navR = 1.3
+            // Underlying price is increased by 20%
+            await twapOracle.mock.getTwap.withArgs(startWeek + DAY).returns(parseEther("1500"));
+            // Underlying amount is increased by 10%
+            await btc.mint(fund.address, parseBtc("0.1"));
+            // NAV at the next settlement: navSum = 3.3, navB = 1.44, navR = 1.86
         });
 
         it("Should return the ballot result", async function () {
-            await votingEscrow.mock.getLockedBalance
-                .withArgs(addr1)
-                .returns([parseEther("40"), startWeek + WEEK * 50]);
-            await ballot.cast(parseEther("0.7"));
-            await votingEscrow.mock.getLockedBalance
-                .withArgs(addr2)
-                .returns([parseEther("80"), startWeek + WEEK * 100]);
-            await ballot.connect(user2).cast(parseEther("0.9"));
-            await advanceBlockAtTime(startWeek);
+            await setNextBlockTime(startWeek + DAY);
             await fund.settle();
-            // (70% * 10 + 90% * 40) / (10 + 40) = 86%
-            expect(await fund.historicalInterestRate(startWeek)).to.equal(
-                RELATIVE_INCOME.mul(86).div(100).add(BASE_INTEREST)
+            // Fund income relative to navSum: 0.3 / 3.3
+            // Additional interest rate: 0.3 * 60% / 1.44 = 0.125
+            // Final interest rate: 0.2 + 0.125 = 0.325
+            expect(await fund.historicalInterestRate(startWeek + DAY)).to.closeTo(
+                parseEther("0.325"),
+                1e6
             );
         });
 
         it("Should return zero if the fund is just rebalanced", async function () {
-            await twapOracle.mock.getTwap.withArgs(startWeek).returns(parseEther("2000"));
-            await advanceBlockAtTime(startWeek);
+            await twapOracle.mock.getTwap.withArgs(startWeek + DAY).returns(parseEther("2000"));
+            await advanceBlockAtTime(startWeek + DAY);
             await fund.settle();
-            expect(await fund.historicalInterestRate(startWeek)).to.equal(BASE_INTEREST);
+            expect(await fund.historicalInterestRate(startWeek + DAY)).to.equal(parseEther("0.2"));
         });
     });
 });
