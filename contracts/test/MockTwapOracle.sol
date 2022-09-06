@@ -12,10 +12,13 @@ contract MockTwapOracle is ITwapOracleV2, CoreUtility, Ownable {
         uint256 nextEpoch;
     }
 
-    event Update(uint256 timestamp, uint256 price, UpdateType updateType);
+    /// @dev Chainlink oracle event
+    event AnswerUpdated(int256 indexed current, uint256 indexed roundId, uint256 updatedAt);
+    event HoleFilled(uint256 timestamp, uint256 price);
     event ReporterAdded(address reporter);
     event ReporterRemoved(address reporter);
 
+    uint256 public constant decimals = 18;
     uint256 private constant EPOCH = 30 minutes;
     uint256 private constant MAX_ITERATION = 500;
 
@@ -26,9 +29,10 @@ contract MockTwapOracle is ITwapOracleV2, CoreUtility, Ownable {
     ///         Epochs ending at the end of trading days are always stored.
     mapping(uint256 => StoredEpoch) public storedEpochs;
 
-    /// @notice Timestamp of the last stored epoch. The `Update` event is not emitted for
+    /// @notice Timestamp of the last stored epoch. The `AnswerUpdated` event is not emitted for
     ///         this epoch yet.
     uint256 public lastStoredEpoch;
+    uint256 public lastStoredRoundId;
 
     /// @notice Mapping of epoch => TWAP. This mapping stores epochs that are manually updated
     ///         out-of-order.
@@ -82,22 +86,25 @@ contract MockTwapOracle is ITwapOracleV2, CoreUtility, Ownable {
         storedEpochs[nextEpoch].twap = twap;
     }
 
-    /// @notice Emit `Update` event for past epochs and add a stored epoch for the next one.
+    /// @notice Emit `AnswerUpdated` event for past epochs and add a stored epoch for the next one.
     function catchUp() public {
         uint256 nextEpoch = _nextEpoch();
         uint256 lastEpoch = lastStoredEpoch;
         if (nextEpoch <= lastEpoch) {
             return;
         }
+        uint256 roundId = lastStoredRoundId;
         uint256 nextStoredEpoch = _endOfDay(lastEpoch);
         uint256 twap = storedEpochs[lastEpoch].twap;
         if (holes[lastEpoch] == 0) {
-            emit Update(lastEpoch, twap, UpdateType.PRIMARY);
+            emit AnswerUpdated(int256(twap), roundId, lastEpoch);
+            roundId++;
         }
         uint256 epoch = lastEpoch + EPOCH;
         for (uint256 i = 0; i < MAX_ITERATION && epoch < nextEpoch; i++) {
             if (holes[epoch] == 0) {
-                emit Update(epoch, twap, UpdateType.PRIMARY);
+                emit AnswerUpdated(int256(twap), roundId, epoch);
+                roundId++;
                 if (epoch == nextStoredEpoch) {
                     storedEpochs[lastEpoch].nextEpoch = nextStoredEpoch;
                     storedEpochs[nextStoredEpoch].twap = twap;
@@ -110,6 +117,7 @@ contract MockTwapOracle is ITwapOracleV2, CoreUtility, Ownable {
         storedEpochs[lastEpoch].nextEpoch = epoch;
         storedEpochs[epoch].twap = twap;
         lastStoredEpoch = epoch;
+        lastStoredRoundId = roundId;
     }
 
     function digHole(uint256 timestamp) external onlyReporter {
@@ -123,7 +131,7 @@ contract MockTwapOracle is ITwapOracleV2, CoreUtility, Ownable {
         require(timestamp < block.timestamp, "Can only fill hole in the past");
         require(holes[timestamp] == uint256(-1), "Not a hole or already filled");
         holes[timestamp] = twap;
-        emit Update(timestamp, twap, UpdateType.OWNER);
+        emit HoleFilled(timestamp, twap);
     }
 
     function getTwap(uint256 timestamp) external view override returns (uint256) {
