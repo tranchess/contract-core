@@ -43,26 +43,25 @@ contract AnyswapChessPool is IAnyswapV6ERC20, ERC20, ChessRoles, Ownable {
     }
 
     function deposit() external returns (uint256) {
-        uint256 _amount = IERC20(underlying).balanceOf(msg.sender);
-        IERC20(underlying).safeTransferFrom(msg.sender, address(this), _amount);
-        return _deposit(_amount, msg.sender);
+        uint256 amount = IERC20(underlying).balanceOf(msg.sender);
+        IERC20(underlying).safeTransferFrom(msg.sender, address(this), amount);
+        _mint(msg.sender, amount);
+        return amount;
     }
 
     function deposit(uint256 amount) external returns (uint256) {
         IERC20(underlying).safeTransferFrom(msg.sender, address(this), amount);
-        return _deposit(amount, msg.sender);
+        _mint(msg.sender, amount);
+        return amount;
     }
 
     function deposit(uint256 amount, address to) external returns (uint256) {
         IERC20(underlying).safeTransferFrom(msg.sender, address(this), amount);
-        return _deposit(amount, to);
+        _mint(to, amount);
+        return amount;
     }
 
     function depositVault(uint256 amount, address to) external onlyMinter returns (uint256) {
-        return _deposit(amount, to);
-    }
-
-    function _deposit(uint256 amount, address to) internal returns (uint256) {
         _mint(to, amount);
         return amount;
     }
