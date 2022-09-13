@@ -306,7 +306,7 @@ contract VotingEscrowV3 is
 
         address to = crossChainVotingEscrows[toChainID];
         require(to != address(0), "Unknown chain ID");
-        _anyCall(to, abi.encode(msg.sender, lockedBalance.unlockTime, amount), toChainID);
+        _anyCall(to, toChainID, abi.encode(msg.sender, lockedBalance.unlockTime, amount));
 
         if (callback != address(0)) {
             IVotingEscrowCallback(callback).syncWithVotingEscrow(msg.sender);

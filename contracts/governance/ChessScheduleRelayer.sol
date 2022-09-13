@@ -69,7 +69,7 @@ contract ChessSubScheduleRelayer is CoreUtility, AnyCallAppBase {
             amount += balance;
         }
         if (amount != 0) {
-            _anyCall(subSchedule, abi.encode(amount), subChainID);
+            _anyCall(subSchedule, subChainID, abi.encode(amount));
             emit CrossChainMinted(subChainID, amount);
         }
     }

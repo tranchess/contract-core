@@ -77,7 +77,7 @@ contract ChessSubSchedule is IChessSchedule, Ownable, ChessRoles, CoreUtility, A
         uint256 week = _endOfWeek(block.timestamp);
         uint256 supply = controllerBallot.totalSupplyAtTimestamp(week);
         uint256 nextWeekSupply = controllerBallot.totalSupplyAtTimestamp(week + 1 weeks);
-        _anyCall(scheduleRelayer, abi.encode(week, supply, nextWeekSupply), mainChainID);
+        _anyCall(scheduleRelayer, mainChainID, abi.encode(week, supply, nextWeekSupply));
     }
 
     function _checkAnyExecuteFrom(address from, uint256 fromChainID)
