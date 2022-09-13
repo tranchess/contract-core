@@ -299,7 +299,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
                         .div(totalWeight)
                 );
             }
-            if (endTimestamp == endWeek) {
+            if (endTimestamp == endWeek || rate == 0) {
                 rate = chessSchedule.getRate(endWeek).mul(
                     chessController.getFundRelativeWeight(address(this), endWeek)
                 );

@@ -61,13 +61,23 @@ contract ChessSchedule is IChessSchedule, OwnableUpgradeable, ChessRoles, CoreUt
         return CUMULATIVE_SUPPLY_SCHEDULE.length / 32;
     }
 
-    /// @notice Get the total supply and weekly supply at the given week index
-    /// @param index Index for weekly supply
-    /// @return currentWeekCumulativeSupply The cumulative supply at the
-    ///         beginning of the week
+    /// @notice Get supply of the week containing the given timestamp.
+    /// @param timestamp Any timestamp in the week to be queried
     /// @return weeklySupply Weekly supply
-    function getWeeklySupply(uint256 index)
+    function getWeeklySupply(uint256 timestamp)
         public
+        view
+        override
+        returns (uint256 weeklySupply)
+    {
+        if (timestamp < startTimestamp) {
+            return 0;
+        }
+        (, weeklySupply) = _getWeeklySupply((timestamp - startTimestamp) / 1 weeks);
+    }
+
+    function _getWeeklySupply(uint256 index)
+        private
         pure
         returns (uint256 currentWeekCumulativeSupply, uint256 weeklySupply)
     {
@@ -93,30 +103,22 @@ contract ChessSchedule is IChessSchedule, OwnableUpgradeable, ChessRoles, CoreUt
         }
     }
 
-    /// @notice Current number of tokens in existence (claimed or unclaimed)
+    /// @notice Current number of tokens in existence (claimed or unclaimed) by the end of
+    ///         the current week.
     function availableSupply() public view returns (uint256) {
         if (block.timestamp < startTimestamp) {
             return 0;
         }
-        uint256 index = (block.timestamp - startTimestamp) / 1 weeks;
-        uint256 currentWeek = index * 1 weeks + startTimestamp;
-        (uint256 currentWeekCumulativeSupply, uint256 weeklySupply) = getWeeklySupply(index);
-        return
-            currentWeekCumulativeSupply.add(
-                weeklySupply.mul(block.timestamp - currentWeek).div(1 weeks)
-            );
+        (uint256 currentWeekCumulativeSupply, uint256 weeklySupply) =
+            _getWeeklySupply((block.timestamp - startTimestamp) / 1 weeks);
+        return currentWeekCumulativeSupply.add(weeklySupply);
     }
 
-    /// @notice Get the release rate of CHESS token at the given timestamp
-    /// @param timestamp Timestamp for release rate
+    /// @notice Get the emission rate of CHESS token at the given timestamp
+    /// @param timestamp Timestamp for emission rate
     /// @return Release rate (number of CHESS token per second)
     function getRate(uint256 timestamp) external view override returns (uint256) {
-        if (timestamp < startTimestamp) {
-            return 0;
-        }
-        uint256 index = (timestamp - startTimestamp) / 1 weeks;
-        (, uint256 weeklySupply) = getWeeklySupply(index);
-        return weeklySupply.div(1 weeks);
+        return getWeeklySupply(timestamp) / 1 weeks;
     }
 
     /// @notice Creates `amount` CHESS tokens and assigns them to `account`,

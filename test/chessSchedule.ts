@@ -170,18 +170,22 @@ describe("Chess", function () {
         it("Should get weekly supply", async function () {
             this.timeout(30000);
             for (let i = 0; i < WEEKLY_SUPPLY_SCHEDULE.length; i++) {
-                const ret = await chessSchedule.getWeeklySupply(i);
-                expect(ret.currentWeekCumulativeSupply).to.equal(CUMULATIVE_SUPPLY_SCHEDULE[i]);
-                expect(ret.weeklySupply).to.equal(WEEKLY_SUPPLY_SCHEDULE[i]);
+                expect(await chessSchedule.getWeeklySupply(startWeek + WEEK * i)).to.equal(
+                    WEEKLY_SUPPLY_SCHEDULE[i]
+                );
             }
         });
 
-        it("Should get weekly supply after the end of schedule", async function () {
-            const ret = await chessSchedule.getWeeklySupply(WEEKLY_SUPPLY_SCHEDULE.length);
-            expect(ret.currentWeekCumulativeSupply).to.equal(
-                CUMULATIVE_SUPPLY_SCHEDULE[CUMULATIVE_SUPPLY_SCHEDULE.length - 1]
-            );
-            expect(ret.weeklySupply).to.equal(0);
+        it("Should get zero before the start", async function () {
+            expect(await chessSchedule.getWeeklySupply(startWeek - 1)).to.equal(0);
+        });
+
+        it("Should get zero after the end of schedule", async function () {
+            expect(
+                await chessSchedule.getWeeklySupply(
+                    startWeek + WEEK * WEEKLY_SUPPLY_SCHEDULE.length
+                )
+            ).to.equal(0);
         });
     });
 
@@ -189,32 +193,17 @@ describe("Chess", function () {
         it("Should get available supply", async function () {
             expect(await chessSchedule.availableSupply()).to.equal(CUMULATIVE_SUPPLY_SCHEDULE[0]);
 
-            await advanceBlockAtTime(startWeek);
+            await advanceBlockAtTime(startWeek - 1);
             expect(await chessSchedule.availableSupply()).to.equal(CUMULATIVE_SUPPLY_SCHEDULE[0]);
 
             await advanceBlockAtTime(startWeek + WEEK / 2);
-            expect(await chessSchedule.availableSupply()).to.equal(
-                CUMULATIVE_SUPPLY_SCHEDULE[1]
-                    .sub(CUMULATIVE_SUPPLY_SCHEDULE[0])
-                    .div(2)
-                    .add(CUMULATIVE_SUPPLY_SCHEDULE[0])
-            );
+            expect(await chessSchedule.availableSupply()).to.equal(CUMULATIVE_SUPPLY_SCHEDULE[1]);
 
             await advanceBlockAtTime(startWeek + WEEK + WEEK / 3);
-            expect(await chessSchedule.availableSupply()).to.equal(
-                CUMULATIVE_SUPPLY_SCHEDULE[2]
-                    .sub(CUMULATIVE_SUPPLY_SCHEDULE[1])
-                    .div(3)
-                    .add(CUMULATIVE_SUPPLY_SCHEDULE[1])
-            );
+            expect(await chessSchedule.availableSupply()).to.equal(CUMULATIVE_SUPPLY_SCHEDULE[2]);
 
-            await advanceBlockAtTime(startWeek + WEEK * 2 + WEEK / 4);
-            expect(await chessSchedule.availableSupply()).to.equal(
-                CUMULATIVE_SUPPLY_SCHEDULE[3]
-                    .sub(CUMULATIVE_SUPPLY_SCHEDULE[2])
-                    .div(4)
-                    .add(CUMULATIVE_SUPPLY_SCHEDULE[2])
-            );
+            await advanceBlockAtTime(startWeek + WEEK * 2);
+            expect(await chessSchedule.availableSupply()).to.equal(CUMULATIVE_SUPPLY_SCHEDULE[3]);
         });
 
         it("Should get available supply after the end of schedule", async function () {
