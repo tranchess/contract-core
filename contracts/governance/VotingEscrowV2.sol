@@ -14,14 +14,6 @@ import "../utils/ManagedPausable.sol";
 import "../interfaces/IVotingEscrow.sol";
 import "../utils/ProxyUtility.sol";
 
-interface IAddressWhitelist {
-    function check(address account) external view returns (bool);
-}
-
-interface IVotingEscrowCallback {
-    function syncWithVotingEscrow(address account) external;
-}
-
 contract VotingEscrowV2 is
     IVotingEscrow,
     OwnableUpgradeable,

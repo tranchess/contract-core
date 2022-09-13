@@ -9,7 +9,6 @@ import "../utils/CoreUtility.sol";
 import "../utils/SafeDecimalMath.sol";
 
 import "../governance/VotingEscrowCheckpoint.sol";
-import {IVotingEscrowCallback} from "../governance/VotingEscrowV2.sol";
 import "../interfaces/IControllerBallotV2.sol";
 import "../interfaces/IVotingEscrow.sol";
 

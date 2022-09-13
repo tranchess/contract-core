@@ -803,7 +803,7 @@ describe("VotingEscrowV2", function () {
         let callback: MockContract;
 
         beforeEach(async function () {
-            callback = await deployMockForName(owner, "contracts/governance/VotingEscrowV2.sol:IVotingEscrowCallback");
+            callback = await deployMockForName(owner, "IVotingEscrowCallback");
         });
 
         it("Should only be called by owner", async function () {

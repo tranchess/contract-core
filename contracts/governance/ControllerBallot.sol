@@ -8,7 +8,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../utils/CoreUtility.sol";
 import "../utils/SafeDecimalMath.sol";
 
-import {IVotingEscrowCallback} from "../governance/VotingEscrowV2.sol";
 import "../interfaces/IControllerBallot.sol";
 import "../interfaces/IVotingEscrow.sol";
 

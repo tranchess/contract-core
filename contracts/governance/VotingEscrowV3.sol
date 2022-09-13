@@ -18,14 +18,6 @@ import "../anyswap/AnyCallAppBase.sol";
 import "../anyswap/AnyswapChessPool.sol";
 import "../interfaces/IAnyswapV6ERC20.sol";
 
-interface IAddressWhitelist {
-    function check(address account) external view returns (bool);
-}
-
-interface IVotingEscrowCallback {
-    function syncWithVotingEscrow(address account) external;
-}
-
 contract VotingEscrowV3 is
     IVotingEscrow,
     OwnableUpgradeable,
