@@ -186,7 +186,7 @@ contract ControllerBallotV2 is
     function syncWithVotingEscrow(address account) external override {
         IVotingEscrow.LockedBalance memory oldLockedBalance = userLockedBalances[account];
         if (oldLockedBalance.amount == 0) {
-            return; // The account did not voted before
+            return; // The account did not vote before
         }
         IVotingEscrow.LockedBalance memory lockedBalance = votingEscrow.getLockedBalance(account);
         if (lockedBalance.unlockTime <= block.timestamp) {
