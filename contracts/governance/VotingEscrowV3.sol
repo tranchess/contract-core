@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
@@ -15,7 +15,8 @@ import "../interfaces/IVotingEscrow.sol";
 import "../utils/ProxyUtility.sol";
 
 import "../anyswap/AnyCallAppBase.sol";
-import "../anyswap/IAnyswapV6ERC20.sol";
+import "../anyswap/AnyswapChessPool.sol";
+import "../interfaces/IAnyswapV6ERC20.sol";
 
 interface IAddressWhitelist {
     function check(address account) external view returns (bool);
@@ -328,7 +329,7 @@ contract VotingEscrowV3 is
         address underlying = IAnyswapV6ERC20(anyswapChess).underlying();
         if (underlying != address(0)) {
             require(token == underlying);
-            IAnyswapV6ERC20(anyswapChess).withdrawUnderlying(amount);
+            AnyswapChessPool(anyswapChess).withdrawUnderlying(amount);
         } else {
             IAnyswapV6ERC20(anyswapChess).mint(address(this), amount);
         }
@@ -364,7 +365,7 @@ contract VotingEscrowV3 is
         address underlying = IAnyswapV6ERC20(anyswapChess).underlying();
         if (underlying != address(0)) {
             require(token == underlying);
-            IAnyswapV6ERC20(anyswapChess).withdrawUnderlying(amount);
+            AnyswapChessPool(anyswapChess).withdrawUnderlying(amount);
         } else {
             IAnyswapV6ERC20(anyswapChess).mint(address(this), amount);
         }

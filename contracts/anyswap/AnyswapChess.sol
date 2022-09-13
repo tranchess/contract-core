@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../governance/ChessRoles.sol";
 
-import "./IAnyswapV6ERC20.sol";
+import "../interfaces/IAnyswapV6ERC20.sol";
 
 contract AnyswapChess is IAnyswapV6ERC20, ERC20, ChessRoles, Ownable {
     address public constant override underlying = address(0);
@@ -37,12 +37,6 @@ contract AnyswapChess is IAnyswapV6ERC20, ERC20, ChessRoles, Ownable {
     function burn(address from, uint256 amount) external override onlyMinter returns (bool) {
         _burn(from, amount);
         return true;
-    }
-
-    function withdrawUnderlying(
-        uint256 /*amount*/
-    ) external override {
-        revert("N/A");
     }
 
     function _beforeTokenTransfer(

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -13,7 +13,7 @@ import "../utils/CoreUtility.sol";
 import "./ChessRoles.sol";
 
 import "../anyswap/AnyCallAppBase.sol";
-import "../anyswap/IAnyswapV6ERC20.sol";
+import "../interfaces/IAnyswapV6ERC20.sol";
 
 contract ChessSubSchedule is IChessSchedule, Ownable, ChessRoles, CoreUtility, AnyCallAppBase {
     using SafeMath for uint256;
