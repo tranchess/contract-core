@@ -123,7 +123,7 @@ describe("ControllerBallotV2", function () {
             expect(lockedBalance.amount).to.equal(amount);
             expect(lockedBalance.unlockTime).to.equal(unlockTime);
             expect(await ballot.balanceOf(addr1)).to.equal(parseEther("10"));
-            expect(await ballot.balanceOfAtTimestamp(addr1, startWeek)).to.equal(parseEther("10"));
+            expect(await ballot.balanceOfAtWeek(addr1, startWeek)).to.equal(parseEther("10"));
             expect(await ballot.userWeights(addr1, pool0)).to.equal(parseEther("0.2"));
             expect(await ballot.userWeights(addr1, pool1)).to.equal(parseEther("0.3"));
             expect(await ballot.userWeights(addr1, pool2)).to.equal(parseEther("0.5"));
@@ -144,7 +144,7 @@ describe("ControllerBallotV2", function () {
             expect(lockedBalance.amount).to.equal(amount);
             expect(lockedBalance.unlockTime).to.equal(unlockTime);
             expect(await ballot.balanceOf(addr1)).to.equal(parseEther("40"));
-            expect(await ballot.balanceOfAtTimestamp(addr1, startWeek)).to.equal(parseEther("40"));
+            expect(await ballot.balanceOfAtWeek(addr1, startWeek)).to.equal(parseEther("40"));
             expect(await ballot.userWeights(addr1, pool0)).to.equal(parseEther("0.7"));
             expect(await ballot.userWeights(addr1, pool1)).to.equal(parseEther("0.2"));
             expect(await ballot.userWeights(addr1, pool2)).to.equal(parseEther("0.1"));
@@ -159,10 +159,10 @@ describe("ControllerBallotV2", function () {
             expect(await ballot.poolScheduledUnlock(pool0, w50)).to.equal(parseEther("8"));
             expect(await ballot.poolScheduledUnlock(pool1, w50)).to.equal(parseEther("12"));
             expect(await ballot.poolScheduledUnlock(pool2, w50)).to.equal(parseEther("20"));
-            expect(await ballot.totalSupplyAtTimestamp(startWeek)).to.equal(parseEther("10"));
-            expect(await ballot.sumAtTimestamp(pool0, startWeek)).to.equal(parseEther("2"));
-            expect(await ballot.sumAtTimestamp(pool1, startWeek)).to.equal(parseEther("3"));
-            expect(await ballot.sumAtTimestamp(pool2, startWeek)).to.equal(parseEther("5"));
+            expect(await ballot.totalSupplyAtWeek(startWeek)).to.equal(parseEther("10"));
+            expect(await ballot.sumAtWeek(pool0, startWeek)).to.equal(parseEther("2"));
+            expect(await ballot.sumAtWeek(pool1, startWeek)).to.equal(parseEther("3"));
+            expect(await ballot.sumAtWeek(pool2, startWeek)).to.equal(parseEther("5"));
 
             const w100 = startWeek + WEEK * 100;
             await votingEscrow.mock.getLockedBalance
@@ -174,10 +174,10 @@ describe("ControllerBallotV2", function () {
             expect(await ballot.poolScheduledUnlock(pool0, w100)).to.equal(parseEther("56"));
             expect(await ballot.poolScheduledUnlock(pool1, w100)).to.equal(parseEther("16"));
             expect(await ballot.poolScheduledUnlock(pool2, w100)).to.equal(parseEther("8"));
-            expect(await ballot.totalSupplyAtTimestamp(startWeek)).to.equal(parseEther("50"));
-            expect(await ballot.sumAtTimestamp(pool0, startWeek)).to.equal(parseEther("30"));
-            expect(await ballot.sumAtTimestamp(pool1, startWeek)).to.equal(parseEther("11"));
-            expect(await ballot.sumAtTimestamp(pool2, startWeek)).to.equal(parseEther("9"));
+            expect(await ballot.totalSupplyAtWeek(startWeek)).to.equal(parseEther("50"));
+            expect(await ballot.sumAtWeek(pool0, startWeek)).to.equal(parseEther("30"));
+            expect(await ballot.sumAtWeek(pool1, startWeek)).to.equal(parseEther("11"));
+            expect(await ballot.sumAtWeek(pool2, startWeek)).to.equal(parseEther("9"));
         });
 
         it("Should emit event", async function () {
@@ -237,7 +237,7 @@ describe("ControllerBallotV2", function () {
             expect(lockedBalance.amount).to.equal(amount);
             expect(lockedBalance.unlockTime).to.equal(unlockTime);
             expect(await ballot.balanceOf(addr1)).to.equal(parseEther("10"));
-            expect(await ballot.balanceOfAtTimestamp(addr1, startWeek)).to.equal(parseEther("10"));
+            expect(await ballot.balanceOfAtWeek(addr1, startWeek)).to.equal(parseEther("10"));
             expect(await ballot.userWeights(addr1, pool0)).to.equal(parseEther("0.2"));
             expect(await ballot.userWeights(addr1, pool1)).to.equal(parseEther("0.3"));
             expect(await ballot.userWeights(addr1, pool2)).to.equal(parseEther("0.5"));
@@ -367,7 +367,7 @@ describe("ControllerBallotV2", function () {
             expect(await ballot.userWeights(addr1, pool2)).to.equal(parseEther("0.3"));
             expect(await ballot.userWeights(addr1, pool3)).to.equal(parseEther("0.4"));
             expect(await ballot.poolScheduledUnlock(pool3, unlockTime)).to.equal(parseEther("0.8"));
-            expect(await ballot.sumAtTimestamp(pool3, startWeek + WEEK * 50)).to.equal(
+            expect(await ballot.sumAtWeek(pool3, startWeek + WEEK * 50)).to.equal(
                 parseEther("0.8").div(4)
             );
         });

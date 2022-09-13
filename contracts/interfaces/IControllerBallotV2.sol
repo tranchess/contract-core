@@ -2,11 +2,11 @@
 pragma solidity >=0.6.10 <0.8.0;
 
 interface IControllerBallotV2 {
-    function totalSupplyAtTimestamp(uint256 timestamp) external view returns (uint256);
+    function totalSupplyAtWeek(uint256 week) external view returns (uint256);
 
-    function sumAtTimestamp(address pool, uint256 timestamp) external view returns (uint256);
+    function sumAtWeek(address pool, uint256 week) external view returns (uint256);
 
-    function count(uint256 timestamp)
+    function count(uint256 week)
         external
         view
         returns (uint256[] memory sums, address[] memory funds);

@@ -112,28 +112,18 @@ contract ControllerBallotV2 is
         return locked.amount.mul(locked.unlockTime - timestamp) / _maxTime;
     }
 
-    function totalSupply() external view returns (uint256) {
-        return totalSupplyAtTimestamp(block.timestamp);
-    }
-
-    function totalSupplyAtTimestamp(uint256 timestamp) public view override returns (uint256) {
+    function totalSupplyAtWeek(uint256 week) public view override returns (uint256) {
         uint256 size = poolSize;
         uint256 total = 0;
         for (uint256 i = 0; i < size; i++) {
             if (!disabledPools[i]) {
-                total = total.add(sumAtTimestamp(_pools[i], timestamp));
+                total = total.add(sumAtWeek(_pools[i], week));
             }
         }
         return total;
     }
 
-    function sumAtTimestamp(address pool, uint256 timestamp)
-        public
-        view
-        override
-        returns (uint256)
-    {
-        uint256 week = _endOfWeek(timestamp) - 1 weeks;
+    function sumAtWeek(address pool, uint256 week) public view override returns (uint256) {
         return
             week <= checkpointWeek
                 ? poolVeSupplyPerWeek[pool][week]
@@ -146,7 +136,7 @@ contract ControllerBallotV2 is
                 );
     }
 
-    function count(uint256 timestamp)
+    function count(uint256 week)
         external
         view
         override
@@ -163,7 +153,7 @@ contract ControllerBallotV2 is
 
         sums = new uint256[](size);
         for (uint256 i = 0; i < size; i++) {
-            uint256 sum = sumAtTimestamp(pools[i], timestamp);
+            uint256 sum = sumAtWeek(pools[i], week);
             sums[i] = sum;
         }
     }

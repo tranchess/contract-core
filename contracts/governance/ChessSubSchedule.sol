@@ -75,8 +75,8 @@ contract ChessSubSchedule is IChessSchedule, Ownable, ChessRoles, CoreUtility, A
 
     function crossChainSync() external payable {
         uint256 week = _endOfWeek(block.timestamp);
-        uint256 supply = controllerBallot.totalSupplyAtTimestamp(week);
-        uint256 nextWeekSupply = controllerBallot.totalSupplyAtTimestamp(week + 1 weeks);
+        uint256 supply = controllerBallot.totalSupplyAtWeek(week);
+        uint256 nextWeekSupply = controllerBallot.totalSupplyAtWeek(week + 1 weeks);
         _anyCall(scheduleRelayer, mainChainID, abi.encode(week, supply, nextWeekSupply));
     }
 
