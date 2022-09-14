@@ -43,9 +43,6 @@ contract ShareStakingV2 is ITrancheIndexV2, CoreUtility {
 
     IVotingEscrow private immutable _votingEscrow;
 
-    /// @notice Timestamp when rewards start.
-    uint256 public immutable rewardStartTimestamp;
-
     /// @dev Per-fund CHESS emission rate. The product of CHESS emission rate
     ///      and weekly percentage of the fund
     uint256 private _rate;
@@ -95,14 +92,12 @@ contract ShareStakingV2 is ITrancheIndexV2, CoreUtility {
         address fund_,
         address chessSchedule_,
         address chessController_,
-        address votingEscrow_,
-        uint256 rewardStartTimestamp_
+        address votingEscrow_
     ) public {
         fund = IFundV3(fund_);
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
         _votingEscrow = IVotingEscrow(votingEscrow_);
-        rewardStartTimestamp = rewardStartTimestamp_;
         _checkpointTimestamp = block.timestamp;
     }
 
@@ -422,12 +417,9 @@ contract ShareStakingV2 is ITrancheIndexV2, CoreUtility {
         for (uint256 i = 0; i < MAX_ITERATIONS && timestamp_ < block.timestamp; i++) {
             uint256 endTimestamp = rebalanceTimestamp.min(endWeek).min(block.timestamp);
 
-            if (weight > 0 && endTimestamp > rewardStartTimestamp) {
+            if (weight > 0) {
                 integral = integral.add(
-                    rate
-                        .mul(endTimestamp.sub(timestamp_.max(rewardStartTimestamp)))
-                        .decimalToPreciseDecimal()
-                        .div(weight)
+                    rate.mul(endTimestamp - timestamp_).decimalToPreciseDecimal().div(weight)
                 );
             }
 
@@ -462,11 +454,6 @@ contract ShareStakingV2 is ITrancheIndexV2, CoreUtility {
                 rate = chessSchedule.getRate(endWeek).mul(
                     chessController.getFundRelativeWeight(address(this), endWeek)
                 );
-                if (endWeek < rewardStartTimestamp && endWeek + 1 weeks > rewardStartTimestamp) {
-                    // Rewards start in the middle of the next week. We adjust the rate to
-                    // compensate for the period between `endWeek` and `rewardStartTimestamp`.
-                    rate = rate.mul(1 weeks).div(endWeek + 1 weeks - rewardStartTimestamp);
-                }
                 endWeek += 1 weeks;
             }
 

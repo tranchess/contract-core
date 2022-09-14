@@ -9,7 +9,6 @@ import {
     TRANCHE_Q,
     TRANCHE_B,
     TRANCHE_R,
-    DAY,
     WEEK,
     SETTLEMENT_TIME,
     FixtureWalletMap,
@@ -112,7 +111,6 @@ describe("ShareStakingV2", function () {
         readonly checkpointTimestamp: number;
         readonly fund: MockContract;
         readonly chessSchedule: MockContract;
-        readonly chessController: MockContract;
         readonly votingEscrow: MockContract;
         readonly usdc: Contract;
         readonly staking: Contract;
@@ -129,7 +127,6 @@ describe("ShareStakingV2", function () {
     let addr2: string;
     let fund: MockContract;
     let chessSchedule: MockContract;
-    let chessController: MockContract;
     let votingEscrow: MockContract;
     let usdc: Contract;
     let staking: Contract;
@@ -161,8 +158,7 @@ describe("ShareStakingV2", function () {
             fund.address,
             chessSchedule.address,
             chessController.address,
-            votingEscrow.address,
-            0
+            votingEscrow.address
         );
 
         // Deposit initial shares
@@ -192,7 +188,6 @@ describe("ShareStakingV2", function () {
             checkpointTimestamp,
             fund,
             chessSchedule,
-            chessController,
             votingEscrow,
             usdc,
             staking: staking.connect(user1),
@@ -213,7 +208,6 @@ describe("ShareStakingV2", function () {
         addr2 = user2.address;
         fund = fixtureData.fund;
         chessSchedule = fixtureData.chessSchedule;
-        chessController = fixtureData.chessController;
         votingEscrow = fixtureData.votingEscrow;
         usdc = fixtureData.usdc;
         staking = fixtureData.staking;
@@ -1121,93 +1115,6 @@ describe("ShareStakingV2", function () {
             const reward2 = parseEther("1").mul(1000).sub(reward1);
             expect(await staking.callStatic.claimableRewards(addr1)).to.equal(reward1);
             expect(await staking.callStatic.claimableRewards(addr2)).to.equal(reward2);
-        });
-    });
-
-    describe("Delayed start", function () {
-        const delay = DAY * 3;
-        let startWeek: number;
-        let firstRate: BigNumber;
-
-        beforeEach(async function () {
-            const ShareStaking = await ethers.getContractFactory("ShareStakingV2");
-            const startEpoch = (await ethers.provider.getBlock("latest")).timestamp;
-            startWeek = Math.ceil(startEpoch / WEEK) * WEEK + WEEK * 2 + SETTLEMENT_TIME;
-            staking = await ShareStaking.connect(owner).deploy(
-                fund.address,
-                chessSchedule.address,
-                chessController.address,
-                votingEscrow.address,
-                startWeek + delay
-            );
-            staking = staking.connect(user1);
-            await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, staking.address).returns(0);
-            await fund.mock.trancheBalanceOf.withArgs(TRANCHE_B, staking.address).returns(0);
-            await fund.mock.trancheBalanceOf.withArgs(TRANCHE_R, staking.address).returns(0);
-            await chessSchedule.mock.getRate.withArgs(startWeek).returns(parseEther("1"));
-            firstRate = parseEther("1")
-                .mul(WEEK)
-                .div(WEEK - delay);
-            await fund.mock.trancheBalanceOf.withArgs(TRANCHE_Q, staking.address).returns(USER1_Q);
-            await staking.deposit(TRANCHE_Q, USER1_Q, user1.address, 0);
-        });
-
-        it("Should initialize with adjusted initial rate", async function () {
-            await advanceBlockAtTime(startWeek + delay);
-            const rate = parseEther("1")
-                .mul(parseEther("1"))
-                .mul(WEEK)
-                .div(WEEK - delay)
-                .div(parseEther("1"));
-            await staking.syncWithVotingEscrow(addr1);
-            expect(await staking.getRate()).to.equal(rate);
-        });
-
-        it("Should start rewards at the given timestamp", async function () {
-            advanceBlockAtTime(startWeek + delay);
-            expect(await staking.callStatic.claimableRewards(addr1)).to.equal(0);
-            advanceBlockAtTime(startWeek + delay + 100);
-            expect(await staking.callStatic.claimableRewards(addr1)).to.equal(firstRate.mul(100));
-        });
-
-        it("Should stop rewards if relative rate is zero", async function () {
-            await chessController.mock.getFundRelativeWeight
-                .withArgs(staking.address, startWeek + WEEK)
-                .returns(parseEther("1"));
-            advanceBlockAtTime(startWeek + WEEK + DAY);
-            await expect(() => staking.claimRewards(addr1)).to.callMocks({
-                func: chessSchedule.mock.mint.withArgs(addr1, firstRate.mul(WEEK - delay)),
-            });
-            advanceBlockAtTime(startWeek + WEEK + DAY * 2);
-            expect(await staking.callStatic.claimableRewards(addr1)).to.equal(0);
-        });
-
-        it("Should handle rebalance before the start", async function () {
-            // Deposit some Queen for user2, so that user1's share is 1/5.
-            await fund.mock.trancheBalanceOf
-                .withArgs(TRANCHE_Q, staking.address)
-                .returns(USER1_Q.mul(5));
-            await staking.deposit(TRANCHE_Q, USER1_Q.mul(4), user2.address, 0);
-            await fund.mock.getRebalanceSize.returns(1);
-            await fund.mock.getRebalanceTimestamp.withArgs(0).returns(startWeek - DAY * 3);
-            await fund.mock.getRebalanceTimestamp.withArgs(1).returns(startWeek);
-            await fund.mock.historicalSplitRatio.withArgs(1).returns(SPLIT_RATIO.mul(2));
-            await fund.mock.historicalSplitRatio.withArgs(2).returns(SPLIT_RATIO.mul(5));
-
-            await fund.mock.doRebalance
-                .withArgs(USER1_Q.mul(5), 0, 0, 0)
-                .returns(USER1_Q.mul(10), 0, 0);
-            await fund.mock.doRebalance
-                .withArgs(USER1_Q.mul(10), 0, 0, 1)
-                .returns(USER1_Q.mul(40), 0, 0);
-            await fund.mock.doRebalance.withArgs(USER1_Q, 0, 0, 0).returns(USER1_Q.mul(2), 0, 0);
-            await fund.mock.doRebalance
-                .withArgs(USER1_Q.mul(2), 0, 0, 1)
-                .returns(USER1_Q.mul(8), 0, 0);
-            await advanceBlockAtTime(startWeek + delay + 100);
-            expect(await staking.callStatic.claimableRewards(addr1)).to.equal(
-                firstRate.div(5).mul(100)
-            );
         });
     });
 });

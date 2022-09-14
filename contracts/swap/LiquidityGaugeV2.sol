@@ -49,8 +49,6 @@ contract LiquidityGaugeV2 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
     IVotingEscrow private immutable _votingEscrow;
     address public immutable swapBonus;
     IERC20 private immutable _bonusToken;
-    /// @notice Timestamp when rewards start.
-    uint256 public immutable rewardStartTimestamp;
 
     uint256 private _workingSupply;
     mapping(address => uint256) private _workingBalances;
@@ -82,8 +80,7 @@ contract LiquidityGaugeV2 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
         address chessController_,
         address fund_,
         address votingEscrow_,
-        address swapBonus_,
-        uint256 rewardStartTimestamp_
+        address swapBonus_
     ) public ERC20(name_, symbol_) {
         stableSwap = stableSwap_;
         _quoteToken = IERC20(IStableSwap(stableSwap_).quoteAddress());
@@ -93,7 +90,6 @@ contract LiquidityGaugeV2 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
         _votingEscrow = IVotingEscrow(votingEscrow_);
         swapBonus = swapBonus_;
         _bonusToken = IERC20(ISwapBonus(swapBonus_).bonusToken());
-        rewardStartTimestamp = rewardStartTimestamp_;
         _chessIntegralTimestamp = block.timestamp;
     }
 
@@ -301,23 +297,15 @@ contract LiquidityGaugeV2 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
         }
         for (uint256 i = 0; i < MAX_ITERATIONS && timestamp < block.timestamp; i++) {
             uint256 endTimestamp = endWeek.min(block.timestamp);
-            if (totalWeight != 0 && endTimestamp > rewardStartTimestamp) {
+            if (totalWeight != 0) {
                 integral = integral.add(
-                    rate
-                        .mul(endTimestamp.sub(timestamp.max(rewardStartTimestamp)))
-                        .decimalToPreciseDecimal()
-                        .div(totalWeight)
+                    rate.mul(endTimestamp - timestamp).decimalToPreciseDecimal().div(totalWeight)
                 );
             }
             if (endTimestamp == endWeek) {
                 rate = chessSchedule.getRate(endWeek).mul(
                     chessController.getFundRelativeWeight(address(this), endWeek)
                 );
-                if (endWeek < rewardStartTimestamp && endWeek + 1 weeks > rewardStartTimestamp) {
-                    // Rewards start in the middle of the next week. We adjust the rate to
-                    // compensate for the period between `endWeek` and `rewardStartTimestamp`.
-                    rate = rate.mul(1 weeks).div(endWeek + 1 weeks - rewardStartTimestamp);
-                }
                 endWeek += 1 weeks;
             }
             timestamp = endTimestamp;

@@ -10,7 +10,6 @@ import {
     TRANCHE_Q,
     TRANCHE_B,
     TRANCHE_R,
-    DAY,
     WEEK,
     FixtureWalletMap,
     advanceBlockAtTime,
@@ -62,7 +61,6 @@ describe("LiquidityGaugeV2", function () {
         readonly fund: MockContract;
         readonly swap: MockContract;
         readonly chessSchedule: MockContract;
-        readonly chessController: MockContract;
         readonly votingEscrow: MockContract;
         readonly usdc: Contract;
         readonly liquidityGauge: Contract;
@@ -80,7 +78,6 @@ describe("LiquidityGaugeV2", function () {
     let fund: MockContract;
     let swap: MockContract;
     let chessSchedule: MockContract;
-    let chessController: MockContract;
     let votingEscrow: MockContract;
     let usdc: Contract;
     let liquidityGauge: Contract;
@@ -125,8 +122,7 @@ describe("LiquidityGaugeV2", function () {
             chessController.address,
             fund.address,
             votingEscrow.address,
-            swapBonus.address,
-            0
+            swapBonus.address
         );
 
         // Deposit initial shares
@@ -138,7 +134,6 @@ describe("LiquidityGaugeV2", function () {
             fund,
             swap,
             chessSchedule,
-            chessController,
             votingEscrow,
             usdc,
             liquidityGauge,
@@ -160,7 +155,6 @@ describe("LiquidityGaugeV2", function () {
         fund = fixtureData.fund;
         swap = fixtureData.swap;
         chessSchedule = fixtureData.chessSchedule;
-        chessController = fixtureData.chessController;
         votingEscrow = fixtureData.votingEscrow;
         usdc = fixtureData.usdc;
         liquidityGauge = fixtureData.liquidityGauge;
@@ -612,78 +606,6 @@ describe("LiquidityGaugeV2", function () {
                 }
             );
             expect(await usdc.balanceOf(addr1)).to.equal(distU1.mul(USER1_LP).div(TOTAL_LP));
-        });
-    });
-
-    describe("Delayed start", function () {
-        const delay = DAY * 2;
-        let startWeek: number;
-        let firstRate: BigNumber;
-
-        beforeEach(async function () {
-            const LiquidityGauge = await ethers.getContractFactory("LiquidityGaugeV2");
-            const startEpoch = (await ethers.provider.getBlock("latest")).timestamp;
-            startWeek = Math.ceil(startEpoch / WEEK) * WEEK + WEEK * 2 + SETTLEMENT_TIME;
-
-            await chessSchedule.mock.getRate.withArgs(startWeek).returns(parseEther("1"));
-            const liquidityGaugeAddress = ethers.utils.getContractAddress({
-                from: owner.address,
-                nonce: (await owner.getTransactionCount("pending")) + 1,
-            });
-            const SwapBonus = await ethers.getContractFactory("SwapBonus");
-            swapBonus = await SwapBonus.connect(owner).deploy(liquidityGaugeAddress, usdc.address);
-            liquidityGauge = await LiquidityGauge.connect(owner).deploy(
-                "Test LP",
-                "TLP",
-                swap.address,
-                chessSchedule.address,
-                chessController.address,
-                fund.address,
-                votingEscrow.address,
-                swapBonus.address,
-                startWeek + delay
-            );
-
-            firstRate = parseEther("1")
-                .mul(WEEK)
-                .div(WEEK - delay);
-            await swap.call(liquidityGauge, "mint", user1.address, USER1_LP);
-        });
-
-        it("Should initialize with adjusted initial rate", async function () {
-            await advanceBlockAtTime(startWeek + delay);
-            const rate = parseEther("1")
-                .mul(parseEther("1"))
-                .mul(WEEK)
-                .div(WEEK - delay)
-                .div(parseEther("1"));
-            await liquidityGauge.syncWithVotingEscrow(addr1);
-            expect(await liquidityGauge.getRate()).to.equal(rate);
-        });
-
-        it("Should start rewards at the given timestamp", async function () {
-            advanceBlockAtTime(startWeek + delay);
-            expect((await liquidityGauge.callStatic.claimableRewards(addr1)).chessAmount).to.equal(
-                0
-            );
-            advanceBlockAtTime(startWeek + delay + 100);
-            expect(
-                (await liquidityGauge.callStatic.claimableRewards(addr1)).chessAmount
-            ).to.closeTo(firstRate.mul(100), 1);
-        });
-
-        it("Should stop rewards if relative rate is zero", async function () {
-            await chessController.mock.getFundRelativeWeight
-                .withArgs(liquidityGauge.address, startWeek + WEEK)
-                .returns(parseEther("1"));
-            advanceBlockAtTime(startWeek + WEEK + DAY);
-            await expect(() => liquidityGauge.claimRewards(addr1)).to.callMocks({
-                func: chessSchedule.mock.mint.withArgs(addr1, firstRate.mul(WEEK - delay)),
-            });
-            advanceBlockAtTime(startWeek + WEEK + DAY * 2);
-            expect((await liquidityGauge.callStatic.claimableRewards(addr1)).chessAmount).to.equal(
-                0
-            );
         });
     });
 });
