@@ -2,7 +2,6 @@
 pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 
@@ -19,7 +18,6 @@ contract ChessControllerV6 is IChessController, CoreUtility {
     /// @dev Reserved storage slots for future base contract upgrades
     uint256[192] private _reservedSlots;
 
-    using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using EnumerableSet for EnumerableSet.AddressSet;
