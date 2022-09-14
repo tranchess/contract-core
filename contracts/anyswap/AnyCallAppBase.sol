@@ -77,8 +77,11 @@ abstract contract AnyCallAppBase {
         return (true, "");
     }
 
-    function anyFallback(address to, bytes calldata data) external onlyExecutor {
-        _anyFallback(to, data);
+    function anyFallback(
+        address, // to
+        bytes calldata data
+    ) external onlyExecutor {
+        _anyFallback(data);
     }
 
     function _checkAnyExecuteFrom(address from, uint256 fromChainID)
@@ -88,5 +91,5 @@ abstract contract AnyCallAppBase {
 
     function _anyExecute(uint256 fromChainID, bytes calldata data) internal virtual;
 
-    function _anyFallback(address to, bytes calldata data) internal virtual;
+    function _anyFallback(bytes calldata data) internal virtual;
 }

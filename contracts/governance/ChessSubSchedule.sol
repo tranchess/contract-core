@@ -100,7 +100,7 @@ contract ChessSubSchedule is IChessSchedule, Ownable, ChessRoles, CoreUtility, A
         _weeklySupplies[currentWeek] = totalAmount;
     }
 
-    function _anyFallback(address, bytes calldata) internal override {
+    function _anyFallback(bytes calldata) internal override {
         revert("N/A");
     }
 }

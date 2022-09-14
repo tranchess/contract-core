@@ -91,7 +91,7 @@ contract ChessSubScheduleRelayer is CoreUtility, AnyCallAppBase {
         emit CrossChainSynced(subChainID, week + 1 weeks, nextWeekSupply);
     }
 
-    function _anyFallback(address, bytes calldata) internal override {
+    function _anyFallback(bytes calldata) internal override {
         revert("N/A");
     }
 }
