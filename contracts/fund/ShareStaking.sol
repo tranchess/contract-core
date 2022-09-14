@@ -448,7 +448,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
                     rebalanceTimestamp = type(uint256).max;
                 }
             }
-            if (endTimestamp == endWeek || rate == 0) {
+            if (endTimestamp == endWeek) {
                 rate = chessSchedule.getRate(endWeek).mul(
                     chessController.getFundRelativeWeight(address(this), endWeek)
                 );
