@@ -123,7 +123,7 @@ describe("ControllerBallotV2", function () {
             expect(lockedBalance.amount).to.equal(amount);
             expect(lockedBalance.unlockTime).to.equal(unlockTime);
             expect(await ballot.balanceOf(addr1)).to.equal(parseEther("10"));
-            expect(await ballot.balanceOfAtWeek(addr1, startWeek)).to.equal(parseEther("10"));
+            expect(await ballot.balanceOfAtTimestamp(addr1, startWeek)).to.equal(parseEther("10"));
             expect(await ballot.userWeights(addr1, pool0)).to.equal(parseEther("0.2"));
             expect(await ballot.userWeights(addr1, pool1)).to.equal(parseEther("0.3"));
             expect(await ballot.userWeights(addr1, pool2)).to.equal(parseEther("0.5"));
@@ -144,7 +144,7 @@ describe("ControllerBallotV2", function () {
             expect(lockedBalance.amount).to.equal(amount);
             expect(lockedBalance.unlockTime).to.equal(unlockTime);
             expect(await ballot.balanceOf(addr1)).to.equal(parseEther("40"));
-            expect(await ballot.balanceOfAtWeek(addr1, startWeek)).to.equal(parseEther("40"));
+            expect(await ballot.balanceOfAtTimestamp(addr1, startWeek)).to.equal(parseEther("40"));
             expect(await ballot.userWeights(addr1, pool0)).to.equal(parseEther("0.7"));
             expect(await ballot.userWeights(addr1, pool1)).to.equal(parseEther("0.2"));
             expect(await ballot.userWeights(addr1, pool2)).to.equal(parseEther("0.1"));
@@ -237,7 +237,7 @@ describe("ControllerBallotV2", function () {
             expect(lockedBalance.amount).to.equal(amount);
             expect(lockedBalance.unlockTime).to.equal(unlockTime);
             expect(await ballot.balanceOf(addr1)).to.equal(parseEther("10"));
-            expect(await ballot.balanceOfAtWeek(addr1, startWeek)).to.equal(parseEther("10"));
+            expect(await ballot.balanceOfAtTimestamp(addr1, startWeek)).to.equal(parseEther("10"));
             expect(await ballot.userWeights(addr1, pool0)).to.equal(parseEther("0.2"));
             expect(await ballot.userWeights(addr1, pool1)).to.equal(parseEther("0.3"));
             expect(await ballot.userWeights(addr1, pool2)).to.equal(parseEther("0.5"));
