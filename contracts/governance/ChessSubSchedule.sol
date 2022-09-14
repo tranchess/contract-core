@@ -4,7 +4,7 @@ pragma solidity >=0.6.10 <0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 import "../interfaces/IChessSchedule.sol";
 import "../interfaces/IControllerBallotV2.sol";
@@ -15,7 +15,16 @@ import "./ChessRoles.sol";
 import "../anyswap/AnyCallAppBase.sol";
 import "../interfaces/IAnyswapV6ERC20.sol";
 
-contract ChessSubSchedule is IChessSchedule, Ownable, ChessRoles, CoreUtility, AnyCallAppBase {
+contract ChessSubSchedule is
+    IChessSchedule,
+    OwnableUpgradeable,
+    ChessRoles,
+    CoreUtility,
+    AnyCallAppBase
+{
+    /// @dev Reserved storage slots for future base contract upgrades
+    uint256[32] private _reservedSlots;
+
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -42,6 +51,10 @@ contract ChessSubSchedule is IChessSchedule, Ownable, ChessRoles, CoreUtility, A
         scheduleRelayer = scheduleRelayer_;
         controllerBallot = IControllerBallotV2(controllerBallot_);
         chess = IAnyswapV6ERC20(chess_);
+    }
+
+    function initialize() external initializer {
+        __Ownable_init();
     }
 
     /// @notice Get supply of the week containing the given timestamp. This function usually
