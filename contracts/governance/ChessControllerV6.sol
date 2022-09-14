@@ -86,26 +86,26 @@ contract ChessControllerV6 is IChessController, CoreUtility {
         }
     }
 
-    /// @notice Get Fund relative weight (not more than 1.0) normalized to 1e18
+    /// @notice Get relative weight (not more than 1.0) normalized to 1e18
     ///         (e.g. 1.0 == 1e18).
     /// @return weight Value of relative weight normalized to 1e18
-    function getFundRelativeWeight(address fundAddress, uint256 timestamp)
+    function getFundRelativeWeight(address pool, uint256 timestamp)
         external
         override
         returns (uint256)
     {
         require(timestamp <= block.timestamp, "Too soon");
         if (timestamp < guardedLaunchStart) {
-            return fundAddress == fund0 ? 1e18 : 0;
+            return pool == fund0 ? 1e18 : 0;
         }
         uint256 weekTimestamp = _endOfWeek(timestamp).sub(1 weeks);
         uint256 lastTimestamp_ = lastTimestamp; // gas saver
         require(weekTimestamp <= lastTimestamp_ + 1 weeks, "Previous week is empty");
         if (weekTimestamp <= lastTimestamp_) {
-            return weights[weekTimestamp][fundAddress];
+            return weights[weekTimestamp][pool];
         }
         lastTimestamp = lastTimestamp_ + 1 weeks;
-        return _updateWeight(weekTimestamp, fundAddress);
+        return _updateWeight(weekTimestamp, pool);
     }
 
     function _updateWeight(uint256 weekTimestamp, address pool) private returns (uint256 weight) {
