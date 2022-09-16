@@ -3,28 +3,37 @@ pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
+import "./VotingEscrowCheckpoint.sol";
 import "../utils/CoreUtility.sol";
 import "../utils/ManagedPausable.sol";
 import "../interfaces/IVotingEscrow.sol";
 import "../utils/ProxyUtility.sol";
 
-contract VotingEscrowV2 is
+import "../anyswap/AnyCallAppBase.sol";
+import "../anyswap/AnyswapChessPool.sol";
+import "../interfaces/IAnyswapV6ERC20.sol";
+
+contract VotingEscrowV3 is
     IVotingEscrow,
     OwnableUpgradeable,
     ReentrancyGuard,
     CoreUtility,
+    VotingEscrowCheckpoint,
     ManagedPausable,
-    ProxyUtility
+    ProxyUtility,
+    AnyCallAppBase
 {
     /// @dev Reserved storage slots for future base contract upgrades
     uint256[29] private _reservedSlots;
 
+    using Math for uint256;
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -32,13 +41,32 @@ contract VotingEscrowV2 is
 
     event AmountIncreased(address indexed account, uint256 increasedAmount);
 
+    event AmountDecreased(address indexed account, uint256 decreasedAmount);
+
     event UnlockTimeIncreased(address indexed account, uint256 newUnlockTime);
 
     event Withdrawn(address indexed account, uint256 amount);
 
+    event CrossChainSent(
+        address indexed account,
+        uint256 toChainID,
+        uint256 amount,
+        uint256 unlockTime
+    );
+
+    event CrossChainReceived(
+        address indexed account,
+        uint256 fromChainID,
+        uint256 amount,
+        uint256 newUnlockTime
+    );
+
+    event CrossChainVotingEscrowUpdated(uint256 chainID, address votingEscrow);
+
     uint8 public constant decimals = 18;
 
-    uint256 public immutable override maxTime;
+    uint256 public constant MIN_CROSS_CHAIN_SENDER_LOCK_PERIOD = 4 weeks;
+    uint256 public constant MIN_CROSS_CHAIN_RECEIVER_LOCK_PERIOD = 3 weeks;
 
     address public immutable override token;
 
@@ -55,7 +83,7 @@ contract VotingEscrowV2 is
     /// @notice max lock time allowed at the moment
     uint256 public maxTimeAllowed;
 
-    /// @notice Contract to be call when an account's locked CHESS is updated
+    /// @notice Contract to be called when an account's locked CHESS is decreased
     address public callback;
 
     /// @notice Amount of Chess locked now. Expired locks are not included.
@@ -73,9 +101,20 @@ contract VotingEscrowV2 is
     /// @notice Start timestamp of the trading week in which the last checkpoint is made
     uint256 public checkpointWeek;
 
-    constructor(address token_, uint256 maxTime_) public {
+    /// @notice Address of AnyswapChessPool (on BNB Chain) or AnyswapChess (on other chains).
+    address public anyswapChess;
+
+    /// @notice Mapping of chain ID => VotingEscrow address on that chain
+    mapping(uint256 => address) public crossChainVotingEscrows;
+
+    constructor(
+        address token_,
+        uint256 maxTime_,
+        address anyswapChess_,
+        address anyCallProxy_
+    ) public VotingEscrowCheckpoint(maxTime_) AnyCallAppBase(anyCallProxy_, true, true) {
         token = token_;
-        maxTime = maxTime_;
+        anyswapChess = anyswapChess_;
     }
 
     /// @dev Initialize the contract. The contract is designed to be used with OpenZeppelin's
@@ -87,7 +126,7 @@ contract VotingEscrowV2 is
         uint256 maxTimeAllowed_
     ) external initializer {
         __Ownable_init();
-        require(maxTimeAllowed_ <= maxTime, "Cannot exceed max time");
+        require(maxTimeAllowed_ <= _maxTime, "Cannot exceed max time");
         maxTimeAllowed = maxTimeAllowed_;
         _initializeV2(msg.sender, name_, symbol_);
     }
@@ -121,17 +160,21 @@ contract VotingEscrowV2 is
         uint256 nextWeekSupply_ = 0;
         for (
             uint256 weekCursor = nextWeek;
-            weekCursor <= nextWeek + maxTime;
+            weekCursor <= nextWeek + _maxTime;
             weekCursor += 1 weeks
         ) {
             totalLocked_ = totalLocked_.add(scheduledUnlock[weekCursor]);
             nextWeekSupply_ = nextWeekSupply_.add(
-                (scheduledUnlock[weekCursor].mul(weekCursor - nextWeek)) / maxTime
+                (scheduledUnlock[weekCursor].mul(weekCursor - nextWeek)) / _maxTime
             );
         }
         totalLocked = totalLocked_;
         nextWeekSupply = nextWeekSupply_;
         checkpointWeek = nextWeek - 1 weeks;
+    }
+
+    function maxTime() external view override returns (uint256) {
+        return _maxTime;
     }
 
     function getTimestampDropBelow(address account, uint256 threshold)
@@ -144,7 +187,7 @@ contract VotingEscrowV2 is
         if (lockedBalance.amount == 0 || lockedBalance.amount < threshold) {
             return 0;
         }
-        return lockedBalance.unlockTime.sub(threshold.mul(maxTime).div(lockedBalance.amount));
+        return lockedBalance.unlockTime.sub(threshold.mul(_maxTime).div(lockedBalance.amount));
     }
 
     function balanceOf(address account) external view override returns (uint256) {
@@ -152,30 +195,7 @@ contract VotingEscrowV2 is
     }
 
     function totalSupply() external view override returns (uint256) {
-        uint256 weekCursor = checkpointWeek;
-        uint256 nextWeek = _endOfWeek(block.timestamp);
-        uint256 currentWeek = nextWeek - 1 weeks;
-        uint256 newNextWeekSupply = nextWeekSupply;
-        uint256 newTotalLocked = totalLocked;
-        if (weekCursor < currentWeek) {
-            weekCursor += 1 weeks;
-            for (; weekCursor < currentWeek; weekCursor += 1 weeks) {
-                // Remove Chess unlocked at the beginning of the next week from total locked amount.
-                newTotalLocked = newTotalLocked.sub(scheduledUnlock[weekCursor]);
-                // Calculate supply at the end of the next week.
-                newNextWeekSupply = newNextWeekSupply.sub(newTotalLocked.mul(1 weeks) / maxTime);
-            }
-            newTotalLocked = newTotalLocked.sub(scheduledUnlock[weekCursor]);
-            newNextWeekSupply = newNextWeekSupply.sub(
-                newTotalLocked.mul(block.timestamp - currentWeek) / maxTime
-            );
-        } else {
-            newNextWeekSupply = newNextWeekSupply.add(
-                newTotalLocked.mul(nextWeek - block.timestamp) / maxTime
-            );
-        }
-
-        return newNextWeekSupply;
+        return _veTotalSupply(scheduledUnlock, checkpointWeek, nextWeekSupply, totalLocked);
     }
 
     function getLockedBalance(address account)
@@ -206,9 +226,7 @@ contract VotingEscrowV2 is
             unlockTime + 1 weeks == _endOfWeek(unlockTime),
             "Unlock time must be end of a week"
         );
-
         LockedBalance memory lockedBalance = locked[msg.sender];
-
         require(amount > 0, "Zero value");
         require(lockedBalance.amount == 0, "Withdraw old tokens first");
         require(unlockTime > block.timestamp, "Can only lock until time in the future");
@@ -217,44 +235,27 @@ contract VotingEscrowV2 is
             "Voting lock cannot exceed max lock time"
         );
 
-        _checkpoint(lockedBalance.amount, lockedBalance.unlockTime, amount, unlockTime);
-        scheduledUnlock[unlockTime] = scheduledUnlock[unlockTime].add(amount);
+        _checkpointAndUpdateLock(0, 0, amount, unlockTime);
         locked[msg.sender].unlockTime = unlockTime;
         locked[msg.sender].amount = amount;
-
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-
-        if (callback != address(0)) {
-            IVotingEscrowCallback(callback).syncWithVotingEscrow(msg.sender);
-        }
-
         emit LockCreated(msg.sender, amount, unlockTime);
     }
 
     function increaseAmount(address account, uint256 amount) external nonReentrant whenNotPaused {
         LockedBalance memory lockedBalance = locked[account];
-
         require(amount > 0, "Zero value");
         require(lockedBalance.unlockTime > block.timestamp, "Cannot add to expired lock");
 
         uint256 newAmount = lockedBalance.amount.add(amount);
-        _checkpoint(
+        _checkpointAndUpdateLock(
             lockedBalance.amount,
             lockedBalance.unlockTime,
             newAmount,
             lockedBalance.unlockTime
         );
-        scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime].add(
-            amount
-        );
         locked[account].amount = newAmount;
-
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-
-        if (callback != address(0)) {
-            IVotingEscrowCallback(callback).syncWithVotingEscrow(msg.sender);
-        }
-
         emit AmountIncreased(account, amount);
     }
 
@@ -272,22 +273,13 @@ contract VotingEscrowV2 is
             "Voting lock cannot exceed max lock time"
         );
 
-        _checkpoint(
+        _checkpointAndUpdateLock(
             lockedBalance.amount,
             lockedBalance.unlockTime,
             lockedBalance.amount,
             unlockTime
         );
-        scheduledUnlock[lockedBalance.unlockTime] = scheduledUnlock[lockedBalance.unlockTime].sub(
-            lockedBalance.amount
-        );
-        scheduledUnlock[unlockTime] = scheduledUnlock[unlockTime].add(lockedBalance.amount);
         locked[msg.sender].unlockTime = unlockTime;
-
-        if (callback != address(0)) {
-            IVotingEscrowCallback(callback).syncWithVotingEscrow(msg.sender);
-        }
-
         emit UnlockTimeIncreased(msg.sender, unlockTime);
     }
 
@@ -305,6 +297,128 @@ contract VotingEscrowV2 is
         emit Withdrawn(msg.sender, amount);
     }
 
+    /// @notice Transfer locked CHESS to the VotingEscrow on another chain. User should pay cross
+    ///         chain fee in native currency (e.g. ETH on Ethereum) when calling this function.
+    ///         Exact fee amount can be queried from the AnyCall proxy contract, i.e.
+    ///         `IAnyCallV6Proxy(thisContract.anyCallProxy()).calcSrcFees(thisContract, toChainID, 96)`.
+    /// @param amount Amount of locked CHESS
+    /// @param toChainID Target chain ID
+    function veChessCrossChain(uint256 amount, uint256 toChainID) external payable {
+        LockedBalance memory lockedBalance = locked[msg.sender];
+        require(amount > 0, "Zero value");
+        require(
+            lockedBalance.unlockTime > block.timestamp + MIN_CROSS_CHAIN_SENDER_LOCK_PERIOD,
+            "Lock period too short"
+        );
+
+        uint256 newAmount = lockedBalance.amount.sub(amount);
+        _checkpointAndUpdateLock(
+            lockedBalance.amount,
+            lockedBalance.unlockTime,
+            newAmount,
+            lockedBalance.unlockTime
+        );
+        locked[msg.sender].amount = newAmount;
+        if (newAmount == 0) {
+            locked[msg.sender].unlockTime = 0;
+        }
+
+        // Deposit CHESS to AnySwap pool
+        address underlying = IAnyswapV6ERC20(anyswapChess).underlying();
+        if (underlying != address(0)) {
+            // anyswapChess is an AnyswapChessPool contract
+            require(token == underlying);
+            IERC20(token).safeTransfer(anyswapChess, amount);
+        } else {
+            // anyswapChess is an AnyswapChess contract
+            IAnyswapV6ERC20(anyswapChess).burn(address(this), amount);
+        }
+
+        address to = crossChainVotingEscrows[toChainID];
+        require(to != address(0), "Unknown chain ID");
+        _anyCall(to, toChainID, abi.encode(msg.sender, amount, lockedBalance.unlockTime));
+
+        if (callback != address(0)) {
+            IVotingEscrowCallback(callback).syncWithVotingEscrow(msg.sender);
+        }
+
+        emit AmountDecreased(msg.sender, amount);
+        emit CrossChainSent(msg.sender, toChainID, amount, lockedBalance.unlockTime);
+    }
+
+    function _checkAnyExecuteFrom(address from, uint256 fromChainID)
+        internal
+        override
+        returns (bool)
+    {
+        return from == crossChainVotingEscrows[fromChainID];
+    }
+
+    /// @dev Receive cross chain veCHESS transfer.
+    function _anyExecute(uint256 fromChainID, bytes calldata data) internal override {
+        (address account, uint256 amount, uint256 unlockTime) =
+            abi.decode(data, (address, uint256, uint256));
+        _receiveCrossChain(account, amount, unlockTime, fromChainID);
+    }
+
+    /// @dev When `veChessCrossChain` failed, this function is called by the anyCall proxy
+    ///      to add locked CHESS back to the account.
+    function _anyFallback(bytes calldata data) internal override {
+        (address account, uint256 amount, uint256 unlockTime) =
+            abi.decode(data, (address, uint256, uint256));
+        _receiveCrossChain(account, amount, unlockTime, 0);
+    }
+
+    function _receiveCrossChain(
+        address account,
+        uint256 amount,
+        uint256 unlockTime,
+        uint256 fromChainID
+    ) private {
+        require(
+            unlockTime + 1 weeks == _endOfWeek(unlockTime),
+            "Unlock time must be end of a week"
+        );
+        LockedBalance memory lockedBalance = locked[account];
+        if (lockedBalance.amount == 0) {
+            require(
+                !Address.isContract(account) ||
+                    (addressWhitelist != address(0) &&
+                        IAddressWhitelist(addressWhitelist).check(account)),
+                "Smart contract depositors not allowed"
+            );
+        }
+        uint256 newAmount = lockedBalance.amount.add(amount);
+        uint256 newUnlockTime =
+            lockedBalance.unlockTime.max(unlockTime).max(
+                _endOfWeek(block.timestamp) + MIN_CROSS_CHAIN_RECEIVER_LOCK_PERIOD
+            );
+        _checkpointAndUpdateLock(
+            lockedBalance.amount,
+            lockedBalance.unlockTime,
+            newAmount,
+            newUnlockTime
+        );
+        locked[msg.sender].amount = newAmount;
+        locked[msg.sender].unlockTime = newUnlockTime;
+
+        // Withdraw CHESS from AnySwap pool
+        address underlying = IAnyswapV6ERC20(anyswapChess).underlying();
+        if (underlying != address(0)) {
+            // anyswapChess is an AnyswapChessPool contract
+            require(token == underlying);
+            AnyswapChessPool(anyswapChess).withdrawUnderlying(amount);
+        } else {
+            // anyswapChess is an AnyswapChess contract
+            IAnyswapV6ERC20(anyswapChess).mint(address(this), amount);
+        }
+        emit AmountIncreased(account, amount);
+        if (newUnlockTime != lockedBalance.unlockTime) {
+            emit UnlockTimeIncreased(msg.sender, newUnlockTime);
+        }
+        emit CrossChainReceived(msg.sender, fromChainID, amount, newUnlockTime);
+    }
+
     function updateAddressWhitelist(address newWhitelist) external onlyOwner {
         require(
             newWhitelist == address(0) || Address.isContract(newWhitelist),
@@ -319,6 +433,14 @@ contract VotingEscrowV2 is
             "Must be null or a contract"
         );
         callback = newCallback;
+    }
+
+    function updateCrossChainVotingEscrow(uint256 chainID, address votingEscrow)
+        external
+        onlyOwner
+    {
+        crossChainVotingEscrows[chainID] = votingEscrow;
+        emit CrossChainVotingEscrowUpdated(chainID, votingEscrow);
     }
 
     function _assertNotContract() private view {
@@ -343,14 +465,14 @@ contract VotingEscrowV2 is
         if (timestamp > lockedBalance.unlockTime) {
             return 0;
         }
-        return (lockedBalance.amount.mul(lockedBalance.unlockTime - timestamp)) / maxTime;
+        return (lockedBalance.amount.mul(lockedBalance.unlockTime - timestamp)) / _maxTime;
     }
 
     function _totalSupplyAtTimestamp(uint256 timestamp) private view returns (uint256) {
         uint256 weekCursor = _endOfWeek(timestamp);
         uint256 total = 0;
-        for (; weekCursor <= timestamp + maxTime; weekCursor += 1 weeks) {
-            total = total.add((scheduledUnlock[weekCursor].mul(weekCursor - timestamp)) / maxTime);
+        for (; weekCursor <= timestamp + _maxTime; weekCursor += 1 weeks) {
+            total = total.add((scheduledUnlock[weekCursor].mul(weekCursor - timestamp)) / _maxTime);
         }
         return total;
     }
@@ -361,49 +483,36 @@ contract VotingEscrowV2 is
     ///      - `newUnlockTime > block.timestamp`
     ///      - `newUnlockTime + 1 weeks == _endOfWeek(newUnlockTime)`, i.e. aligned to a trading week
     ///
-    ///      The latter two conditions gaurantee that `newUnlockTime` is no smaller than the local
-    ///      variable `nextWeek` in the function.
-    function _checkpoint(
+    ///      The latter two conditions gaurantee that `newUnlockTime` is no smaller than
+    ///      `_endOfWeek(block.timestamp)`.
+    function _checkpointAndUpdateLock(
         uint256 oldAmount,
         uint256 oldUnlockTime,
         uint256 newAmount,
         uint256 newUnlockTime
     ) private {
-        // Update veCHESS supply at the beginning of each week since the last checkpoint.
-        uint256 weekCursor = checkpointWeek;
-        uint256 nextWeek = _endOfWeek(block.timestamp);
-        uint256 currentWeek = nextWeek - 1 weeks;
-        uint256 newTotalLocked = totalLocked;
-        uint256 newNextWeekSupply = nextWeekSupply;
-        if (weekCursor < currentWeek) {
-            for (uint256 w = weekCursor + 1 weeks; w <= currentWeek; w += 1 weeks) {
-                veSupplyPerWeek[w] = newNextWeekSupply;
-                // Remove Chess unlocked at the beginning of this week from total locked amount.
-                newTotalLocked = newTotalLocked.sub(scheduledUnlock[w]);
-                // Calculate supply at the end of the next week.
-                newNextWeekSupply = newNextWeekSupply.sub(newTotalLocked.mul(1 weeks) / maxTime);
-            }
-            checkpointWeek = currentWeek;
-        }
-
-        // Remove the old schedule if there is one
-        if (oldAmount > 0 && oldUnlockTime >= nextWeek) {
-            newTotalLocked = newTotalLocked.sub(oldAmount);
-            newNextWeekSupply = newNextWeekSupply.sub(
-                oldAmount.mul(oldUnlockTime - nextWeek) / maxTime
-            );
-        }
-
-        totalLocked = newTotalLocked.add(newAmount);
-        // Round up on division when added to the total supply, so that the total supply is never
-        // smaller than the sum of all accounts' veCHESS balance.
-        nextWeekSupply = newNextWeekSupply.add(
-            newAmount.mul(newUnlockTime - nextWeek).add(maxTime - 1) / maxTime
+        uint256 newNextWeekSupply;
+        uint256 newTotalLocked;
+        (checkpointWeek, newNextWeekSupply, newTotalLocked) = _veCheckpoint(
+            scheduledUnlock,
+            checkpointWeek,
+            nextWeekSupply,
+            totalLocked,
+            veSupplyPerWeek
+        );
+        (nextWeekSupply, totalLocked) = _veUpdateLock(
+            newNextWeekSupply,
+            newTotalLocked,
+            oldAmount,
+            oldUnlockTime,
+            newAmount,
+            newUnlockTime,
+            scheduledUnlock
         );
     }
 
     function updateMaxTimeAllowed(uint256 newMaxTimeAllowed) external onlyOwner {
-        require(newMaxTimeAllowed <= maxTime, "Cannot exceed max time");
+        require(newMaxTimeAllowed <= _maxTime, "Cannot exceed max time");
         require(newMaxTimeAllowed > maxTimeAllowed, "Cannot shorten max time allowed");
         maxTimeAllowed = newMaxTimeAllowed;
     }
