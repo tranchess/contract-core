@@ -5,7 +5,7 @@ import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
 const { parseEther, parseUnits } = ethers.utils;
 import { deployMockForName } from "./mock";
-import { HOUR, FixtureWalletMap, advanceBlockAtTime, setNextBlockTime } from "./utils";
+import { HOUR, FixtureWalletMap, advanceBlockAtTime } from "./utils";
 
 const EPOCH = HOUR / 2;
 const MIN_MESSAGE_COUNT = 10;
@@ -22,7 +22,6 @@ describe("ChainlinkTwapOracleV3", function () {
         readonly wallets: FixtureWalletMap;
         readonly startEpoch: number;
         readonly aggregator: MockContract;
-        readonly fund: MockContract;
         readonly twapOracle: Contract;
         readonly firstRoundID: number;
         readonly nextRoundID: number;
@@ -34,7 +33,6 @@ describe("ChainlinkTwapOracleV3", function () {
     let user1: Wallet;
     let startEpoch: number;
     let aggregator: MockContract;
-    let fund: MockContract;
     let twapOracle: Contract;
     let firstRoundID: number;
     let nextRoundID: number;
@@ -96,7 +94,6 @@ describe("ChainlinkTwapOracleV3", function () {
             wallets: { user1, owner },
             startEpoch,
             aggregator,
-            fund,
             twapOracle,
             firstRoundID,
             nextRoundID,
@@ -124,7 +121,6 @@ describe("ChainlinkTwapOracleV3", function () {
         user1 = fixtureData.wallets.user1;
         startEpoch = fixtureData.startEpoch;
         aggregator = fixtureData.aggregator;
-        fund = fixtureData.fund;
         twapOracle = fixtureData.twapOracle;
         firstRoundID = fixtureData.firstRoundID;
         nextRoundID = fixtureData.nextRoundID;
