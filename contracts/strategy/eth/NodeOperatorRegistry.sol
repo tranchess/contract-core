@@ -89,8 +89,25 @@ contract NodeOperatorRegistry is Ownable {
         return _operators[id].withdrawalAddress;
     }
 
+    function getWithdrawalCredential(uint256 id) external view returns (bytes32) {
+        return IWithdrawalManager(_operators[id].withdrawalAddress).getWithdrawalCredential();
+    }
+
     function getKeyStat(uint256 id) external view returns (KeyStat memory) {
         return _operators[id].keyStat;
+    }
+
+    function getPubkeys(
+        uint256 id,
+        uint256 start,
+        uint256 count
+    ) external view returns (bytes[] memory pubkeys) {
+        pubkeys = new bytes[](count);
+        mapping(uint256 => Key) storage operatorKeys = _keys[id];
+        for (uint256 i = 0; i < count; i++) {
+            Key storage key = operatorKeys[start + i];
+            pubkeys[i] = abi.encode(key.pubkey0, bytes16(key.pubkey1));
+        }
     }
 
     function addKeys(
