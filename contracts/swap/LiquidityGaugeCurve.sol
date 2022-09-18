@@ -8,12 +8,9 @@ import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "../interfaces/ILiquidityGauge.sol";
 import "../interfaces/IChessSchedule.sol";
 import "../interfaces/IChessController.sol";
 import "../interfaces/IFundV3.sol";
-import "../interfaces/ITrancheIndexV2.sol";
-import "../interfaces/IStableSwap.sol";
 import "../interfaces/IVotingEscrow.sol";
 
 import "../utils/CoreUtility.sol";
@@ -33,7 +30,7 @@ interface ICurveLiquidityGauge {
     function withdraw(uint256 _value, bool _claim_rewards) external;
 }
 
-contract LiquidityGaugeCurve is ITrancheIndexV2, CoreUtility, ERC20, Ownable {
+contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
