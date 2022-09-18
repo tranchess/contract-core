@@ -12,7 +12,7 @@ import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
 
 import "../interfaces/IPrimaryMarketV3.sol";
-import "../interfaces/IFundV3.sol";
+import "../interfaces/IFundV4.sol";
 import "../interfaces/IFundForPrimaryMarketV4.sol";
 import "../interfaces/IFundForStrategyV2.sol";
 import "../interfaces/IShareV2.sol";
@@ -24,7 +24,7 @@ import "../interfaces/IVotingEscrow.sol";
 import "./FundRolesV2.sol";
 
 contract FundV4 is
-    IFundV3,
+    IFundV4,
     IFundForPrimaryMarketV4,
     IFundForStrategyV2,
     Ownable,
@@ -408,6 +408,48 @@ contract FundV4 is
             navROrZero = _historicalNavR[settledDay];
             navSum = navB + navROrZero;
         }
+    }
+
+    /// @notice Return the fund's relative income in a trading day. Note that denominators
+    ///         of the returned ratios are the latest value instead of that at the last settlement.
+    ///         If the amount of underlying token increases from 100 to 110 and assume that there's
+    ///         no creation/redemption or underlying price change, return value `incomeOverQ` will
+    ///         be 1/11 rather than 1/10.
+    /// @param day End timestamp of a trading day
+    /// @return incomeOverQ The ratio of income to the fund's total value
+    /// @return incomeOverB The ratio of income to equivalent BISHOP total value if all QUEEN are split
+    function getRelativeIncome(uint256 day)
+        external
+        view
+        override
+        returns (uint256 incomeOverQ, uint256 incomeOverB)
+    {
+        uint256 navB = _historicalNavB[day];
+        if (navB == 0) {
+            return (0, 0);
+        }
+        uint256 navR = _historicalNavR[day];
+        if (navB == UNIT && navR == UNIT) {
+            return (0, 0); // Rebalance is triggered
+        }
+        uint256 lastUnderlying = historicalUnderlying[day - 1 days];
+        uint256 lastEquivalentTotalB = historicalEquivalentTotalB[day - 1 days];
+        if (lastUnderlying == 0 || lastEquivalentTotalB == 0) {
+            return (0, 0);
+        }
+        uint256 currentUnderlying = historicalUnderlying[day];
+        uint256 currentEquivalentTotalB = historicalEquivalentTotalB[day];
+        if (currentUnderlying == 0 || currentEquivalentTotalB == 0) {
+            return (0, 0);
+        }
+        {
+            uint256 ratio =
+                ((lastUnderlying * currentEquivalentTotalB) / currentUnderlying).divideDecimal(
+                    lastEquivalentTotalB
+                );
+            incomeOverQ = ratio > 1e18 ? 0 : 1e18 - ratio;
+        }
+        incomeOverB = incomeOverQ.mul(navB + navR) / navB;
     }
 
     /// @notice Transform share amounts according to the rebalance at a given index.
@@ -833,13 +875,12 @@ contract FundV4 is
             fundActivityStartTime = day;
         }
 
-        uint256 interestRate = _updateInterestRate(day);
-        historicalInterestRate[day] = interestRate;
-
         historicalEquivalentTotalB[day] = equivalentTotalB;
         historicalUnderlying[day] = underlying;
         _historicalNavB[day] = navB;
         _historicalNavR[day] = navR;
+        uint256 interestRate = _updateInterestRate(day);
+        historicalInterestRate[day] = interestRate;
         currentDay = day + 1 days;
 
         emit Settled(day, navB, navR, interestRate);
