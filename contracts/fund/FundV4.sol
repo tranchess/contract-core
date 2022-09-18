@@ -91,7 +91,7 @@ contract FundV4 is
     /// @dev Mapping of rebalance version => splitRatio.
     mapping(uint256 => uint256) private _historicalSplitRatio;
 
-    /// @notice Start timestamp of the current primary market activity window.
+    /// @notice Start timestamp of the current activity window.
     uint256 public override fundActivityStartTime;
 
     uint256 public activityDelayTimeAfterRebalance;
@@ -1089,9 +1089,9 @@ contract FundV4 is
             });
     }
 
-    function _updateInterestRate(uint256 week) private returns (uint256) {
+    function _updateInterestRate(uint256 day) private returns (uint256) {
         uint256 baseInterestRate = MAX_INTEREST_RATE.min(aprOracle.capture());
-        uint256 floatingInterestRate = ballot.count(week).div(365);
+        uint256 floatingInterestRate = ballot.count(day).div(365);
         uint256 rate = baseInterestRate.add(floatingInterestRate);
 
         emit InterestRateUpdated(baseInterestRate, floatingInterestRate);
