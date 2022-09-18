@@ -286,7 +286,9 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
             // Round up the limit
             uint256 totalLimit = (limits[i] * newValidatorCount + totalWeights - 1) / totalWeights;
             NodeOperatorRegistry.KeyStat memory stat = registry.getKeyStat(i);
-            totalLimit = totalLimit.min(stat.totalCount).min(stat.depositLimit);
+            totalLimit = totalLimit.min(stat.totalCount).min(stat.depositLimit).min(
+                stat.verifiedCount
+            );
             limits[i] = totalLimit <= stat.usedCount ? 0 : totalLimit - stat.usedCount;
         }
 

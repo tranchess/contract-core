@@ -11,6 +11,7 @@ contract NodeOperatorRegistry is Ownable {
     event OperatorAdded(uint256 indexed id, string name, address operatorOwner);
     event OperatorOwnerUpdated(uint256 indexed id, address newOperatorOwner);
     event RewardAddressUpdated(uint256 indexed id, address newRewardAddress);
+    event VerifiedCountUpdated(uint256 indexed id, uint256 newVerifiedCount);
     event DepositLimitUpdated(uint256 indexed id, uint256 newDepositLimit);
     event KeyAdded(uint256 indexed id, bytes pubkey, uint256 index);
     event KeyUsed(uint256 indexed id, uint256 count);
@@ -20,10 +21,12 @@ contract NodeOperatorRegistry is Ownable {
     /// @notice Statistics of validator pubkeys from a node operator.
     /// @param totalCount Total number of validator pubkeys uploaded to this contract
     /// @param usedCount Number of validator pubkeys that are already used
+    /// @param verifiedCount Number of validator pubkeys that are verified by the contract owner
     /// @param depositLimit Maximum number of usable validator pubkeys, set by the node operator
     struct KeyStat {
         uint64 totalCount;
         uint64 usedCount;
+        uint256 verifiedCount;
         uint64 depositLimit;
     }
 
@@ -173,8 +176,11 @@ contract NodeOperatorRegistry is Ownable {
         KeyStat memory stat = operator.keyStat;
         mapping(uint256 => Key) storage operatorKeys = _keys[id];
         uint256 usedCount = stat.usedCount;
+        uint256 newUsedCount = usedCount + count;
         require(
-            usedCount + count <= stat.totalCount && usedCount + count <= stat.depositLimit,
+            newUsedCount <= stat.totalCount &&
+                newUsedCount <= stat.depositLimit &&
+                newUsedCount <= stat.verifiedCount,
             "No enough pubkeys"
         );
         keys = new Key[](count);
@@ -186,7 +192,7 @@ contract NodeOperatorRegistry is Ownable {
             k.signature1 = 0;
             k.signature2 = 0;
         }
-        stat.usedCount = uint64(usedCount + count);
+        stat.usedCount = uint64(newUsedCount);
         operator.keyStat = stat;
         withdrawalCredential = IWithdrawalManager(operator.withdrawalAddress)
             .getWithdrawalCredential();
@@ -214,6 +220,11 @@ contract NodeOperatorRegistry is Ownable {
         emit OperatorOwnerUpdated(id, newOperatorOwner);
     }
 
+    function updateVerifiedCount(uint256 id, uint64 newVerifiedCount) external onlyOwner {
+        _operators[id].keyStat.verifiedCount = newVerifiedCount;
+        emit VerifiedCountUpdated(id, newVerifiedCount);
+    }
+
     function truncateAllUnusedKeys() external onlyOwner {
         uint256 count = operatorCount;
         for (uint256 i = 0; i < count; i++) {
@@ -225,6 +236,7 @@ contract NodeOperatorRegistry is Ownable {
         Operator storage operator = _operators[id];
         KeyStat memory stat = operator.keyStat;
         stat.totalCount = stat.usedCount;
+        stat.verifiedCount = stat.usedCount;
         operator.keyStat = stat;
         emit KeyTruncated(id, stat.totalCount);
     }
