@@ -90,14 +90,11 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
         return _rate / 1e18;
     }
 
-    function getLPBalance() public view returns (uint256) {
-        return curveLiquidityToken.balanceOf(address(this));
-    }
-
     function deposit(address account, uint256 amount) external {
         curveLiquidityToken.safeTransferFrom(msg.sender, address(this), amount);
         if (allowDepositFurther) {
             // Deposit and claim CRV rewards before gauge checkpoint
+            curveLiquidityToken.safeApprove(address(curveLiquidityGauge), amount);
             curveLiquidityGauge.deposit(amount, address(this), true);
         }
 
@@ -110,10 +107,10 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
     }
 
     function withdraw(uint256 amount) external {
-        uint256 currentAmount = getLPBalance();
-        if (currentAmount < amount) {
+        uint256 lpBalance = curveLiquidityToken.balanceOf(address(this));
+        if (lpBalance < amount) {
             // Withdraw and claim CRV rewards before gauge checkpoint
-            curveLiquidityGauge.withdraw(amount - currentAmount, true);
+            curveLiquidityGauge.withdraw(amount - lpBalance, true);
         }
         curveLiquidityToken.safeTransfer(msg.sender, amount);
 
@@ -174,7 +171,8 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
     }
 
     function depositToGauge() external onlyOwner {
-        curveLiquidityGauge.deposit(getLPBalance(), address(this), true);
+        uint256 lpBalance = curveLiquidityToken.balanceOf(address(this));
+        curveLiquidityGauge.deposit(lpBalance, address(this), true);
     }
 
     function setDespositFurther(bool allowDepositFurther_) external onlyOwner {
