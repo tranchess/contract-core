@@ -13,13 +13,13 @@ import "../utils/SafeDecimalMath.sol";
 
 import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/IFundV3.sol";
-import "../interfaces/IFundForPrimaryMarketV3.sol";
+import "../interfaces/IFundForPrimaryMarketV4.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "../interfaces/IWrappedERC20.sol";
 
-contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, Ownable {
+contract PrimaryMarketV4 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, Ownable {
     event Created(address indexed account, uint256 underlying, uint256 outQ);
-    event Redeemed(address indexed account, uint256 inQ, uint256 underlying, uint256 fee);
+    event Redeemed(address indexed account, uint256 inQ, uint256 underlying, uint256 feeQ);
     event Split(address indexed account, uint256 inQ, uint256 outB, uint256 outR);
     event Merged(
         address indexed account,
@@ -49,6 +49,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18;
 
     address public immutable override fund;
+    bool public immutable redemptionFlag;
     IERC20 private immutable _tokenUnderlying;
 
     uint256 public redemptionFeeRate;
@@ -81,13 +82,15 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         address fund_,
         uint256 redemptionFeeRate_,
         uint256 mergeFeeRate_,
-        uint256 fundCap_
+        uint256 fundCap_,
+        bool redemptionFlag_
     ) public Ownable() {
         fund = fund_;
         _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
         _updateRedemptionFeeRate(redemptionFeeRate_);
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
+        redemptionFlag = redemptionFlag_;
     }
 
     /// @notice Calculate the result of a creation.
@@ -138,7 +141,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         return minOutQ.mul(fundUnderlying).add(fundEquivalentTotalQ - 1).div(fundEquivalentTotalQ);
     }
 
-    function _getRedemptionBeforeFee(uint256 inQ) private view returns (uint256 underlying) {
+    function _getRedemption(uint256 inQ) private view returns (uint256 underlying) {
         uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
         uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
         underlying = inQ.mul(fundUnderlying).div(fundEquivalentTotalQ);
@@ -147,16 +150,15 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     /// @notice Calculate the result of a redemption.
     /// @param inQ QUEEN amount spent for the redemption
     /// @return underlying Redeemed underlying amount
-    /// @return fee Underlying amount charged as redemption fee
+    /// @return feeQ QUEEN amount charged as redemption fee
     function getRedemption(uint256 inQ)
         public
         view
         override
-        returns (uint256 underlying, uint256 fee)
+        returns (uint256 underlying, uint256 feeQ)
     {
-        underlying = _getRedemptionBeforeFee(inQ);
-        fee = underlying.multiplyDecimal(redemptionFeeRate);
-        underlying = underlying.sub(fee);
+        feeQ = inQ.multiplyDecimal(redemptionFeeRate);
+        underlying = _getRedemption(inQ - feeQ);
     }
 
     /// @notice Calculate the amount of QUEEN that can be redeemed for at least the given amount
@@ -171,30 +173,27 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         returns (uint256 inQ)
     {
         // Assume:
-        //   minUnderlying * 1e18 = a * (1e18 - redemptionFeeRate) + b
-        //   a * fundEquivalentTotalQ = c * fundUnderlying - d
+        //   minUnderlying * fundEquivalentTotalQ = a * fundUnderlying - b
+        //   a * 1e18 = c * (1e18 - redemptionFeeRate) + d
         // where
         //   a, b, c, d are integers
-        //   0 <= b < 1e18 - redemptionFeeRate
-        //   0 <= d < fundUnderlying
+        //   0 <= b < fundUnderlying
+        //   0 <= d < 1e18 - redemeptionFeeRate
         // Then
-        //   underlyingBeforeFee = a
+        //   inQAfterFee = a
         //   inQ = c
         //   getRedemption(inQ).underlying
-        //     = floor(c * fundUnderlying / fundEquivalentTotalQ) -
-        //       - floor(floor(c * fundUnderlying / fundEquivalentTotalQ) * redemptionFeeRate / 1e18)
-        //     = ceil(floor(c * fundUnderlying / fundEquivalentTotalQ) * (1e18 - redemptionFeeRate) / 1e18)
-        //    >= ceil(floor((c * fundUnderlying - d) / fundEquivalentTotalQ) * (1e18 - redemptionFeeRate) / 1e18)
-        //     = ceil(a * (1e18 - redemptionFeeRate) / 1e18)
-        //     = (a * (1e18 - redemptionFeeRate) + b) / 1e18        // because b < 1e18
+        //     = floor((c - floor(c * redemptionFeeRate / 1e18)) * fundUnderlying / fundEquivalentTotalQ)
+        //     = floor(ceil(c * (1e18 - redemptionFeeRate) / 1e18) * fundUnderlying / fundEquivalentTotalQ)
+        //     = floor(((c * (1e18 - redemptionFeeRate) + d) / 1e18) * fundUnderlying / fundEquivalentTotalQ)
+        //     = floor(a * fundUnderlying / fundEquivalentTotalQ)
+        //     => floor((a * fundUnderlying - b) / fundEquivalentTotalQ)
         //     = minUnderlying
         uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
         uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
-        uint256 underlyingBeforeFee = minUnderlying.divideDecimal(1e18 - redemptionFeeRate);
-        return
-            underlyingBeforeFee.mul(fundEquivalentTotalQ).add(fundUnderlying - 1).div(
-                fundUnderlying
-            );
+        uint256 inQAfterFee =
+            minUnderlying.mul(fundEquivalentTotalQ).add(fundUnderlying - 1).div(fundUnderlying);
+        return inQAfterFee.divideDecimal(1e18 - redemptionFeeRate);
     }
 
     /// @notice Calculate the result of a split.
@@ -330,7 +329,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 underlying = _tokenUnderlying.balanceOf(address(this)).sub(claimableUnderlying);
         outQ = getCreation(underlying);
         require(outQ >= minOutQ && outQ > 0, "Min QUEEN created");
-        IFundForPrimaryMarketV3(fund).primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
+        IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
         _tokenUnderlying.safeTransfer(fund, underlying);
         emit Created(recipient, underlying, outQ);
     }
@@ -377,15 +376,15 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 minUnderlying,
         uint256 version
     ) private returns (uint256 underlying) {
-        uint256 fee;
-        (underlying, fee) = getRedemption(inQ);
-        IFundForPrimaryMarketV3(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
+        uint256 feeQ;
+        (underlying, feeQ) = getRedemption(inQ);
+        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         _popRedemptionQueue(0);
         require(underlying >= minUnderlying && underlying > 0, "Min underlying redeemed");
         // Redundant check for user-friendly revert message.
         require(underlying <= _tokenUnderlying.balanceOf(fund), "Not enough underlying in fund");
-        IFundForPrimaryMarketV3(fund).primaryMarketTransferUnderlying(recipient, underlying, fee);
-        emit Redeemed(recipient, inQ, underlying, fee);
+        IFundForPrimaryMarketV4(fund).primaryMarketTransferUnderlying(recipient, underlying, feeQ);
+        emit Redeemed(recipient, inQ, underlying, feeQ);
     }
 
     /// @notice Redeem QUEEN and wait in the redemption queue. Redeemed underlying tokens will
@@ -402,10 +401,10 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 inQ,
         uint256 minUnderlying,
         uint256 version
-    ) external override nonReentrant returns (uint256 underlying, uint256 index) {
-        uint256 fee;
-        (underlying, fee) = getRedemption(inQ);
-        IFundForPrimaryMarketV3(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
+    ) external override nonReentrant allowRedemption returns (uint256 underlying, uint256 index) {
+        uint256 feeQ;
+        (underlying, feeQ) = getRedemption(inQ);
+        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         require(underlying >= minUnderlying && underlying > 0, "Min underlying redeemed");
         index = redemptionQueueTail;
         QueuedRedemption storage newRedemption = queuedRedemptions[index];
@@ -416,8 +415,8 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
             newRedemption.previousPrefixSum +
             underlying;
         redemptionQueueTail = index + 1;
-        IFundForPrimaryMarketV3(fund).primaryMarketAddDebt(underlying, fee);
-        emit Redeemed(recipient, inQ, underlying, fee);
+        IFundForPrimaryMarketV4(fund).primaryMarketAddDebtAndFee(underlying, feeQ);
+        emit Redeemed(recipient, inQ, underlying, feeQ);
         emit RedemptionQueued(recipient, index, underlying);
     }
 
@@ -429,7 +428,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         _popRedemptionQueue(count);
     }
 
-    function _popRedemptionQueue(uint256 count) private {
+    function _popRedemptionQueue(uint256 count) private allowRedemption {
         uint256 oldHead = redemptionQueueHead;
         uint256 oldTail = redemptionQueueTail;
         uint256 newHead;
@@ -452,7 +451,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
             "Not enough underlying in fund"
         );
         claimableUnderlying = claimableUnderlying.add(requiredUnderlying);
-        IFundForPrimaryMarketV3(fund).primaryMarketPayDebt(requiredUnderlying);
+        IFundForPrimaryMarketV4(fund).primaryMarketPayDebt(requiredUnderlying);
         redemptionQueueHead = newHead;
         emit RedemptionPopped(newHead - oldHead, newHead, requiredUnderlying);
     }
@@ -491,6 +490,7 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
 
     function _claimRedemptions(address account, uint256[] calldata indices)
         private
+        allowRedemption
         returns (uint256 underlying)
     {
         uint256 count = indices.length;
@@ -522,9 +522,9 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 version
     ) external override returns (uint256 outB) {
         outB = getSplit(inQ);
-        IFundForPrimaryMarketV3(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
-        IFundForPrimaryMarketV3(fund).primaryMarketMint(TRANCHE_B, recipient, outB, version);
-        IFundForPrimaryMarketV3(fund).primaryMarketMint(TRANCHE_R, recipient, outB, version);
+        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
+        IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_B, recipient, outB, version);
+        IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_R, recipient, outB, version);
         emit Split(recipient, inQ, outB, outB);
     }
 
@@ -535,12 +535,11 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     ) external override returns (uint256 outQ) {
         uint256 feeQ;
         (outQ, feeQ) = getMerge(inB);
-        uint256 feeUnderlying = _getRedemptionBeforeFee(feeQ);
-        IFundForPrimaryMarketV3(fund).primaryMarketBurn(TRANCHE_B, msg.sender, inB, version);
-        IFundForPrimaryMarketV3(fund).primaryMarketBurn(TRANCHE_R, msg.sender, inB, version);
-        IFundForPrimaryMarketV3(fund).primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
-        IFundForPrimaryMarketV3(fund).primaryMarketAddDebt(0, feeUnderlying);
-        emit Merged(recipient, outQ, inB, inB, feeUnderlying);
+        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_B, msg.sender, inB, version);
+        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_R, msg.sender, inB, version);
+        IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
+        IFundForPrimaryMarketV4(fund).primaryMarketAddDebtAndFee(0, feeQ);
+        emit Merged(recipient, outQ, inB, inB, feeQ);
     }
 
     /// @dev Nothing to do for daily fund settlement.
@@ -580,6 +579,11 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
 
     modifier onlyFund() {
         require(msg.sender == fund, "Only fund");
+        _;
+    }
+
+    modifier allowRedemption() {
+        require(redemptionFlag, "Redemption N/A");
         _;
     }
 }

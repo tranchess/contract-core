@@ -21,7 +21,7 @@ contract PrimaryMarketRouter is IPrimaryMarketRouter, ITrancheIndexV2 {
 
     constructor(address pm) public {
         primaryMarket = IPrimaryMarketV3(pm);
-        IFundV3 fund_ = IPrimaryMarketV3(pm).fund();
+        IFundV3 fund_ = IFundV3(IPrimaryMarketV3(pm).fund());
         fund = fund_;
         _tokenUnderlying = IERC20(fund_.tokenUnderlying());
         _tokenB = fund_.tokenB();

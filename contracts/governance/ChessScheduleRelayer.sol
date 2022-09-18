@@ -10,7 +10,7 @@ import "../utils/SafeDecimalMath.sol";
 import "../anyswap/AnyCallAppBase.sol";
 import "../interfaces/IAnyswapV6ERC20.sol";
 
-contract ChessSubScheduleRelayer is CoreUtility, AnyCallAppBase {
+contract ChessScheduleRelayer is CoreUtility, AnyCallAppBase {
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
