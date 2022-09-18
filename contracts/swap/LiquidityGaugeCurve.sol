@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
-pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
@@ -10,7 +9,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../interfaces/IChessSchedule.sol";
 import "../interfaces/IChessController.sol";
-import "../interfaces/IFundV3.sol";
 import "../interfaces/IVotingEscrow.sol";
 
 import "../utils/CoreUtility.sol";
@@ -44,7 +42,6 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
     IERC20 public immutable curveLiquidityToken;
     IChessSchedule public immutable chessSchedule;
     IChessController public immutable chessController;
-    IFundV3 public immutable fund;
     IVotingEscrow private immutable _votingEscrow;
     IERC20 private immutable _bonusToken;
 
@@ -73,14 +70,12 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
         address curveLiquidityGauge_,
         address chessSchedule_,
         address chessController_,
-        address fund_,
         address votingEscrow_
     ) public ERC20(name_, symbol_) {
         curveLiquidityGauge = ICurveLiquidityGauge(curveLiquidityGauge_);
         curveLiquidityToken = IERC20(ICurveLiquidityGauge(curveLiquidityGauge_).LP_TOKEN());
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
-        fund = IFundV3(fund_);
         _bonusToken = IERC20(ICurveLiquidityGauge(curveLiquidityGauge_).CRV());
         _votingEscrow = IVotingEscrow(votingEscrow_);
         _chessIntegralTimestamp = block.timestamp;
