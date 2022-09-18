@@ -1004,7 +1004,7 @@ describe("PrimaryMarketV4", function () {
 
             shareStaking = await deployMockForName(owner, "ShareStaking");
 
-            swap = await deployMockForName(owner, "StableSwap");
+            swap = await deployMockForName(owner, "StableSwapV2");
             swapRouter = await deployMockForName(owner, "SwapRouter");
             await swapRouter.mock.getSwap.returns(swap.address);
 

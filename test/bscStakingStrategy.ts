@@ -42,7 +42,7 @@ describe("BscStakingStrategy", function () {
         const MockWrappedToken = await ethers.getContractFactory("MockWrappedToken");
         const wbnb = await MockWrappedToken.connect(owner).deploy("Wrapped BNB", "WBNB");
 
-        const fund = await deployMockForName(owner, "IFundV3");
+        const fund = await deployMockForName(owner, "FundV3");
         await fund.mock.tokenUnderlying.returns(wbnb.address);
 
         const BscStakingStrategy = await ethers.getContractFactory("BscStakingStrategy");
