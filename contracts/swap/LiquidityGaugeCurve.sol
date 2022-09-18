@@ -103,7 +103,7 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
         _checkpoint(account, oldWorkingBalance, oldWorkingSupply);
 
         _mint(account, amount);
-        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, totalSupply());
+        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply);
     }
 
     function withdraw(uint256 amount) external {
@@ -119,7 +119,7 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
         _checkpoint(msg.sender, oldWorkingBalance, oldWorkingSupply);
 
         _burn(msg.sender, amount);
-        _updateWorkingBalance(msg.sender, oldWorkingBalance, oldWorkingSupply, totalSupply());
+        _updateWorkingBalance(msg.sender, oldWorkingBalance, oldWorkingSupply);
     }
 
     function _transfer(
@@ -150,7 +150,7 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
         uint256 oldWorkingSupply = _workingSupply;
         (uint256 chessAmount, uint256 bonusAmount) =
             _checkpoint(account, oldWorkingBalance, oldWorkingSupply);
-        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, totalSupply());
+        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply);
 
         if (chessAmount != 0) {
             chessSchedule.mint(account, chessAmount);
@@ -167,7 +167,7 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
         uint256 oldWorkingBalance = _workingBalances[account];
         uint256 oldWorkingSupply = _workingSupply;
         _checkpoint(account, oldWorkingBalance, oldWorkingSupply);
-        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, totalSupply());
+        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply);
     }
 
     function depositToGauge() external onlyOwner {
@@ -182,8 +182,7 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
     function _updateWorkingBalance(
         address account,
         uint256 oldWorkingBalance,
-        uint256 oldWorkingSupply,
-        uint256 newTotalSupply
+        uint256 oldWorkingSupply
     ) private {
         uint256 newWorkingBalance = balanceOf(account);
         uint256 veBalance = _votingEscrow.balanceOf(account);
@@ -192,10 +191,9 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
             uint256 maxWorkingBalance = newWorkingBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
             uint256 boostedWorkingBalance =
                 newWorkingBalance.add(
-                    newTotalSupply
-                        .mul(veBalance)
-                        .multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
-                        .div(veTotalSupply)
+                    totalSupply().mul(veBalance).multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE).div(
+                        veTotalSupply
+                    )
                 );
             newWorkingBalance = maxWorkingBalance.min(boostedWorkingBalance);
         }

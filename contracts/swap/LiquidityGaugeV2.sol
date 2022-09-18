@@ -109,13 +109,7 @@ contract LiquidityGaugeV2 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
         _checkpoint(account, oldBalance, oldWorkingBalance, oldWorkingSupply);
 
         _mint(account, amount);
-        _updateWorkingBalance(
-            account,
-            oldWorkingBalance,
-            oldWorkingSupply,
-            oldBalance.add(amount),
-            totalSupply()
-        );
+        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, oldBalance.add(amount));
     }
 
     function burnFrom(address account, uint256 amount) external override onlyStableSwap {
@@ -125,13 +119,7 @@ contract LiquidityGaugeV2 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
         _checkpoint(account, oldBalance, oldWorkingBalance, oldWorkingSupply);
 
         _burn(account, amount);
-        _updateWorkingBalance(
-            account,
-            oldWorkingBalance,
-            oldWorkingSupply,
-            oldBalance.sub(amount),
-            totalSupply()
-        );
+        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, oldBalance.sub(amount));
     }
 
     function _transfer(
@@ -177,7 +165,7 @@ contract LiquidityGaugeV2 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
             uint256 amountR,
             uint256 quoteAmount
         ) = _checkpoint(account, balance, oldWorkingBalance, oldWorkingSupply);
-        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, balance, totalSupply());
+        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, balance);
 
         if (chessAmount != 0) {
             chessSchedule.mint(account, chessAmount);
@@ -210,7 +198,7 @@ contract LiquidityGaugeV2 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
         uint256 oldWorkingBalance = _workingBalances[account];
         uint256 oldWorkingSupply = _workingSupply;
         _checkpoint(account, balance, oldWorkingBalance, oldWorkingSupply);
-        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, balance, totalSupply());
+        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, balance);
     }
 
     function distribute(
@@ -233,8 +221,7 @@ contract LiquidityGaugeV2 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
         address account,
         uint256 oldWorkingBalance,
         uint256 oldWorkingSupply,
-        uint256 newBalance,
-        uint256 newTotalSupply
+        uint256 newBalance
     ) private {
         uint256 newWorkingBalance = newBalance;
         uint256 veBalance = _votingEscrow.balanceOf(account);
@@ -243,10 +230,9 @@ contract LiquidityGaugeV2 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
             uint256 maxWorkingBalance = newWorkingBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
             uint256 boostedWorkingBalance =
                 newWorkingBalance.add(
-                    newTotalSupply
-                        .mul(veBalance)
-                        .multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
-                        .div(veTotalSupply)
+                    totalSupply().mul(veBalance).multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE).div(
+                        veTotalSupply
+                    )
                 );
             newWorkingBalance = maxWorkingBalance.min(boostedWorkingBalance);
         }
