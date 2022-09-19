@@ -88,8 +88,24 @@ contract NodeOperatorRegistry is Ownable {
         return _operators[id].rewardAddress;
     }
 
+    function getRewardAddresses() external view returns (address[] memory addresses) {
+        uint256 count = operatorCount;
+        addresses = new address[](count);
+        for (uint256 i = 0; i < count; i++) {
+            addresses[i] = _operators[i].rewardAddress;
+        }
+    }
+
     function getWithdrawalAddress(uint256 id) external view returns (address) {
         return _operators[id].withdrawalAddress;
+    }
+
+    function getWithdrawalAddresses() external view returns (address[] memory addresses) {
+        uint256 count = operatorCount;
+        addresses = new address[](count);
+        for (uint256 i = 0; i < count; i++) {
+            addresses[i] = _operators[i].withdrawalAddress;
+        }
     }
 
     function getWithdrawalCredential(uint256 id) external view returns (bytes32) {
@@ -98,6 +114,14 @@ contract NodeOperatorRegistry is Ownable {
 
     function getKeyStat(uint256 id) external view returns (KeyStat memory) {
         return _operators[id].keyStat;
+    }
+
+    function getKeyStats() external view returns (KeyStat[] memory keyStats) {
+        uint256 count = operatorCount;
+        keyStats = new KeyStat[](count);
+        for (uint256 i = 0; i < count; i++) {
+            keyStats[i] = _operators[i].keyStat;
+        }
     }
 
     function getKey(uint256 id, uint256 index) external view returns (Key memory) {
