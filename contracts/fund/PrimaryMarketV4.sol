@@ -375,7 +375,7 @@ contract PrimaryMarketV4 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 inQ,
         uint256 minUnderlying,
         uint256 version
-    ) private returns (uint256 underlying) {
+    ) private allowRedemption returns (uint256 underlying) {
         uint256 feeQ;
         (underlying, feeQ) = getRedemption(inQ);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
@@ -428,7 +428,7 @@ contract PrimaryMarketV4 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         _popRedemptionQueue(count);
     }
 
-    function _popRedemptionQueue(uint256 count) private allowRedemption {
+    function _popRedemptionQueue(uint256 count) private {
         uint256 oldHead = redemptionQueueHead;
         uint256 oldTail = redemptionQueueTail;
         uint256 newHead;
@@ -490,7 +490,6 @@ contract PrimaryMarketV4 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
 
     function _claimRedemptions(address account, uint256[] calldata indices)
         private
-        allowRedemption
         returns (uint256 underlying)
     {
         uint256 count = indices.length;
