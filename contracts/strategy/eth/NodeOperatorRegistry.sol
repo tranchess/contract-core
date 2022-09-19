@@ -26,7 +26,7 @@ contract NodeOperatorRegistry is Ownable {
     struct KeyStat {
         uint64 totalCount;
         uint64 usedCount;
-        uint256 verifiedCount;
+        uint64 verifiedCount;
         uint64 depositLimit;
     }
 
