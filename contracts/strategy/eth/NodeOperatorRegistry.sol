@@ -100,6 +100,22 @@ contract NodeOperatorRegistry is Ownable {
         return _operators[id].keyStat;
     }
 
+    function getKey(uint256 id, uint256 index) external view returns (Key memory) {
+        return _keys[id][index];
+    }
+
+    function getKeys(
+        uint256 id,
+        uint256 start,
+        uint256 count
+    ) external view returns (Key[] memory keys) {
+        keys = new Key[](count);
+        mapping(uint256 => Key) storage operatorKeys = _keys[id];
+        for (uint256 i = 0; i < count; i++) {
+            keys[i] = operatorKeys[start + i];
+        }
+    }
+
     function getPubkeys(
         uint256 id,
         uint256 start,
@@ -110,6 +126,19 @@ contract NodeOperatorRegistry is Ownable {
         for (uint256 i = 0; i < count; i++) {
             Key storage key = operatorKeys[start + i];
             pubkeys[i] = abi.encode(key.pubkey0, bytes16(key.pubkey1));
+        }
+    }
+
+    function getSignatures(
+        uint256 id,
+        uint256 start,
+        uint256 count
+    ) external view returns (bytes[] memory signatures) {
+        signatures = new bytes[](count);
+        mapping(uint256 => Key) storage operatorKeys = _keys[id];
+        for (uint256 i = 0; i < count; i++) {
+            Key storage key = operatorKeys[start + i];
+            signatures[i] = abi.encode(key.signature0, key.signature1, key.signature2);
         }
     }
 
