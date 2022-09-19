@@ -12,9 +12,9 @@ import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
 
 import "../interfaces/IPrimaryMarketV3.sol";
-import "../interfaces/IFundV3.sol";
-import "../interfaces/IFundForPrimaryMarketV3.sol";
-import "../interfaces/IFundForStrategy.sol";
+import "../interfaces/IFundV4.sol";
+import "../interfaces/IFundForPrimaryMarketV4.sol";
+import "../interfaces/IFundForStrategyV2.sol";
 import "../interfaces/IShareV2.sol";
 import "../interfaces/ITwapOracleV2.sol";
 import "../interfaces/IAprOracle.sol";
@@ -23,10 +23,10 @@ import "../interfaces/IVotingEscrow.sol";
 
 import "./FundRolesV2.sol";
 
-contract FundV3 is
-    IFundV3,
-    IFundForPrimaryMarketV3,
-    IFundForStrategy,
+contract FundV4 is
+    IFundV4,
+    IFundForPrimaryMarketV4,
+    IFundForStrategyV2,
     Ownable,
     ReentrancyGuard,
     FundRolesV2,
@@ -37,7 +37,7 @@ contract FundV3 is
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
-    event ProfitReported(uint256 profit, uint256 performanceFee);
+    event ProfitReported(uint256 profit, uint256 totalFee, uint256 totalFeeQ, uint256 strategyFeeQ);
     event LossReported(uint256 loss);
     event DailyProtocolFeeRateUpdated(uint256 newDailyProtocolFeeRate);
     event TwapOracleUpdated(address newTwapOracle);
@@ -46,7 +46,6 @@ contract FundV3 is
     event FeeCollectorUpdated(address newFeeCollector);
     event ActivityDelayTimeUpdated(uint256 delayTime);
     event SplitRatioUpdated(uint256 newSplitRatio);
-    event FeeDebtPaid(uint256 amount);
     event TotalDebtUpdated(uint256 newTotalDebt);
 
     uint256 private constant UNIT = 1e18;
@@ -92,7 +91,7 @@ contract FundV3 is
     /// @dev Mapping of rebalance version => splitRatio.
     mapping(uint256 => uint256) private _historicalSplitRatio;
 
-    /// @notice Start timestamp of the current primary market activity window.
+    /// @notice Start timestamp of the current activity window.
     uint256 public override fundActivityStartTime;
 
     uint256 public activityDelayTimeAfterRebalance;
@@ -148,13 +147,7 @@ contract FundV3 is
     ///         after settlement of that day, which will be effective in the following trading day.
     mapping(uint256 => uint256) public historicalInterestRate;
 
-    /// @notice Amount of fee not transfered to the fee collector yet.
-    uint256 public feeDebt;
-
-    /// @notice Amount of redemption underlying that the fund owes the primary market
-    uint256 public redemptionDebt;
-
-    /// @dev Sum of the fee debt and redemption debts of all primary markets.
+    /// @dev Amount of redemption underlying that the fund owes the primary market
     uint256 private _totalDebt;
 
     uint256 private _strategyUnderlying;
@@ -300,6 +293,7 @@ contract FundV3 is
         return _strategyUnderlying;
     }
 
+    /// @notice Get the amount of redemption underlying that the fund owes the primary market.
     function getTotalDebt() external view override returns (uint256) {
         return _totalDebt;
     }
@@ -310,7 +304,7 @@ contract FundV3 is
     }
 
     /// @notice Equivalent QUEEN supply, as if all BISHOP and ROOK are merged.
-    function getEquivalentTotalQ() external view override returns (uint256) {
+    function getEquivalentTotalQ() public view override returns (uint256) {
         return _totalSupplies[TRANCHE_B].divideDecimal(splitRatio).add(_totalSupplies[TRANCHE_Q]);
     }
 
@@ -416,6 +410,48 @@ contract FundV3 is
         }
     }
 
+    /// @notice Return the fund's relative income in a trading day. Note that denominators
+    ///         of the returned ratios are the latest value instead of that at the last settlement.
+    ///         If the amount of underlying token increases from 100 to 110 and assume that there's
+    ///         no creation/redemption or underlying price change, return value `incomeOverQ` will
+    ///         be 1/11 rather than 1/10.
+    /// @param day End timestamp of a trading day
+    /// @return incomeOverQ The ratio of income to the fund's total value
+    /// @return incomeOverB The ratio of income to equivalent BISHOP total value if all QUEEN are split
+    function getRelativeIncome(uint256 day)
+        external
+        view
+        override
+        returns (uint256 incomeOverQ, uint256 incomeOverB)
+    {
+        uint256 navB = _historicalNavB[day];
+        if (navB == 0) {
+            return (0, 0);
+        }
+        uint256 navR = _historicalNavR[day];
+        if (navB == UNIT && navR == UNIT) {
+            return (0, 0); // Rebalance is triggered
+        }
+        uint256 lastUnderlying = historicalUnderlying[day - 1 days];
+        uint256 lastEquivalentTotalB = historicalEquivalentTotalB[day - 1 days];
+        if (lastUnderlying == 0 || lastEquivalentTotalB == 0) {
+            return (0, 0);
+        }
+        uint256 currentUnderlying = historicalUnderlying[day];
+        uint256 currentEquivalentTotalB = historicalEquivalentTotalB[day];
+        if (currentUnderlying == 0 || currentEquivalentTotalB == 0) {
+            return (0, 0);
+        }
+        {
+            uint256 ratio =
+                ((lastUnderlying * currentEquivalentTotalB) / currentUnderlying).divideDecimal(
+                    lastEquivalentTotalB
+                );
+            incomeOverQ = ratio > 1e18 ? 0 : 1e18 - ratio;
+        }
+        incomeOverB = incomeOverQ.mul(navB + navR) / navB;
+    }
+
     /// @notice Transform share amounts according to the rebalance at a given index.
     ///         This function performs no bounds checking on the given index. A non-existent
     ///         rebalance transforms anything to a zero vector.
@@ -519,29 +555,27 @@ contract FundV3 is
         override
         returns (uint256)
     {
+        uint256 latestVersion = _rebalanceSize;
+        uint256 userVersion = _balanceVersions[account];
+        if (userVersion == latestVersion) {
+            // Fast path
+            return _balances[account][tranche];
+        }
+
         uint256 amountQ = _balances[account][TRANCHE_Q];
         uint256 amountB = _balances[account][TRANCHE_B];
         uint256 amountR = _balances[account][TRANCHE_R];
-
-        if (tranche == TRANCHE_Q) {
-            if (amountQ == 0 && amountB == 0 && amountR == 0) return 0;
-        } else if (tranche == TRANCHE_B) {
-            if (amountB == 0) return 0;
-        } else {
-            if (amountR == 0) return 0;
-        }
-
-        uint256 size = _rebalanceSize; // Gas saver
-        for (uint256 i = _balanceVersions[account]; i < size; i++) {
+        for (uint256 i = userVersion; i < latestVersion; i++) {
             (amountQ, amountB, amountR) = doRebalance(amountQ, amountB, amountR, i);
         }
-
         if (tranche == TRANCHE_Q) {
             return amountQ;
         } else if (tranche == TRANCHE_B) {
             return amountB;
-        } else {
+        } else if (tranche == TRANCHE_R) {
             return amountR;
+        } else {
+            revert("Invalid tranche");
         }
     }
 
@@ -578,35 +612,14 @@ contract FundV3 is
         address owner,
         address spender
     ) external view override returns (uint256) {
-        uint256 allowanceQ = _allowances[owner][spender][TRANCHE_Q];
-        uint256 allowanceB = _allowances[owner][spender][TRANCHE_B];
-        uint256 allowanceR = _allowances[owner][spender][TRANCHE_R];
-
-        if (tranche == TRANCHE_Q) {
-            if (allowanceQ == 0) return 0;
-        } else if (tranche == TRANCHE_B) {
-            if (allowanceB == 0) return 0;
-        } else {
-            if (allowanceR == 0) return 0;
+        uint256 allowance = _allowances[owner][spender][tranche];
+        if (tranche != TRANCHE_Q) {
+            uint256 size = _rebalanceSize; // Gas saver
+            for (uint256 i = _allowanceVersions[owner][spender]; i < size; i++) {
+                allowance = _rebalanceAllowanceBR(allowance, i);
+            }
         }
-
-        uint256 size = _rebalanceSize; // Gas saver
-        for (uint256 i = _allowanceVersions[owner][spender]; i < size; i++) {
-            (allowanceQ, allowanceB, allowanceR) = _rebalanceAllowance(
-                allowanceQ,
-                allowanceB,
-                allowanceR,
-                i
-            );
-        }
-
-        if (tranche == TRANCHE_Q) {
-            return allowanceQ;
-        } else if (tranche == TRANCHE_B) {
-            return allowanceB;
-        } else {
-            return allowanceR;
-        }
+        return allowance;
     }
 
     function trancheAllowanceVersion(address owner, address spender)
@@ -625,7 +638,9 @@ contract FundV3 is
         uint256 version
     ) external override onlyCurrentVersion(version) {
         _refreshBalance(msg.sender, version);
-        _refreshBalance(recipient, version);
+        if (tranche != TRANCHE_Q) {
+            _refreshBalance(recipient, version);
+        }
         _transfer(tranche, msg.sender, recipient, amount);
     }
 
@@ -636,15 +651,17 @@ contract FundV3 is
         uint256 amount,
         uint256 version
     ) external override onlyCurrentVersion(version) {
-        _refreshAllowance(sender, msg.sender, version);
+        _refreshBalance(sender, version);
+        if (tranche != TRANCHE_Q) {
+            _refreshAllowance(sender, msg.sender, version);
+            _refreshBalance(recipient, version);
+        }
         uint256 newAllowance =
             _allowances[sender][msg.sender][tranche].sub(
                 amount,
                 "ERC20: transfer amount exceeds allowance"
             );
         _approve(tranche, sender, msg.sender, newAllowance);
-        _refreshBalance(sender, version);
-        _refreshBalance(recipient, version);
         _transfer(tranche, sender, recipient, amount);
     }
 
@@ -654,7 +671,9 @@ contract FundV3 is
         uint256 amount,
         uint256 version
     ) external override onlyCurrentVersion(version) {
-        _refreshAllowance(msg.sender, spender, version);
+        if (tranche != TRANCHE_Q) {
+            _refreshAllowance(msg.sender, spender, version);
+        }
         _approve(tranche, msg.sender, spender, amount);
     }
 
@@ -668,8 +687,17 @@ contract FundV3 is
         uint256 amount,
         uint256 version
     ) external override onlyPrimaryMarket onlyCurrentVersion(version) {
-        _refreshBalance(account, version);
+        if (tranche != TRANCHE_Q) {
+            _refreshBalance(account, version);
+        }
         _mint(tranche, account, amount);
+        if (tranche == TRANCHE_Q) {
+            // Call an optional hook in the strategy and ignore errors.
+            (bool success, ) = _strategy.call(abi.encodeWithSignature("onPrimaryMarketMintQ()"));
+            if (!success) {
+                // ignore
+            }
+        }
     }
 
     function primaryMarketBurn(
@@ -680,6 +708,13 @@ contract FundV3 is
     ) external override onlyPrimaryMarket onlyCurrentVersion(version) {
         _refreshBalance(account, version);
         _burn(tranche, account, amount);
+        if (tranche == TRANCHE_Q) {
+            // Call an optional hook in the strategy and ignore errors.
+            (bool success, ) = _strategy.call(abi.encodeWithSignature("onPrimaryMarketBurnQ()"));
+            if (!success) {
+                // ignore
+            }
+        }
     }
 
     function shareTransfer(
@@ -690,9 +725,9 @@ contract FundV3 is
         uint256 tranche = _getTranche(msg.sender);
         if (tranche != TRANCHE_Q) {
             require(isFundActive(block.timestamp), "Transfer is inactive");
+            _refreshBalance(recipient, _rebalanceSize);
         }
         _refreshBalance(sender, _rebalanceSize);
-        _refreshBalance(recipient, _rebalanceSize);
         _transfer(tranche, sender, recipient, amount);
     }
 
@@ -704,7 +739,9 @@ contract FundV3 is
     ) external override returns (uint256 newAllowance) {
         uint256 tranche = _getTranche(msg.sender);
         shareTransfer(sender, recipient, amount);
-        _refreshAllowance(sender, spender, _rebalanceSize);
+        if (tranche != TRANCHE_Q) {
+            _refreshAllowance(sender, spender, _rebalanceSize);
+        }
         newAllowance = _allowances[sender][spender][tranche].sub(
             amount,
             "ERC20: transfer amount exceeds allowance"
@@ -718,7 +755,9 @@ contract FundV3 is
         uint256 amount
     ) external override {
         uint256 tranche = _getTranche(msg.sender);
-        _refreshAllowance(owner, spender, _rebalanceSize);
+        if (tranche != TRANCHE_Q) {
+            _refreshAllowance(owner, spender, _rebalanceSize);
+        }
         _approve(tranche, owner, spender, amount);
     }
 
@@ -728,7 +767,9 @@ contract FundV3 is
         uint256 addedValue
     ) external override returns (uint256 newAllowance) {
         uint256 tranche = _getTranche(msg.sender);
-        _refreshAllowance(sender, spender, _rebalanceSize);
+        if (tranche != TRANCHE_Q) {
+            _refreshAllowance(sender, spender, _rebalanceSize);
+        }
         newAllowance = _allowances[sender][spender][tranche].add(addedValue);
         _approve(tranche, sender, spender, newAllowance);
     }
@@ -739,7 +780,9 @@ contract FundV3 is
         uint256 subtractedValue
     ) external override returns (uint256 newAllowance) {
         uint256 tranche = _getTranche(msg.sender);
-        _refreshAllowance(sender, spender, _rebalanceSize);
+        if (tranche != TRANCHE_Q) {
+            _refreshAllowance(sender, spender, _rebalanceSize);
+        }
         newAllowance = _allowances[sender][spender][tranche].sub(subtractedValue);
         _approve(tranche, sender, spender, newAllowance);
     }
@@ -815,8 +858,6 @@ contract FundV3 is
 
         IPrimaryMarketV3(_primaryMarket).settle(day);
 
-        _payFeeDebt();
-
         // Calculate NAV
         uint256 equivalentTotalB = getEquivalentTotalB();
         uint256 underlying = getTotalUnderlying();
@@ -834,13 +875,12 @@ contract FundV3 is
             fundActivityStartTime = day;
         }
 
-        uint256 interestRate = _updateInterestRate(day);
-        historicalInterestRate[day] = interestRate;
-
         historicalEquivalentTotalB[day] = equivalentTotalB;
         historicalUnderlying[day] = underlying;
         _historicalNavB[day] = navB;
         _historicalNavR[day] = navR;
+        uint256 interestRate = _updateInterestRate(day);
+        historicalInterestRate[day] = interestRate;
         currentDay = day + 1 days;
 
         emit Settled(day, navB, navR, interestRate);
@@ -854,37 +894,45 @@ contract FundV3 is
     function transferFromStrategy(uint256 amount) external override onlyStrategy {
         _strategyUnderlying = _strategyUnderlying.sub(amount);
         IERC20(tokenUnderlying).safeTransferFrom(_strategy, address(this), amount);
-        _payFeeDebt();
     }
 
     function primaryMarketTransferUnderlying(
         address recipient,
         uint256 amount,
-        uint256 fee
+        uint256 feeQ
     ) external override onlyPrimaryMarket {
         IERC20(tokenUnderlying).safeTransfer(recipient, amount);
-        feeDebt = feeDebt.add(fee);
-        _updateTotalDebt(_totalDebt.add(fee));
+        _mint(TRANCHE_Q, feeCollector, feeQ);
     }
 
-    function primaryMarketAddDebt(uint256 amount, uint256 fee) external override onlyPrimaryMarket {
-        redemptionDebt = redemptionDebt.add(amount);
-        feeDebt = feeDebt.add(fee);
-        _updateTotalDebt(_totalDebt.add(amount).add(fee));
+    function primaryMarketAddDebtAndFee(uint256 amount, uint256 feeQ)
+        external
+        override
+        onlyPrimaryMarket
+    {
+        _mint(TRANCHE_Q, feeCollector, feeQ);
+        _updateTotalDebt(_totalDebt.add(amount));
     }
 
     function primaryMarketPayDebt(uint256 amount) external override onlyPrimaryMarket {
-        redemptionDebt = redemptionDebt.sub(amount);
         _updateTotalDebt(_totalDebt.sub(amount));
         IERC20(tokenUnderlying).safeTransfer(msg.sender, amount);
     }
 
-    function reportProfit(uint256 profit, uint256 performanceFee) external override onlyStrategy {
-        require(profit >= performanceFee, "Performance fee cannot exceed profit");
+    function reportProfit(
+        uint256 profit,
+        uint256 totalFee,
+        uint256 strategyFee
+    ) external override onlyStrategy returns (uint256 strategyFeeQ) {
+        require(profit >= totalFee && totalFee >= strategyFee, "Fee cannot exceed profit");
         _strategyUnderlying = _strategyUnderlying.add(profit);
-        feeDebt = feeDebt.add(performanceFee);
-        _updateTotalDebt(_totalDebt.add(performanceFee));
-        emit ProfitReported(profit, performanceFee);
+        uint256 equivalentTotalQ = getEquivalentTotalQ();
+        uint256 totalUnderlyingAfterFee = getTotalUnderlying() - totalFee;
+        uint256 totalFeeQ = totalFee.mul(equivalentTotalQ).div(totalUnderlyingAfterFee);
+        strategyFeeQ = strategyFee.mul(equivalentTotalQ).div(totalUnderlyingAfterFee);
+        _mint(TRANCHE_Q, feeCollector, totalFeeQ.sub(strategyFeeQ));
+        _mint(TRANCHE_Q, msg.sender, strategyFeeQ);
+        emit ProfitReported(profit, totalFee, totalFeeQ, strategyFeeQ);
     }
 
     function reportLoss(uint256 loss) external override onlyStrategy {
@@ -975,40 +1023,15 @@ contract FundV3 is
         _updateActivityDelayTime(delayTime);
     }
 
-    /// @dev Transfer protocol fee of the current trading day to the fee collector.
-    ///      This function should be called before creation and redemption on the same day
-    ///      are settled.
+    /// @dev Collect protocol fee by minting QUEEN tokens to the fee collector.
     function _collectFee() private {
-        uint256 currentUnderlying = getTotalUnderlying();
-        uint256 fee = currentUnderlying.multiplyDecimal(dailyProtocolFeeRate);
-        if (fee > 0) {
-            feeDebt = feeDebt.add(fee);
-            _updateTotalDebt(_totalDebt.add(fee));
-        }
-    }
-
-    function _payFeeDebt() private {
-        uint256 total = _totalDebt;
-        if (total == 0) {
+        uint256 feeRate = dailyProtocolFeeRate;
+        if (feeRate == 0) {
             return;
         }
-        uint256 hot = IERC20(tokenUnderlying).balanceOf(address(this));
-        if (hot == 0) {
-            return;
-        }
-        uint256 fee = feeDebt;
-        if (fee > 0) {
-            uint256 amount = hot.min(fee);
-            feeDebt = fee - amount;
-            _updateTotalDebt(total - amount);
-            // Call `feeCollector.checkpoint()` without errors.
-            // This is a intended behavior because `feeCollector` may not have `checkpoint()`.
-            (bool success, ) = feeCollector.call(abi.encodeWithSignature("checkpoint()"));
-            if (!success) {
-                // ignore
-            }
-            IERC20(tokenUnderlying).safeTransfer(feeCollector, amount);
-            emit FeeDebtPaid(amount);
+        uint256 feeQ = getEquivalentTotalQ().mul(feeRate) / (1e18 - feeRate);
+        if (feeQ > 0) {
+            _mint(TRANCHE_Q, feeCollector, feeQ);
         }
     }
 
@@ -1107,9 +1130,9 @@ contract FundV3 is
             });
     }
 
-    function _updateInterestRate(uint256 week) private returns (uint256) {
+    function _updateInterestRate(uint256 day) private returns (uint256) {
         uint256 baseInterestRate = MAX_INTEREST_RATE.min(aprOracle.capture());
-        uint256 floatingInterestRate = ballot.count(week).div(365);
+        uint256 floatingInterestRate = ballot.count(day).div(365);
         uint256 rate = baseInterestRate.add(floatingInterestRate);
 
         emit InterestRateUpdated(baseInterestRate, floatingInterestRate);
@@ -1141,8 +1164,8 @@ contract FundV3 is
         uint256 balanceR = balanceTuple[TRANCHE_R];
         _balanceVersions[account] = targetVersion;
 
-        if (balanceQ == 0 && balanceB == 0 && balanceR == 0) {
-            // Fast path for an empty account
+        if (balanceB == 0 && balanceR == 0) {
+            // Fast path for zero BISHOP and ROOK balance
             return;
         }
 
@@ -1175,25 +1198,19 @@ contract FundV3 is
         }
 
         uint256[TRANCHE_COUNT] storage allowanceTuple = _allowances[owner][spender];
-        uint256 allowanceQ = allowanceTuple[TRANCHE_Q];
         uint256 allowanceB = allowanceTuple[TRANCHE_B];
         uint256 allowanceR = allowanceTuple[TRANCHE_R];
         _allowanceVersions[owner][spender] = targetVersion;
 
-        if (allowanceQ == 0 && allowanceB == 0 && allowanceR == 0) {
-            // Fast path for an empty allowance
+        if (allowanceB == 0 && allowanceR == 0) {
+            // Fast path for empty BISHOP and ROOK allowance
             return;
         }
 
         for (uint256 i = oldVersion; i < targetVersion; i++) {
-            (allowanceQ, allowanceB, allowanceR) = _rebalanceAllowance(
-                allowanceQ,
-                allowanceB,
-                allowanceR,
-                i
-            );
+            allowanceB = _rebalanceAllowanceBR(allowanceB, i);
+            allowanceR = _rebalanceAllowanceBR(allowanceR, i);
         }
-        allowanceTuple[TRANCHE_Q] = allowanceQ;
         allowanceTuple[TRANCHE_B] = allowanceB;
         allowanceTuple[TRANCHE_R] = allowanceR;
 
@@ -1201,32 +1218,20 @@ contract FundV3 is
             owner,
             spender,
             targetVersion,
-            allowanceQ,
+            allowanceTuple[TRANCHE_Q],
             allowanceB,
             allowanceR
         );
     }
 
-    function _rebalanceAllowance(
-        uint256 allowanceQ,
-        uint256 allowanceB,
-        uint256 allowanceR,
-        uint256 index
-    )
+    function _rebalanceAllowanceBR(uint256 allowance, uint256 index)
         private
         view
-        returns (
-            uint256 newAllowanceQ,
-            uint256 newAllowanceB,
-            uint256 newAllowanceR
-        )
+        returns (uint256)
     {
         Rebalance storage rebalance = _rebalances[index];
-
         /// @dev using saturating arithmetic to avoid unconscious overflow revert
-        newAllowanceQ = allowanceQ;
-        newAllowanceB = allowanceB.saturatingMultiplyDecimal(rebalance.ratioBR);
-        newAllowanceR = allowanceR.saturatingMultiplyDecimal(rebalance.ratioBR);
+        return allowance.saturatingMultiplyDecimal(rebalance.ratioBR);
     }
 
     modifier onlyCurrentVersion(uint256 version) {
