@@ -28,35 +28,13 @@ contract WithdrawalManagerFactory is Ownable {
     address internal _proposedImplementation;
     uint256 internal _proposedImplementationTimestamp;
 
-    // Construct
     constructor(address registry_) public {
         registry = registry_;
     }
 
-    // Returns the bytecode for WithdrawalManager proxy
-    function getWithdrawalManagerBytecode() public pure returns (bytes memory) {
-        return type(WithdrawalManagerProxy).creationCode;
-    }
-
-    // Performs a CREATE2 deployment of a withdrawal manager contract with given operator id
     function deployContract(uint256 id) external onlyRegistry returns (address) {
-        // Construct deployment bytecode
-        bytes memory creationCode = getWithdrawalManagerBytecode();
-        bytes memory bytecode = abi.encodePacked(creationCode, abi.encode(address(this), id));
-        // Construct final salt
-        uint256 salt = uint256(keccak256(abi.encodePacked(id)));
-        // CREATE2 deployment
-        address contractAddress;
-        uint256 codeSize;
-        assembly {
-            contractAddress := create2(0, add(bytecode, 0x20), mload(bytecode), salt)
-
-            codeSize := extcodesize(contractAddress)
-        }
-        // Ensure deployment was successful
-        require(codeSize > 0, "Contract creation failed");
-        // Return address
-        return contractAddress;
+        WithdrawalManagerProxy proxy = new WithdrawalManagerProxy(this, id);
+        return address(proxy);
     }
 
     function proposeImplementationUpdate(address newImplementation) external onlyOwner {
