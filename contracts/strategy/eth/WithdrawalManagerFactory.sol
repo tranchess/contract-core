@@ -2,56 +2,29 @@
 pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
 
 import "./WithdrawalManagerProxy.sol";
 
 contract WithdrawalManagerFactory is Ownable {
-    using SafeMath for uint256;
-
-    event ImplementationUpdateProposed(
-        address indexed newImplementation,
-        uint256 minTimestamp,
-        uint256 maxTimestamp
-    );
-    event ImplementationUpdated(
-        address indexed previousImplementation,
-        address indexed newImplementation
-    );
-
-    uint256 private constant ROLE_UPDATE_MIN_DELAY = 3 days;
-    uint256 private constant ROLE_UPDATE_MAX_DELAY = 15 days;
+    event ImplementationUpdated(address indexed newImplementation);
 
     address public implementation;
-    address internal _proposedImplementation;
-    uint256 internal _proposedImplementationTimestamp;
+
+    constructor(address implementation_) public {
+        _updateImplementation(implementation_);
+    }
 
     function deployContract(uint256 id) external returns (address) {
         WithdrawalManagerProxy proxy = new WithdrawalManagerProxy(this, id);
         return address(proxy);
     }
 
-    function proposeImplementationUpdate(address newImplementation) external onlyOwner {
-        require(newImplementation != implementation);
-        _proposedImplementation = newImplementation;
-        _proposedImplementationTimestamp = block.timestamp;
-        emit ImplementationUpdateProposed(
-            newImplementation,
-            block.timestamp + ROLE_UPDATE_MIN_DELAY,
-            block.timestamp + ROLE_UPDATE_MAX_DELAY
-        );
+    function updateImplementation(address newImplementation) external onlyOwner {
+        _updateImplementation(newImplementation);
     }
 
-    function applyImplementationUpdate(address newImplementation) external onlyOwner {
-        require(_proposedImplementation == newImplementation, "Proposed address mismatch");
-        require(
-            block.timestamp >= _proposedImplementationTimestamp + ROLE_UPDATE_MIN_DELAY &&
-                block.timestamp < _proposedImplementationTimestamp + ROLE_UPDATE_MAX_DELAY,
-            "Not ready to update"
-        );
-        emit ImplementationUpdated(implementation, newImplementation);
+    function _updateImplementation(address newImplementation) private {
         implementation = newImplementation;
-        _proposedImplementation = address(0);
-        _proposedImplementationTimestamp = 0;
+        emit ImplementationUpdated(newImplementation);
     }
 }
