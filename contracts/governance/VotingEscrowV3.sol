@@ -70,6 +70,9 @@ contract VotingEscrowV3 is
 
     address public immutable override token;
 
+    /// @notice Address of AnyswapChessPool (on BNB Chain) or AnyswapChess (on other chains).
+    address public immutable anyswapChess;
+
     string public name;
     string public symbol;
 
@@ -100,9 +103,6 @@ contract VotingEscrowV3 is
 
     /// @notice Start timestamp of the trading week in which the last checkpoint is made
     uint256 public checkpointWeek;
-
-    /// @notice Address of AnyswapChessPool (on BNB Chain) or AnyswapChess (on other chains).
-    address public anyswapChess;
 
     /// @notice Mapping of chain ID => VotingEscrow address on that chain
     mapping(uint256 => address) public crossChainVotingEscrows;
