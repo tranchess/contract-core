@@ -399,8 +399,8 @@ contract VotingEscrowV3 is
             newAmount,
             newUnlockTime
         );
-        locked[msg.sender].amount = newAmount;
-        locked[msg.sender].unlockTime = newUnlockTime;
+        locked[account].amount = newAmount;
+        locked[account].unlockTime = newUnlockTime;
 
         // Withdraw CHESS from AnySwap pool
         address underlying = IAnyswapV6ERC20(anyswapChess).underlying();
@@ -414,9 +414,9 @@ contract VotingEscrowV3 is
         }
         emit AmountIncreased(account, amount);
         if (newUnlockTime != lockedBalance.unlockTime) {
-            emit UnlockTimeIncreased(msg.sender, newUnlockTime);
+            emit UnlockTimeIncreased(account, newUnlockTime);
         }
-        emit CrossChainReceived(msg.sender, fromChainID, amount, newUnlockTime);
+        emit CrossChainReceived(account, fromChainID, amount, newUnlockTime);
     }
 
     function updateAddressWhitelist(address newWhitelist) external onlyOwner {
