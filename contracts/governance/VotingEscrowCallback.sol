@@ -14,18 +14,15 @@ contract VotingEscrowCallback is IVotingEscrowCallback, Ownable {
 
     EnumerableSet.AddressSet private _handles;
 
-    constructor(address[] memory handles_) public {
-        uint256 count = handles_.length;
-        for (uint256 i = 0; i < count; i++) {
-            _addCallbackHandle(handles_[i]);
+    function getCallbackHandles() external view returns (address[] memory handles) {
+        uint256 length = _handles.length();
+        handles = new address[](length);
+        for (uint256 i = 0; i < length; i++) {
+            handles[i] = _handles.at(i);
         }
     }
 
     function addCallbackHandle(address callbackHandle) external onlyOwner {
-        _addCallbackHandle(callbackHandle);
-    }
-
-    function _addCallbackHandle(address callbackHandle) private {
         if (_handles.add(callbackHandle)) {
             emit CallbackHandleAdded(callbackHandle);
         }
