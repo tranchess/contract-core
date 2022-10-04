@@ -364,7 +364,7 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
     }
 
     function _deposit(NodeOperatorRegistry.Key memory key, bytes32 withdrawalCredential) private {
-        bytes memory pubkey = abi.encode(key.pubkey0, bytes16(key.pubkey1));
+        bytes memory pubkey = abi.encodePacked(key.pubkey0, bytes16(key.pubkey1));
         bytes memory signature = abi.encode(key.signature0, key.signature1, key.signature2);
         // Lower 16 bytes of pubkey1 are cleared by the registry
         bytes32 pubkeyRoot = sha256(abi.encode(key.pubkey0, key.pubkey1));
