@@ -149,7 +149,7 @@ contract NodeOperatorRegistry is Ownable {
         mapping(uint256 => Key) storage operatorKeys = _keys[id];
         for (uint256 i = 0; i < count; i++) {
             Key storage key = operatorKeys[start + i];
-            pubkeys[i] = abi.encode(key.pubkey0, bytes16(key.pubkey1));
+            pubkeys[i] = abi.encodePacked(key.pubkey0, bytes16(key.pubkey1));
         }
     }
 
@@ -182,11 +182,12 @@ contract NodeOperatorRegistry is Ownable {
         KeyStat memory stat = operator.keyStat;
         for (uint256 i = 0; i < count; ++i) {
             Key memory key;
-            (key.pubkey0, key.pubkey1) = abi.decode(
-                pubkeys[i * PUBKEY_LENGTH:i * PUBKEY_LENGTH + 64],
-                (bytes32, bytes32)
+            key.pubkey0 = abi.decode(pubkeys[i * PUBKEY_LENGTH:i * PUBKEY_LENGTH + 32], (bytes32));
+            key.pubkey1 = abi.decode(
+                pubkeys[i * PUBKEY_LENGTH + 16:i * PUBKEY_LENGTH + 48],
+                (bytes32)
             );
-            key.pubkey1 &= bytes32(uint256(((1 << 128) - 1) << 128)); // Clear its lower 16 bytes
+            key.pubkey1 = bytes32(uint256(key.pubkey1) << 128);
             (key.signature0, key.signature1, key.signature2) = abi.decode(
                 signatures[i * SIGNATURE_LENGTH:(i + 1) * SIGNATURE_LENGTH],
                 (bytes32, bytes32, bytes32)
