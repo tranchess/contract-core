@@ -198,7 +198,11 @@ contract NodeOperatorRegistry is Ownable {
                 "Empty pubkey or signature"
             );
             operatorKeys[stat.totalCount + i] = key;
-            emit KeyAdded(id, abi.encode(key.pubkey0, bytes16(key.pubkey1)), stat.totalCount + i);
+            emit KeyAdded(
+                id,
+                abi.encodePacked(key.pubkey0, bytes16(key.pubkey1)),
+                stat.totalCount + i
+            );
         }
         stat.totalCount += uint64(count);
         operator.keyStat = stat;
