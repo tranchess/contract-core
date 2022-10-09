@@ -706,7 +706,9 @@ contract FundV4 is
         uint256 amount,
         uint256 version
     ) external override onlyPrimaryMarket onlyCurrentVersion(version) {
-        _refreshBalance(account, version);
+        if (tranche != TRANCHE_Q) {
+            _refreshBalance(account, version);
+        }
         _burn(tranche, account, amount);
         if (tranche == TRANCHE_Q) {
             // Call an optional hook in the strategy and ignore errors.
