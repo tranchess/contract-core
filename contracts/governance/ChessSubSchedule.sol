@@ -37,6 +37,7 @@ contract ChessSubSchedule is
 
     /// @notice Current number of tokens in existence (claimed or unclaimed)
     uint256 public availableSupply;
+    uint256 public outstandingSupply;
     uint256 public minted;
     mapping(uint256 => uint256) private _weeklySupplies;
 
@@ -115,9 +116,19 @@ contract ChessSubSchedule is
     ) internal override {
         uint256 totalAmount = abi.decode(data, (uint256));
         uint256 currentWeek = _endOfWeek(block.timestamp) - 1 weeks;
-        require(_weeklySupplies[currentWeek] == 0, "Already received");
-        availableSupply = availableSupply.add(totalAmount);
-        _weeklySupplies[currentWeek] = totalAmount;
+        uint256 outstandingSupply_ = outstandingSupply;
+        // A non-zero weekly supply indicates the current weekly emission has already gone
+        // into effect, so we have to delay the emission to next week.
+        if (_weeklySupplies[currentWeek] == 0) {
+            if (outstandingSupply_ != 0) {
+                totalAmount = totalAmount.add(outstandingSupply_);
+                outstandingSupply = 0;
+            }
+            availableSupply = availableSupply.add(totalAmount);
+            _weeklySupplies[currentWeek] = totalAmount;
+        } else {
+            outstandingSupply = outstandingSupply_.add(totalAmount);
+        }
     }
 
     function _anyFallback(bytes calldata) internal override {
