@@ -582,8 +582,9 @@ abstract contract StableSwapV2 is IStableSwap, Ownable, ReentrancyGuard, Managed
     }
 
     function collectFee() external {
-        IERC20(quoteAddress).safeTransfer(feeCollector, totalAdminFee);
+        uint256 totalAdminFee_ = totalAdminFee;
         delete totalAdminFee;
+        IERC20(quoteAddress).safeTransfer(feeCollector, totalAdminFee_);
     }
 
     function _getNewQuoteBalance() private view returns (uint256) {
