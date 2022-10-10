@@ -15,9 +15,7 @@ import "../utils/CoreUtility.sol";
 import "../utils/SafeDecimalMath.sol";
 
 interface ICurveLiquidityGauge {
-    function CRV() external view returns (address);
-
-    function LP_TOKEN() external view returns (address);
+    function lp_token() external view returns (address);
 
     function deposit(
         uint256 _value,
@@ -31,6 +29,8 @@ interface ICurveLiquidityGauge {
 }
 
 interface ICurveMinter {
+    function token() external view returns (address);
+
     function mint(address gauge_addr) external;
 }
 
@@ -83,11 +83,11 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
         address votingEscrow_
     ) public ERC20(name_, symbol_) {
         curveLiquidityGauge = ICurveLiquidityGauge(curveLiquidityGauge_);
-        curveLiquidityToken = IERC20(ICurveLiquidityGauge(curveLiquidityGauge_).LP_TOKEN());
+        curveLiquidityToken = IERC20(ICurveLiquidityGauge(curveLiquidityGauge_).lp_token());
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
         _curveMinter = ICurveMinter(curveMinter_);
-        _bonusToken = IERC20(ICurveLiquidityGauge(curveLiquidityGauge_).CRV());
+        _bonusToken = IERC20(ICurveMinter(curveMinter_).token());
         _votingEscrow = IVotingEscrow(votingEscrow_);
         _chessIntegralTimestamp = block.timestamp;
     }
