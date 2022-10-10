@@ -706,6 +706,9 @@ contract FundV4 is
         uint256 amount,
         uint256 version
     ) external override onlyPrimaryMarket onlyCurrentVersion(version) {
+        // Unlike `primaryMarketMint()`, `_refreshBalance()` is required even if we are burning
+        // QUEEN tokens, because a rebalance may increase the user's QUEEN balance if the user
+        // owns BISHOP or ROOK tokens beforehand.
         _refreshBalance(account, version);
         _burn(tranche, account, amount);
         if (tranche == TRANCHE_Q) {
