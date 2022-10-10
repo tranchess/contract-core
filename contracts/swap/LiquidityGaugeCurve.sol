@@ -96,7 +96,7 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
         return _rate / 1e18;
     }
 
-    function deposit(address account, uint256 amount) external {
+    function deposit(uint256 amount, address recipient) external {
         curveLiquidityToken.safeTransferFrom(msg.sender, address(this), amount);
         if (allowDepositFurther) {
             // Deposit and claim CRV rewards before gauge checkpoint
@@ -104,12 +104,12 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
             curveLiquidityGauge.deposit(amount, address(this), true);
         }
 
-        uint256 oldWorkingBalance = _workingBalances[account];
+        uint256 oldWorkingBalance = _workingBalances[recipient];
         uint256 oldWorkingSupply = _workingSupply;
-        _checkpoint(account, oldWorkingBalance, oldWorkingSupply);
+        _checkpoint(recipient, oldWorkingBalance, oldWorkingSupply);
 
-        _mint(account, amount);
-        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply);
+        _mint(recipient, amount);
+        _updateWorkingBalance(recipient, oldWorkingBalance, oldWorkingSupply);
     }
 
     function withdraw(uint256 amount) external {
