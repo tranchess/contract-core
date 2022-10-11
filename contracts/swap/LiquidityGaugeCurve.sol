@@ -167,10 +167,11 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
 
     function depositToGauge() external onlyOwner {
         uint256 lpBalance = curveLiquidityToken.balanceOf(address(this));
+        curveLiquidityToken.safeApprove(address(curveLiquidityGauge), lpBalance);
         curveLiquidityGauge.deposit(lpBalance, address(this), true);
     }
 
-    function setDespositFurther(bool allowDepositFurther_) external onlyOwner {
+    function setDepositFurther(bool allowDepositFurther_) external onlyOwner {
         allowDepositFurther = allowDepositFurther_;
     }
 
