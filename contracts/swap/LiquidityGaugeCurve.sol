@@ -15,9 +15,7 @@ import "../utils/CoreUtility.sol";
 import "../utils/SafeDecimalMath.sol";
 
 interface ICurveLiquidityGauge {
-    function CRV() external view returns (address);
-
-    function LP_TOKEN() external view returns (address);
+    function lp_token() external view returns (address);
 
     function deposit(
         uint256 _value,
@@ -26,6 +24,14 @@ interface ICurveLiquidityGauge {
     ) external;
 
     function withdraw(uint256 _value, bool _claim_rewards) external;
+
+    function set_rewards_receiver(address _receiver) external;
+}
+
+interface ICurveMinter {
+    function token() external view returns (address);
+
+    function mint(address gauge_addr) external;
 }
 
 contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
@@ -33,6 +39,8 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
+
+    event ReceiverUpdated(address receiver);
 
     uint256 private constant MAX_ITERATIONS = 500;
     uint256 private constant MAX_BOOSTING_FACTOR = 3e18;
@@ -42,6 +50,7 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
     IERC20 public immutable curveLiquidityToken;
     IChessSchedule public immutable chessSchedule;
     IChessController public immutable chessController;
+    ICurveMinter private immutable _curveMinter;
     IVotingEscrow private immutable _votingEscrow;
     IERC20 private immutable _bonusToken;
 
@@ -68,15 +77,17 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
         string memory name_,
         string memory symbol_,
         address curveLiquidityGauge_,
+        address curveMinter_,
         address chessSchedule_,
         address chessController_,
         address votingEscrow_
     ) public ERC20(name_, symbol_) {
         curveLiquidityGauge = ICurveLiquidityGauge(curveLiquidityGauge_);
-        curveLiquidityToken = IERC20(ICurveLiquidityGauge(curveLiquidityGauge_).LP_TOKEN());
+        curveLiquidityToken = IERC20(ICurveLiquidityGauge(curveLiquidityGauge_).lp_token());
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
-        _bonusToken = IERC20(ICurveLiquidityGauge(curveLiquidityGauge_).CRV());
+        _curveMinter = ICurveMinter(curveMinter_);
+        _bonusToken = IERC20(ICurveMinter(curveMinter_).token());
         _votingEscrow = IVotingEscrow(votingEscrow_);
         _chessIntegralTimestamp = block.timestamp;
     }
@@ -85,7 +96,7 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
         return _rate / 1e18;
     }
 
-    function deposit(address account, uint256 amount) external {
+    function deposit(uint256 amount, address recipient) external {
         curveLiquidityToken.safeTransferFrom(msg.sender, address(this), amount);
         if (allowDepositFurther) {
             // Deposit and claim CRV rewards before gauge checkpoint
@@ -93,12 +104,12 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
             curveLiquidityGauge.deposit(amount, address(this), true);
         }
 
-        uint256 oldWorkingBalance = _workingBalances[account];
+        uint256 oldWorkingBalance = _workingBalances[recipient];
         uint256 oldWorkingSupply = _workingSupply;
-        _checkpoint(account, oldWorkingBalance, oldWorkingSupply);
+        _checkpoint(recipient, oldWorkingBalance, oldWorkingSupply);
 
-        _mint(account, amount);
-        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply);
+        _mint(recipient, amount);
+        _updateWorkingBalance(recipient, oldWorkingBalance, oldWorkingSupply);
     }
 
     function withdraw(uint256 amount) external {
@@ -172,6 +183,11 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
 
     function setDespositFurther(bool allowDepositFurther_) external onlyOwner {
         allowDepositFurther = allowDepositFurther_;
+    }
+
+    function setRewardsReceiver(address receiver) external onlyOwner {
+        curveLiquidityGauge.set_rewards_receiver(receiver);
+        emit ReceiverUpdated(receiver);
     }
 
     function _updateWorkingBalance(
@@ -258,6 +274,7 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
         uint256 totalWeight
     ) private returns (uint256 amount) {
         // Update global state
+        _curveMinter.mint(address(curveLiquidityGauge));
         uint256 currentBonus = _bonusToken.balanceOf(address(this));
         uint256 newBonus = currentBonus.sub(totalBonus);
         uint256 integral = _bonusIntegral;
