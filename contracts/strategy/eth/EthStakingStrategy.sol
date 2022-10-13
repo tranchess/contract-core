@@ -334,7 +334,7 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
         totalValidatorCount = totalValidatorCount + total;
     }
 
-    function onPrimaryMarketMintQ() external {
+    function onPrimaryMarketCreate() external {
         uint256 balance = IERC20(_tokenUnderlying).balanceOf(fund) + address(this).balance;
         uint256 count = balance / DEPOSIT_AMOUNT;
         if (count > 0) {

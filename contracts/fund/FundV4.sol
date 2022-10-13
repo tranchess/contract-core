@@ -691,13 +691,6 @@ contract FundV4 is
             _refreshBalance(account, version);
         }
         _mint(tranche, account, amount);
-        if (tranche == TRANCHE_Q) {
-            // Call an optional hook in the strategy and ignore errors.
-            (bool success, ) = _strategy.call(abi.encodeWithSignature("onPrimaryMarketMintQ()"));
-            if (!success) {
-                // ignore
-            }
-        }
     }
 
     function primaryMarketBurn(
@@ -711,13 +704,6 @@ contract FundV4 is
         // owns BISHOP or ROOK tokens beforehand.
         _refreshBalance(account, version);
         _burn(tranche, account, amount);
-        if (tranche == TRANCHE_Q) {
-            // Call an optional hook in the strategy and ignore errors.
-            (bool success, ) = _strategy.call(abi.encodeWithSignature("onPrimaryMarketBurnQ()"));
-            if (!success) {
-                // ignore
-            }
-        }
     }
 
     function shareTransfer(
