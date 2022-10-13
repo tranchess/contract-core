@@ -30,17 +30,19 @@ task("deploy_controller_ballot", "Deploy ControllerBallot")
             assert.match(symbol, /^[a-zA-Z]+$/, "Invalid symbol");
         }
 
-        const ControllerBallot = await ethers.getContractFactory("ControllerBallot");
+        const ControllerBallot = await ethers.getContractFactory("ControllerBallotV2");
         const controllerBallot = await ControllerBallot.deploy(votingEscrowAddress);
         console.log(`ControllerBallot: ${controllerBallot.address}`);
 
         for (const symbol of symbols) {
-            console.log(`Adding ${symbol} staking`);
             const fundAddresses = loadAddressFile<FundAddresses>(
                 hre,
                 `fund_${symbol.toLowerCase()}`
             );
-            await controllerBallot.addPool(fundAddresses.shareStaking);
+            if (fundAddresses.shareStaking) {
+                console.log(`Adding ${symbol} staking`);
+                await controllerBallot.addPool(fundAddresses.shareStaking);
+            }
             console.log(`Adding ${symbol} BISHOP stable swap's liquidity gauge`);
             const stableSwapAddresses = loadAddressFile<StableSwapAddresses>(
                 hre,

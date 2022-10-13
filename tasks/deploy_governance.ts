@@ -4,6 +4,7 @@ import type { ChessScheduleImplAddresses } from "./deploy_chess_schedule_impl";
 import type { VotingEscrowImplAddresses } from "./deploy_voting_escrow_impl";
 import type { ControllerBallotAddresses } from "./deploy_controller_ballot";
 import type { ChessControllerImplAddresses } from "./deploy_chess_controller_impl";
+import type { AnyswapChessPoolAddresses } from "./deploy_anyswap_chess_pool";
 import { GOVERNANCE_CONFIG } from "../config";
 import { updateHreSigner } from "./signers";
 
@@ -11,6 +12,7 @@ export interface GovernanceAddresses extends Addresses {
     timelockController: string;
     proxyAdmin: string;
     chess: string;
+    anyswapChessPool: string;
     chessScheduleImpl: string;
     chessSchedule: string;
     votingEscrowImpl: string;
@@ -77,12 +79,24 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     const chessSchedule = ChessSchedule.attach(chessScheduleProxy.address);
     console.log(`ChessSchedule: ${chessSchedule.address}`);
 
-    await hre.run("deploy_voting_escrow_impl", { chess: chess.address });
+    await hre.run("deploy_anyswap_chess_pool", {
+        chess: chess.address,
+    });
+    const anyswapChessPool = await ethers.getContractAt(
+        "AnyswapChessPool",
+        loadAddressFile<AnyswapChessPoolAddresses>(hre, "anyswap_chess_pool").anyswapChessPool
+    );
+    console.log(`AnyswapChessPool: ${anyswapChessPool.address}`);
+
+    await hre.run("deploy_voting_escrow_impl", {
+        chess: chess.address,
+        anyswapChess: anyswapChessPool.address,
+    });
     const votingEscrowImplAddresses = loadAddressFile<VotingEscrowImplAddresses>(
         hre,
-        "voting_escrow_v2_impl"
+        "voting_escrow_v3_impl"
     );
-    const VotingEscrow = await ethers.getContractFactory("VotingEscrowV2");
+    const VotingEscrow = await ethers.getContractFactory("VotingEscrowV3");
     const votingEscrowImpl = VotingEscrow.attach(votingEscrowImplAddresses.votingEscrowImpl);
 
     const votingEscrowInitTx = await votingEscrowImpl.populateTransaction.initialize(
@@ -111,7 +125,7 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
         hre,
         "controller_ballot"
     );
-    const ControllerBallot = await ethers.getContractFactory("ControllerBallot");
+    const ControllerBallot = await ethers.getContractFactory("ControllerBallotV2");
     const controllerBallot = ControllerBallot.attach(controllerBallotAddresses.controllerBallot);
     console.log(`ControllerBallot: ${controllerBallot.address}`);
 
@@ -121,9 +135,9 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     });
     const chessControllerImplAddresses = loadAddressFile<ChessControllerImplAddresses>(
         hre,
-        "chess_controller_v5_impl"
+        "chess_controller_v6_impl"
     );
-    const ChessController = await ethers.getContractFactory("ChessControllerV5");
+    const ChessController = await ethers.getContractFactory("ChessControllerV6");
     const chessControllerImpl = ChessController.attach(
         chessControllerImplAddresses.chessControllerImpl
     );
@@ -141,8 +155,14 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
     const chessController = ChessController.attach(chessControllerProxy.address);
     console.log(`ChessController: ${chessController.address}`);
 
+    console.log("Set VotingEscrow and AnyswapRouter to be CHESS minters");
+    await anyswapChessPool.addMinter(votingEscrow.address);
+    await anyswapChessPool.addMinter(GOVERNANCE_CONFIG.ANYSWAP_ROUTER);
+    // TODO transfer owner
+
     console.log("Transfering ownership to TimelockController");
     await proxyAdmin.transferOwnership(timelockController.address);
+    await anyswapChessPool.transferOwnership(timelockController.address);
     await votingEscrow.transferOwnership(timelockController.address);
 
     const addresses: GovernanceAddresses = {
@@ -150,6 +170,7 @@ task("deploy_governance", "Deploy governance contracts", async function (_args, 
         timelockController: timelockController.address,
         proxyAdmin: proxyAdmin.address,
         chess: chess.address,
+        anyswapChessPool: anyswapChessPool.address,
         chessScheduleImpl: chessScheduleImpl.address,
         chessSchedule: chessSchedule.address,
         votingEscrowImpl: votingEscrowImpl.address,

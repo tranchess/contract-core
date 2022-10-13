@@ -22,7 +22,7 @@ import "../swap/SwapRouter.sol";
 import "../governance/InterestRateBallotV2.sol";
 import "../governance/FeeDistributor.sol";
 import "../governance/VotingEscrowV2.sol";
-import "../governance/ControllerBallot.sol";
+import "../governance/ControllerBallotV2.sol";
 
 contract DataAggregator is ITrancheIndexV2, CoreUtility {
     struct Data {
@@ -226,7 +226,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
     VotingEscrowV2 public immutable votingEscrow;
     IChessSchedule public immutable chessSchedule;
     IERC20 public immutable chess;
-    ControllerBallot public immutable controllerBallot;
+    ControllerBallotV2 public immutable controllerBallot;
     InterestRateBallotV2 public immutable interestRateBallot;
     SwapRouter public immutable swapRouter;
     address public immutable flashSwapRouter;
@@ -235,7 +235,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
     constructor(
         VotingEscrowV2 votingEscrow_,
         IChessSchedule chessSchedule_,
-        ControllerBallot controllerBallot_,
+        ControllerBallotV2 controllerBallot_,
         InterestRateBallotV2 interestRateBallot_,
         SwapRouter swapRouter_,
         address flashSwapRouter_,
@@ -440,6 +440,9 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         uint256 splitRatio,
         address account
     ) public returns (ShareStakingData memory data) {
+        if (address(shareStaking) == address(0)) {
+            return data;
+        }
         data.account.claimableChess = shareStaking.claimableRewards(account);
         data.totalSupplyQ = shareStaking.totalSupply(TRANCHE_Q);
         data.totalSupplyB = shareStaking.totalSupply(TRANCHE_B);
@@ -559,7 +562,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         data.account.weights = new uint256[](data.pools.length);
         for (uint256 i = 0; i < data.pools.length; i++) {
             address pool = data.pools[i];
-            data.currentSums[i] = controllerBallot.sumAtTimestamp(pool, block.timestamp);
+            data.currentSums[i] = controllerBallot.sumAtWeek(pool, _endOfWeek(block.timestamp));
             data.account.weights[i] = controllerBallot.userWeights(account, pool);
         }
     }

@@ -17,11 +17,11 @@ task("deploy_swap_router", "Deploy swap routers contracts")
         const { ethers } = hre;
         await hre.run("compile");
 
-        const queenSwaps: string[] = args.queenSwaps.split(",");
+        const queenSwaps: string[] = args.queenSwaps.split(",").filter(Boolean);
         for (const queenSwap of queenSwaps) {
             assert.match(queenSwap, /^[a-zA-Z]+$/, "Invalid symbol");
         }
-        const bishopSwaps: string[] = args.bishopSwaps.split(",");
+        const bishopSwaps: string[] = args.bishopSwaps.split(",").filter(Boolean);
         for (const bishopSwap of bishopSwaps) {
             assert.match(bishopSwap, /^[a-zA-Z]+$/, "Invalid symbol");
         }
