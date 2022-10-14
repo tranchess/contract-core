@@ -159,10 +159,10 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
 
         if (kind == "Bishop") {
             const controllerBallot = await ethers.getContractAt(
-                "ControllerBallot",
+                "ControllerBallotV2",
                 governanceAddresses.controllerBallot
             );
-            if ((await controllerBallot.owner()) === (await controllerBallot.signer.getAddress())) {
+            if ((await controllerBallot.owner()) === deployer.address) {
                 console.log("Adding LiquidityGauge to ControllerBallot");
                 await controllerBallot.addPool(liquidityGauge.address);
                 console.log(
@@ -172,7 +172,17 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
                 console.log("NOTE: Please add LiquidityGauge to ControllerBallot");
             }
 
-            console.log("Please add LiquidityGauge to ChessSchedule");
+            const chessSchedule = await ethers.getContractAt(
+                "ChessSchedule",
+                governanceAddresses.chessSchedule
+            );
+            if ((await chessSchedule.owner()) === deployer.address) {
+                console.log("Adding LiquidityGauge to ChessSchedule's minter list");
+                await chessSchedule.addMinter(liquidityGauge.address);
+                console.log("NOTE: Please transfer ownership of ChessSchedule to Timelock later");
+            } else {
+                console.log("NOTE: Please add LiquidityGauge to ChessSchedule's minter list");
+            }
         }
 
         console.log("Transfering StableSwap's ownership to TimelockController");

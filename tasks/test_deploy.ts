@@ -1,7 +1,8 @@
 import { task } from "hardhat/config";
 import { loadAddressFile } from "./address_file";
 import type { MockAddresses } from "./deploy_mock";
-import { endOfWeek, GOVERNANCE_CONFIG, FUND_CONFIG } from "../config";
+import type { AnyswapAddresses } from "./dev_deploy_anyswap";
+import { endOfWeek, GOVERNANCE_CONFIG } from "../config";
 
 task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (_args, hre) => {
     const { ethers } = hre;
@@ -12,6 +13,13 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     console.log("[+] Deploying mock contracts");
     await hre.run("deploy_mock", { silent: true });
     const mockAddresses = loadAddressFile<MockAddresses>(hre, "mock");
+
+    console.log();
+    console.log("[+] Deploying Anyswap");
+    await hre.run("dev_deploy_anyswap");
+    const anyswapAddresses = loadAddressFile<AnyswapAddresses>(hre, "dev_anyswap");
+    GOVERNANCE_CONFIG.ANYSWAP_ROUTER = anyswapAddresses.router;
+    GOVERNANCE_CONFIG.ANY_CALL_PROXY = anyswapAddresses.anyCallProxy;
 
     console.log();
     console.log("[+] Deploying mock TwapOracle");
@@ -45,8 +53,6 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
 
     console.log();
     console.log("[+] Deploying fund contracts");
-    FUND_CONFIG.MIN_CREATION = "0.1";
-    FUND_CONFIG.GUARDED_LAUNCH = true;
     await hre.run("deploy_fee_distributor", {
         underlying: mockAddresses.mockBtc,
         adminFeeRate: "0.5",
@@ -114,9 +120,7 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     console.log("[+] Deploying misc contracts");
     await hre.run("deploy_misc", {
         silent: true,
-        deployProtocolDataProvider: true,
         deployBatchOperationHelper: true,
-        deployBatchUpgradeTool: true,
     });
 
     console.log();
