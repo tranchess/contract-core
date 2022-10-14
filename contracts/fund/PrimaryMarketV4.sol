@@ -332,6 +332,13 @@ contract PrimaryMarketV4 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
         _tokenUnderlying.safeTransfer(fund, underlying);
         emit Created(recipient, underlying, outQ);
+
+        // Call an optional hook in the strategy and ignore errors.
+        (bool success, ) =
+            IFundV3(fund).strategy().call(abi.encodeWithSignature("onPrimaryMarketCreate()"));
+        if (!success) {
+            // ignore
+        }
     }
 
     /// @notice Redeem QUEEN to get underlying tokens back. Revert if there are still some
@@ -385,6 +392,13 @@ contract PrimaryMarketV4 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         require(underlying <= _tokenUnderlying.balanceOf(fund), "Not enough underlying in fund");
         IFundForPrimaryMarketV4(fund).primaryMarketTransferUnderlying(recipient, underlying, feeQ);
         emit Redeemed(recipient, inQ, underlying, feeQ);
+
+        // Call an optional hook in the strategy and ignore errors.
+        (bool success, ) =
+            IFundV3(fund).strategy().call(abi.encodeWithSignature("onPrimaryMarketRedeem()"));
+        if (!success) {
+            // ignore
+        }
     }
 
     /// @notice Redeem QUEEN and wait in the redemption queue. Redeemed underlying tokens will

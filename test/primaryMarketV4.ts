@@ -51,6 +51,7 @@ describe("PrimaryMarketV4", function () {
         await fund.mock.getTotalUnderlying.returns(TOTAL_UNDERLYING);
         await fund.mock.getEquivalentTotalQ.returns(EQUIVALENT_TOTAL_Q);
         await fund.mock.splitRatio.returns(SPLIT_RATIO);
+        await fund.mock.strategy.returns(ethers.constants.AddressZero);
         await btc.mint(fund.address, TOTAL_UNDERLYING);
         const PrimaryMarket = await ethers.getContractFactory("PrimaryMarketV4");
         const primaryMarket = await PrimaryMarket.connect(owner).deploy(
