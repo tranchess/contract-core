@@ -24,7 +24,6 @@ contract CurveRouter {
 
     ICurvePool public immutable curvePool;
     address public immutable WETH20;
-    bool public immutable useETH;
     LiquidityGaugeCurve public immutable tranchessLiquidityGauge;
     IERC20 public immutable curveLiquidityToken;
     address[2] public coins;
@@ -34,14 +33,6 @@ contract CurveRouter {
         WETH20 = ICurvePool(curvePool_).WETH20();
         coins[0] = ICurvePool(curvePool_).coins(0);
         coins[1] = ICurvePool(curvePool_).coins(1);
-        bool useETH_ = false;
-        if (
-            coins[0] == ICurvePool(curvePool_).WETH20() ||
-            coins[1] == ICurvePool(curvePool_).WETH20()
-        ) {
-            useETH_ = true;
-        }
-        useETH = useETH_;
 
         tranchessLiquidityGauge = LiquidityGaugeCurve(tranchessLiquidityGauge_);
         curveLiquidityToken = LiquidityGaugeCurve(tranchessLiquidityGauge_).curveLiquidityToken();
@@ -58,8 +49,6 @@ contract CurveRouter {
             if (coins[i] != WETH20) {
                 IERC20(coins[i]).safeTransferFrom(msg.sender, address(this), amounts[i]);
                 IERC20(coins[i]).safeApprove(address(curvePool), amounts[i]);
-            } else {
-                require(amounts[i] == msg.value, "Sanity check");
             }
         }
 
@@ -67,7 +56,7 @@ contract CurveRouter {
             lpToken = curvePool.add_liquidity{value: msg.value}(
                 amounts,
                 minMintAmount,
-                useETH,
+                true,
                 address(this)
             );
             curveLiquidityToken.safeApprove(address(tranchessLiquidityGauge), lpToken);
@@ -76,7 +65,7 @@ contract CurveRouter {
             lpToken = curvePool.add_liquidity{value: msg.value}(
                 amounts,
                 minMintAmount,
-                useETH,
+                true,
                 msg.sender
             );
         }
