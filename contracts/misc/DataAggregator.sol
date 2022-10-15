@@ -19,6 +19,8 @@ import "../swap/StableSwap.sol";
 import "../swap/LiquidityGauge.sol";
 import "../swap/SwapBonus.sol";
 import "../swap/SwapRouter.sol";
+import "../swap/LiquidityGaugeCurve.sol";
+import "../swap/CurveRouter.sol";
 import "../governance/InterestRateBallotV2.sol";
 import "../governance/FeeDistributor.sol";
 import "../governance/VotingEscrowV2.sol";
@@ -119,6 +121,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         GovernanceData governance;
         FeeDistributorData[] feeDistributors;
         ExternalSwapData[] externalSwaps;
+        CurveData[] curvePools;
     }
 
     struct FundAllData {
@@ -250,6 +253,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         uint256 totalLocked;
         uint256 totalSupply;
         uint256 tradingWeekTotalSupply;
+        AnyCallSrcFee[] crossChainFees;
         IVotingEscrow.LockedBalance account;
     }
 
@@ -301,11 +305,53 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         uint256 unlockTime;
     }
 
+    struct AnyCallSrcFee {
+        uint256 chainId;
+        uint256 fee;
+    }
+
     struct ExternalSwapData {
         string symbol0;
         string symbol1;
         uint112 reserve0;
         uint112 reserve1;
+    }
+
+    struct CurveData {
+        CurvePoolData pool;
+        CurveGaugeData gauge;
+    }
+
+    struct CurvePoolData {
+        uint256 fee;
+        address lpToken;
+        address[2] coins;
+        uint256[2] balances;
+        uint256 priceOracle;
+        uint256 lpTotalSupply;
+        uint256 lpPrice;
+        CurvePoolAccountData account;
+    }
+
+    struct CurvePoolAccountData {
+        uint256[2] balances;
+        uint256[2] allowances;
+        uint256 lpBalance;
+    }
+
+    struct CurveGaugeData {
+        uint256 chessRate;
+        uint256 totalSupply;
+        uint256 workingSupply;
+        CurveGaugeAccountData account;
+    }
+
+    struct CurveGaugeAccountData {
+        uint256 balance;
+        uint256 allowance;
+        uint256 workingBalance;
+        uint256 claimableChess;
+        uint256 claimableBonus;
     }
 
     string public constant VERSION = "2.0.0";
@@ -318,6 +364,10 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
     address public immutable swapRouter;
     address public immutable flashSwapRouter;
     address public immutable bishopQuoteToken;
+    address public immutable anyCallProxy;
+    uint256 private immutable _otherChainCount;
+
+    uint256[255] public otherChainIds;
 
     constructor(
         address votingEscrow_,
@@ -326,7 +376,9 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         address interestRateBallot_,
         address swapRouter_,
         address flashSwapRouter_,
-        address bishopQuoteToken_
+        address bishopQuoteToken_,
+        address anyCallProxy_,
+        uint256[] memory otherChainIds_
     ) public {
         votingEscrow = votingEscrow_;
         chessSchedule = chessSchedule_;
@@ -336,6 +388,11 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         swapRouter = swapRouter_;
         flashSwapRouter = flashSwapRouter_;
         bishopQuoteToken = bishopQuoteToken_;
+        anyCallProxy = anyCallProxy_;
+        _otherChainCount = otherChainIds_.length;
+        for (uint256 i = 0; i < otherChainIds_.length; i++) {
+            otherChainIds[i] = otherChainIds_[i];
+        }
     }
 
     function getData(
@@ -343,6 +400,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         address[] calldata shareStakings,
         address[] calldata feeDistributors,
         address[] calldata externalSwaps,
+        address[] calldata curveRouters,
         address account
     ) public returns (Data memory data) {
         data.blockNumber = block.number;
@@ -367,6 +425,11 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
                 externalSwaps[i * 3 + 1],
                 externalSwaps[i * 3 + 2]
             );
+        }
+
+        data.curvePools = new CurveData[](curveRouters.length);
+        for (uint256 i = 0; i < curveRouters.length; i++) {
+            data.curvePools[i] = getCurveData(curveRouters[i], account);
         }
     }
 
@@ -790,6 +853,21 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             abi.encodeWithSelector(VotingEscrowV2.totalSupplyAtTimestamp.selector, blockCurrentWeek)
         )
             .toUint();
+        data.votingEscrow.crossChainFees = new AnyCallSrcFee[](_otherChainCount);
+        for (uint256 i = 0; i < _otherChainCount; i++) {
+            AnyCallSrcFee memory fee = data.votingEscrow.crossChainFees[i];
+            fee.chainId = otherChainIds[i];
+            fee.fee = anyCallProxy
+                .get(
+                abi.encodeWithSignature(
+                    "calcSrcFees(address,uint256,uint256)",
+                    votingEscrow,
+                    fee.chainId,
+                    96
+                )
+            )
+                .toUint();
+        }
         (data.votingEscrow.account.amount, data.votingEscrow.account.unlockTime) = votingEscrow
             .get(abi.encodeWithSelector(VotingEscrowV2.getLockedBalance.selector, account))
             .toUintUint();
@@ -934,5 +1012,87 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         } else {
             (data.reserve1, data.reserve0, ) = pair.getReserves();
         }
+    }
+
+    function getCurveData(address curveRouter, address account)
+        public
+        returns (CurveData memory data)
+    {
+        data.pool = getCurvePoolData(curveRouter, account);
+        data.gauge = getCurveGaugeData(curveRouter, account);
+    }
+
+    function getCurvePoolData(address curveRouter, address account)
+        public
+        view
+        returns (CurvePoolData memory data)
+    {
+        address pool =
+            curveRouter.get(abi.encodeWithSelector(CurveRouter(0).curvePool.selector)).toAddr();
+        address lp =
+            curveRouter
+                .get(abi.encodeWithSelector(CurveRouter(0).curveLiquidityToken.selector))
+                .toAddr();
+        data.fee = pool.get(abi.encodeWithSignature("fee()")).toUint();
+        data.lpToken = lp;
+        data.coins[0] = pool.get(abi.encodeWithSignature("coins(uint256)", 0)).toAddr();
+        data.coins[1] = pool.get(abi.encodeWithSignature("coins(uint256)", 1)).toAddr();
+        data.balances[0] = pool.get(abi.encodeWithSignature("balances(uint256)", 0)).toUint();
+        data.balances[1] = pool.get(abi.encodeWithSignature("balances(uint256)", 1)).toUint();
+        data.priceOracle = pool.get(abi.encodeWithSignature("price_oracle()")).toUint();
+        data.lpTotalSupply = lp.get(abi.encodeWithSignature("totalSupply()")).toUint();
+        data.lpPrice = pool.get(abi.encodeWithSignature("lp_price()")).toUint();
+
+        data.account.balances[0] = data.coins[0]
+            .get(abi.encodeWithSelector(IERC20.balanceOf.selector, account))
+            .toUint();
+        data.account.balances[1] = data.coins[1]
+            .get(abi.encodeWithSelector(IERC20.balanceOf.selector, account))
+            .toUint();
+        data.account.allowances[0] = data.coins[0]
+            .get(abi.encodeWithSelector(IERC20.allowance.selector, account, curveRouter))
+            .toUint();
+        data.account.allowances[1] = data.coins[1]
+            .get(abi.encodeWithSelector(IERC20.allowance.selector, account, curveRouter))
+            .toUint();
+        data.account.lpBalance = lp
+            .get(abi.encodeWithSelector(IERC20.balanceOf.selector, account))
+            .toUint();
+    }
+
+    function getCurveGaugeData(address curveRouter, address account)
+        public
+        returns (CurveGaugeData memory data)
+    {
+        address gauge =
+            curveRouter
+                .get(abi.encodeWithSelector(CurveRouter(0).tranchessLiquidityGauge.selector))
+                .toAddr();
+        address lp =
+            curveRouter
+                .get(abi.encodeWithSelector(CurveRouter(0).curveLiquidityToken.selector))
+                .toAddr();
+        (data.account.claimableChess, data.account.claimableBonus) = gauge
+            .post(abi.encodeWithSelector(LiquidityGaugeCurve.claimableRewards.selector, account))
+            .toUintUint();
+        data.account.balance = gauge
+            .post(abi.encodeWithSelector(LiquidityGaugeCurve(0).balanceOf.selector, account))
+            .toUint();
+        data.account.allowance = lp
+            .get(abi.encodeWithSelector(IERC20.allowance.selector, account, gauge))
+            .toUint();
+        data.account.workingBalance = gauge
+            .post(abi.encodeWithSelector(LiquidityGaugeCurve.workingBalanceOf.selector, account))
+            .toUint();
+
+        data.chessRate = gauge
+            .get(abi.encodeWithSelector(LiquidityGaugeCurve.getRate.selector))
+            .toUint();
+        data.totalSupply = gauge
+            .get(abi.encodeWithSelector(LiquidityGaugeCurve(0).totalSupply.selector))
+            .toUint();
+        data.workingSupply = gauge
+            .get(abi.encodeWithSelector(LiquidityGaugeCurve.workingSupply.selector))
+            .toUint();
     }
 }

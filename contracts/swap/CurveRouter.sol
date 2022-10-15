@@ -7,8 +7,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./LiquidityGaugeCurve.sol";
 
 interface ICurvePool {
-    function WETH20() external view returns (address);
-
     function coins(uint256 index) external view returns (address);
 
     function add_liquidity(
@@ -19,23 +17,29 @@ interface ICurvePool {
     ) external payable returns (uint256);
 }
 
+interface ICurveLiquidityToken {
+    function minter() external view returns (address);
+}
+
 contract CurveRouter {
     using SafeERC20 for IERC20;
 
-    ICurvePool public immutable curvePool;
-    address public immutable WETH20;
     LiquidityGaugeCurve public immutable tranchessLiquidityGauge;
+    address public immutable wrappedToken;
     IERC20 public immutable curveLiquidityToken;
+    ICurvePool public immutable curvePool;
     address[2] public coins;
 
-    constructor(address curvePool_, address tranchessLiquidityGauge_) public {
-        curvePool = ICurvePool(curvePool_);
-        WETH20 = ICurvePool(curvePool_).WETH20();
-        coins[0] = ICurvePool(curvePool_).coins(0);
-        coins[1] = ICurvePool(curvePool_).coins(1);
-
+    constructor(address tranchessLiquidityGauge_, address wrappedToken_) public {
         tranchessLiquidityGauge = LiquidityGaugeCurve(tranchessLiquidityGauge_);
-        curveLiquidityToken = LiquidityGaugeCurve(tranchessLiquidityGauge_).curveLiquidityToken();
+        wrappedToken = wrappedToken_;
+
+        IERC20 liquidityToken = LiquidityGaugeCurve(tranchessLiquidityGauge_).curveLiquidityToken();
+        curveLiquidityToken = liquidityToken;
+        ICurvePool pool = ICurvePool(ICurveLiquidityToken(address(liquidityToken)).minter());
+        curvePool = pool;
+        coins[0] = pool.coins(0);
+        coins[1] = pool.coins(1);
     }
 
     receive() external payable {}
@@ -46,7 +50,7 @@ contract CurveRouter {
         bool stakeFurther
     ) external payable returns (uint256 lpToken) {
         for (uint256 i = 0; i < coins.length; i++) {
-            if (coins[i] != WETH20) {
+            if (coins[i] != wrappedToken) {
                 IERC20(coins[i]).safeTransferFrom(msg.sender, address(this), amounts[i]);
                 IERC20(coins[i]).safeApprove(address(curvePool), amounts[i]);
             }
