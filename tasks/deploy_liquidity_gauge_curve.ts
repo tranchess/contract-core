@@ -8,6 +8,7 @@ import { updateHreSigner } from "./signers";
 
 export interface LiquidityGaugeCurveAddresses extends Addresses {
     gauge: string;
+    router: string;
 }
 
 task("deploy_liquidity_gauge_curve", "Deploy LiquidityGaugeCurve")
@@ -39,6 +40,10 @@ task("deploy_liquidity_gauge_curve", "Deploy LiquidityGaugeCurve")
             governanceAddresses.votingEscrow
         );
         console.log(`LiquidityGaugeCurve: ${gauge.address}`);
+
+        const CurveRouter = await ethers.getContractFactory("CurveRouter");
+        const router = await CurveRouter.deploy(gauge.address);
+        console.log(`CurveRouter: ${router.address}`);
 
         console.log("Setting Curve's rewards receiver to the treasury");
         await gauge.setRewardsReceiver(GOVERNANCE_CONFIG.TREASURY || deployer.address);
@@ -73,6 +78,7 @@ task("deploy_liquidity_gauge_curve", "Deploy LiquidityGaugeCurve")
         const addresses: LiquidityGaugeCurveAddresses = {
             ...newAddresses(hre),
             gauge: gauge.address,
+            router: router.address,
         };
         saveAddressFile(hre, "liquidity_gauge_curve", addresses);
     });
