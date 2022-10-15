@@ -14,6 +14,7 @@ export interface LiquidityGaugeCurveAddresses extends Addresses {
 task("deploy_liquidity_gauge_curve", "Deploy LiquidityGaugeCurve")
     .addParam("curveGauge", "Curve LiquidityGauge contract address")
     .addParam("curveMinter", "Curve Minter contract address")
+    .addParam("wrappedToken", "Wrapped native currency contract address")
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
         const { ethers } = hre;
@@ -27,6 +28,8 @@ task("deploy_liquidity_gauge_curve", "Deploy LiquidityGaugeCurve")
         );
         const curveMinter = await ethers.getContractAt(MINTER_ABI, args.curveMinter);
         assert.notStrictEqual(await curveMinter.controller(), ethers.constants.AddressZero);
+        const wrappedToken = await ethers.getContractAt("IERC20", args.wrappedToken);
+        assert.strictEqual((await wrappedToken.balanceOf(deployer.address)).toNumber(), 0);
         const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
 
         const LiquidityGaugeCurve = await ethers.getContractFactory("LiquidityGaugeCurve");
@@ -42,7 +45,7 @@ task("deploy_liquidity_gauge_curve", "Deploy LiquidityGaugeCurve")
         console.log(`LiquidityGaugeCurve: ${gauge.address}`);
 
         const CurveRouter = await ethers.getContractFactory("CurveRouter");
-        const router = await CurveRouter.deploy(gauge.address);
+        const router = await CurveRouter.deploy(gauge.address, wrappedToken.address);
         console.log(`CurveRouter: ${router.address}`);
 
         console.log("Setting Curve's rewards receiver to the treasury");
