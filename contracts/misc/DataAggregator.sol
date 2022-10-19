@@ -785,9 +785,20 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         data.lpTotalSupply = lp
             .get(abi.encodeWithSelector(LiquidityGauge(0).totalSupply.selector))
             .toUint();
-        if (data.lpTotalSupply != 0) {
-            // Handle rebalance
-            stableSwap.post(abi.encodeWithSelector(StableSwap.sync.selector));
+        (bool success, bytes memory encodedOraclePrice) =
+            stableSwap.staticcall(abi.encodeWithSelector(StableSwap.getOraclePrice.selector));
+        if (success) {
+            data.currentD = stableSwap
+                .get(abi.encodeWithSelector(StableSwap.getCurrentD.selector))
+                .toUint();
+            data.currentPrice = stableSwap
+                .get(abi.encodeWithSelector(StableSwap.getCurrentPrice.selector))
+                .toUint();
+            data.oraclePrice = abi.decode(encodedOraclePrice, (uint256));
+            if (data.lpTotalSupply != 0) {
+                // Handle rebalance
+                stableSwap.post(abi.encodeWithSelector(StableSwap.sync.selector));
+            }
         }
         data.lpWorkingSupply = lp
             .get(abi.encodeWithSelector(LiquidityGauge.workingSupply.selector))
@@ -818,18 +829,6 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             swapBonus.get(abi.encodeWithSelector(SwapBonus(0).endTimestamp.selector)).toUint()
             ? swapBonus.get(abi.encodeWithSelector(SwapBonus(0).ratePerSecond.selector)).toUint()
             : 0;
-
-        (bool success, bytes memory encodedOraclePrice) =
-            stableSwap.staticcall(abi.encodeWithSelector(StableSwap.getOraclePrice.selector));
-        if (success) {
-            data.currentD = stableSwap
-                .get(abi.encodeWithSelector(StableSwap.getCurrentD.selector))
-                .toUint();
-            data.currentPrice = stableSwap
-                .get(abi.encodeWithSelector(StableSwap.getCurrentPrice.selector))
-                .toUint();
-            data.oraclePrice = abi.decode(encodedOraclePrice, (uint256));
-        }
     }
 
     function getGovernanceData(address account) public view returns (GovernanceData memory data) {
