@@ -29,6 +29,7 @@ import "./tasks/deploy_flash_swap_router";
 import "./tasks/deploy_data_aggregator";
 import "./tasks/dev_deploy_anyswap";
 import "./tasks/dev_deploy_curve";
+import "./tasks/dev_deploy_deposit_contract";
 import "./tasks/dev_deploy_token_hub";
 import "./tasks/test_deploy";
 import { ETH_RPC, ETH_CHAIN_ID, DEPLOYER_PK, DEPLOYER_HD_PATH, ETHERSCAN_API_KEY } from "./config";
