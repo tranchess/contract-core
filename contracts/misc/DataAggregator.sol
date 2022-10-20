@@ -327,7 +327,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         address lpToken;
         address[2] coins;
         uint256[2] balances;
-        uint256 priceOracle;
+        uint256[2] prices;
         uint256 lpTotalSupply;
         uint256 lpPrice;
         CurvePoolAccountData account;
@@ -785,9 +785,20 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         data.lpTotalSupply = lp
             .get(abi.encodeWithSelector(LiquidityGauge(0).totalSupply.selector))
             .toUint();
-        if (data.lpTotalSupply != 0) {
-            // Handle rebalance
-            stableSwap.post(abi.encodeWithSelector(StableSwap.sync.selector));
+        (bool success, bytes memory encodedOraclePrice) =
+            stableSwap.staticcall(abi.encodeWithSelector(StableSwap.getOraclePrice.selector));
+        if (success) {
+            data.currentD = stableSwap
+                .get(abi.encodeWithSelector(StableSwap.getCurrentD.selector))
+                .toUint();
+            data.currentPrice = stableSwap
+                .get(abi.encodeWithSelector(StableSwap.getCurrentPrice.selector))
+                .toUint();
+            data.oraclePrice = abi.decode(encodedOraclePrice, (uint256));
+            if (data.lpTotalSupply != 0) {
+                // Handle rebalance
+                stableSwap.post(abi.encodeWithSelector(StableSwap.sync.selector));
+            }
         }
         data.lpWorkingSupply = lp
             .get(abi.encodeWithSelector(LiquidityGauge.workingSupply.selector))
@@ -818,18 +829,6 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             swapBonus.get(abi.encodeWithSelector(SwapBonus(0).endTimestamp.selector)).toUint()
             ? swapBonus.get(abi.encodeWithSelector(SwapBonus(0).ratePerSecond.selector)).toUint()
             : 0;
-
-        (bool success, bytes memory encodedOraclePrice) =
-            stableSwap.staticcall(abi.encodeWithSelector(StableSwap.getOraclePrice.selector));
-        if (success) {
-            data.currentD = stableSwap
-                .get(abi.encodeWithSelector(StableSwap.getCurrentD.selector))
-                .toUint();
-            data.currentPrice = stableSwap
-                .get(abi.encodeWithSelector(StableSwap.getCurrentPrice.selector))
-                .toUint();
-            data.oraclePrice = abi.decode(encodedOraclePrice, (uint256));
-        }
     }
 
     function getGovernanceData(address account) public view returns (GovernanceData memory data) {
@@ -1033,15 +1032,26 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             curveRouter
                 .get(abi.encodeWithSelector(CurveRouter(0).curveLiquidityToken.selector))
                 .toAddr();
-        data.fee = pool.get(abi.encodeWithSignature("fee()")).toUint();
         data.lpToken = lp;
+        data.lpTotalSupply = lp.get(abi.encodeWithSignature("totalSupply()")).toUint();
         data.coins[0] = pool.get(abi.encodeWithSignature("coins(uint256)", 0)).toAddr();
         data.coins[1] = pool.get(abi.encodeWithSignature("coins(uint256)", 1)).toAddr();
         data.balances[0] = pool.get(abi.encodeWithSignature("balances(uint256)", 0)).toUint();
         data.balances[1] = pool.get(abi.encodeWithSignature("balances(uint256)", 1)).toUint();
-        data.priceOracle = pool.get(abi.encodeWithSignature("price_oracle()")).toUint();
-        data.lpTotalSupply = lp.get(abi.encodeWithSignature("totalSupply()")).toUint();
-        data.lpPrice = pool.get(abi.encodeWithSignature("lp_price()")).toUint();
+        if (data.lpTotalSupply > 0) {
+            data.fee = pool.get(abi.encodeWithSignature("fee()")).toUint();
+            data.prices[0] =
+                pool
+                    .get(abi.encodeWithSignature("get_dy(uint256,uint256,uint256)", 0, 1, 1e14))
+                    .toUint() *
+                1e4;
+            data.prices[1] =
+                pool
+                    .get(abi.encodeWithSignature("get_dy(uint256,uint256,uint256)", 1, 0, 1e14))
+                    .toUint() *
+                1e4;
+            data.lpPrice = pool.get(abi.encodeWithSignature("lp_price()")).toUint();
+        }
 
         data.account.balances[0] = data.coins[0]
             .get(abi.encodeWithSelector(IERC20.balanceOf.selector, account))
