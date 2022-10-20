@@ -86,8 +86,8 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
 
     uint256 public totalValidatorCount;
     uint256 public operatorCursor;
-    mapping(uint256 => uint256) lastBeaconBalances;
-    mapping(uint256 => uint256) lastValidatorCounts;
+    mapping(uint256 => uint256) public lastBeaconBalances;
+    mapping(uint256 => uint256) public lastValidatorCounts;
 
     constructor(
         address fund_,
