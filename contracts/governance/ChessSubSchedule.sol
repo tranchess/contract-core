@@ -131,7 +131,7 @@ contract ChessSubSchedule is
         }
     }
 
-    function _anyFallback(bytes calldata) internal override {
+    function _anyFallback(bytes memory) internal override {
         revert("N/A");
     }
 }
