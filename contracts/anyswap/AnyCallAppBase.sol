@@ -73,20 +73,12 @@ abstract contract AnyCallAppBase {
     {
         (address from, uint256 fromChainID, ) =
             IAnyCallExecutor(IAnyCallV6Proxy(anyCallProxy).executor()).context();
-        uint256 chainID;
-        assembly {
-            chainID := chainid()
-        }
-        if (fromChainID == chainID) {
-            bytes4 selector = bytes4(abi.decode(data[0:32], (bytes32)));
+        bytes4 selector =
+            data.length >= 32 ? bytes4(abi.decode(data[0:32], (bytes32))) : bytes4("");
+        if (from == address(this) && selector == IAnyFallback.anyFallback.selector) {
             (address to, bytes memory fallbackData) =
                 abi.decode(data[4:data.length], (address, bytes));
-            require(selector == IAnyFallback.anyFallback.selector, "Unknown selector");
-            require(from == address(this), "Invalid anyFallback from");
-            require(
-                _checkAnyFallbackTo(to, fromChainID) && from == address(this),
-                "Invalid anyFallback from/to"
-            );
+            require(_checkAnyFallbackTo(to, fromChainID), "Invalid anyFallback to");
             _anyFallback(fallbackData);
             return (true, "");
         }
