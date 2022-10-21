@@ -110,7 +110,7 @@ contract ChessSubSchedule is
     }
 
     function _checkAnyFallbackTo(address, uint256) internal override returns (bool) {
-        revert("N/A");
+        return false;
     }
 
     /// @dev Receive CHESS emission from the main chain.

@@ -83,7 +83,7 @@ contract ChessScheduleRelayer is CoreUtility, AnyCallAppBase {
     }
 
     function _checkAnyFallbackTo(address, uint256) internal override returns (bool) {
-        revert("N/A");
+        return false;
     }
 
     function _anyExecute(uint256, bytes calldata data) internal override {

@@ -73,8 +73,7 @@ abstract contract AnyCallAppBase {
     {
         (address from, uint256 fromChainID, ) =
             IAnyCallExecutor(IAnyCallV6Proxy(anyCallProxy).executor()).context();
-        bytes4 selector =
-            data.length >= 32 ? bytes4(abi.decode(data[0:32], (bytes32))) : bytes4("");
+        bytes4 selector = data.length >= 32 ? abi.decode(data[0:32], (bytes4)) : bytes4(0);
         if (from == address(this) && selector == IAnyFallback.anyFallback.selector) {
             (address to, bytes memory fallbackData) =
                 abi.decode(data[4:data.length], (address, bytes));
