@@ -354,6 +354,10 @@ contract VotingEscrowV3 is
         return from == crossChainVotingEscrows[fromChainID];
     }
 
+    function _checkAnyFallbackTo(address to, uint256 fromChainID) internal override returns (bool) {
+        return to == crossChainVotingEscrows[fromChainID];
+    }
+
     /// @dev Receive cross chain veCHESS transfer.
     function _anyExecute(uint256 fromChainID, bytes calldata data) internal override {
         (address account, uint256 amount, uint256 unlockTime) =
@@ -363,7 +367,7 @@ contract VotingEscrowV3 is
 
     /// @dev When `veChessCrossChain` failed, this function is called by the anyCall proxy
     ///      to add locked CHESS back to the account.
-    function _anyFallback(bytes calldata data) internal override {
+    function _anyFallback(bytes memory data) internal override {
         (address account, uint256 amount, uint256 unlockTime) =
             abi.decode(data, (address, uint256, uint256));
         _receiveCrossChain(account, amount, unlockTime, 0);

@@ -23,6 +23,10 @@ interface IAnyCallExecutor {
         );
 }
 
+interface IAnyFallback {
+    function anyFallback(address to, bytes calldata data) external;
+}
+
 abstract contract AnyCallAppBase {
     uint256 private constant ANY_CALL_FLAG_PAY_ON_DEST = 0;
     uint256 private constant ANY_CALL_FLAG_PAY_ON_SRC = 2;
@@ -69,6 +73,15 @@ abstract contract AnyCallAppBase {
     {
         (address from, uint256 fromChainID, ) =
             IAnyCallExecutor(IAnyCallV6Proxy(anyCallProxy).executor()).context();
+        bytes4 selector = data.length >= 32 ? abi.decode(data[0:32], (bytes4)) : bytes4(0);
+        if (from == address(this) && selector == IAnyFallback.anyFallback.selector) {
+            (address to, bytes memory fallbackData) =
+                abi.decode(data[4:data.length], (address, bytes));
+            require(_checkAnyFallbackTo(to, fromChainID), "Invalid anyFallback to");
+            _anyFallback(fallbackData);
+            return (true, "");
+        }
+
         require(
             _checkAnyExecuteFrom(from, fromChainID) && from != address(0),
             "Invalid anyExecute from"
@@ -77,19 +90,14 @@ abstract contract AnyCallAppBase {
         return (true, "");
     }
 
-    function anyFallback(
-        address, // to
-        bytes calldata data
-    ) external onlyExecutor {
-        _anyFallback(data);
-    }
-
     function _checkAnyExecuteFrom(address from, uint256 fromChainID)
         internal
         virtual
         returns (bool);
 
+    function _checkAnyFallbackTo(address to, uint256 fromChainID) internal virtual returns (bool);
+
     function _anyExecute(uint256 fromChainID, bytes calldata data) internal virtual;
 
-    function _anyFallback(bytes calldata data) internal virtual;
+    function _anyFallback(bytes memory data) internal virtual;
 }

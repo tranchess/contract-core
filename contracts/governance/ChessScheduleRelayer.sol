@@ -82,6 +82,10 @@ contract ChessScheduleRelayer is CoreUtility, AnyCallAppBase {
         return from == subSchedule && fromChainID == subChainID;
     }
 
+    function _checkAnyFallbackTo(address, uint256) internal override returns (bool) {
+        return false;
+    }
+
     function _anyExecute(uint256, bytes calldata data) internal override {
         (uint256 week, uint256 supply, uint256 nextWeekSupply) =
             abi.decode(data, (uint256, uint256, uint256));
