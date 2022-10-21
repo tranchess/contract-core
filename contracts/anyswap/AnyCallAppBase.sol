@@ -16,6 +16,7 @@ interface IAnyCallV6Proxy {
 interface IAnyCallExecutor {
     function context()
         external
+        view
         returns (
             address from,
             uint256 fromChainID,
