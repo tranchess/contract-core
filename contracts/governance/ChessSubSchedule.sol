@@ -109,6 +109,10 @@ contract ChessSubSchedule is
         return from == scheduleRelayer && fromChainID == mainChainID;
     }
 
+    function _checkAnyFallbackTo(address, uint256) internal override returns (bool) {
+        revert("N/A");
+    }
+
     /// @dev Receive CHESS emission from the main chain.
     function _anyExecute(
         uint256, // fromChainID

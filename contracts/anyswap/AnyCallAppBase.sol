@@ -79,10 +79,14 @@ abstract contract AnyCallAppBase {
         }
         if (fromChainID == chainID) {
             bytes4 selector = bytes4(abi.decode(data[0:32], (bytes32)));
-            (address to, bytes memory fallbackData) = abi.decode(data[4:68], (address, bytes));
+            (address to, bytes memory fallbackData) =
+                abi.decode(data[4:data.length], (address, bytes));
             require(selector == IAnyFallback.anyFallback.selector, "Unknown selector");
             require(from == address(this), "Invalid anyFallback from");
-            require(to == address(this), "Invalid anyFallback to");
+            require(
+                _checkAnyFallbackTo(to, fromChainID) && from == address(this),
+                "Invalid anyFallback from/to"
+            );
             _anyFallback(fallbackData);
             return (true, "");
         }
@@ -99,6 +103,8 @@ abstract contract AnyCallAppBase {
         internal
         virtual
         returns (bool);
+
+    function _checkAnyFallbackTo(address to, uint256 fromChainID) internal virtual returns (bool);
 
     function _anyExecute(uint256 fromChainID, bytes calldata data) internal virtual;
 

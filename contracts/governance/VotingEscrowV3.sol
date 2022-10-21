@@ -354,6 +354,10 @@ contract VotingEscrowV3 is
         return from == crossChainVotingEscrows[fromChainID];
     }
 
+    function _checkAnyFallbackTo(address to, uint256 fromChainID) internal override returns (bool) {
+        return to == crossChainVotingEscrows[fromChainID];
+    }
+
     /// @dev Receive cross chain veCHESS transfer.
     function _anyExecute(uint256 fromChainID, bytes calldata data) internal override {
         (address account, uint256 amount, uint256 unlockTime) =
