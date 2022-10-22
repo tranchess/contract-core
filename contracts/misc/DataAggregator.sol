@@ -323,6 +323,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
     }
 
     struct CurvePoolData {
+        address pool;
         uint256 fee;
         address lpToken;
         address[2] coins;
@@ -340,6 +341,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
     }
 
     struct CurveGaugeData {
+        address gauge;
         uint256 chessRate;
         uint256 totalSupply;
         uint256 workingSupply;
@@ -1032,6 +1034,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             curveRouter
                 .get(abi.encodeWithSelector(CurveRouter(0).curveLiquidityToken.selector))
                 .toAddr();
+        data.pool = pool;
         data.lpToken = lp;
         data.lpTotalSupply = lp.get(abi.encodeWithSignature("totalSupply()")).toUint();
         data.coins[0] = pool.get(abi.encodeWithSignature("coins(uint256)", 0)).toAddr();
@@ -1095,6 +1098,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             .post(abi.encodeWithSelector(LiquidityGaugeCurve.workingBalanceOf.selector, account))
             .toUint();
 
+        data.gauge = gauge;
         data.chessRate = gauge
             .get(abi.encodeWithSelector(LiquidityGaugeCurve.getRate.selector))
             .toUint();
