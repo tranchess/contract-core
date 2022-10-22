@@ -267,6 +267,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
     struct ControllerBallotData {
         address[] pools;
         uint256[] currentSums;
+        uint256[] lastWeekSums;
         ControllerBallotAccountData account;
     }
 
@@ -921,12 +922,13 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         data.pools = controllerBallot
             .get(abi.encodeWithSelector(ControllerBallotV2.getPools.selector))
             .toAddrs();
-        // TODO handle disabled pools
         data.currentSums = new uint256[](data.pools.length);
+        data.lastWeekSums = new uint256[](data.pools.length);
         (data.account.amount, data.account.unlockTime) = controllerBallot
             .get(abi.encodeWithSelector(ControllerBallotV2(0).userLockedBalances.selector, account))
             .toUintUint();
         data.account.weights = new uint256[](data.pools.length);
+        uint256 blockCurrentWeek = _endOfWeek(block.timestamp);
         for (uint256 i = 0; i < data.pools.length; i++) {
             address pool = data.pools[i];
             data.currentSums[i] = controllerBallot
@@ -934,7 +936,16 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
                 abi.encodeWithSelector(
                     ControllerBallotV2.sumAtWeek.selector,
                     pool,
-                    _endOfWeek(block.timestamp)
+                    blockCurrentWeek
+                )
+            )
+                .toUint();
+            data.lastWeekSums[i] = controllerBallot
+                .get(
+                abi.encodeWithSelector(
+                    ControllerBallotV2.sumAtWeek.selector,
+                    pool,
+                    blockCurrentWeek - 1 weeks
                 )
             )
                 .toUint();
