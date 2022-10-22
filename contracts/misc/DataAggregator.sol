@@ -267,6 +267,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
     struct ControllerBallotData {
         address[] pools;
         uint256[] currentSums;
+        uint256[] lastWeekSums;
         ControllerBallotAccountData account;
     }
 
@@ -323,6 +324,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
     }
 
     struct CurvePoolData {
+        address pool;
         uint256 fee;
         address lpToken;
         address[2] coins;
@@ -340,6 +342,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
     }
 
     struct CurveGaugeData {
+        address gauge;
         uint256 chessRate;
         uint256 totalSupply;
         uint256 workingSupply;
@@ -919,12 +922,13 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         data.pools = controllerBallot
             .get(abi.encodeWithSelector(ControllerBallotV2.getPools.selector))
             .toAddrs();
-        // TODO handle disabled pools
         data.currentSums = new uint256[](data.pools.length);
+        data.lastWeekSums = new uint256[](data.pools.length);
         (data.account.amount, data.account.unlockTime) = controllerBallot
             .get(abi.encodeWithSelector(ControllerBallotV2(0).userLockedBalances.selector, account))
             .toUintUint();
         data.account.weights = new uint256[](data.pools.length);
+        uint256 blockCurrentWeek = _endOfWeek(block.timestamp);
         for (uint256 i = 0; i < data.pools.length; i++) {
             address pool = data.pools[i];
             data.currentSums[i] = controllerBallot
@@ -932,7 +936,16 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
                 abi.encodeWithSelector(
                     ControllerBallotV2.sumAtWeek.selector,
                     pool,
-                    _endOfWeek(block.timestamp)
+                    blockCurrentWeek
+                )
+            )
+                .toUint();
+            data.lastWeekSums[i] = controllerBallot
+                .get(
+                abi.encodeWithSelector(
+                    ControllerBallotV2.sumAtWeek.selector,
+                    pool,
+                    blockCurrentWeek - 1 weeks
                 )
             )
                 .toUint();
@@ -1032,6 +1045,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             curveRouter
                 .get(abi.encodeWithSelector(CurveRouter(0).curveLiquidityToken.selector))
                 .toAddr();
+        data.pool = pool;
         data.lpToken = lp;
         data.lpTotalSupply = lp.get(abi.encodeWithSignature("totalSupply()")).toUint();
         data.coins[0] = pool.get(abi.encodeWithSignature("coins(uint256)", 0)).toAddr();
@@ -1095,6 +1109,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             .post(abi.encodeWithSelector(LiquidityGaugeCurve.workingBalanceOf.selector, account))
             .toUint();
 
+        data.gauge = gauge;
         data.chessRate = gauge
             .get(abi.encodeWithSelector(LiquidityGaugeCurve.getRate.selector))
             .toUint();
