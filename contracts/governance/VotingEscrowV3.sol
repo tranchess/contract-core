@@ -303,7 +303,12 @@ contract VotingEscrowV3 is
     ///         `IAnyCallV6Proxy(thisContract.anyCallProxy()).calcSrcFees(thisContract, toChainID, 96)`.
     /// @param amount Amount of locked CHESS
     /// @param toChainID Target chain ID
-    function veChessCrossChain(uint256 amount, uint256 toChainID) external payable {
+    function veChessCrossChain(uint256 amount, uint256 toChainID)
+        external
+        payable
+        nonReentrant
+        whenNotPaused
+    {
         LockedBalance memory lockedBalance = locked[msg.sender];
         require(amount > 0, "Zero value");
         require(
@@ -319,9 +324,6 @@ contract VotingEscrowV3 is
             lockedBalance.unlockTime
         );
         locked[msg.sender].amount = newAmount;
-        if (newAmount == 0) {
-            locked[msg.sender].unlockTime = 0;
-        }
 
         // Deposit CHESS to AnySwap pool
         address underlying = IAnyswapV6ERC20(anyswapChess).underlying();
@@ -340,6 +342,13 @@ contract VotingEscrowV3 is
 
         if (callback != address(0)) {
             IVotingEscrowCallback(callback).syncWithVotingEscrow(msg.sender);
+        }
+
+        // Unlock time can only be reset after the callback is invoked, because some veCHESS-related
+        // contracts won't refresh the user's locked balance in `syncWithVotingEscrow()` if
+        // unlock time is zero.
+        if (newAmount == 0) {
+            locked[msg.sender].unlockTime = 0;
         }
 
         emit AmountDecreased(msg.sender, amount);
@@ -378,7 +387,7 @@ contract VotingEscrowV3 is
         uint256 amount,
         uint256 unlockTime,
         uint256 fromChainID
-    ) private {
+    ) private nonReentrant {
         require(
             unlockTime + 1 weeks == _endOfWeek(unlockTime),
             "Unlock time must be end of a week"
