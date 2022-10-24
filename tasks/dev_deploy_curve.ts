@@ -162,11 +162,11 @@ task("dev_deploy_curve", "Deploy the Curve factory and a pool for QUEEN")
         console.log(`Factory: ${factory.address}`);
 
         await factory.deploy_pool(
-            "Pool Name",
-            "PoolSym",
-            [shareQ.address, wrappedToken.address],
+            "qETH",
+            "qETH-ETH",
+            [wrappedToken.address, shareQ.address],
             200000000, // A
-            parseEther("0.0001"), // gamma
+            parseEther("0.01"), // gamma
             parseUnits("0.05", 8), // mid_fee
             parseUnits("0.45", 8), // out_fee
             parseEther("0.00000001"), // allowed_extra_profit
