@@ -1,6 +1,14 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
+
+interface IAddressWhitelist {
+    function check(address account) external view returns (bool);
+}
+
+interface IVotingEscrowCallback {
+    function syncWithVotingEscrow(address account) external;
+}
 
 interface IVotingEscrow {
     struct LockedBalance {

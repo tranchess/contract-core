@@ -147,7 +147,7 @@ describe("FlashSwapRouter", function () {
             from: owner.address,
             nonce: (await owner.getTransactionCount("pending")) + 1,
         });
-        const StableSwap = await ethers.getContractFactory("BishopStableSwap");
+        const StableSwap = await ethers.getContractFactory("BishopStableSwapV2");
         const stableSwap = await StableSwap.connect(owner).deploy(
             lpTokenAddress,
             fund.address,

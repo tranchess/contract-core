@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -29,13 +29,15 @@ contract BatchKeeperHelperBase is KeeperCompatibleInterface, Ownable {
     }
 
     function addAllowlist(address contractAddress) external onlyOwner {
-        _allowlist.add(contractAddress);
-        emit AllowlistAdded(contractAddress);
+        if (_allowlist.add(contractAddress)) {
+            emit AllowlistAdded(contractAddress);
+        }
     }
 
     function removeAllowlist(address contractAddress) external onlyOwner {
-        _allowlist.remove(contractAddress);
-        emit AllowlistRemoved(contractAddress);
+        if (_allowlist.remove(contractAddress)) {
+            emit AllowlistRemoved(contractAddress);
+        }
     }
 
     function checkUpkeep(bytes calldata)

@@ -8,6 +8,7 @@ export interface MockAddresses extends Addresses {
     mockVToken: string;
     mockBtc: string;
     mockEth: string;
+    mockWeth: string;
     mockWbnb: string;
     mockUsdc: string;
     mockBusd: string;
@@ -100,6 +101,14 @@ task("deploy_mock", "Deploy mock contracts")
             await mockBusd.mint(deployer.address, 1000000e6);
         }
 
+        let mockWethAddress = "";
+        if (args.silent || keyInYNStrict("Deploy MockWeth?", { guide: true })) {
+            const MockWrappedToken = await ethers.getContractFactory("MockWrappedToken");
+            const mockWeth = await MockWrappedToken.deploy("Wrapped ETH", "WETH");
+            console.log(`MockWeth: ${mockWeth.address}`);
+            mockWethAddress = mockWeth.address;
+        }
+
         let mockUniswapV2PairAddress = "";
         if (args.silent || keyInYNStrict("Deploy MockUniswapV2Pair?", { guide: true })) {
             const MockUniswapV2Pair = await ethers.getContractAt(
@@ -123,6 +132,7 @@ task("deploy_mock", "Deploy mock contracts")
             mockVToken: mockVTokenAddress,
             mockBtc: mockBtcAddress,
             mockEth: mockEthAddress,
+            mockWeth: mockWethAddress,
             mockWbnb: mockWbnbAddress,
             mockUsdc: mockUsdcAddress,
             mockBusd: mockBusdAddress,

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
@@ -169,20 +169,6 @@ interface IFundV3 {
         uint256 targetVersion
     ) external;
 
-    function primaryMarketMint(
-        uint256 tranche,
-        address account,
-        uint256 amount,
-        uint256 version
-    ) external;
-
-    function primaryMarketBurn(
-        uint256 tranche,
-        address account,
-        uint256 amount,
-        uint256 version
-    ) external;
-
     function shareTransfer(
         address sender,
         address recipient,
@@ -221,24 +207,6 @@ interface IFundV3 {
     function getStrategyUnderlying() external view returns (uint256);
 
     function getTotalDebt() external view returns (uint256);
-
-    function transferToStrategy(uint256 amount) external;
-
-    function transferFromStrategy(uint256 amount) external;
-
-    function reportProfit(uint256 profit, uint256 performanceFee) external;
-
-    function reportLoss(uint256 loss) external;
-
-    function primaryMarketTransferUnderlying(
-        address recipient,
-        uint256 amount,
-        uint256 fee
-    ) external;
-
-    function primaryMarketAddDebt(uint256 amount, uint256 fee) external;
-
-    function primaryMarketPayDebt(uint256 amount) external;
 
     event RebalanceTriggered(
         uint256 indexed index,

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
@@ -13,6 +13,8 @@ import "../utils/CoreUtility.sol";
 
 import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/IFundV3.sol";
+import "../interfaces/IFundForPrimaryMarketV3.sol";
+import "../interfaces/IFundForStrategy.sol";
 import "../interfaces/IShareV2.sol";
 import "../interfaces/ITwapOracleV2.sol";
 import "../interfaces/IAprOracle.sol";
@@ -21,7 +23,15 @@ import "../interfaces/IVotingEscrow.sol";
 
 import "./FundRolesV2.sol";
 
-contract FundV3 is IFundV3, Ownable, ReentrancyGuard, FundRolesV2, CoreUtility {
+contract FundV3 is
+    IFundV3,
+    IFundForPrimaryMarketV3,
+    IFundForStrategy,
+    Ownable,
+    ReentrancyGuard,
+    FundRolesV2,
+    CoreUtility
+{
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;

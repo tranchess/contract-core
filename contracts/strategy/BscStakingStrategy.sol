@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../utils/SafeDecimalMath.sol";
 
 import "../interfaces/IFundV3.sol";
+import "../interfaces/IFundForStrategy.sol";
 import "../interfaces/IWrappedERC20.sol";
 
 interface ITokenHub {
@@ -47,7 +48,7 @@ contract BscStakingStrategy is Ownable {
     uint256 private constant MAX_ESTIMATED_DAILY_PROFIT_RATE = 0.1e18;
     uint256 private constant MAX_PERFORMANCE_FEE_RATE = 0.5e18;
 
-    IFundV3 public immutable fund;
+    address public immutable fund;
     address private immutable _tokenUnderlying;
 
     /// @notice BEP2 address that does the actual staking on Binance Chain.
@@ -77,7 +78,7 @@ contract BscStakingStrategy is Ownable {
         address staker_,
         uint256 performanceFeeRate_
     ) public {
-        fund = IFundV3(fund_);
+        fund = fund_;
         _tokenUnderlying = IFundV3(fund_).tokenUnderlying();
         staker = staker_;
         performanceFeeRate = performanceFeeRate_;
@@ -104,7 +105,7 @@ contract BscStakingStrategy is Ownable {
     /// @notice Report daily profit to the fund by a reporter.
     /// @param amount Absolute profit, which must be no greater than twice the estimation
     function accrueProfit(uint256 amount) external onlyReporter {
-        uint256 total = fund.getStrategyUnderlying();
+        uint256 total = IFundV3(fund).getStrategyUnderlying();
         require(
             amount / 2 <= total.multiplyDecimal(estimatedDailyProfitRate),
             "Profit out of range"
@@ -114,12 +115,12 @@ contract BscStakingStrategy is Ownable {
 
     /// @notice Report daily profit according to the pre-configured rate by a reporter.
     function accrueEstimatedProfit() external onlyReporter {
-        uint256 total = fund.getStrategyUnderlying();
+        uint256 total = IFundV3(fund).getStrategyUnderlying();
         _accrueProfit(total.multiplyDecimal(estimatedDailyProfitRate));
     }
 
     function _accrueProfit(uint256 amount) private {
-        uint256 currentDay = fund.currentDay();
+        uint256 currentDay = IFundV3(fund).currentDay();
         uint256 oldReportedDay = reportedDay;
         require(oldReportedDay < currentDay, "Already reported");
         reportedDay = oldReportedDay + 1 days;
@@ -129,12 +130,12 @@ contract BscStakingStrategy is Ownable {
     function updateEstimatedDailyProfitRate(uint256 rate) external onlyOwner {
         require(rate < MAX_ESTIMATED_DAILY_PROFIT_RATE);
         estimatedDailyProfitRate = rate;
-        reportedDay = fund.currentDay();
+        reportedDay = IFundV3(fund).currentDay();
     }
 
     /// @notice Report profit to the fund by the owner.
     function reportProfit(uint256 amount) external onlyOwner {
-        reportedDay = fund.currentDay();
+        reportedDay = IFundV3(fund).currentDay();
         _reportProfit(amount);
     }
 
@@ -144,22 +145,22 @@ contract BscStakingStrategy is Ownable {
         uint256 oldDrawdown = currentDrawdown;
         if (amount < oldDrawdown) {
             currentDrawdown = oldDrawdown - amount;
-            fund.reportProfit(amount, 0);
+            IFundForStrategy(fund).reportProfit(amount, 0);
         } else {
             if (oldDrawdown > 0) {
                 currentDrawdown = 0;
             }
             uint256 performanceFee = (amount - oldDrawdown).multiplyDecimal(performanceFeeRate);
-            fund.reportProfit(amount, performanceFee);
+            IFundForStrategy(fund).reportProfit(amount, performanceFee);
         }
     }
 
     /// @notice Report loss to the fund. Performance fee will not be charged until
     ///         the current drawdown is covered.
     function reportLoss(uint256 amount) external onlyOwner {
-        reportedDay = fund.currentDay();
+        reportedDay = IFundV3(fund).currentDay();
         currentDrawdown = currentDrawdown.add(amount);
-        fund.reportLoss(amount);
+        IFundForStrategy(fund).reportLoss(amount);
     }
 
     function updateStaker(address newStaker) external onlyOwner {
@@ -176,7 +177,7 @@ contract BscStakingStrategy is Ownable {
     /// @notice Transfer underlying tokens from the fund to the staker on Binance Chain.
     /// @param amount Amount of underlying transfered from the fund, including cross-chain relay fee
     function transferToStaker(uint256 amount) external onlyOwner {
-        fund.transferToStrategy(amount);
+        IFundForStrategy(fund).transferToStrategy(amount);
         _unwrap(amount);
         uint256 relayFee = TOKEN_HUB.getMiniRelayFee();
         require(
@@ -197,8 +198,8 @@ contract BscStakingStrategy is Ownable {
             _wrap(unwrapped);
         }
         uint256 amount = IWrappedERC20(_tokenUnderlying).balanceOf(address(this));
-        IWrappedERC20(_tokenUnderlying).safeApprove(address(fund), amount);
-        fund.transferFromStrategy(amount);
+        IWrappedERC20(_tokenUnderlying).safeApprove(fund, amount);
+        IFundForStrategy(fund).transferFromStrategy(amount);
     }
 
     /// @notice Receive cross-chain transfer from the staker.

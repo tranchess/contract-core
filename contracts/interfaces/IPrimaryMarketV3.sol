@@ -1,10 +1,8 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 
-import "./IFundV3.sol";
-
 interface IPrimaryMarketV3 {
-    function fund() external view returns (IFundV3);
+    function fund() external view returns (address);
 
     function getCreation(uint256 underlying) external view returns (uint256 outQ);
 

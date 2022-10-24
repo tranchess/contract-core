@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
@@ -8,7 +8,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../utils/CoreUtility.sol";
 import "../utils/SafeDecimalMath.sol";
 
-import {IVotingEscrowCallback} from "../governance/VotingEscrowV2.sol";
 import "../interfaces/IControllerBallot.sol";
 import "../interfaces/IVotingEscrow.sol";
 
