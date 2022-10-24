@@ -324,9 +324,6 @@ contract VotingEscrowV3 is
             lockedBalance.unlockTime
         );
         locked[msg.sender].amount = newAmount;
-        if (newAmount == 0) {
-            locked[msg.sender].unlockTime = 0;
-        }
 
         // Deposit CHESS to AnySwap pool
         address underlying = IAnyswapV6ERC20(anyswapChess).underlying();
@@ -345,6 +342,13 @@ contract VotingEscrowV3 is
 
         if (callback != address(0)) {
             IVotingEscrowCallback(callback).syncWithVotingEscrow(msg.sender);
+        }
+
+        // Unlock time can only be reset after the callback is invoked, because some veCHESS-related
+        // contracts won't refresh the user's locked balance in `syncWithVotingEscrow()` if
+        // unlock time is zero.
+        if (newAmount == 0) {
+            locked[msg.sender].unlockTime = 0;
         }
 
         emit AmountDecreased(msg.sender, amount);
