@@ -557,9 +557,15 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             account
         );
         data.account.weights = new uint256[](data.pools.length);
+        uint256 blockCurrentWeek = _endOfWeek(block.timestamp);
         for (uint256 i = 0; i < data.pools.length; i++) {
             address pool = data.pools[i];
-            data.currentSums[i] = controllerBallot.sumAtTimestamp(pool, block.timestamp);
+            (bool success, bytes memory ret) =
+                address(controllerBallot).staticcall(
+                    abi.encodeWithSignature("sumAtWeek(address,uint256)", pool, blockCurrentWeek)
+                );
+            require(success, "Low-level call failed");
+            data.currentSums[i] = abi.decode(ret, (uint256));
             data.account.weights[i] = controllerBallot.userWeights(account, pool);
         }
     }
