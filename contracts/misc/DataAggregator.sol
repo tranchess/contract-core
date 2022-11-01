@@ -357,7 +357,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         uint256 claimableBonus;
     }
 
-    string public constant VERSION = "2.0.0";
+    string public constant VERSION = "2.1.1";
 
     address public immutable votingEscrow;
     address public immutable chessSchedule;
