@@ -6,10 +6,8 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "../utils/SafeDecimalMath.sol";
 import "../interfaces/IFundV3.sol";
 
-/**
- * @title Queen Rate Provider
- * @notice Returns the value of Queen in terms of the underlying
- */
+/// @title Queen Rate Provider
+/// @notice Returns the value of Queen in terms of the underlying
 contract QueenRateProvider {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
@@ -18,14 +16,12 @@ contract QueenRateProvider {
     /// @dev A multipler that normalizes a quote asset balance to 18 decimal places.
     uint256 internal immutable _quoteDecimalMultiplier;
 
-    constructor(address fund_, uint256 quoteDecimals_) public {
+    constructor(address fund_) public {
         fund = IFundV3(fund_);
-        _quoteDecimalMultiplier = 10**(18 - quoteDecimals_);
+        _quoteDecimalMultiplier = IFundV3(fund_).underlyingDecimalMultiplier();
     }
 
-    /**
-     * @return the value of Queen in terms of the underlying
-     */
+    /// @return the value of Queen in terms of the underlying
     function getRate() external view returns (uint256) {
         uint256 fundUnderlying = fund.getTotalUnderlying();
         uint256 fundEquivalentTotalQ = fund.getEquivalentTotalQ();
