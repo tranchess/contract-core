@@ -13,18 +13,18 @@ contract QueenRateProvider {
     using SafeDecimalMath for uint256;
 
     IFundV3 public immutable fund;
-    /// @dev A multipler that normalizes a quote asset balance to 18 decimal places.
-    uint256 internal immutable _quoteDecimalMultiplier;
+    /// @dev A multipler that normalizes a underlying asset balance to 18 decimal places.
+    uint256 internal immutable _underlyingDecimalMultiplier;
 
     constructor(address fund_) public {
         fund = IFundV3(fund_);
-        _quoteDecimalMultiplier = IFundV3(fund_).underlyingDecimalMultiplier();
+        _underlyingDecimalMultiplier = IFundV3(fund_).underlyingDecimalMultiplier();
     }
 
     /// @return the value of Queen in terms of the underlying
     function getRate() external view returns (uint256) {
         uint256 fundUnderlying = fund.getTotalUnderlying();
         uint256 fundEquivalentTotalQ = fund.getEquivalentTotalQ();
-        return fundUnderlying.mul(_quoteDecimalMultiplier).divideDecimal(fundEquivalentTotalQ);
+        return fundUnderlying.mul(_underlyingDecimalMultiplier).divideDecimal(fundEquivalentTotalQ);
     }
 }
