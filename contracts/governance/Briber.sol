@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 
-import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "../interfaces/IChessSchedule.sol";
-import "../interfaces/IChessController.sol";
-import "../utils/CoreUtility.sol";
+import "./RewardClaimer.sol";
 
 interface IBribeVault {
     function BRIBE_VAULT() external view returns (address);
@@ -28,15 +24,13 @@ interface IBribeVault {
 }
 
 contract Briber is Ownable, CoreUtility {
-    using Math for uint256;
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
     uint256 private constant MAX_ITERATIONS = 500;
 
-    IChessSchedule public immutable chessSchedule;
-    IChessController public immutable chessController;
     IBribeVault public immutable bribeVault;
+    RewardClaimer public immutable rewardClaimer;
     address public immutable token;
 
     uint256 public claimableChess;
@@ -46,67 +40,18 @@ contract Briber is Ownable, CoreUtility {
     uint256 private _rate;
 
     constructor(
-        address chessSchedule_,
-        address chessController_,
         address bribeVault_,
+        address rewardClaimer_,
         address token_
     ) public {
-        chessSchedule = IChessSchedule(chessSchedule_);
-        chessController = IChessController(chessController_);
         bribeVault = IBribeVault(bribeVault_);
+        rewardClaimer = RewardClaimer(rewardClaimer_);
         token = token_;
     }
 
-    function checkpoint() external returns (uint256 amount) {
-        amount = claimableChess;
-        uint256 delta = _checkpoint();
-        if (delta != 0) {
-            amount = amount.add(delta);
-            claimableChess = amount;
-        }
-    }
-
     function bribe(bytes32 proposal, uint256 bribeAmount) external onlyOwner {
-        claimableChess = claimableChess.add(_checkpoint()).sub(bribeAmount);
-        chessSchedule.mint(address(this), bribeAmount);
+        rewardClaimer.claimRewards(bribeAmount);
         IERC20(token).safeApprove(bribeVault.BRIBE_VAULT(), bribeAmount);
         bribeVault.depositBribeERC20(proposal, token, bribeAmount);
-    }
-
-    function _checkpoint() private returns (uint256 amount) {
-        uint256 timestamp = _chessIntegralTimestamp;
-        uint256 integral = _chessIntegral;
-        uint256 oldIntegral = integral;
-        uint256 endWeek = _endOfWeek(timestamp);
-        uint256 rate = _rate;
-        if (rate == 0) {
-            // CHESS emission may update in the middle of a week due to cross-chain lag.
-            // We re-calculate the rate if it was zero after the last checkpoint.
-            uint256 weeklySupply = chessSchedule.getWeeklySupply(timestamp);
-            if (weeklySupply != 0) {
-                rate = (weeklySupply / (endWeek - timestamp)).mul(
-                    chessController.getFundRelativeWeight(address(this), timestamp)
-                );
-            }
-        }
-
-        for (uint256 i = 0; i < MAX_ITERATIONS && timestamp < block.timestamp; i++) {
-            uint256 endTimestamp = endWeek.min(block.timestamp);
-            integral = integral.add(rate.mul(endTimestamp - timestamp));
-            if (endTimestamp == endWeek) {
-                rate = chessSchedule.getRate(endWeek).mul(
-                    chessController.getFundRelativeWeight(address(this), endWeek)
-                );
-                endWeek += 1 weeks;
-            }
-            timestamp = endTimestamp;
-        }
-
-        // Update global state
-        _chessIntegralTimestamp = block.timestamp;
-        _chessIntegral = integral;
-        _rate = rate;
-
-        amount = integral.sub(oldIntegral);
     }
 }
