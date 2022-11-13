@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "./RewardClaimer.sol";
@@ -10,10 +9,6 @@ import "./RewardClaimer.sol";
 interface IBribeVault {
     function BRIBE_VAULT() external view returns (address);
 
-    /// @notice Deposit bribe for a proposal (ERC20 tokens only)
-    /// @param  proposal  bytes32  Proposal
-    /// @param  token     address  Token
-    /// @param  amount    uint256  Token amount
     function depositBribeERC20(
         bytes32 proposal,
         address token,
@@ -21,19 +16,12 @@ interface IBribeVault {
     ) external;
 }
 
-contract Briber is Ownable, CoreUtility {
-    using SafeMath for uint256;
+contract Briber is Ownable {
     using SafeERC20 for IERC20;
-
-    uint256 private constant MAX_ITERATIONS = 500;
 
     IBribeVault public immutable bribeVault;
     RewardClaimer public immutable rewardClaimer;
     address public immutable token;
-
-    uint256 private _chessIntegral;
-    uint256 private _chessIntegralTimestamp;
-    uint256 private _rate;
 
     constructor(
         address bribeVault_,

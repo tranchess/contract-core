@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 
-import "@openzeppelin/contracts/math/Math.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../interfaces/IChessSchedule.sol";
@@ -13,10 +9,7 @@ import "../utils/CoreUtility.sol";
 import "../utils/SafeDecimalMath.sol";
 
 contract RewardClaimer is Ownable, CoreUtility {
-    using Math for uint256;
-    using SafeMath for uint256;
     using SafeDecimalMath for uint256;
-    using SafeERC20 for IERC20;
 
     event ClaimerUpdated(address newClaimer);
 
@@ -54,6 +47,8 @@ contract RewardClaimer is Ownable, CoreUtility {
         for (; w < block.timestamp; w += 1 weeks) {
             uint256 weeklySupply = chessSchedule.getWeeklySupply(w);
             if (weeklySupply == 0) {
+                // CHESS emission may update in the middle of a week due to cross-chain lag,
+                // so we have to revisit the zero value as long as it is in the current week.
                 if (w == currWeek) break;
                 continue;
             }
