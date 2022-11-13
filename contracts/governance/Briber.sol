@@ -10,12 +10,10 @@ import "./RewardClaimer.sol";
 interface IBribeVault {
     function BRIBE_VAULT() external view returns (address);
 
-    /**
-        @notice Deposit bribe for a proposal (ERC20 tokens only)
-        @param  proposal  bytes32  Proposal
-        @param  token     address  Token
-        @param  amount    uint256  Token amount
-     */
+    /// @notice Deposit bribe for a proposal (ERC20 tokens only)
+    /// @param  proposal  bytes32  Proposal
+    /// @param  token     address  Token
+    /// @param  amount    uint256  Token amount
     function depositBribeERC20(
         bytes32 proposal,
         address token,
@@ -33,8 +31,6 @@ contract Briber is Ownable, CoreUtility {
     RewardClaimer public immutable rewardClaimer;
     address public immutable token;
 
-    uint256 public claimableChess;
-
     uint256 private _chessIntegral;
     uint256 private _chessIntegralTimestamp;
     uint256 private _rate;
@@ -49,8 +45,10 @@ contract Briber is Ownable, CoreUtility {
         token = token_;
     }
 
-    function bribe(bytes32 proposal, uint256 bribeAmount) external onlyOwner {
-        rewardClaimer.claimRewards(bribeAmount);
+    function bribe(uint256 proposalIndex, uint256 choiceIndex) external onlyOwner {
+        bytes32 proposal = keccak256(abi.encodePacked(proposalIndex, choiceIndex));
+        rewardClaimer.claimRewards();
+        uint256 bribeAmount = IERC20(token).balanceOf(address(this));
         IERC20(token).safeApprove(bribeVault.BRIBE_VAULT(), bribeAmount);
         bribeVault.depositBribeERC20(proposal, token, bribeAmount);
     }
