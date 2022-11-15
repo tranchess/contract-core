@@ -5,8 +5,8 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "../utils/SafeDecimalMath.sol";
-import "../interfaces/IFundV3.sol";
+import "../../utils/SafeDecimalMath.sol";
+import "../../interfaces/IFundV3.sol";
 
 interface IEthStakingStrategy {
     function fund() external view returns (address);
@@ -175,21 +175,29 @@ contract BeaconStakingOracle is Ownable {
         _;
     }
 
-    function addOracleMember(address member, uint256 quorum) external onlyOwner {
+    function getMemberCount() external view returns (uint256) {
+        return _members.length();
+    }
+
+    function getMember(uint256 index) external view returns (address) {
+        return _members.at(index);
+    }
+
+    function addOracleMember(address member, uint256 newQuorum) external onlyOwner {
         require(member != address(0), "Invalid address");
         require(!_members.contains(member), "Already a member");
         _members.add(member);
         emit MemberAdded(member);
 
-        _updateQuorum(quorum);
+        _updateQuorum(newQuorum);
     }
 
-    function removeOracleMember(address member, uint256 quorum) external onlyOwner {
+    function removeOracleMember(address member, uint256 newQuorum) external onlyOwner {
         require(_members.contains(member), "Not a member");
         _members.remove(member);
         emit MemberRemoved(member);
 
-        _updateQuorum(quorum);
+        _updateQuorum(newQuorum);
 
         // Increment `salt` to force out the previous records, and allow the remained oracles
         // to report it again
