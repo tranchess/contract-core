@@ -10,10 +10,8 @@ import { WEEK, FixtureWalletMap, advanceBlockAtTime } from "./utils";
 const EPOCHS_PER_FRAME = 225;
 const SLOTS_PER_EPOCH = 32;
 const SECONDS_PER_SLOT = 12;
-const ANNUAL_MAX_INCREASE = parseEther("0.5");
-const INSTANT_MAX_DECREASE = parseEther("0.5");
+const ANNUAL_MAX_CHANGE = parseEther("0.5");
 const QUORUM = 2;
-const MAX_MEMBER = 3;
 
 describe("BeaconStakingOracle", function () {
     interface FixtureData {
@@ -25,7 +23,6 @@ describe("BeaconStakingOracle", function () {
     let currentFixture: Fixture<FixtureData>;
     let fixtureData: FixtureData;
 
-    let owner: Wallet;
     let user1: Wallet;
     let user2: Wallet;
     let user3: Wallet;
@@ -54,10 +51,8 @@ describe("BeaconStakingOracle", function () {
             SLOTS_PER_EPOCH,
             SECONDS_PER_SLOT,
             genesisTime,
-            ANNUAL_MAX_INCREASE,
-            INSTANT_MAX_DECREASE,
-            QUORUM,
-            MAX_MEMBER
+            ANNUAL_MAX_CHANGE,
+            QUORUM
         );
 
         return {
@@ -73,7 +68,6 @@ describe("BeaconStakingOracle", function () {
 
     beforeEach(async function () {
         fixtureData = await loadFixture(currentFixture);
-        owner = fixtureData.wallets.owner;
         user1 = fixtureData.wallets.user1;
         user2 = fixtureData.wallets.user2;
         user3 = fixtureData.wallets.user3;
@@ -83,29 +77,20 @@ describe("BeaconStakingOracle", function () {
 
     describe("addOracleMember()", function () {
         it("Should revert if adding zero address as member", async function () {
-            await expect(stakingOracle.addOracleMember(constants.AddressZero)).to.be.revertedWith(
-                "Invalid address"
-            );
+            await expect(
+                stakingOracle.addOracleMember(constants.AddressZero, QUORUM)
+            ).to.be.revertedWith("Invalid address");
         });
 
         it("Should revert if adding an existing member", async function () {
-            await stakingOracle.addOracleMember(user1.address);
-            await expect(stakingOracle.addOracleMember(user1.address)).to.be.revertedWith(
+            await stakingOracle.addOracleMember(user1.address, QUORUM);
+            await expect(stakingOracle.addOracleMember(user1.address, QUORUM)).to.be.revertedWith(
                 "Already a member"
             );
         });
 
-        it("Should revert if exceeding member cap", async function () {
-            await stakingOracle.addOracleMember(user1.address);
-            await stakingOracle.addOracleMember(user2.address);
-            await stakingOracle.addOracleMember(user3.address);
-            await expect(stakingOracle.addOracleMember(owner.address)).to.be.revertedWith(
-                "Too many members"
-            );
-        });
-
         it("Should add oracle member", async function () {
-            await expect(stakingOracle.addOracleMember(user1.address))
+            await expect(stakingOracle.addOracleMember(user1.address, QUORUM))
                 .to.emit(stakingOracle, "MemberAdded")
                 .withArgs(user1.address);
         });
@@ -113,39 +98,39 @@ describe("BeaconStakingOracle", function () {
 
     describe("removeOracleMember()", function () {
         it("Should revert if removing an non-member address", async function () {
-            await expect(stakingOracle.removeOracleMember(user1.address)).to.be.revertedWith(
-                "Not a member"
-            );
+            await expect(
+                stakingOracle.removeOracleMember(user1.address, QUORUM)
+            ).to.be.revertedWith("Not a member");
         });
 
         it("Should remove oracle member", async function () {
-            await stakingOracle.addOracleMember(user1.address);
-            await expect(stakingOracle.removeOracleMember(user1.address))
+            await stakingOracle.addOracleMember(user1.address, QUORUM);
+            await expect(stakingOracle.removeOracleMember(user1.address, QUORUM))
                 .to.emit(stakingOracle, "MemberRemoved")
                 .withArgs(user1.address);
             expect(await stakingOracle.salt()).to.equal(1);
         });
     });
 
-    describe("reportBeacon()", function () {
+    describe("batchReport()", function () {
         beforeEach(async function () {
-            await stakingOracle.addOracleMember(user1.address);
-            await stakingOracle.addOracleMember(user2.address);
-            await stakingOracle.addOracleMember(user3.address);
+            await stakingOracle.addOracleMember(user1.address, QUORUM);
+            await stakingOracle.addOracleMember(user2.address, QUORUM);
+            await stakingOracle.addOracleMember(user3.address, QUORUM);
         });
 
         it("Should revert if reporting with stale epoch", async function () {
             await strategy.mock.batchReport.returns();
             await stakingOracle
                 .connect(user1)
-                .reportBeacon(EPOCHS_PER_FRAME, [0], [parseUnits("1", 9)], [10]);
+                .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10]);
             await stakingOracle
                 .connect(user2)
-                .reportBeacon(EPOCHS_PER_FRAME, [0], [parseUnits("1", 9)], [10]);
+                .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10]);
             await expect(
                 stakingOracle
                     .connect(user1)
-                    .reportBeacon(EPOCHS_PER_FRAME, [0], [parseUnits("1", 9)], [10])
+                    .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10])
             ).to.be.revertedWith("Stale epoch");
         });
 
@@ -153,59 +138,37 @@ describe("BeaconStakingOracle", function () {
             await strategy.mock.batchReport.returns();
             await stakingOracle
                 .connect(user1)
-                .reportBeacon(EPOCHS_PER_FRAME, [0], [parseUnits("1", 9)], [10]);
+                .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10]);
             await expect(
                 stakingOracle
                     .connect(user1)
-                    .reportBeacon(EPOCHS_PER_FRAME, [0], [parseUnits("2", 9)], [10])
+                    .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("2", 18)], [10])
             ).to.be.revertedWith("Already submitted");
         });
 
         it("Should revert if jump to an invalid epoch", async function () {
             await expect(
-                stakingOracle.connect(user1).reportBeacon(1, [0], [parseUnits("1", 9)], [10])
+                stakingOracle.connect(user1).batchReport(1, [0], [parseUnits("1", 18)], [10])
             ).to.be.revertedWith("Invalid epoch");
-        });
-
-        it("Should report beacon stat", async function () {
-            await expect(
-                stakingOracle
-                    .connect(user1)
-                    .reportBeacon(EPOCHS_PER_FRAME, [0], [parseUnits("1", 9)], [10])
-            )
-                .to.emit(stakingOracle, "BeaconReported")
-                .withArgs(EPOCHS_PER_FRAME, [parseUnits("1", 18)], [10], user1.address);
-
-            await strategy.mock.batchReport
-                .withArgs(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10])
-                .returns();
-
-            await expect(
-                stakingOracle
-                    .connect(user2)
-                    .reportBeacon(EPOCHS_PER_FRAME, [0], [parseUnits("1", 9)], [10])
-            )
-                .to.emit(stakingOracle, "BeaconReported")
-                .withArgs(EPOCHS_PER_FRAME, [parseUnits("1", 18)], [10], user2.address);
         });
 
         it("Should invalidate previous reports if a oracle member is removed", async function () {
             await expect(
                 stakingOracle
                     .connect(user1)
-                    .reportBeacon(EPOCHS_PER_FRAME, [0], [parseUnits("1", 9)], [10])
+                    .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10])
             )
                 .to.emit(stakingOracle, "BeaconReported")
                 .withArgs(EPOCHS_PER_FRAME, [parseUnits("1", 18)], [10], user1.address);
 
-            await expect(stakingOracle.removeOracleMember(user1.address))
+            await expect(stakingOracle.removeOracleMember(user1.address, QUORUM))
                 .to.emit(stakingOracle, "MemberRemoved")
                 .withArgs(user1.address);
 
             await expect(
                 stakingOracle
                     .connect(user2)
-                    .reportBeacon(EPOCHS_PER_FRAME, [0], [parseUnits("1", 9)], [10])
+                    .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10])
             )
                 .to.emit(stakingOracle, "BeaconReported")
                 .withArgs(EPOCHS_PER_FRAME, [parseUnits("1", 18)], [10], user2.address);
@@ -217,7 +180,7 @@ describe("BeaconStakingOracle", function () {
             await expect(
                 stakingOracle
                     .connect(user3)
-                    .reportBeacon(EPOCHS_PER_FRAME, [0], [parseUnits("1", 9)], [10])
+                    .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10])
             )
                 .to.emit(stakingOracle, "BeaconReported")
                 .withArgs(EPOCHS_PER_FRAME, [parseUnits("1", 18)], [10], user3.address);

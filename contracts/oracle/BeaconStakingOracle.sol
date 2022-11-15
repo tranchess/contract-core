@@ -75,7 +75,7 @@ contract BeaconStakingOracle is Ownable {
         uint256 slotsPerEpoch_,
         uint256 secondsPerSlot_,
         uint256 genesisTime_,
-        uint256 newAnnualMaxChange_,
+        uint256 annualMaxChange_,
         uint256 quorum_
     ) public {
         strategy = IEthStakingStrategy(strategy_);
@@ -84,7 +84,7 @@ contract BeaconStakingOracle is Ownable {
         slotsPerEpoch = slotsPerEpoch_;
         secondsPerSlot = secondsPerSlot_;
         genesisTime = genesisTime_;
-        _updateSanityBoundary(newAnnualMaxChange_);
+        _updateSanityBoundary(annualMaxChange_);
         _updateQuorum(quorum_);
     }
 
@@ -184,10 +184,12 @@ contract BeaconStakingOracle is Ownable {
         _updateQuorum(quorum);
     }
 
-    function removeOracleMember(address member) external onlyOwner {
+    function removeOracleMember(address member, uint256 quorum) external onlyOwner {
         require(_members.contains(member), "Not a member");
         _members.remove(member);
         emit MemberRemoved(member);
+
+        _updateQuorum(quorum);
 
         // Increment `salt` to force out the previous records, and allow the remained oracles
         // to report it again
