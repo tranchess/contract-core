@@ -41,24 +41,17 @@ contract BeaconStakingOracle is Ownable {
         uint256 newSecondsPerSlot,
         uint256 newGenesisTime
     );
-    event SanityBoundaryUpdated(uint256 newAnnualMaxIncrease, uint256 newInstantMaxDecrease);
+    event SanityBoundaryUpdated(uint256 newAnnualMaxChange);
     event QuorumUpdated(uint256 newQuorum);
 
-    /// Eth1 denomination is 18 digits, while Eth2 has 9 digits. Because we work with Eth2
-    /// balances and to support old interfaces expecting eth1 format, we multiply by this
-    /// coefficient.
-    uint256 public constant DENOMINATION_OFFSET = 1e9;
-
-    uint256 public immutable maxMember;
+    uint256 public immutable epochsPerFrame;
+    uint256 public immutable slotsPerEpoch;
+    uint256 public immutable secondsPerSlot;
+    uint256 public immutable genesisTime;
 
     IEthStakingStrategy public strategy;
     IFundV3 public fund;
-    uint256 public epochsPerFrame;
-    uint256 public slotsPerEpoch;
-    uint256 public secondsPerSlot;
-    uint256 public genesisTime;
-    uint256 public annualMaxIncrease;
-    uint256 public instantMaxDecrease;
+    uint256 public annualMaxChange;
 
     /// @notice Number of exactly the same reports needed to finalize the epoch
     /// Not all frames may come to a quorum. Oracles may report only to the first
@@ -69,10 +62,10 @@ contract BeaconStakingOracle is Ownable {
     uint256 public lastCompletedEpoch;
 
     /// @dev Epoch head => message hash => count
-    mapping(uint256 => mapping(bytes32 => uint256)) private _reports;
+    mapping(uint256 => mapping(bytes32 => uint256)) public reports;
 
     /// @dev Oracle members => epoch Id of the most recent reported frame
-    mapping(address => uint256) private _reported;
+    mapping(address => uint256) public reported;
 
     EnumerableSet.AddressSet private _members;
 
@@ -82,17 +75,17 @@ contract BeaconStakingOracle is Ownable {
         uint256 slotsPerEpoch_,
         uint256 secondsPerSlot_,
         uint256 genesisTime_,
-        uint256 annualMaxIncrease_,
-        uint256 instantMaxDecrease_,
-        uint256 quorum_,
-        uint256 maxMember_
+        uint256 newAnnualMaxChange_,
+        uint256 quorum_
     ) public {
         strategy = IEthStakingStrategy(strategy_);
         fund = IFundV3(IEthStakingStrategy(strategy_).fund());
-        _updateBeaconConfig(epochsPerFrame_, slotsPerEpoch_, secondsPerSlot_, genesisTime_);
-        _updateSanityBoundary(annualMaxIncrease_, instantMaxDecrease_);
+        epochsPerFrame = epochsPerFrame_;
+        slotsPerEpoch = slotsPerEpoch_;
+        secondsPerSlot = secondsPerSlot_;
+        genesisTime = genesisTime_;
+        _updateSanityBoundary(newAnnualMaxChange_);
         _updateQuorum(quorum_);
-        maxMember = maxMember_;
     }
 
     /// @notice Accept oracle committee member reports from the ETH 2.0 side
@@ -100,7 +93,7 @@ contract BeaconStakingOracle is Ownable {
     /// @param ids Operator IDs
     /// @param beaconBalances Balance in gwei on the ETH 2.0 side (9-digit denomination)
     /// @param validatorCounts Number of validators visible in this epoch
-    function reportBeacon(
+    function batchReport(
         uint256 epochId,
         uint256[] memory ids,
         uint256[] memory beaconBalances,
@@ -118,22 +111,16 @@ contract BeaconStakingOracle is Ownable {
         }
 
         // Make sure the oracle is from members list and has not yet voted
-        require(_reported[msg.sender] < expectedEpoch, "Already submitted");
-        _reported[msg.sender] = expectedEpoch;
+        require(reported[msg.sender] < expectedEpoch, "Already submitted");
+        reported[msg.sender] = expectedEpoch;
 
-        // Convert eth2 balances to eth1
-        uint256[] memory eth1Balances = new uint256[](beaconBalances.length);
-        for (uint256 i = 0; i < eth1Balances.length; i++) {
-            eth1Balances[i] = beaconBalances[i] * DENOMINATION_OFFSET;
-        }
-
-        // Push the result to `_reports` queue, report to strategy if counts exceed `quorum`
+        // Push the result to `reports` queue, report to strategy if counts exceed `quorum`
         bytes32 report = keccak256(abi.encodePacked(ids, beaconBalances, validatorCounts, salt));
-        uint256 currentCount = _reports[expectedEpoch][report] + 1;
-        _reports[expectedEpoch][report] = currentCount;
+        uint256 currentCount = reports[expectedEpoch][report] + 1;
+        reports[expectedEpoch][report] = currentCount;
         if (currentCount >= quorum) {
             uint256 prevTotalEther = fund.getTotalUnderlying();
-            strategy.batchReport(epochId, ids, eth1Balances, validatorCounts);
+            strategy.batchReport(epochId, ids, beaconBalances, validatorCounts);
             uint256 postTotalEther = fund.getTotalUnderlying();
 
             uint256 timeElapsed = (epochId - lastCompletedEpoch) * slotsPerEpoch * secondsPerSlot;
@@ -145,7 +132,7 @@ contract BeaconStakingOracle is Ownable {
             expectedEpoch = epochId + epochsPerFrame;
         }
 
-        emit BeaconReported(epochId, eth1Balances, validatorCounts, msg.sender);
+        emit BeaconReported(epochId, beaconBalances, validatorCounts, msg.sender);
     }
 
     /// @dev Performs logical consistency check of the underlying changes as the result of reports push
@@ -154,26 +141,15 @@ contract BeaconStakingOracle is Ownable {
         uint256 preTotalEther,
         uint256 timeElapsed
     ) internal view {
-        if (postTotalEther >= preTotalEther) {
-            // increase             = (postTotalEther - preTotalEther) * 365 days
-            // maxAnnualIncrease    = preTotalEther * annualMaxIncrease * timeElapsed
-            //
-            // check that increase <= maxAnnualIncrease
-            require(
-                uint256(365 days).mul(postTotalEther - preTotalEther) <=
-                    preTotalEther.mul(timeElapsed).multiplyDecimal(annualMaxIncrease),
-                "Annual max increase"
-            );
-        } else {
-            // decrease             = preTotalEther - postTotalEther
-            // maxInstantDecrease   = preTotalEther * instantMaxDecrease
-            //
-            // check that decrease <= maxInstantDecrease
-            require(
-                preTotalEther - postTotalEther <= preTotalEther.multiplyDecimal(instantMaxDecrease),
-                "Instant max decrease"
-            );
-        }
+        uint256 totalEtherDelta =
+            postTotalEther >= preTotalEther
+                ? postTotalEther - preTotalEther
+                : preTotalEther - postTotalEther;
+        require(
+            uint256(365 days).mul(totalEtherDelta) <=
+                preTotalEther.mul(timeElapsed).multiplyDecimal(annualMaxChange),
+            "Annual max delta"
+        );
     }
 
     /// @return epochId the epoch calculated from current timestamp
@@ -199,14 +175,13 @@ contract BeaconStakingOracle is Ownable {
         _;
     }
 
-    function addOracleMember(address member) external onlyOwner {
+    function addOracleMember(address member, uint256 quorum) external onlyOwner {
         require(member != address(0), "Invalid address");
         require(!_members.contains(member), "Already a member");
-        require(_members.length() < maxMember, "Too many members");
-
         _members.add(member);
-
         emit MemberAdded(member);
+
+        _updateQuorum(quorum);
     }
 
     function removeOracleMember(address member) external onlyOwner {
@@ -219,54 +194,17 @@ contract BeaconStakingOracle is Ownable {
         salt++;
     }
 
-    function updateBeaconConfig(
-        uint256 newEpochsPerFrame,
-        uint256 newSlotsPerEpoch,
-        uint256 newSecondsPerSlot,
-        uint256 newGenesisTime
-    ) external onlyOwner {
-        _updateBeaconConfig(newEpochsPerFrame, newSlotsPerEpoch, newSecondsPerSlot, newGenesisTime);
-    }
-
-    function updateSanityBoundary(uint256 newAnnualMaxIncrease, uint256 newInstantMaxDecrease)
-        external
-        onlyOwner
-    {
-        _updateSanityBoundary(newAnnualMaxIncrease, newInstantMaxDecrease);
+    function updateSanityBoundary(uint256 newAnnualMaxChange) external onlyOwner {
+        _updateSanityBoundary(newAnnualMaxChange);
     }
 
     function updateQuorum(uint256 newQuorum) external onlyOwner {
         _updateQuorum(newQuorum);
     }
 
-    function _updateBeaconConfig(
-        uint256 newEpochsPerFrame,
-        uint256 newSlotsPerEpoch,
-        uint256 newSecondsPerSlot,
-        uint256 newGenesisTime
-    ) private {
-        require(newEpochsPerFrame > 0, "BAD_EPOCHS_PER_FRAME");
-        require(newSlotsPerEpoch > 0, "BAD_SLOTS_PER_EPOCH");
-        require(newSecondsPerSlot > 0, "BAD_SECONDS_PER_SLOT");
-        require(newGenesisTime > 0, "BAD_GENESIS_TIME");
-        epochsPerFrame = newEpochsPerFrame;
-        slotsPerEpoch = newSlotsPerEpoch;
-        secondsPerSlot = newSecondsPerSlot;
-        genesisTime = newGenesisTime;
-        emit BeaconConfigUpdated(
-            newEpochsPerFrame,
-            newSlotsPerEpoch,
-            newSecondsPerSlot,
-            newGenesisTime
-        );
-    }
-
-    function _updateSanityBoundary(uint256 newAnnualMaxIncrease, uint256 newInstantMaxDecrease)
-        private
-    {
-        annualMaxIncrease = newAnnualMaxIncrease;
-        instantMaxDecrease = newInstantMaxDecrease;
-        emit SanityBoundaryUpdated(newAnnualMaxIncrease, newInstantMaxDecrease);
+    function _updateSanityBoundary(uint256 newAnnualMaxChange) private {
+        annualMaxChange = newAnnualMaxChange;
+        emit SanityBoundaryUpdated(newAnnualMaxChange);
     }
 
     function _updateQuorum(uint256 newQuorum) private {
