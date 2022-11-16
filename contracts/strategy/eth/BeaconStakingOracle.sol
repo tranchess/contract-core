@@ -36,7 +36,7 @@ contract BeaconStakingOracle is Ownable {
     );
     event MemberAdded(address member);
     event MemberRemoved(address member);
-    event SanityBoundaryUpdated(uint256 newAnnualMaxChange);
+    event AnnualMaxChangeUpdated(uint256 newAnnualMaxChange);
     event QuorumUpdated(uint256 newQuorum);
 
     /// @notice Number of epochs between adjacent reports
@@ -78,7 +78,7 @@ contract BeaconStakingOracle is Ownable {
         secondsPerEpoch = secondsPerEpoch_;
         require(genesisTime_ < block.timestamp);
         genesisTime = genesisTime_;
-        _updateSanityBoundary(annualMaxChange_);
+        _updateAnnualMaxChange(annualMaxChange_);
     }
 
     /// @notice Accept oracle committee member reports from the ETH 2.0 side
@@ -108,29 +108,29 @@ contract BeaconStakingOracle is Ownable {
         emit BeaconReported(epoch, ids, beaconBalances, validatorCounts, msg.sender);
 
         if (currentCount >= quorum) {
-            uint256 prevTotalEther = fund.getTotalUnderlying();
+            uint256 preTotalUnderlying = fund.getTotalUnderlying();
             strategy.batchReport(epoch, ids, beaconBalances, validatorCounts);
-            uint256 postTotalEther = fund.getTotalUnderlying();
+            uint256 postTotalUnderlying = fund.getTotalUnderlying();
 
             uint256 timeElapsed = (epoch - lastCompletedEpoch) * secondsPerEpoch;
-            _reportSanityChecks(postTotalEther, prevTotalEther, timeElapsed);
+            _sanityCheck(postTotalUnderlying, preTotalUnderlying, timeElapsed);
             lastCompletedEpoch = epoch;
         }
     }
 
     /// @dev Performs logical consistency check of the underlying changes as the result of reports push
-    function _reportSanityChecks(
-        uint256 postTotalEther,
-        uint256 preTotalEther,
+    function _sanityCheck(
+        uint256 postTotalUnderlying,
+        uint256 preTotalUnderlying,
         uint256 timeElapsed
-    ) internal view {
-        uint256 totalEtherDelta =
-            postTotalEther >= preTotalEther
-                ? postTotalEther - preTotalEther
-                : preTotalEther - postTotalEther;
+    ) private view {
+        uint256 delta =
+            postTotalUnderlying >= preTotalUnderlying
+                ? postTotalUnderlying - preTotalUnderlying
+                : preTotalUnderlying - postTotalUnderlying;
         require(
-            uint256(365 days).mul(totalEtherDelta) <=
-                preTotalEther.mul(timeElapsed).multiplyDecimal(annualMaxChange),
+            delta.mul(365 days) / timeElapsed <=
+                preTotalUnderlying.multiplyDecimal(annualMaxChange),
             "Annual max delta"
         );
     }
@@ -179,17 +179,17 @@ contract BeaconStakingOracle is Ownable {
         _updateQuorum(newQuorum);
     }
 
-    function updateSanityBoundary(uint256 newAnnualMaxChange) external onlyOwner {
-        _updateSanityBoundary(newAnnualMaxChange);
+    function updateAnnualMaxChange(uint256 newAnnualMaxChange) external onlyOwner {
+        _updateAnnualMaxChange(newAnnualMaxChange);
     }
 
     function updateQuorum(uint256 newQuorum) external onlyOwner {
         _updateQuorum(newQuorum);
     }
 
-    function _updateSanityBoundary(uint256 newAnnualMaxChange) private {
+    function _updateAnnualMaxChange(uint256 newAnnualMaxChange) private {
         annualMaxChange = newAnnualMaxChange;
-        emit SanityBoundaryUpdated(newAnnualMaxChange);
+        emit AnnualMaxChangeUpdated(newAnnualMaxChange);
     }
 
     function _updateQuorum(uint256 newQuorum) private {
