@@ -54,7 +54,6 @@ contract BeaconStakingOracle is Ownable {
     /// Not all frames may come to a quorum. Oracles may report only to the first
     /// epoch of the frame and only if no quorum is reached for this epoch yet.
     uint256 public quorum;
-    uint256 public salt;
     uint256 public lastCompletedEpoch;
 
     /// @dev Epoch head => message hash => count
@@ -102,7 +101,7 @@ contract BeaconStakingOracle is Ownable {
         reported[msg.sender] = epoch;
 
         // Push the result to `reports` queue, report to strategy if counts exceed `quorum`
-        bytes32 report = keccak256(abi.encodePacked(ids, beaconBalances, validatorCounts, salt));
+        bytes32 report = keccak256(abi.encodePacked(ids, beaconBalances, validatorCounts));
         uint256 currentCount = reports[epoch][report] + 1;
         reports[epoch][report] = currentCount;
         if (currentCount >= quorum) {
@@ -169,10 +168,6 @@ contract BeaconStakingOracle is Ownable {
         emit MemberRemoved(member);
 
         _updateQuorum(newQuorum);
-
-        // Increment `salt` to force out the previous records, and allow the remained oracles
-        // to report it again
-        salt++;
     }
 
     function updateSanityBoundary(uint256 newAnnualMaxChange) external onlyOwner {
