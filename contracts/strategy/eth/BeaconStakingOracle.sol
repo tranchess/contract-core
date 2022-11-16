@@ -38,9 +38,12 @@ contract BeaconStakingOracle is Ownable {
     event SanityBoundaryUpdated(uint256 newAnnualMaxChange);
     event QuorumUpdated(uint256 newQuorum);
 
-    uint256 public immutable epochsPerFrame;
-    uint256 public immutable slotsPerEpoch;
-    uint256 public immutable secondsPerSlot;
+    /// @notice Number of epochs between adjacent reports
+    uint256 public immutable reportableEpochInterval;
+
+    uint256 public immutable secondsPerEpoch;
+
+    /// @notice Timestamp of epoch 0
     uint256 public immutable genesisTime;
 
     IEthStakingStrategy public strategy;
@@ -52,7 +55,6 @@ contract BeaconStakingOracle is Ownable {
     /// epoch of the frame and only if no quorum is reached for this epoch yet.
     uint256 public quorum;
     uint256 public salt;
-    uint256 public expectedEpoch;
     uint256 public lastCompletedEpoch;
 
     /// @dev Epoch head => message hash => count
@@ -65,68 +67,57 @@ contract BeaconStakingOracle is Ownable {
 
     constructor(
         address strategy_,
-        uint256 epochsPerFrame_,
-        uint256 slotsPerEpoch_,
-        uint256 secondsPerSlot_,
+        uint256 reportableEpochInterval_,
+        uint256 secondsPerEpoch_,
         uint256 genesisTime_,
         uint256 annualMaxChange_,
         uint256 quorum_
     ) public {
         strategy = IEthStakingStrategy(strategy_);
         fund = IFundV3(IEthStakingStrategy(strategy_).fund());
-        epochsPerFrame = epochsPerFrame_;
-        slotsPerEpoch = slotsPerEpoch_;
-        secondsPerSlot = secondsPerSlot_;
+        reportableEpochInterval = reportableEpochInterval_;
+        secondsPerEpoch = secondsPerEpoch_;
+        require(genesisTime_ < block.timestamp);
         genesisTime = genesisTime_;
         _updateSanityBoundary(annualMaxChange_);
         _updateQuorum(quorum_);
     }
 
     /// @notice Accept oracle committee member reports from the ETH 2.0 side
-    /// @param epochId Beacon chain epoch
+    /// @param epoch Beacon chain epoch
     /// @param ids Operator IDs
     /// @param beaconBalances Balance in gwei on the ETH 2.0 side (9-digit denomination)
     /// @param validatorCounts Number of validators visible in this epoch
     function batchReport(
-        uint256 epochId,
+        uint256 epoch,
         uint256[] memory ids,
         uint256[] memory beaconBalances,
         uint256[] memory validatorCounts
     ) external onlyMember {
-        // If expected epoch has advanced, check that this is the first epoch of the new frame
-        require(epochId >= expectedEpoch, "Stale epoch");
-        if (epochId > expectedEpoch) {
-            uint256 currentEpochId = _getCurrentEpochId(genesisTime, slotsPerEpoch, secondsPerSlot);
-            require(
-                epochId == _getFrameFirstEpochId(currentEpochId, epochsPerFrame),
-                "Invalid epoch"
-            );
-            expectedEpoch = epochId;
-        }
-
-        // Make sure the oracle is from members list and has not yet voted
-        require(reported[msg.sender] < expectedEpoch, "Already submitted");
-        reported[msg.sender] = expectedEpoch;
+        require(
+            epoch <= getLatestReportableEpoch() &&
+                epoch > lastCompletedEpoch &&
+                epoch % reportableEpochInterval == 0,
+            "Invalid epoch"
+        );
+        require(reported[msg.sender] < epoch, "Already reported");
+        reported[msg.sender] = epoch;
 
         // Push the result to `reports` queue, report to strategy if counts exceed `quorum`
         bytes32 report = keccak256(abi.encodePacked(ids, beaconBalances, validatorCounts, salt));
-        uint256 currentCount = reports[expectedEpoch][report] + 1;
-        reports[expectedEpoch][report] = currentCount;
+        uint256 currentCount = reports[epoch][report] + 1;
+        reports[epoch][report] = currentCount;
         if (currentCount >= quorum) {
             uint256 prevTotalEther = fund.getTotalUnderlying();
-            strategy.batchReport(epochId, ids, beaconBalances, validatorCounts);
+            strategy.batchReport(epoch, ids, beaconBalances, validatorCounts);
             uint256 postTotalEther = fund.getTotalUnderlying();
 
-            uint256 timeElapsed = (epochId - lastCompletedEpoch) * slotsPerEpoch * secondsPerSlot;
-            lastCompletedEpoch = epochId;
-
+            uint256 timeElapsed = (epoch - lastCompletedEpoch) * secondsPerEpoch;
             _reportSanityChecks(postTotalEther, prevTotalEther, timeElapsed);
-
-            // Move the expectedEpoch to the first epoch of the next frame
-            expectedEpoch = epochId + epochsPerFrame;
+            lastCompletedEpoch = epoch;
         }
 
-        emit BeaconReported(epochId, beaconBalances, validatorCounts, msg.sender);
+        emit BeaconReported(epoch, beaconBalances, validatorCounts, msg.sender);
     }
 
     /// @dev Performs logical consistency check of the underlying changes as the result of reports push
@@ -146,22 +137,10 @@ contract BeaconStakingOracle is Ownable {
         );
     }
 
-    /// @return epochId the epoch calculated from current timestamp
-    function _getCurrentEpochId(
-        uint256 genesis,
-        uint256 slots,
-        uint256 slotTime
-    ) private view returns (uint256 epochId) {
-        epochId = (block.timestamp - genesis) / (slots * slotTime);
-    }
-
-    /// @return firstEpochId the first epoch of the frame that `epochId` belongs to
-    function _getFrameFirstEpochId(uint256 epochId, uint256 epochs)
-        private
-        pure
-        returns (uint256 firstEpochId)
-    {
-        firstEpochId = (epochId / epochs) * epochs;
+    /// @notice Return the latest reportable epoch
+    function getLatestReportableEpoch() public view returns (uint256) {
+        uint256 latestEpoch = (block.timestamp - genesisTime) / secondsPerEpoch;
+        return (latestEpoch / reportableEpochInterval) * reportableEpochInterval;
     }
 
     modifier onlyMember() {
