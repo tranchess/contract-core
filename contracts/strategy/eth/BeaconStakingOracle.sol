@@ -56,7 +56,7 @@ contract BeaconStakingOracle is Ownable {
     uint256 public quorum;
     uint256 public lastCompletedEpoch;
 
-    /// @dev Epoch head => message hash => count
+    /// @notice Epoch => report hash => received count
     mapping(uint256 => mapping(bytes32 => uint256)) public reports;
 
     /// @dev Oracle members => epoch Id of the most recent reported frame
@@ -101,7 +101,7 @@ contract BeaconStakingOracle is Ownable {
         reported[msg.sender] = epoch;
 
         // Push the result to `reports` queue, report to strategy if counts exceed `quorum`
-        bytes32 report = keccak256(abi.encodePacked(ids, beaconBalances, validatorCounts));
+        bytes32 report = encodeBatchReport(ids, beaconBalances, validatorCounts);
         uint256 currentCount = reports[epoch][report] + 1;
         reports[epoch][report] = currentCount;
         if (currentCount >= quorum) {
@@ -138,6 +138,14 @@ contract BeaconStakingOracle is Ownable {
     function getLatestReportableEpoch() public view returns (uint256) {
         uint256 latestEpoch = (block.timestamp - genesisTime) / secondsPerEpoch;
         return (latestEpoch / reportableEpochInterval) * reportableEpochInterval;
+    }
+
+    function encodeBatchReport(
+        uint256[] memory ids,
+        uint256[] memory beaconBalances,
+        uint256[] memory validatorCounts
+    ) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(ids, beaconBalances, validatorCounts));
     }
 
     modifier onlyMember() {
