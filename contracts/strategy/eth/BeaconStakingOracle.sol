@@ -29,6 +29,7 @@ contract BeaconStakingOracle is Ownable {
 
     event BeaconReported(
         uint256 epochId,
+        uint256[] ids,
         uint256[] beaconBalance,
         uint256[] beaconValidators,
         address caller
@@ -104,6 +105,8 @@ contract BeaconStakingOracle is Ownable {
         bytes32 report = encodeBatchReport(ids, beaconBalances, validatorCounts);
         uint256 currentCount = reports[epoch][report] + 1;
         reports[epoch][report] = currentCount;
+        emit BeaconReported(epoch, ids, beaconBalances, validatorCounts, msg.sender);
+
         if (currentCount >= quorum) {
             uint256 prevTotalEther = fund.getTotalUnderlying();
             strategy.batchReport(epoch, ids, beaconBalances, validatorCounts);
@@ -113,8 +116,6 @@ contract BeaconStakingOracle is Ownable {
             _reportSanityChecks(postTotalEther, prevTotalEther, timeElapsed);
             lastCompletedEpoch = epoch;
         }
-
-        emit BeaconReported(epoch, beaconBalances, validatorCounts, msg.sender);
     }
 
     /// @dev Performs logical consistency check of the underlying changes as the result of reports push
