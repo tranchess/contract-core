@@ -70,8 +70,7 @@ contract BeaconStakingOracle is Ownable {
         uint256 reportableEpochInterval_,
         uint256 secondsPerEpoch_,
         uint256 genesisTime_,
-        uint256 annualMaxChange_,
-        uint256 quorum_
+        uint256 annualMaxChange_
     ) public {
         strategy = IEthStakingStrategy(strategy_);
         fund = IFundV3(IEthStakingStrategy(strategy_).fund());
@@ -80,7 +79,6 @@ contract BeaconStakingOracle is Ownable {
         require(genesisTime_ < block.timestamp);
         genesisTime = genesisTime_;
         _updateSanityBoundary(annualMaxChange_);
-        _updateQuorum(quorum_);
     }
 
     /// @notice Accept oracle committee member reports from the ETH 2.0 side
