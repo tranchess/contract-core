@@ -99,7 +99,6 @@ contract BeaconStakingOracle is Ownable {
         // Push the result to `reports` queue, report to strategy if counts exceed `quorum`
         bytes32 report = encodeBatchReport(ids, beaconBalances, validatorCounts);
         uint256 currentCount = reports[epoch][report] + 1;
-        reports[epoch][report] = currentCount;
         emit BeaconReported(epoch, ids, beaconBalances, validatorCounts, msg.sender);
 
         if (currentCount >= quorum) {
@@ -110,6 +109,12 @@ contract BeaconStakingOracle is Ownable {
             uint256 timeElapsed = (epoch - lastCompletedEpoch) * secondsPerEpoch;
             _sanityCheck(postTotalUnderlying, preTotalUnderlying, timeElapsed);
             lastCompletedEpoch = epoch;
+
+            if (currentCount > 1) {
+                reports[epoch][report] = 0; // Clear storage for gas refund
+            }
+        } else {
+            reports[epoch][report] = currentCount;
         }
     }
 
