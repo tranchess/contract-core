@@ -55,8 +55,8 @@ contract BeaconStakingOracle is Ownable {
     /// @notice Epoch => report hash => received count
     mapping(uint256 => mapping(bytes32 => uint256)) public reports;
 
-    /// @dev Oracle members => epoch Id of the most recent reported frame
-    mapping(address => uint256) public reported;
+    /// @dev Oracle member => epoch of the most recent report
+    mapping(address => uint256) public lastReportedEpoch;
 
     EnumerableSet.AddressSet private _members;
 
@@ -93,8 +93,8 @@ contract BeaconStakingOracle is Ownable {
                 epoch % reportableEpochInterval == 0,
             "Invalid epoch"
         );
-        require(reported[msg.sender] < epoch, "Already reported");
-        reported[msg.sender] = epoch;
+        require(lastReportedEpoch[msg.sender] < epoch, "Already reported");
+        lastReportedEpoch[msg.sender] = epoch;
 
         // Push the result to `reports` queue, report to strategy if counts exceed `quorum`
         bytes32 report = encodeBatchReport(ids, beaconBalances, validatorCounts);
@@ -142,6 +142,14 @@ contract BeaconStakingOracle is Ownable {
         uint256[] memory validatorCounts
     ) public pure returns (bytes32) {
         return keccak256(abi.encodePacked(ids, beaconBalances, validatorCounts));
+    }
+
+    /// @notice Return the epoch that an oracle member should report now,
+    ///         or zero if the latest reportable epoch is already reported.
+    function getNextEpochByMember(address member) external view returns (uint256) {
+        uint256 epoch = getLatestReportableEpoch();
+        uint256 last = lastReportedEpoch[member];
+        return epoch > last ? epoch : 0;
     }
 
     modifier onlyMember() {
