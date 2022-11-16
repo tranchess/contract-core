@@ -19,9 +19,6 @@ interface IEthStakingStrategy {
     ) external;
 }
 
-/// @title ETH Beacon Chain staking oracle
-/// @notice Implementation of an ETH 2.0 -> ETH oracle
-/// @dev Beacon balances can go up because of reward accumulation and down because of slashing.
 contract BeaconStakingOracle is Ownable {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
@@ -52,8 +49,6 @@ contract BeaconStakingOracle is Ownable {
     uint256 public annualMaxChange;
 
     /// @notice Number of exactly the same reports needed to finalize the epoch
-    /// Not all frames may come to a quorum. Oracles may report only to the first
-    /// epoch of the frame and only if no quorum is reached for this epoch yet.
     uint256 public quorum;
     uint256 public lastCompletedEpoch;
 
@@ -81,10 +76,10 @@ contract BeaconStakingOracle is Ownable {
         _updateAnnualMaxChange(annualMaxChange_);
     }
 
-    /// @notice Accept oracle committee member reports from the ETH 2.0 side
+    /// @notice Report validator balances on Beacon chain
     /// @param epoch Beacon chain epoch
-    /// @param ids Operator IDs
-    /// @param beaconBalances Balance in gwei on the ETH 2.0 side (9-digit denomination)
+    /// @param ids Node operator IDs, which must be sorted in ascending order
+    /// @param beaconBalances Balance in wei of all validators of each node operator
     /// @param validatorCounts Number of validators visible in this epoch
     function batchReport(
         uint256 epoch,
