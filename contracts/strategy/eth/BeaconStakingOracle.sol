@@ -35,12 +35,6 @@ contract BeaconStakingOracle is Ownable {
     );
     event MemberAdded(address member);
     event MemberRemoved(address member);
-    event BeaconConfigUpdated(
-        uint256 newEpochsPerFrame,
-        uint256 newSlotsPerEpoch,
-        uint256 newSecondsPerSlot,
-        uint256 newGenesisTime
-    );
     event SanityBoundaryUpdated(uint256 newAnnualMaxChange);
     event QuorumUpdated(uint256 newQuorum);
 
