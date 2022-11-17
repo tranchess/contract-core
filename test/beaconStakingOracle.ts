@@ -47,12 +47,10 @@ describe("BeaconStakingOracle", function () {
         const BeaconStakingOracle = await ethers.getContractFactory("BeaconStakingOracle");
         const stakingOracle = await BeaconStakingOracle.connect(owner).deploy(
             strategy.address,
-            EPOCHS_PER_FRAME,
-            SLOTS_PER_EPOCH,
+            EPOCHS_PER_FRAME * SLOTS_PER_EPOCH,
             SECONDS_PER_SLOT,
             genesisTime,
-            ANNUAL_MAX_CHANGE,
-            QUORUM
+            ANNUAL_MAX_CHANGE
         );
 
         return {
@@ -108,7 +106,7 @@ describe("BeaconStakingOracle", function () {
             await expect(stakingOracle.removeOracleMember(user1.address, QUORUM))
                 .to.emit(stakingOracle, "MemberRemoved")
                 .withArgs(user1.address);
-            expect(await stakingOracle.salt()).to.equal(1);
+            expect(await stakingOracle.nonce()).to.equal(1);
         });
     });
 
@@ -119,31 +117,31 @@ describe("BeaconStakingOracle", function () {
             await stakingOracle.addOracleMember(user3.address, QUORUM);
         });
 
-        it("Should revert if reporting with stale epoch", async function () {
+        it("Should revert if reporting with stable epoch", async function () {
             await strategy.mock.batchReport.returns();
             await stakingOracle
                 .connect(user1)
-                .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10]);
+                .batchReport(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10]);
             await stakingOracle
                 .connect(user2)
-                .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10]);
+                .batchReport(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10]);
             await expect(
                 stakingOracle
                     .connect(user1)
-                    .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10])
-            ).to.be.revertedWith("Stale epoch");
+                    .batchReport(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10])
+            ).to.be.revertedWith("Invalid epoch");
         });
 
         it("Should revert if reporting twice", async function () {
             await strategy.mock.batchReport.returns();
             await stakingOracle
                 .connect(user1)
-                .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10]);
+                .batchReport(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10]);
             await expect(
                 stakingOracle
                     .connect(user1)
-                    .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("2", 18)], [10])
-            ).to.be.revertedWith("Already submitted");
+                    .batchReport(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("2", 18)], [10])
+            ).to.be.revertedWith("Already reported");
         });
 
         it("Should revert if jump to an invalid epoch", async function () {
@@ -156,10 +154,10 @@ describe("BeaconStakingOracle", function () {
             await expect(
                 stakingOracle
                     .connect(user1)
-                    .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10])
+                    .batchReport(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10])
             )
                 .to.emit(stakingOracle, "BeaconReported")
-                .withArgs(EPOCHS_PER_FRAME, [parseUnits("1", 18)], [10], user1.address);
+                .withArgs(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10], user1.address);
 
             await expect(stakingOracle.removeOracleMember(user1.address, QUORUM))
                 .to.emit(stakingOracle, "MemberRemoved")
@@ -168,22 +166,22 @@ describe("BeaconStakingOracle", function () {
             await expect(
                 stakingOracle
                     .connect(user2)
-                    .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10])
+                    .batchReport(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10])
             )
                 .to.emit(stakingOracle, "BeaconReported")
-                .withArgs(EPOCHS_PER_FRAME, [parseUnits("1", 18)], [10], user2.address);
+                .withArgs(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10], user2.address);
 
             await strategy.mock.batchReport
-                .withArgs(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10])
+                .withArgs(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10])
                 .returns();
 
             await expect(
                 stakingOracle
                     .connect(user3)
-                    .batchReport(EPOCHS_PER_FRAME, [0], [parseUnits("1", 18)], [10])
+                    .batchReport(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10])
             )
                 .to.emit(stakingOracle, "BeaconReported")
-                .withArgs(EPOCHS_PER_FRAME, [parseUnits("1", 18)], [10], user3.address);
+                .withArgs(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10], user3.address);
         });
     });
 });
