@@ -128,7 +128,12 @@ describe("BeaconStakingOracle", function () {
             await expect(
                 stakingOracle
                     .connect(user1)
-                    .batchReport(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10])
+                    .batchReport(
+                        EPOCHS_PER_FRAME * SLOTS_PER_EPOCH,
+                        [0],
+                        [parseUnits("1", 18)],
+                        [10]
+                    )
             ).to.be.revertedWith("Invalid epoch");
         });
 
@@ -140,7 +145,12 @@ describe("BeaconStakingOracle", function () {
             await expect(
                 stakingOracle
                     .connect(user1)
-                    .batchReport(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("2", 18)], [10])
+                    .batchReport(
+                        EPOCHS_PER_FRAME * SLOTS_PER_EPOCH,
+                        [0],
+                        [parseUnits("2", 18)],
+                        [10]
+                    )
             ).to.be.revertedWith("Already reported");
         });
 
@@ -154,10 +164,21 @@ describe("BeaconStakingOracle", function () {
             await expect(
                 stakingOracle
                     .connect(user1)
-                    .batchReport(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10])
+                    .batchReport(
+                        EPOCHS_PER_FRAME * SLOTS_PER_EPOCH,
+                        [0],
+                        [parseUnits("1", 18)],
+                        [10]
+                    )
             )
                 .to.emit(stakingOracle, "BeaconReported")
-                .withArgs(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10], user1.address);
+                .withArgs(
+                    EPOCHS_PER_FRAME * SLOTS_PER_EPOCH,
+                    [0],
+                    [parseUnits("1", 18)],
+                    [10],
+                    user1.address
+                );
 
             await expect(stakingOracle.removeOracleMember(user1.address, QUORUM))
                 .to.emit(stakingOracle, "MemberRemoved")
@@ -166,10 +187,21 @@ describe("BeaconStakingOracle", function () {
             await expect(
                 stakingOracle
                     .connect(user2)
-                    .batchReport(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10])
+                    .batchReport(
+                        EPOCHS_PER_FRAME * SLOTS_PER_EPOCH,
+                        [0],
+                        [parseUnits("1", 18)],
+                        [10]
+                    )
             )
                 .to.emit(stakingOracle, "BeaconReported")
-                .withArgs(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10], user2.address);
+                .withArgs(
+                    EPOCHS_PER_FRAME * SLOTS_PER_EPOCH,
+                    [0],
+                    [parseUnits("1", 18)],
+                    [10],
+                    user2.address
+                );
 
             await strategy.mock.batchReport
                 .withArgs(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10])
@@ -178,10 +210,21 @@ describe("BeaconStakingOracle", function () {
             await expect(
                 stakingOracle
                     .connect(user3)
-                    .batchReport(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10])
+                    .batchReport(
+                        EPOCHS_PER_FRAME * SLOTS_PER_EPOCH,
+                        [0],
+                        [parseUnits("1", 18)],
+                        [10]
+                    )
             )
                 .to.emit(stakingOracle, "BeaconReported")
-                .withArgs(EPOCHS_PER_FRAME * SLOTS_PER_EPOCH, [0], [parseUnits("1", 18)], [10], user3.address);
+                .withArgs(
+                    EPOCHS_PER_FRAME * SLOTS_PER_EPOCH,
+                    [0],
+                    [parseUnits("1", 18)],
+                    [10],
+                    user3.address
+                );
         });
     });
 });
