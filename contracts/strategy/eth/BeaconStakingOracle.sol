@@ -50,6 +50,7 @@ contract BeaconStakingOracle is Ownable {
 
     /// @notice Number of exactly the same reports needed to finalize the epoch
     uint256 public quorum;
+    uint256 public nonce;
     uint256 public lastCompletedEpoch;
 
     /// @notice Epoch => report hash => received count
@@ -145,8 +146,8 @@ contract BeaconStakingOracle is Ownable {
         uint256[] memory ids,
         uint256[] memory beaconBalances,
         uint256[] memory validatorCounts
-    ) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked(ids, beaconBalances, validatorCounts));
+    ) public view returns (bytes32) {
+        return keccak256(abi.encodePacked(ids, beaconBalances, validatorCounts, nonce));
     }
 
     /// @notice Return the epoch that an oracle member should report now,
@@ -185,6 +186,9 @@ contract BeaconStakingOracle is Ownable {
         emit MemberRemoved(member);
 
         _updateQuorum(newQuorum);
+
+        // Force out the previous records, and allow the remained oracles to report it again
+        nonce++;
     }
 
     function updateAnnualMaxChange(uint256 newAnnualMaxChange) external onlyOwner {
