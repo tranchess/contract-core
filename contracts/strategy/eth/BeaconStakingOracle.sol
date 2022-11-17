@@ -36,6 +36,9 @@ contract BeaconStakingOracle is Ownable {
     event AnnualMaxChangeUpdated(uint256 newAnnualMaxChange);
     event QuorumUpdated(uint256 newQuorum);
 
+    IEthStakingStrategy public immutable strategy;
+    IFundV3 public immutable fund;
+
     /// @notice Number of epochs between adjacent reports
     uint256 public immutable reportableEpochInterval;
 
@@ -44,8 +47,6 @@ contract BeaconStakingOracle is Ownable {
     /// @notice Timestamp of epoch 0
     uint256 public immutable genesisTime;
 
-    IEthStakingStrategy public strategy;
-    IFundV3 public fund;
     uint256 public annualMaxChange;
 
     /// @notice Number of exactly the same reports needed to finalize the epoch
