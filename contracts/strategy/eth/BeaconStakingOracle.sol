@@ -168,11 +168,15 @@ contract BeaconStakingOracle is Ownable {
         return _members.length();
     }
 
-    function getMember(uint256 index) external view returns (address) {
-        return _members.at(index);
+    function getMembers() external view returns (address[] memory members) {
+        uint256 length = _members.length();
+        members = new address[](length);
+        for (uint256 i = 0; i < length; i++) {
+            members[i] = _members.at(i);
+        }
     }
 
-    function addOracleMember(address member, uint256 newQuorum) external onlyOwner {
+    function addMember(address member, uint256 newQuorum) external onlyOwner {
         require(member != address(0), "Invalid address");
         require(!_members.contains(member), "Already a member");
         _members.add(member);
@@ -181,7 +185,7 @@ contract BeaconStakingOracle is Ownable {
         _updateQuorum(newQuorum);
     }
 
-    function removeOracleMember(address member, uint256 newQuorum) external onlyOwner {
+    function removeMember(address member, uint256 newQuorum) external onlyOwner {
         require(_members.contains(member), "Not a member");
         _members.remove(member);
         emit MemberRemoved(member);

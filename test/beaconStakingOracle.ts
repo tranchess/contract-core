@@ -70,37 +70,37 @@ describe("BeaconStakingOracle", function () {
         stakingOracle = fixtureData.stakingOracle;
     });
 
-    describe("addOracleMember()", function () {
+    describe("addMember()", function () {
         it("Should revert if adding zero address as member", async function () {
-            await expect(
-                stakingOracle.addOracleMember(constants.AddressZero, QUORUM)
-            ).to.be.revertedWith("Invalid address");
+            await expect(stakingOracle.addMember(constants.AddressZero, QUORUM)).to.be.revertedWith(
+                "Invalid address"
+            );
         });
 
         it("Should revert if adding an existing member", async function () {
-            await stakingOracle.addOracleMember(user1.address, QUORUM);
-            await expect(stakingOracle.addOracleMember(user1.address, QUORUM)).to.be.revertedWith(
+            await stakingOracle.addMember(user1.address, QUORUM);
+            await expect(stakingOracle.addMember(user1.address, QUORUM)).to.be.revertedWith(
                 "Already a member"
             );
         });
 
         it("Should add oracle member", async function () {
-            await expect(stakingOracle.addOracleMember(user1.address, QUORUM))
+            await expect(stakingOracle.addMember(user1.address, QUORUM))
                 .to.emit(stakingOracle, "MemberAdded")
                 .withArgs(user1.address);
         });
     });
 
-    describe("removeOracleMember()", function () {
+    describe("removeMember()", function () {
         it("Should revert if removing an non-member address", async function () {
-            await expect(
-                stakingOracle.removeOracleMember(user1.address, QUORUM)
-            ).to.be.revertedWith("Not a member");
+            await expect(stakingOracle.removeMember(user1.address, QUORUM)).to.be.revertedWith(
+                "Not a member"
+            );
         });
 
         it("Should remove oracle member", async function () {
-            await stakingOracle.addOracleMember(user1.address, QUORUM);
-            await expect(stakingOracle.removeOracleMember(user1.address, QUORUM))
+            await stakingOracle.addMember(user1.address, QUORUM);
+            await expect(stakingOracle.removeMember(user1.address, QUORUM))
                 .to.emit(stakingOracle, "MemberRemoved")
                 .withArgs(user1.address);
             expect(await stakingOracle.nonce()).to.equal(1);
@@ -109,9 +109,9 @@ describe("BeaconStakingOracle", function () {
 
     describe("batchReport()", function () {
         beforeEach(async function () {
-            await stakingOracle.addOracleMember(user1.address, QUORUM);
-            await stakingOracle.addOracleMember(user2.address, QUORUM);
-            await stakingOracle.addOracleMember(user3.address, QUORUM);
+            await stakingOracle.addMember(user1.address, QUORUM);
+            await stakingOracle.addMember(user2.address, QUORUM);
+            await stakingOracle.addMember(user3.address, QUORUM);
         });
 
         it("Should revert if reporting with stable epoch", async function () {
@@ -156,7 +156,7 @@ describe("BeaconStakingOracle", function () {
                 .to.emit(stakingOracle, "BeaconReported")
                 .withArgs(EPOCH_INTERVAL, [0], [parseUnits("1", 18)], [10], user1.address);
 
-            await expect(stakingOracle.removeOracleMember(user1.address, QUORUM))
+            await expect(stakingOracle.removeMember(user1.address, QUORUM))
                 .to.emit(stakingOracle, "MemberRemoved")
                 .withArgs(user1.address);
 
