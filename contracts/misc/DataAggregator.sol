@@ -357,7 +357,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         uint256 claimableBonus;
     }
 
-    string public constant VERSION = "2.0.0";
+    string public constant VERSION = "2.1.1";
 
     address public immutable votingEscrow;
     address public immutable chessSchedule;
@@ -454,36 +454,36 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         data.primaryMarket = getPrimaryMarketData(primaryMarket);
 
         data.shareStaking = getShareStakingData(shareStaking, data.fund.splitRatio, account);
-
-        address bishopStableSwap =
-            swapRouter
-                .get(
-                abi.encodeWithSelector(
-                    SwapRouter.getSwap.selector,
-                    fund
-                        .get(abi.encodeWithSelector(FundV3.tokenShare.selector, TRANCHE_B))
-                        .toAddr(),
-                    bishopQuoteToken
-                )
-            )
-                .toAddr();
-        data.bishopStableSwap = getStableSwapData(bishopStableSwap, account);
-
         address underlyingToken =
             fund.get(abi.encodeWithSelector(FundV3(0).tokenUnderlying.selector)).toAddr();
-        address queenStableSwap =
-            swapRouter
-                .get(
-                abi.encodeWithSelector(
-                    SwapRouter.getSwap.selector,
-                    fund
-                        .get(abi.encodeWithSelector(FundV3.tokenShare.selector, TRANCHE_Q))
-                        .toAddr(),
-                    underlyingToken
+
+        if (swapRouter != address(0)) {
+            address bishopStableSwap =
+                swapRouter
+                    .get(
+                    abi.encodeWithSelector(
+                        SwapRouter.getSwap.selector,
+                        fund
+                            .get(abi.encodeWithSelector(FundV3.tokenShare.selector, TRANCHE_B))
+                            .toAddr(),
+                        bishopQuoteToken
+                    )
                 )
-            )
-                .toAddr();
-        if (queenStableSwap != address(0)) {
+                    .toAddr();
+            data.bishopStableSwap = getStableSwapData(bishopStableSwap, account);
+
+            address queenStableSwap =
+                swapRouter
+                    .get(
+                    abi.encodeWithSelector(
+                        SwapRouter.getSwap.selector,
+                        fund
+                            .get(abi.encodeWithSelector(FundV3.tokenShare.selector, TRANCHE_Q))
+                            .toAddr(),
+                        underlyingToken
+                    )
+                )
+                    .toAddr();
             data.queenStableSwap = getStableSwapData(queenStableSwap, account);
         }
 
@@ -755,6 +755,9 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         public
         returns (StableSwapData memory data)
     {
+        if (stableSwap == address(0)) {
+            return data;
+        }
         address lp =
             stableSwap.get(abi.encodeWithSelector(StableSwap(0).lpToken.selector)).toAddr();
         address swapBonus =
