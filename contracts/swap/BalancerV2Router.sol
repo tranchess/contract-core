@@ -144,7 +144,7 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
         bytes calldata
     ) external override returns (uint256 realBaseOut) {
         uint256 routerQuoteBalance = IERC20(_tokenUnderlying).balanceOf(address(this));
-        IERC20(_tokenUnderlying).safeTransfer(address(vault), routerQuoteBalance);
+        IERC20(_tokenUnderlying).safeApprove(address(vault), routerQuoteBalance);
 
         IBalancerVault.SingleSwap memory singleSwap =
             IBalancerVault.SingleSwap({
@@ -158,7 +158,7 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
         IBalancerVault.FundManagement memory funds =
             IBalancerVault.FundManagement({
                 sender: address(this),
-                fromInternalBalance: true,
+                fromInternalBalance: false,
                 recipient: recipient,
                 toInternalBalance: false
             });
@@ -175,7 +175,7 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
         bytes calldata
     ) external override returns (uint256 realQuoteOut) {
         uint256 routerBaseBalance = fund.trancheBalanceOf(TRANCHE_Q, address(this));
-        IERC20(_tokenQ).safeTransfer(address(vault), routerBaseBalance);
+        fund.trancheApprove(TRANCHE_Q, address(vault), routerBaseBalance, fund.getRebalanceSize());
 
         IBalancerVault.SingleSwap memory singleSwap =
             IBalancerVault.SingleSwap({
@@ -189,7 +189,7 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
         IBalancerVault.FundManagement memory funds =
             IBalancerVault.FundManagement({
                 sender: address(this),
-                fromInternalBalance: true,
+                fromInternalBalance: false,
                 recipient: address(this),
                 toInternalBalance: false
             });
