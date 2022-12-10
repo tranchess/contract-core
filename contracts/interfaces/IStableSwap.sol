@@ -82,3 +82,30 @@ interface IStableSwap is IStableSwapCore {
         uint256 minQuoteOut
     ) external returns (uint256 quoteOut);
 }
+
+/// @dev The interface shares the same function names as in `IStableSwapCore`;
+///      all getters are defined as non-view functions in order to parse and
+///      return the internal revert messages
+interface IStableSwapCoreInternalRevertExpected {
+    function getQuoteOut(uint256 baseIn) external returns (uint256 quoteOut);
+
+    function getQuoteIn(uint256 baseOut) external returns (uint256 quoteIn);
+
+    function getBaseOut(uint256 quoteIn) external returns (uint256 baseOut);
+
+    function getBaseIn(uint256 quoteOut) external returns (uint256 baseIn);
+
+    function buy(
+        uint256 version,
+        uint256 baseOut,
+        address recipient,
+        bytes calldata data
+    ) external returns (uint256 realBaseOut);
+
+    function sell(
+        uint256 version,
+        uint256 quoteOut,
+        address recipient,
+        bytes calldata data
+    ) external returns (uint256 realQuoteOut);
+}
