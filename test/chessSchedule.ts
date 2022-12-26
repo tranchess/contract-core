@@ -90,6 +90,16 @@ const CUMULATIVE_SUPPLY_SCHEDULE: BigNumber[] = [
     parseEther("69974632"),
     parseEther("70327176"),
     parseEther("70676194"),
+    parseEther("71025213"),
+    parseEther("71374232"),
+    parseEther("71723250"),
+    parseEther("72072269"),
+    parseEther("72421288"),
+    parseEther("72770306"),
+    parseEther("73119325"),
+    parseEther("73468344"),
+    parseEther("73817362"),
+    parseEther("74166381"),
 ];
 
 const WEEKLY_SUPPLY_SCHEDULE: BigNumber[] = [];
