@@ -43,6 +43,10 @@ contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
         require(success, "ETH transfer failed");
     }
 
+    function updateLastTimestamp(uint256 lastTimestamp_) external onlyOwner {
+        _updateLastTimestamp(lastTimestamp_);
+    }
+
     function checkUpkeep(bytes calldata)
         external
         override
@@ -60,6 +64,13 @@ contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
         subSchedule.crossChainSync{value: srcFees}();
 
         // Always skip to the lastest week
-        lastTimestamp += ((block.timestamp - lastTimestamp + 1 weeks - 1) / 1 weeks) * 1 weeks;
+        uint256 lastTimestamp_ = lastTimestamp;
+        _updateLastTimestamp(
+            lastTimestamp_ + ((block.timestamp - lastTimestamp_ + 1 weeks - 1) / 1 weeks) * 1 weeks
+        );
+    }
+
+    function _updateLastTimestamp(uint256 lastTimestamp_) private {
+        lastTimestamp = lastTimestamp_;
     }
 }
