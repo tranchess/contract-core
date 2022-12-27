@@ -33,7 +33,7 @@ contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
         subSchedule = ISubSchedule(subSchedule_);
         mainChainID = ISubSchedule(subSchedule_).mainChainID();
         anyCallProxy = ISubSchedule(subSchedule_).anyCallProxy();
-        lastTimestamp = block.timestamp;
+        _updateLastTimestamp(block.timestamp);
     }
 
     receive() external payable {}
@@ -66,7 +66,7 @@ contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
         // Always skip to the lastest week
         uint256 lastTimestamp_ = lastTimestamp;
         _updateLastTimestamp(
-            lastTimestamp_ + ((block.timestamp - lastTimestamp_ + 1 weeks - 1) / 1 weeks) * 1 weeks
+            lastTimestamp_ + ((block.timestamp - lastTimestamp_ - 1) / 1 weeks) * 1 weeks
         );
     }
 
