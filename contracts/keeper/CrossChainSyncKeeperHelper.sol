@@ -13,6 +13,8 @@ interface IAnyCallProxy {
 }
 
 interface ISubSchedule {
+    function anyCallProxy() external view returns (address);
+
     function mainChainID() external view returns (uint256);
 
     function crossChainSync() external payable;
@@ -25,10 +27,13 @@ contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
     uint256 public immutable mainChainID;
     address public immutable anyCallProxy;
 
-    constructor(address subSchedule_, address anyCallProxy_) public {
+    uint256 public lastTimestamp;
+
+    constructor(address subSchedule_) public {
         subSchedule = ISubSchedule(subSchedule_);
         mainChainID = ISubSchedule(subSchedule_).mainChainID();
-        anyCallProxy = anyCallProxy_;
+        anyCallProxy = ISubSchedule(subSchedule_).anyCallProxy();
+        lastTimestamp = block.timestamp;
     }
 
     receive() external payable {}
@@ -38,14 +43,23 @@ contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
         require(success, "ETH transfer failed");
     }
 
-    function checkUpkeep(bytes calldata) external override returns (bool, bytes memory) {
-        revert("Not Supported");
+    function checkUpkeep(bytes calldata)
+        external
+        override
+        returns (bool upkeepNeeded, bytes memory)
+    {
+        upkeepNeeded = (block.timestamp > lastTimestamp + 1 weeks);
     }
 
     function performUpkeep(bytes calldata) external override {
+        require(block.timestamp > lastTimestamp + 1 weeks, "Not yet");
+
         uint256 srcFees =
             IAnyCallProxy(anyCallProxy).calcSrcFees(address(subSchedule), mainChainID, DATA_LENGTH);
         require(address(this).balance >= srcFees, "Not enough balance");
         subSchedule.crossChainSync{value: srcFees}();
+
+        // Always skip to the lastest week
+        lastTimestamp += ((block.timestamp - lastTimestamp + 1 weeks - 1) / 1 weeks) * 1 weeks;
     }
 }
