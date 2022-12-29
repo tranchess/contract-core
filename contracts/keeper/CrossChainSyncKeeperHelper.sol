@@ -56,7 +56,8 @@ contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
     }
 
     function performUpkeep(bytes calldata) external override {
-        require(block.timestamp > lastTimestamp + 1 weeks, "Not yet");
+        uint256 lastTimestamp_ = lastTimestamp;
+        require(block.timestamp > lastTimestamp_ + 1 weeks, "Not yet");
 
         uint256 srcFees =
             IAnyCallProxy(anyCallProxy).calcSrcFees(address(subSchedule), mainChainID, DATA_LENGTH);
@@ -64,7 +65,6 @@ contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
         subSchedule.crossChainSync{value: srcFees}();
 
         // Always skip to the lastest week
-        uint256 lastTimestamp_ = lastTimestamp;
         _updateLastTimestamp(
             lastTimestamp_ + ((block.timestamp - lastTimestamp_ - 1) / 1 weeks) * 1 weeks
         );
