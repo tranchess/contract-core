@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "../interfaces/IStableSwap.sol";
 import "../interfaces/ITrancheIndexV2.sol";
-import "../interfaces/IWrappedERC20.sol";
 
 /// @dev See IVault.sol under https://github.com/balancer-labs/balancer-v2-monorepo/
 interface IBalancerVault {
@@ -131,10 +130,6 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
         );
     }
 
-    receive() external payable {
-        require(msg.sender == address(vault.WETH()), "Unexpected transfer");
-    }
-
     /// @dev Create QUEEN with StableSwap buy interface.
     ///      Underlying should have already been sent to this contract
     function buy(
@@ -190,13 +185,11 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
             IBalancerVault.FundManagement({
                 sender: address(this),
                 fromInternalBalance: false,
-                recipient: address(this),
+                recipient: recipient,
                 toInternalBalance: false
             });
 
         realQuoteOut = vault.swap(singleSwap, funds, quoteOut, block.timestamp);
-        IWrappedERC20(_tokenUnderlying).deposit{value: realQuoteOut}();
-        IERC20(_tokenUnderlying).safeTransfer(recipient, realQuoteOut);
     }
 
     /// @dev See BalancerQueries.sol under https://github.com/balancer-labs/balancer-v2-monorepo/
