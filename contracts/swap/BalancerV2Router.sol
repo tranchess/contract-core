@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "../interfaces/IStableSwap.sol";
 import "../interfaces/ITrancheIndexV2.sol";
+import "../interfaces/IWrappedERC20.sol";
 
 /// @dev See IVault.sol under https://github.com/balancer-labs/balancer-v2-monorepo/
 interface IBalancerVault {
@@ -62,17 +63,23 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
     IBalancerVault public immutable vault;
     bytes32 public immutable poolId;
 
+    address private immutable _fundUnderlying;
+
     constructor(
         address fund_,
         address vault_,
-        bytes32 poolId_
+        bytes32 poolId_,
+        address balancerWeth_
     ) public {
         fund = IFundV3(fund_);
-        _tokenUnderlying = IFundV3(fund_).tokenUnderlying();
+        _tokenUnderlying = balancerWeth_;
         _tokenQ = IFundV3(fund_).tokenQ();
         vault = IBalancerVault(vault_);
         poolId = poolId_;
+        _fundUnderlying = IFundV3(fund_).tokenUnderlying();
     }
+
+    receive() external payable {}
 
     /// @dev Get redemption with StableSwap getQuoteOut interface.
     function getQuoteOut(uint256 baseIn) external override returns (uint256 quoteOut) {
@@ -138,7 +145,9 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
         address recipient,
         bytes calldata
     ) external override returns (uint256 realBaseOut) {
-        uint256 routerQuoteBalance = IERC20(_tokenUnderlying).balanceOf(address(this));
+        uint256 routerQuoteBalance = IERC20(_fundUnderlying).balanceOf(address(this));
+        IWrappedERC20(_fundUnderlying).withdraw(routerQuoteBalance);
+        IWrappedERC20(_tokenUnderlying).deposit{value: routerQuoteBalance}();
         IERC20(_tokenUnderlying).safeApprove(address(vault), routerQuoteBalance);
 
         IBalancerVault.SingleSwap memory singleSwap =
@@ -185,11 +194,14 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
             IBalancerVault.FundManagement({
                 sender: address(this),
                 fromInternalBalance: false,
-                recipient: recipient,
+                recipient: address(this),
                 toInternalBalance: false
             });
 
         realQuoteOut = vault.swap(singleSwap, funds, quoteOut, block.timestamp);
+        IWrappedERC20(_tokenUnderlying).withdraw(realQuoteOut);
+        IWrappedERC20(_fundUnderlying).deposit{value: realQuoteOut}();
+        IERC20(_fundUnderlying).transfer(recipient, realQuoteOut);
     }
 
     /// @dev See BalancerQueries.sol under https://github.com/balancer-labs/balancer-v2-monorepo/
