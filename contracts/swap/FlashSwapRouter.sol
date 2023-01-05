@@ -59,7 +59,8 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         bytes memory data;
         {
             uint256 inQ = IPrimaryMarketV3(fund.primaryMarket()).getSplitForB(outR);
-            underlyingAmount = IStableSwapCore(queenSwapOrPrimaryMarketRouter).getQuoteIn(inQ);
+            underlyingAmount = IStableSwapCoreInternalRevertExpected(queenSwapOrPrimaryMarketRouter)
+                .getQuoteIn(inQ);
             // Calculate the exact amount of quote asset to pay
             totalQuoteAmount = IUniswapV2Router01(externalRouter).getAmountsIn(
                 underlyingAmount,
@@ -153,13 +154,12 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
 
                 // Redeem or swap QUEEN for underlying
                 uint256 underlyingAmount =
-                    IStableSwapCore(queenSwapOrPrimaryMarketRouter).getQuoteOut(outQ);
-                underlyingAmount = IStableSwapCore(queenSwapOrPrimaryMarketRouter).sell(
-                    version,
-                    underlyingAmount,
-                    address(this),
-                    ""
-                );
+                    IStableSwapCoreInternalRevertExpected(queenSwapOrPrimaryMarketRouter)
+                        .getQuoteOut(outQ);
+                underlyingAmount = IStableSwapCoreInternalRevertExpected(
+                    queenSwapOrPrimaryMarketRouter
+                )
+                    .sell(version, underlyingAmount, address(this), "");
 
                 // Trade underlying for quote asset
                 uint256 totalQuoteAmount =
@@ -180,9 +180,11 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
 
             // Create or swap borrowed underlying for QUEEN
             uint256 outQ =
-                IStableSwapCore(queenSwapOrPrimaryMarketRouter).getBaseOut(underlyingAmount);
+                IStableSwapCoreInternalRevertExpected(queenSwapOrPrimaryMarketRouter).getBaseOut(
+                    underlyingAmount
+                );
             IERC20(tokenUnderlying).safeTransfer(queenSwapOrPrimaryMarketRouter, underlyingAmount);
-            outQ = IStableSwapCore(queenSwapOrPrimaryMarketRouter).buy(
+            outQ = IStableSwapCoreInternalRevertExpected(queenSwapOrPrimaryMarketRouter).buy(
                 version,
                 outQ,
                 address(this),
