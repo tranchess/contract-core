@@ -94,8 +94,8 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
             IBalancerVault.SingleSwap({
                 poolId: poolId,
                 kind: IBalancerVault.SwapKind.GIVEN_OUT,
-                assetIn: _tokenQ,
-                assetOut: _tokenUnderlying,
+                assetIn: _tokenUnderlying,
+                assetOut: _tokenQ,
                 amount: baseOut,
                 userData: ""
             })
@@ -122,8 +122,8 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
             IBalancerVault.SingleSwap({
                 poolId: poolId,
                 kind: IBalancerVault.SwapKind.GIVEN_OUT,
-                assetIn: _tokenUnderlying,
-                assetOut: _tokenQ,
+                assetIn: _tokenQ,
+                assetOut: _tokenUnderlying,
                 amount: quoteOut,
                 userData: ""
             })
