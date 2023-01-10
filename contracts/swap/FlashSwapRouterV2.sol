@@ -218,24 +218,13 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
                 params.inputs.version
             );
             // Pay back the flashloan
-            if (amountToPay >= amounts[1]) {
-                IERC20(paymentToken).safeTransfer(msg.sender, amounts[1]);
-                if (amountToPay != amounts[1]) {
-                    require(
-                        amountToPay - amounts[1] > params.inputs.resultBoundary,
-                        "Excessive input"
-                    );
-                    IERC20(paymentToken).safeTransferFrom(
-                        params.payer,
-                        msg.sender,
-                        amountToPay - amounts[1]
-                    );
-                }
-            } else {
-                IERC20(paymentToken).safeTransfer(msg.sender, amountToPay);
-                // If the transaction made more money than borrowed, transfer back to the payer
-                IERC20(paymentToken).safeTransfer(params.payer, amounts[1] - amountToPay);
-            }
+            require(amountToPay.sub(amounts[1]) <= params.inputs.resultBoundary, "Excessive input");
+            IERC20(paymentToken).safeTransfer(msg.sender, amounts[1]);
+            IERC20(paymentToken).safeTransferFrom(
+                params.payer,
+                msg.sender,
+                amountToPay - amounts[1]
+            );
         } else if (paymentToken == params.tokenUnderlying) {
             // Sell BISHOP to tranchess swap for quote asset
             address[] memory path = new address[](2);
@@ -274,7 +263,6 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
             );
             outQ = swapCore.sell(params.inputs.version, underlyingAmount, address(this), "");
             // Pay back the flashloan
-            require(amountToPay == amounts[1]);
             IERC20(paymentToken).safeTransfer(msg.sender, amountToPay);
             // Send the rest of quote asset to user
             uint256 resultAmount = IERC20(params.inputs.tokenQuote).balanceOf(address(this));
