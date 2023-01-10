@@ -189,27 +189,22 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
                     params.inputs.version
                 );
             // Sell BISHOP to tranchess swap for quote asset
-            params.inputs.fund.trancheApprove(
-                TRANCHE_B,
-                address(tranchessRouter),
-                outB,
-                params.inputs.version
-            );
             address[] memory path = new address[](2);
             path[0] = params.inputs.fund.tokenB();
             path[1] = params.inputs.tokenQuote;
-            uint256[] memory versions = new uint256[](1);
-            versions[0] = params.inputs.version;
-            uint256[] memory amounts =
-                tranchessRouter.swapExactTokensForTokens(
-                    outB,
-                    0,
-                    path,
-                    address(this),
-                    address(0),
-                    versions,
-                    block.timestamp
-                );
+            (uint256[] memory amounts, , ) = tranchessRouter.getAmountsOut(outB, path);
+            params.inputs.fund.trancheTransfer(
+                TRANCHE_B,
+                address(tranchessRouter),
+                amounts[0],
+                params.inputs.version
+            );
+            tranchessRouter.getSwap(path[0], path[1]).sell(
+                params.inputs.version,
+                amounts[1],
+                address(this),
+                new bytes(0)
+            );
             // Send ROOK to recipient
             params.inputs.fund.trancheTransfer(
                 TRANCHE_R,
@@ -226,23 +221,18 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
                 amountToPay - amounts[1]
             );
         } else if (paymentToken == params.tokenUnderlying) {
-            // Sell BISHOP to tranchess swap for quote asset
+            // Buy BISHOP from tranchess swap using quote asset
             address[] memory path = new address[](2);
             path[0] = params.inputs.tokenQuote;
             path[1] = params.inputs.fund.tokenB();
-            uint256[] memory versions = new uint256[](1);
-            versions[0] = params.inputs.version;
             (uint256[] memory amounts, , ) =
                 tranchessRouter.getAmountsIn(params.inputs.amountR, path);
-            IERC20(params.inputs.tokenQuote).safeApprove(address(tranchessRouter), amounts[0]);
-            tranchessRouter.swapTokensForExactTokens(
-                params.inputs.amountR,
-                amounts[0],
-                path,
+            IERC20(params.inputs.tokenQuote).safeTransfer(address(tranchessRouter), amounts[0]);
+            tranchessRouter.getSwap(path[0], path[1]).buy(
+                params.inputs.version,
+                amounts[1],
                 address(this),
-                address(0),
-                versions,
-                block.timestamp
+                new bytes(0)
             );
             // Merge BISHOP and ROOK into QUEEN
             uint256 outQ =
