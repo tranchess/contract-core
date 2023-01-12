@@ -192,18 +192,14 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
             path[0] = params.inputs.fund.tokenB();
             path[1] = params.inputs.tokenQuote;
             (uint256[] memory amounts, , ) = tranchessRouter.getAmountsOut(outB, path);
+            IStableSwap tranchessSwap = tranchessRouter.getSwap(path[0], path[1]);
             params.inputs.fund.trancheTransfer(
                 TRANCHE_B,
-                address(tranchessRouter),
+                address(tranchessSwap),
                 amounts[0],
                 params.inputs.version
             );
-            tranchessRouter.getSwap(path[0], path[1]).sell(
-                params.inputs.version,
-                amounts[1],
-                address(this),
-                new bytes(0)
-            );
+            tranchessSwap.sell(params.inputs.version, amounts[1], address(this), new bytes(0));
             // Send ROOK to recipient
             params.inputs.fund.trancheTransfer(
                 TRANCHE_R,
@@ -226,13 +222,9 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
             path[1] = params.inputs.fund.tokenB();
             (uint256[] memory amounts, , ) =
                 tranchessRouter.getAmountsIn(params.inputs.amountR, path);
-            IERC20(params.inputs.tokenQuote).safeTransfer(address(tranchessRouter), amounts[0]);
-            tranchessRouter.getSwap(path[0], path[1]).buy(
-                params.inputs.version,
-                amounts[1],
-                address(this),
-                new bytes(0)
-            );
+            IStableSwap tranchessSwap = tranchessRouter.getSwap(path[0], path[1]);
+            IERC20(params.inputs.tokenQuote).safeTransfer(address(tranchessSwap), amounts[0]);
+            tranchessSwap.buy(params.inputs.version, amounts[1], address(this), new bytes(0));
             // Merge BISHOP and ROOK into QUEEN
             uint256 outQ =
                 IPrimaryMarketV3(params.inputs.fund.primaryMarket()).merge(
