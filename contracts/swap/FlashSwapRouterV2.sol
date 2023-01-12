@@ -75,7 +75,7 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
 
         (int256 amount0Delta, int256 amount1Delta) =
             pool.swap(
-                params.recipient,
+                address(this),
                 zeroForOne,
                 -underlyingAmount.toInt256(),
                 zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
@@ -114,9 +114,8 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         (uint256 outQ, ) = IPrimaryMarketV3(params.fund.primaryMarket()).getMerge(params.amountR);
         // Calculate the exact amount of underlying asset to pay
         uint256 underlyingAmount =
-            IStableSwapCoreInternalRevertExpected(params.queenSwapOrPrimaryMarketRouter).getBaseOut(
-                outQ
-            );
+            IStableSwapCoreInternalRevertExpected(params.queenSwapOrPrimaryMarketRouter)
+                .getQuoteOut(outQ);
 
         address tokenUnderlying = params.fund.tokenUnderlying();
         PoolAddress.PoolKey memory poolKey =
@@ -136,7 +135,7 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
 
         (int256 amount0Delta, int256 amount1Delta) =
             pool.swap(
-                params.recipient,
+                address(this),
                 zeroForOne,
                 underlyingAmount.toInt256(), // Exact input
                 zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
@@ -171,8 +170,8 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
 
         (address paymentToken, uint256 amountToPay, uint256 amountOut) =
             amount0Delta > 0
-                ? (params.token0, uint256(amount0Delta), uint256(amount1Delta))
-                : (params.token1, uint256(amount1Delta), uint256(amount0Delta));
+                ? (params.token0, uint256(amount0Delta), uint256(-amount1Delta))
+                : (params.token1, uint256(amount1Delta), uint256(-amount0Delta));
 
         if (paymentToken == params.inputs.tokenQuote) {
             // Create or swap borrowed underlying for QUEEN
