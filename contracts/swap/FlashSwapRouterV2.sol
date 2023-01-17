@@ -145,8 +145,8 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         emit SwapRook(
             params.recipient,
             0,
-            uint256(zeroForOne ? amount0Delta : amount1Delta),
             params.amountR,
+            uint256(zeroForOne ? -amount0Delta : -amount1Delta),
             0
         );
     }
@@ -187,19 +187,19 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
                     outQ,
                     params.inputs.version
                 );
+            // Arrange the stable swap path
+            IStableSwap tranchessPair =
+                tranchessRouter.getSwap(params.inputs.fund.tokenB(), params.inputs.tokenQuote);
             // Sell BISHOP to tranchess swap for quote asset
-            address[] memory path = new address[](2);
-            path[0] = params.inputs.fund.tokenB();
-            path[1] = params.inputs.tokenQuote;
-            (uint256[] memory amounts, , ) = tranchessRouter.getAmountsOut(outB, path);
-            IStableSwap tranchessSwap = tranchessRouter.getSwap(path[0], path[1]);
+            uint256 quoteAmount = tranchessPair.getQuoteOut(outB);
+            // Calculate the amount of quote asset for selling BISHOP, paying back part of the flashloan
             params.inputs.fund.trancheTransfer(
                 TRANCHE_B,
-                address(tranchessSwap),
-                amounts[0],
+                address(tranchessPair),
+                outB,
                 params.inputs.version
             );
-            tranchessSwap.sell(params.inputs.version, amounts[1], address(this), new bytes(0));
+            tranchessPair.sell(params.inputs.version, quoteAmount, msg.sender, "");
             // Send ROOK to recipient
             params.inputs.fund.trancheTransfer(
                 TRANCHE_R,
@@ -207,48 +207,45 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
                 outB,
                 params.inputs.version
             );
-            // Pay back the flashloan
-            require(amountToPay.sub(amounts[1]) <= params.inputs.resultBoundary, "Excessive input");
-            IERC20(paymentToken).safeTransfer(msg.sender, amounts[1]);
+            // Pay back rest of the flashloan out of user pocket
+            require(
+                amountToPay.sub(quoteAmount) <= params.inputs.resultBoundary,
+                "Excessive input"
+            );
             IERC20(paymentToken).safeTransferFrom(
                 params.payer,
                 msg.sender,
-                amountToPay - amounts[1]
+                amountToPay - quoteAmount
             );
         } else if (paymentToken == params.tokenUnderlying) {
+            // Arrange the stable swap path
+            IStableSwap tranchessPair =
+                tranchessRouter.getSwap(params.inputs.fund.tokenB(), params.inputs.tokenQuote);
             // Buy BISHOP from tranchess swap using quote asset
-            address[] memory path = new address[](2);
-            path[0] = params.inputs.tokenQuote;
-            path[1] = params.inputs.fund.tokenB();
-            (uint256[] memory amounts, , ) =
-                tranchessRouter.getAmountsIn(params.inputs.amountR, path);
-            IStableSwap tranchessSwap = tranchessRouter.getSwap(path[0], path[1]);
-            IERC20(params.inputs.tokenQuote).safeTransfer(address(tranchessSwap), amounts[0]);
-            tranchessSwap.buy(params.inputs.version, amounts[1], address(this), new bytes(0));
+            uint256 quoteAmount = tranchessPair.getQuoteIn(params.inputs.amountR);
+            IERC20(params.inputs.tokenQuote).safeTransfer(address(tranchessPair), quoteAmount);
+            tranchessPair.buy(params.inputs.version, params.inputs.amountR, address(this), "");
             // Merge BISHOP and ROOK into QUEEN
-            uint256 outQ =
-                IPrimaryMarketV3(params.inputs.fund.primaryMarket()).merge(
-                    address(this),
-                    amounts[1],
-                    params.inputs.version
-                );
-            // Redeem or swap QUEEN for underlying
             IStableSwapCoreInternalRevertExpected swapCore =
                 IStableSwapCoreInternalRevertExpected(params.inputs.queenSwapOrPrimaryMarketRouter);
+            uint256 outQ =
+                IPrimaryMarketV3(params.inputs.fund.primaryMarket()).merge(
+                    address(swapCore),
+                    params.inputs.amountR,
+                    params.inputs.version
+                );
+            // Redeem or swap QUEEN for underlying, paying back the flashloan
             uint256 underlyingAmount = swapCore.getQuoteOut(outQ);
-            params.inputs.fund.trancheTransfer(
-                TRANCHE_Q,
-                address(swapCore),
-                outQ,
-                params.inputs.version
-            );
-            outQ = swapCore.sell(params.inputs.version, underlyingAmount, address(this), "");
-            // Pay back the flashloan
-            IERC20(paymentToken).safeTransfer(msg.sender, amountToPay);
+            swapCore.sell(params.inputs.version, underlyingAmount, msg.sender, "");
             // Send the rest of quote asset to user
-            uint256 resultAmount = IERC20(params.inputs.tokenQuote).balanceOf(address(this));
-            require(resultAmount >= params.inputs.resultBoundary, "Insufficient output");
-            IERC20(params.inputs.tokenQuote).safeTransfer(params.recipient, resultAmount);
+            require(
+                amountOut.sub(quoteAmount) >= params.inputs.resultBoundary,
+                "Insufficient output"
+            );
+            IERC20(params.inputs.tokenQuote).safeTransfer(
+                params.recipient,
+                amountOut - quoteAmount
+            );
         }
     }
 }
