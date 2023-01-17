@@ -32,7 +32,6 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
     struct SwapCallbackData {
         InputParam inputs;
         address tokenUnderlying;
-        address recipient;
         address token0;
         address token1;
         uint24 fee;
@@ -65,7 +64,6 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
             abi.encode(
                 params,
                 tokenUnderlying,
-                params.staking == address(0) ? params.recipient : params.staking,
                 poolKey.token0,
                 poolKey.token1,
                 poolKey.fee,
@@ -73,30 +71,12 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
             );
         bool zeroForOne = params.tokenQuote == poolKey.token0;
 
-        (int256 amount0Delta, int256 amount1Delta) =
-            pool.swap(
-                address(this),
-                zeroForOne,
-                -underlyingAmount.toInt256(),
-                zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
-                data
-            );
-
-        if (params.staking != address(0)) {
-            ShareStaking(params.staking).deposit(
-                TRANCHE_R,
-                params.amountR,
-                params.recipient,
-                params.version
-            );
-        }
-
-        emit SwapRook(
-            params.recipient,
-            params.amountR,
-            0,
-            0,
-            uint256(zeroForOne ? amount0Delta : amount1Delta)
+        pool.swap(
+            address(this),
+            zeroForOne,
+            -underlyingAmount.toInt256(),
+            zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
+            data
         );
     }
 
@@ -125,7 +105,6 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
             abi.encode(
                 params,
                 tokenUnderlying,
-                params.recipient,
                 poolKey.token0,
                 poolKey.token1,
                 poolKey.fee,
@@ -133,21 +112,12 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
             );
         bool zeroForOne = params.tokenQuote == poolKey.token1;
 
-        (int256 amount0Delta, int256 amount1Delta) =
-            pool.swap(
-                address(this),
-                zeroForOne,
-                underlyingAmount.toInt256(), // Exact input
-                zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
-                data
-            );
-
-        emit SwapRook(
-            params.recipient,
-            0,
-            params.amountR,
-            uint256(zeroForOne ? -amount0Delta : -amount1Delta),
-            0
+        pool.swap(
+            address(this),
+            zeroForOne,
+            underlyingAmount.toInt256(), // Exact input
+            zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
+            data
         );
     }
 
@@ -203,10 +173,20 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
             // Send ROOK to recipient
             params.inputs.fund.trancheTransfer(
                 TRANCHE_R,
-                params.recipient,
+                params.inputs.staking == address(0)
+                    ? params.inputs.recipient
+                    : params.inputs.staking,
                 outB,
                 params.inputs.version
             );
+            if (params.inputs.staking != address(0)) {
+                ShareStaking(params.inputs.staking).deposit(
+                    TRANCHE_R,
+                    outB,
+                    params.inputs.recipient,
+                    params.inputs.version
+                );
+            }
             // Pay back rest of the flashloan out of user pocket
             require(
                 amountToPay.sub(quoteAmount) <= params.inputs.resultBoundary,
@@ -217,6 +197,7 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
                 msg.sender,
                 amountToPay - quoteAmount
             );
+            emit SwapRook(params.inputs.recipient, 0, amountToPay - quoteAmount, outB, 0);
         } else if (paymentToken == params.tokenUnderlying) {
             // Arrange the stable swap path
             IStableSwap tranchessPair =
@@ -243,7 +224,14 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
                 "Insufficient output"
             );
             IERC20(params.inputs.tokenQuote).safeTransfer(
-                params.recipient,
+                params.inputs.recipient,
+                amountOut - quoteAmount
+            );
+            emit SwapRook(
+                params.inputs.recipient,
+                params.inputs.amountR,
+                0,
+                0,
                 amountOut - quoteAmount
             );
         }
