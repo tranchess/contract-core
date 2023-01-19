@@ -35,6 +35,70 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         tranchessRouter = ISwapRouter(tranchessRouter_);
     }
 
+    /// @dev Only meant for an off-chain client to call with eth_call.
+    function getBuyR(
+        IFundV3 fund,
+        address queenSwapOrPrimaryMarketRouter,
+        uint256 maxQuote,
+        address recipient,
+        address tokenQuote,
+        address externalRouter,
+        address[] memory externalPath,
+        address,
+        uint256 version,
+        uint256 outR
+    ) external returns (uint256 quoteDelta, uint256 rookDelta) {
+        uint256 prevQuoteAmount = IERC20(tokenQuote).balanceOf(msg.sender);
+        uint256 prevRookAmount = IERC20(fund.tokenR()).balanceOf(recipient);
+        buyR(
+            fund,
+            queenSwapOrPrimaryMarketRouter,
+            maxQuote,
+            recipient,
+            tokenQuote,
+            externalRouter,
+            externalPath,
+            address(0),
+            version,
+            outR
+        );
+        uint256 quoteAmount = IERC20(tokenQuote).balanceOf(msg.sender);
+        uint256 rookAmount = IERC20(fund.tokenR()).balanceOf(recipient);
+        quoteDelta = prevQuoteAmount.sub(quoteAmount);
+        rookDelta = rookAmount.sub(prevRookAmount);
+    }
+
+    /// @dev Only meant for an off-chain client to call with eth_call.
+    function getSellR(
+        IFundV3 fund,
+        address queenSwapOrPrimaryMarketRouter,
+        uint256 minQuote,
+        address recipient,
+        address tokenQuote,
+        address externalRouter,
+        address[] memory externalPath,
+        uint256 version,
+        uint256 inR
+    ) external returns (uint256 quoteDelta, uint256 rookDelta) {
+        uint256 prevQuoteAmount = IERC20(tokenQuote).balanceOf(msg.sender);
+        uint256 prevRookAmount = IERC20(fund.tokenR()).balanceOf(recipient);
+        sellR(
+            fund,
+            queenSwapOrPrimaryMarketRouter,
+            minQuote,
+            recipient,
+            tokenQuote,
+            externalRouter,
+            externalPath,
+            version,
+            inR
+        );
+        uint256 quoteAmount = IERC20(tokenQuote).balanceOf(msg.sender);
+        uint256 rookAmount = IERC20(fund.tokenR()).balanceOf(recipient);
+        quoteDelta = quoteAmount.sub(prevQuoteAmount);
+        rookDelta = prevRookAmount.sub(rookAmount);
+    }
+
     function toggleExternalRouter(address externalRouter) external onlyOwner {
         bool enabled = !externalRouterAllowlist[externalRouter];
         externalRouterAllowlist[externalRouter] = enabled;
@@ -52,7 +116,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         address staking,
         uint256 version,
         uint256 outR
-    ) external {
+    ) public {
         require(externalRouterAllowlist[externalRouter], "Invalid external router");
         uint256 underlyingAmount;
         uint256 totalQuoteAmount;
@@ -103,7 +167,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         address[] memory externalPath,
         uint256 version,
         uint256 inR
-    ) external {
+    ) public {
         require(externalRouterAllowlist[externalRouter], "Invalid external router");
         // Send the user's ROOK to this router
         fund.trancheTransferFrom(TRANCHE_R, msg.sender, address(this), inR, version);

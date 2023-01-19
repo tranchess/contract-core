@@ -47,7 +47,7 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         factory = factory_;
     }
 
-    /// @dev Following two getters are meant for an off-chain client to call with eth_call.
+    /// @dev Only meant for an off-chain client to call with eth_call.
     function getBuyR(InputParam memory params)
         external
         returns (uint256 quoteDelta, uint256 rookDelta)
@@ -62,13 +62,14 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         rookDelta = rookAmount.sub(prevRookAmount);
     }
 
+    /// @dev Only meant for an off-chain client to call with eth_call.
     function getSellR(InputParam memory params)
         external
         returns (uint256 quoteDelta, uint256 rookDelta)
     {
         uint256 prevQuoteAmount = IERC20(params.tokenQuote).balanceOf(msg.sender);
         uint256 prevRookAmount = IERC20(params.fund.tokenR()).balanceOf(params.recipient);
-        buyR(params);
+        sellR(params);
         uint256 quoteAmount = IERC20(params.tokenQuote).balanceOf(msg.sender);
         uint256 rookAmount = IERC20(params.fund.tokenR()).balanceOf(params.recipient);
         quoteDelta = quoteAmount.sub(prevQuoteAmount);
@@ -100,7 +101,7 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         bool zeroForOne = params.tokenQuote == poolKey.token0;
 
         pool.swap(
-            address(this),
+            params.queenSwapOrPrimaryMarketRouter,
             zeroForOne,
             -underlyingAmount.toInt256(),
             zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
@@ -176,7 +177,6 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
             IStableSwapCoreInternalRevertExpected swapCore =
                 IStableSwapCoreInternalRevertExpected(params.inputs.queenSwapOrPrimaryMarketRouter);
             uint256 outQ = swapCore.getBaseOut(amountOut);
-            IERC20(params.tokenUnderlying).safeTransfer(address(swapCore), amountOut);
             outQ = swapCore.buy(params.inputs.version, outQ, address(this), "");
             // Split QUEEN into BISHOP and ROOK
             uint256 outB =
