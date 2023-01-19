@@ -47,7 +47,35 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         factory = factory_;
     }
 
-    function buyR(InputParam memory params) external {
+    /// @dev Following two getters are meant for an off-chain client to call with eth_call.
+    function getBuyR(InputParam memory params)
+        external
+        returns (uint256 quoteDelta, uint256 rookDelta)
+    {
+        uint256 prevQuoteAmount = IERC20(params.tokenQuote).balanceOf(msg.sender);
+        uint256 prevRookAmount = IERC20(params.fund.tokenR()).balanceOf(params.recipient);
+        params.staking = address(0);
+        buyR(params);
+        uint256 quoteAmount = IERC20(params.tokenQuote).balanceOf(msg.sender);
+        uint256 rookAmount = IERC20(params.fund.tokenR()).balanceOf(params.recipient);
+        quoteDelta = prevQuoteAmount.sub(quoteAmount);
+        rookDelta = rookAmount.sub(prevRookAmount);
+    }
+
+    function getSellR(InputParam memory params)
+        external
+        returns (uint256 quoteDelta, uint256 rookDelta)
+    {
+        uint256 prevQuoteAmount = IERC20(params.tokenQuote).balanceOf(msg.sender);
+        uint256 prevRookAmount = IERC20(params.fund.tokenR()).balanceOf(params.recipient);
+        buyR(params);
+        uint256 quoteAmount = IERC20(params.tokenQuote).balanceOf(msg.sender);
+        uint256 rookAmount = IERC20(params.fund.tokenR()).balanceOf(params.recipient);
+        quoteDelta = quoteAmount.sub(prevQuoteAmount);
+        rookDelta = prevRookAmount.sub(rookAmount);
+    }
+
+    function buyR(InputParam memory params) public {
         // Calculate the exact amount of QUEEN
         uint256 inQ = IPrimaryMarketV3(params.fund.primaryMarket()).getSplitForB(params.amountR);
         // Calculate the exact amount of quote asset to pay
@@ -80,7 +108,7 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         );
     }
 
-    function sellR(InputParam memory params) external {
+    function sellR(InputParam memory params) public {
         // Transfer user's ROOK to this router
         params.fund.trancheTransferFrom(
             TRANCHE_R,
