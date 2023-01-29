@@ -10,6 +10,43 @@ import "@uniswap/v3-periphery/contracts/libraries/PoolAddress.sol";
 
 import "./FlashSwapRouter.sol";
 
+/// @dev See IQuoterV2.sol under https://github.com/Uniswap/v3-periphery/
+interface IQuoterV2 {
+    struct QuoteExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint256 amountIn;
+        uint24 fee;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function quoteExactInputSingle(QuoteExactInputSingleParams memory params)
+        external
+        returns (
+            uint256 amountOut,
+            uint160 sqrtPriceX96After,
+            uint32 initializedTicksCrossed,
+            uint256 gasEstimate
+        );
+
+    struct QuoteExactOutputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint256 amountOut;
+        uint24 fee;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function quoteExactOutputSingle(QuoteExactOutputSingleParams memory params)
+        external
+        returns (
+            uint256 amountIn,
+            uint160 sqrtPriceX96After,
+            uint32 initializedTicksCrossed,
+            uint256 gasEstimate
+        );
+}
+
 /// @title Tranchess Flash Swap Router V2
 /// @notice Router for stateless execution of flash swaps against Tranchess stable swaps
 contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
@@ -38,6 +75,9 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         address payer;
     }
 
+    IQuoterV2 public constant UNIV3_QUOTER = IQuoterV2(0x61fFE014bA17989E743c5F6cB21bF9697530B21e);
+    uint24 public constant FEE = 3000;
+
     address public immutable factory;
 
     constructor(address tranchessRouter_, address factory_)
@@ -52,14 +92,36 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         external
         returns (uint256 quoteDelta, uint256 rookDelta)
     {
-        uint256 prevQuoteAmount = IERC20(params.tokenQuote).balanceOf(msg.sender);
-        uint256 prevRookAmount = IERC20(params.fund.tokenR()).balanceOf(params.recipient);
-        params.staking = address(0);
-        buyRV2(params);
-        uint256 quoteAmount = IERC20(params.tokenQuote).balanceOf(msg.sender);
-        uint256 rookAmount = IERC20(params.fund.tokenR()).balanceOf(params.recipient);
-        quoteDelta = prevQuoteAmount.sub(quoteAmount);
-        rookDelta = rookAmount.sub(prevRookAmount);
+        // Calculate the exact amount of QUEEN
+        uint256 inQ = IPrimaryMarketV3(params.fund.primaryMarket()).getSplitForB(params.amountR);
+        // Calculate the exact amount of quote asset to pay
+        uint256 underlyingAmount =
+            IStableSwapCoreInternalRevertExpected(params.queenSwapOrPrimaryMarketRouter).getQuoteIn(
+                inQ
+            );
+        // Calculate the exact amount of quote asset to pay
+        (uint256 amountToPay, , , ) =
+            UNIV3_QUOTER.quoteExactOutputSingle(
+                IQuoterV2.QuoteExactOutputSingleParams({
+                    tokenIn: params.tokenQuote,
+                    tokenOut: params.fund.tokenUnderlying(),
+                    amountOut: underlyingAmount,
+                    fee: FEE,
+                    sqrtPriceLimitX96: 0
+                })
+            );
+        // Calculate the QUEEN creation amount from underlying
+        IStableSwapCoreInternalRevertExpected swapCore =
+            IStableSwapCoreInternalRevertExpected(params.queenSwapOrPrimaryMarketRouter);
+        uint256 outQ = swapCore.getBaseOut(underlyingAmount);
+        // Get the amount of BISHOP and ROOK in split
+        rookDelta = IPrimaryMarketV3(params.fund.primaryMarket()).getSplit(outQ);
+        // Calculate the amount of quote from BISHOP sale
+        IStableSwap tranchessPair =
+            tranchessRouter.getSwap(params.fund.tokenB(), params.tokenQuote);
+        // Subtract the amount of quote asset fulfilled by BISHOP sale
+        uint256 quoteAmount = tranchessPair.getQuoteOut(rookDelta);
+        quoteDelta = amountToPay.sub(quoteAmount, "Excessive input");
     }
 
     /// @dev Only meant for an off-chain client to call with eth_call.
@@ -67,13 +129,30 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         external
         returns (uint256 quoteDelta, uint256 rookDelta)
     {
-        uint256 prevQuoteAmount = IERC20(params.tokenQuote).balanceOf(msg.sender);
-        uint256 prevRookAmount = IERC20(params.fund.tokenR()).balanceOf(params.recipient);
-        sellRV2(params);
-        uint256 quoteAmount = IERC20(params.tokenQuote).balanceOf(msg.sender);
-        uint256 rookAmount = IERC20(params.fund.tokenR()).balanceOf(params.recipient);
-        quoteDelta = quoteAmount.sub(prevQuoteAmount);
-        rookDelta = prevRookAmount.sub(rookAmount);
+        rookDelta = params.amountR;
+        // Calculate the exact amount of QUEEN
+        (uint256 outQ, ) = IPrimaryMarketV3(params.fund.primaryMarket()).getMerge(params.amountR);
+        // Calculate the exact amount of underlying asset to pay
+        uint256 underlyingAmount =
+            IStableSwapCoreInternalRevertExpected(params.queenSwapOrPrimaryMarketRouter)
+                .getQuoteOut(outQ);
+        // Calculate the exact amount of quote asset to pay
+        (uint256 amountToSend, , , ) =
+            UNIV3_QUOTER.quoteExactInputSingle(
+                IQuoterV2.QuoteExactInputSingleParams({
+                    tokenIn: params.fund.tokenUnderlying(),
+                    tokenOut: params.tokenQuote,
+                    amountIn: underlyingAmount,
+                    fee: FEE,
+                    sqrtPriceLimitX96: 0
+                })
+            );
+        // Calculate the amount of quote needed for BISHOP
+        IStableSwap tranchessPair =
+            tranchessRouter.getSwap(params.fund.tokenB(), params.tokenQuote);
+        uint256 quoteAmount = tranchessPair.getQuoteIn(params.amountR);
+        // Subtract the amount of quote asset used to buy BISHOP
+        quoteDelta = amountToSend.sub(quoteAmount, "Insufficient output");
     }
 
     function buyRV2(InputParam memory params) public {
