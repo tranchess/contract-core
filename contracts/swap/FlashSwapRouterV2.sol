@@ -48,14 +48,14 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
     }
 
     /// @dev Only meant for an off-chain client to call with eth_call.
-    function getBuyR(InputParam memory params)
+    function getBuyRV2(InputParam memory params)
         external
         returns (uint256 quoteDelta, uint256 rookDelta)
     {
         uint256 prevQuoteAmount = IERC20(params.tokenQuote).balanceOf(msg.sender);
         uint256 prevRookAmount = IERC20(params.fund.tokenR()).balanceOf(params.recipient);
         params.staking = address(0);
-        buyR(params);
+        buyRV2(params);
         uint256 quoteAmount = IERC20(params.tokenQuote).balanceOf(msg.sender);
         uint256 rookAmount = IERC20(params.fund.tokenR()).balanceOf(params.recipient);
         quoteDelta = prevQuoteAmount.sub(quoteAmount);
@@ -63,20 +63,20 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
     }
 
     /// @dev Only meant for an off-chain client to call with eth_call.
-    function getSellR(InputParam memory params)
+    function getSellRV2(InputParam memory params)
         external
         returns (uint256 quoteDelta, uint256 rookDelta)
     {
         uint256 prevQuoteAmount = IERC20(params.tokenQuote).balanceOf(msg.sender);
         uint256 prevRookAmount = IERC20(params.fund.tokenR()).balanceOf(params.recipient);
-        sellR(params);
+        sellRV2(params);
         uint256 quoteAmount = IERC20(params.tokenQuote).balanceOf(msg.sender);
         uint256 rookAmount = IERC20(params.fund.tokenR()).balanceOf(params.recipient);
         quoteDelta = quoteAmount.sub(prevQuoteAmount);
         rookDelta = prevRookAmount.sub(rookAmount);
     }
 
-    function buyR(InputParam memory params) public {
+    function buyRV2(InputParam memory params) public {
         // Calculate the exact amount of QUEEN
         uint256 inQ = IPrimaryMarketV3(params.fund.primaryMarket()).getSplitForB(params.amountR);
         // Calculate the exact amount of quote asset to pay
@@ -109,7 +109,7 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         );
     }
 
-    function sellR(InputParam memory params) public {
+    function sellRV2(InputParam memory params) public {
         // Transfer user's ROOK to this router
         params.fund.trancheTransferFrom(
             TRANCHE_R,
