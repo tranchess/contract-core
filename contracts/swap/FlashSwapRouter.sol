@@ -40,32 +40,41 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         IFundV3 fund,
         address queenSwapOrPrimaryMarketRouter,
         uint256 maxQuote,
-        address recipient,
         address tokenQuote,
         address externalRouter,
         address[] memory externalPath,
-        address,
-        uint256 version,
         uint256 outR
     ) external returns (uint256 quoteDelta, uint256 rookDelta) {
-        uint256 prevQuoteAmount = IERC20(tokenQuote).balanceOf(msg.sender);
-        uint256 prevRookAmount = IERC20(fund.tokenR()).balanceOf(recipient);
-        buyR(
-            fund,
-            queenSwapOrPrimaryMarketRouter,
-            maxQuote,
-            recipient,
-            tokenQuote,
-            externalRouter,
-            externalPath,
-            address(0),
-            version,
-            outR
-        );
-        uint256 quoteAmount = IERC20(tokenQuote).balanceOf(msg.sender);
-        uint256 rookAmount = IERC20(fund.tokenR()).balanceOf(recipient);
-        quoteDelta = prevQuoteAmount.sub(quoteAmount);
-        rookDelta = rookAmount.sub(prevRookAmount);
+        uint256 underlyingAmount;
+        uint256 totalQuoteAmount;
+        {
+            uint256 inQ = IPrimaryMarketV3(fund.primaryMarket()).getSplitForB(outR);
+            underlyingAmount = IStableSwapCoreInternalRevertExpected(queenSwapOrPrimaryMarketRouter)
+                .getQuoteIn(inQ);
+            // Calculate the exact amount of quote asset to pay
+            totalQuoteAmount = IUniswapV2Router01(externalRouter).getAmountsIn(
+                underlyingAmount,
+                externalPath
+            )[0];
+            // Calculate the amount of quote asset for selling BISHOP
+            IStableSwap tranchessPair = tranchessRouter.getSwap(fund.tokenB(), tokenQuote);
+            uint256 quoteAmount = tranchessPair.getQuoteOut(outR);
+            // Calculate the user's portion of the payment to Tranchess swap
+            quoteDelta = totalQuoteAmount.sub(quoteAmount);
+            require(quoteDelta <= maxQuote, "Excessive input");
+            // Calculate the quote asset for underlying asset
+            underlyingAmount = IUniswapV2Router01(externalRouter).getAmountsOut(
+                totalQuoteAmount,
+                externalPath
+            )[externalPath.length - 1];
+        }
+        // Calculate creation of borrowed underlying for QUEEN
+        uint256 outQ =
+            IStableSwapCoreInternalRevertExpected(queenSwapOrPrimaryMarketRouter).getBaseOut(
+                underlyingAmount
+            );
+        // Calculate the split result of QUEEN into BISHOP and ROOK
+        rookDelta = IPrimaryMarketV3(fund.primaryMarket()).getSplit(outQ);
     }
 
     /// @dev Only meant for an off-chain client to call with eth_call.
@@ -73,30 +82,29 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         IFundV3 fund,
         address queenSwapOrPrimaryMarketRouter,
         uint256 minQuote,
-        address recipient,
         address tokenQuote,
         address externalRouter,
         address[] memory externalPath,
-        uint256 version,
         uint256 inR
     ) external returns (uint256 quoteDelta, uint256 rookDelta) {
-        uint256 prevQuoteAmount = IERC20(tokenQuote).balanceOf(msg.sender);
-        uint256 prevRookAmount = IERC20(fund.tokenR()).balanceOf(recipient);
-        sellR(
-            fund,
-            queenSwapOrPrimaryMarketRouter,
-            minQuote,
-            recipient,
-            tokenQuote,
-            externalRouter,
-            externalPath,
-            version,
-            inR
-        );
-        uint256 quoteAmount = IERC20(tokenQuote).balanceOf(msg.sender);
-        uint256 rookAmount = IERC20(fund.tokenR()).balanceOf(recipient);
-        quoteDelta = quoteAmount.sub(prevQuoteAmount);
-        rookDelta = prevRookAmount.sub(rookAmount);
+        rookDelta = inR;
+        uint256 quoteAmount =
+            IStableSwap(tranchessRouter.getSwap(fund.tokenB(), tokenQuote)).getQuoteIn(inR);
+        // Calculate merge result of BISHOP and ROOK into QUEEN
+        (uint256 outQ, ) = IPrimaryMarketV3(fund.primaryMarket()).getMerge(inR);
+        // Calculate the redemption from QUEEN to underlying
+        uint256 underlyingAmount =
+            IStableSwapCoreInternalRevertExpected(queenSwapOrPrimaryMarketRouter).getQuoteOut(outQ);
+        underlyingAmount = IStableSwapCoreInternalRevertExpected(queenSwapOrPrimaryMarketRouter)
+            .getQuoteOut(outQ);
+        // Calculate the underlying for quote asset
+        uint256 totalQuoteAmount =
+            IUniswapV2Router01(externalRouter).getAmountsOut(underlyingAmount, externalPath)[
+                externalPath.length - 1
+            ];
+        // Calculate the rest of quote asset to user
+        quoteDelta = totalQuoteAmount.sub(quoteAmount);
+        require(quoteDelta >= minQuote, "Insufficient output");
     }
 
     function toggleExternalRouter(address externalRouter) external onlyOwner {
