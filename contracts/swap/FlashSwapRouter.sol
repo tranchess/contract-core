@@ -36,10 +36,11 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
     }
 
     /// @dev Only meant for an off-chain client to call with eth_call.
+    ///      Note that `maxQuote` is ignored.
     function getBuyR(
         IFundV3 fund,
         address queenSwapOrPrimaryMarketRouter,
-        uint256 maxQuote,
+        uint256,
         address tokenQuote,
         address externalRouter,
         address[] memory externalPath,
@@ -61,7 +62,6 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
             uint256 quoteAmount = tranchessPair.getQuoteOut(outR);
             // Calculate the user's portion of the payment to Tranchess swap
             quoteDelta = totalQuoteAmount.sub(quoteAmount);
-            require(quoteDelta <= maxQuote, "Excessive input");
             // Calculate the quote asset for underlying asset
             underlyingAmount = IUniswapV2Router01(externalRouter).getAmountsOut(
                 totalQuoteAmount,
@@ -78,10 +78,11 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
     }
 
     /// @dev Only meant for an off-chain client to call with eth_call.
+    ///      Note that `minQuote` is ignored.
     function getSellR(
         IFundV3 fund,
         address queenSwapOrPrimaryMarketRouter,
-        uint256 minQuote,
+        uint256,
         address tokenQuote,
         address externalRouter,
         address[] memory externalPath,
@@ -95,8 +96,6 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         // Calculate the redemption from QUEEN to underlying
         uint256 underlyingAmount =
             IStableSwapCoreInternalRevertExpected(queenSwapOrPrimaryMarketRouter).getQuoteOut(outQ);
-        underlyingAmount = IStableSwapCoreInternalRevertExpected(queenSwapOrPrimaryMarketRouter)
-            .getQuoteOut(outQ);
         // Calculate the underlying for quote asset
         uint256 totalQuoteAmount =
             IUniswapV2Router01(externalRouter).getAmountsOut(underlyingAmount, externalPath)[
@@ -104,7 +103,6 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
             ];
         // Calculate the rest of quote asset to user
         quoteDelta = totalQuoteAmount.sub(quoteAmount);
-        require(quoteDelta >= minQuote, "Insufficient output");
     }
 
     function toggleExternalRouter(address externalRouter) external onlyOwner {
@@ -124,7 +122,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         address staking,
         uint256 version,
         uint256 outR
-    ) public {
+    ) external {
         require(externalRouterAllowlist[externalRouter], "Invalid external router");
         uint256 underlyingAmount;
         uint256 totalQuoteAmount;
@@ -175,7 +173,7 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         address[] memory externalPath,
         uint256 version,
         uint256 inR
-    ) public {
+    ) external {
         require(externalRouterAllowlist[externalRouter], "Invalid external router");
         // Send the user's ROOK to this router
         fund.trancheTransferFrom(TRANCHE_R, msg.sender, address(this), inR, version);

@@ -11,7 +11,7 @@ import "@uniswap/v3-periphery/contracts/libraries/PoolAddress.sol";
 import "./FlashSwapRouter.sol";
 
 /// @dev See IQuoterV2.sol under https://github.com/Uniswap/v3-periphery/
-interface IQuoterV2 {
+interface IUniswapV3QuoterV2 {
     struct QuoteExactInputSingleParams {
         address tokenIn;
         address tokenOut;
@@ -69,44 +69,43 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
     struct SwapCallbackData {
         InputParam inputs;
         address tokenUnderlying;
-        address token0;
-        address token1;
-        uint24 fee;
+        PoolAddress.PoolKey poolKey;
         address payer;
     }
 
-    IQuoterV2 public constant UNIV3_QUOTER = IQuoterV2(0x61fFE014bA17989E743c5F6cB21bF9697530B21e);
-    uint24 public constant FEE = 3000;
+    address public immutable uniswapV3Factory;
+    IUniswapV3QuoterV2 public immutable uniswapV3Quoter;
 
-    address public immutable factory;
-
-    constructor(address tranchessRouter_, address factory_)
-        public
-        FlashSwapRouter(tranchessRouter_)
-    {
-        factory = factory_;
+    constructor(
+        address tranchessRouter_,
+        address uniswapV3Factory_,
+        address uniswapV3Quoter_
+    ) public FlashSwapRouter(tranchessRouter_) {
+        uniswapV3Factory = uniswapV3Factory_;
+        uniswapV3Quoter = IUniswapV3QuoterV2(uniswapV3Quoter_);
     }
 
     /// @dev Only meant for an off-chain client to call with eth_call.
+    ///      Note that `params.resultBoundary` is ignored.
     function getBuyRV2(InputParam memory params)
         external
         returns (uint256 quoteDelta, uint256 rookDelta)
     {
         // Calculate the exact amount of QUEEN
         uint256 inQ = IPrimaryMarketV3(params.fund.primaryMarket()).getSplitForB(params.amountR);
-        // Calculate the exact amount of quote asset to pay
+        // Calculate the exact amount of underlying asset
         uint256 underlyingAmount =
             IStableSwapCoreInternalRevertExpected(params.queenSwapOrPrimaryMarketRouter).getQuoteIn(
                 inQ
             );
         // Calculate the exact amount of quote asset to pay
         (uint256 amountToPay, , , ) =
-            UNIV3_QUOTER.quoteExactOutputSingle(
-                IQuoterV2.QuoteExactOutputSingleParams({
+            uniswapV3Quoter.quoteExactOutputSingle(
+                IUniswapV3QuoterV2.QuoteExactOutputSingleParams({
                     tokenIn: params.tokenQuote,
                     tokenOut: params.fund.tokenUnderlying(),
                     amountOut: underlyingAmount,
-                    fee: FEE,
+                    fee: params.externalPoolFee,
                     sqrtPriceLimitX96: 0
                 })
             );
@@ -119,12 +118,13 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         // Calculate the amount of quote from BISHOP sale
         IStableSwap tranchessPair =
             tranchessRouter.getSwap(params.fund.tokenB(), params.tokenQuote);
-        // Subtract the amount of quote asset fulfilled by BISHOP sale
         uint256 quoteAmount = tranchessPair.getQuoteOut(rookDelta);
-        quoteDelta = amountToPay.sub(quoteAmount, "Excessive input");
+        // Subtract the amount of quote asset fulfilled by BISHOP sale
+        quoteDelta = amountToPay.sub(quoteAmount);
     }
 
     /// @dev Only meant for an off-chain client to call with eth_call.
+    ///      Note that `params.resultBoundary` is ignored.
     function getSellRV2(InputParam memory params)
         external
         returns (uint256 quoteDelta, uint256 rookDelta)
@@ -138,12 +138,12 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
                 .getQuoteOut(outQ);
         // Calculate the exact amount of quote asset to pay
         (uint256 amountToSend, , , ) =
-            UNIV3_QUOTER.quoteExactInputSingle(
-                IQuoterV2.QuoteExactInputSingleParams({
+            uniswapV3Quoter.quoteExactInputSingle(
+                IUniswapV3QuoterV2.QuoteExactInputSingleParams({
                     tokenIn: params.fund.tokenUnderlying(),
                     tokenOut: params.tokenQuote,
                     amountIn: underlyingAmount,
-                    fee: FEE,
+                    fee: params.externalPoolFee,
                     sqrtPriceLimitX96: 0
                 })
             );
@@ -152,13 +152,13 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
             tranchessRouter.getSwap(params.fund.tokenB(), params.tokenQuote);
         uint256 quoteAmount = tranchessPair.getQuoteIn(params.amountR);
         // Subtract the amount of quote asset used to buy BISHOP
-        quoteDelta = amountToSend.sub(quoteAmount, "Insufficient output");
+        quoteDelta = amountToSend.sub(quoteAmount);
     }
 
-    function buyRV2(InputParam memory params) public {
+    function buyRV2(InputParam memory params) external {
         // Calculate the exact amount of QUEEN
         uint256 inQ = IPrimaryMarketV3(params.fund.primaryMarket()).getSplitForB(params.amountR);
-        // Calculate the exact amount of quote asset to pay
+        // Calculate the exact amount of underlying asset
         uint256 underlyingAmount =
             IStableSwapCoreInternalRevertExpected(params.queenSwapOrPrimaryMarketRouter).getQuoteIn(
                 inQ
@@ -167,16 +167,8 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         address tokenUnderlying = params.fund.tokenUnderlying();
         PoolAddress.PoolKey memory poolKey =
             PoolAddress.getPoolKey(tokenUnderlying, params.tokenQuote, params.externalPoolFee);
-        IUniswapV3Pool pool = IUniswapV3Pool(PoolAddress.computeAddress(factory, poolKey));
-        bytes memory data =
-            abi.encode(
-                params,
-                tokenUnderlying,
-                poolKey.token0,
-                poolKey.token1,
-                poolKey.fee,
-                msg.sender
-            );
+        IUniswapV3Pool pool = IUniswapV3Pool(PoolAddress.computeAddress(uniswapV3Factory, poolKey));
+        bytes memory data = abi.encode(params, tokenUnderlying, poolKey, msg.sender);
         bool zeroForOne = params.tokenQuote == poolKey.token0;
 
         pool.swap(
@@ -188,7 +180,7 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         );
     }
 
-    function sellRV2(InputParam memory params) public {
+    function sellRV2(InputParam memory params) external {
         // Transfer user's ROOK to this router
         params.fund.trancheTransferFrom(
             TRANCHE_R,
@@ -208,16 +200,8 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         address tokenUnderlying = params.fund.tokenUnderlying();
         PoolAddress.PoolKey memory poolKey =
             PoolAddress.getPoolKey(tokenUnderlying, params.tokenQuote, params.externalPoolFee);
-        IUniswapV3Pool pool = IUniswapV3Pool(PoolAddress.computeAddress(factory, poolKey));
-        bytes memory data =
-            abi.encode(
-                params,
-                tokenUnderlying,
-                poolKey.token0,
-                poolKey.token1,
-                poolKey.fee,
-                msg.sender
-            );
+        IUniswapV3Pool pool = IUniswapV3Pool(PoolAddress.computeAddress(uniswapV3Factory, poolKey));
+        bytes memory data = abi.encode(params, tokenUnderlying, poolKey, msg.sender);
         bool zeroForOne = params.tokenQuote == poolKey.token1;
 
         pool.swap(
@@ -239,17 +223,13 @@ contract FlashSwapRouterV2 is FlashSwapRouter, IUniswapV3SwapCallback {
         SwapCallbackData memory params = abi.decode(data, (SwapCallbackData));
 
         // Ensure that the pool is the one we expect
-        address pool =
-            PoolAddress.computeAddress(
-                factory,
-                PoolAddress.getPoolKey(params.token0, params.token1, params.fee)
-            );
+        address pool = PoolAddress.computeAddress(uniswapV3Factory, params.poolKey);
         require(msg.sender == pool);
 
         (address paymentToken, uint256 amountToPay, uint256 amountOut) =
             amount0Delta > 0
-                ? (params.token0, uint256(amount0Delta), uint256(-amount1Delta))
-                : (params.token1, uint256(amount1Delta), uint256(-amount0Delta));
+                ? (params.poolKey.token0, uint256(amount0Delta), uint256(-amount1Delta))
+                : (params.poolKey.token1, uint256(amount1Delta), uint256(-amount0Delta));
 
         if (paymentToken == params.inputs.tokenQuote) {
             // Create or swap borrowed underlying for QUEEN

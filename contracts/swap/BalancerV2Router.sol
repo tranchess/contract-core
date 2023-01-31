@@ -4,7 +4,6 @@ pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
-import "../utils/SafeDecimalMath.sol";
 import "../interfaces/IStableSwap.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 
@@ -56,9 +55,8 @@ interface IBalancerVault {
 contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheIndexV2 {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
-    using SafeDecimalMath for uint256;
 
-    uint256 public constant UP_ROUNDING_FACTOR = 1e8; // 1e-10
+    uint256 public constant UP_ROUNDING_FACTOR = 1e10;
 
     IFundV3 public immutable fund;
     address private immutable _tokenUnderlying;
@@ -105,7 +103,7 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
             })
         );
         // Round up by (1 + factor)x + 1 in case of rounding errors
-        quoteIn = quoteIn.add(quoteIn.multiplyDecimal(UP_ROUNDING_FACTOR)).add(1);
+        quoteIn = quoteIn.add(quoteIn / UP_ROUNDING_FACTOR).add(1);
     }
 
     /// @dev Get creation with StableSwap getBaseOut interface.
@@ -135,7 +133,7 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
             })
         );
         // Round up by (1 + factor)x + 1 in case of rounding errors
-        baseIn = baseIn.add(baseIn.multiplyDecimal(UP_ROUNDING_FACTOR)).add(1);
+        baseIn = baseIn.add(baseIn / UP_ROUNDING_FACTOR).add(1);
     }
 
     /// @dev Create QUEEN with StableSwap buy interface.
