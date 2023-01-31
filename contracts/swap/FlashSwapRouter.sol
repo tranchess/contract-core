@@ -36,11 +36,9 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
     }
 
     /// @dev Only meant for an off-chain client to call with eth_call.
-    ///      Note that `maxQuote` is ignored.
     function getBuyR(
         IFundV3 fund,
         address queenSwapOrPrimaryMarketRouter,
-        uint256,
         address tokenQuote,
         address externalRouter,
         address[] memory externalPath,
@@ -78,11 +76,9 @@ contract FlashSwapRouter is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
     }
 
     /// @dev Only meant for an off-chain client to call with eth_call.
-    ///      Note that `minQuote` is ignored.
     function getSellR(
         IFundV3 fund,
         address queenSwapOrPrimaryMarketRouter,
-        uint256,
         address tokenQuote,
         address externalRouter,
         address[] memory externalPath,
