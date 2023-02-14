@@ -11,20 +11,13 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../../utils/SafeDecimalMath.sol";
 
-import "../../interfaces/IEthPrimaryMarket.sol";
 import "../../interfaces/IFundV3.sol";
 import "../../interfaces/IFundForPrimaryMarketV4.sol";
 import "../../interfaces/ITrancheIndexV2.sol";
 import "../../interfaces/IWrappedERC20.sol";
 import "./WithdrawalNFT.sol";
 
-contract EthPrimaryMarket is
-    IEthPrimaryMarket,
-    ReentrancyGuard,
-    ITrancheIndexV2,
-    Ownable,
-    WithdrawalNFT
-{
+contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, WithdrawalNFT {
     event Created(address indexed account, uint256 underlying, uint256 outQ);
     event Split(address indexed account, uint256 inQ, uint256 outB, uint256 outR);
     event Merged(
@@ -44,7 +37,6 @@ contract EthPrimaryMarket is
     event RedemptionPopped(uint256 count, uint256 newHead, uint256 requiredUnderlying);
     event RedemptionClaimed(address indexed account, uint256 index, uint256 underlying);
     event FundCapUpdated(uint256 newCap);
-    event RedemptionFeeRateUpdated(uint256 newRedemptionFeeRate);
     event MergeFeeRateUpdated(uint256 newMergeFeeRate);
 
     using Math for uint256;
@@ -64,12 +56,12 @@ contract EthPrimaryMarket is
 
     uint256 private constant MAX_REDEMPTION_FEE_RATE = 0.01e18;
     uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18;
+    uint256 public constant redemptionFeeRate = 0;
 
-    address public immutable override fund;
+    address public immutable fund;
     bool public immutable redemptionFlag;
     IERC20 private immutable _tokenUnderlying;
 
-    uint256 public redemptionFeeRate;
     uint256 public mergeFeeRate;
 
     /// @notice The upper limit of underlying that the fund can hold. This contract rejects
@@ -95,15 +87,12 @@ contract EthPrimaryMarket is
     ///         redemption will be written at this index.
     uint256 public redemptionQueueTail;
 
-    uint256 public lastRedemptionIndex;
-
     mapping(uint256 => RedemptionRate) public redemptionRates;
 
     uint256 public redemptionRateSize;
 
     constructor(
         address fund_,
-        uint256 redemptionFeeRate_,
         uint256 mergeFeeRate_,
         uint256 fundCap_,
         bool redemptionFlag_,
@@ -112,7 +101,6 @@ contract EthPrimaryMarket is
     ) public Ownable() WithdrawalNFT(name_, symbol_) {
         fund = fund_;
         _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
-        _updateRedemptionFeeRate(redemptionFeeRate_);
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
         redemptionFlag = redemptionFlag_;
@@ -121,7 +109,7 @@ contract EthPrimaryMarket is
     /// @notice Calculate the result of a creation.
     /// @param underlying Underlying amount spent for the creation
     /// @return outQ Created QUEEN amount
-    function getCreation(uint256 underlying) public view override returns (uint256 outQ) {
+    function getCreation(uint256 underlying) public view returns (uint256 outQ) {
         uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
         uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
         require(fundUnderlying.add(underlying) <= fundCap, "Exceed fund cap");
@@ -146,7 +134,7 @@ contract EthPrimaryMarket is
     ///         This only works with non-empty fund for simplicity.
     /// @param minOutQ Minimum received QUEEN amount
     /// @return underlying Underlying amount that should be used for creation
-    function getCreationForQ(uint256 minOutQ) external view override returns (uint256 underlying) {
+    function getCreationForQ(uint256 minOutQ) external view returns (uint256 underlying) {
         // Assume:
         //   minOutQ * fundUnderlying = a * fundEquivalentTotalQ - b
         // where a and b are integers and 0 <= b < fundEquivalentTotalQ
@@ -176,14 +164,8 @@ contract EthPrimaryMarket is
     /// @param inQ QUEEN amount spent for the redemption
     /// @return underlying Redeemed underlying amount
     /// @return feeQ QUEEN amount charged as redemption fee
-    function getRedemption(uint256 inQ)
-        public
-        view
-        override
-        returns (uint256 underlying, uint256 feeQ)
-    {
-        feeQ = inQ.multiplyDecimal(redemptionFeeRate);
-        underlying = _getRedemption(inQ - feeQ);
+    function getRedemption(uint256 inQ) public view returns (uint256 underlying, uint256) {
+        underlying = _getRedemption(inQ);
     }
 
     /// @notice Calculate the amount of QUEEN that can be redeemed for at least the given amount
@@ -191,12 +173,7 @@ contract EthPrimaryMarket is
     /// @dev The return value may not be the minimum solution due to rounding errors.
     /// @param minUnderlying Minimum received underlying amount
     /// @return inQ QUEEN amount that should be redeemed
-    function getRedemptionForUnderlying(uint256 minUnderlying)
-        external
-        view
-        override
-        returns (uint256 inQ)
-    {
+    function getRedemptionForUnderlying(uint256 minUnderlying) external view returns (uint256 inQ) {
         // Assume:
         //   minUnderlying * fundEquivalentTotalQ = a * fundUnderlying - b
         //   a * 1e18 = c * (1e18 - redemptionFeeRate) + d
@@ -224,7 +201,7 @@ contract EthPrimaryMarket is
     /// @notice Calculate the result of a split.
     /// @param inQ QUEEN amount to be split
     /// @return outB Received BISHOP amount, which is also received ROOK amount
-    function getSplit(uint256 inQ) public view override returns (uint256 outB) {
+    function getSplit(uint256 inQ) public view returns (uint256 outB) {
         return inQ.multiplyDecimal(IFundV3(fund).splitRatio());
     }
 
@@ -232,7 +209,7 @@ contract EthPrimaryMarket is
     ///         BISHOP and ROOK.
     /// @param minOutB Received BISHOP amount, which is also received ROOK amount
     /// @return inQ QUEEN amount that should be split
-    function getSplitForB(uint256 minOutB) external view override returns (uint256 inQ) {
+    function getSplitForB(uint256 minOutB) external view returns (uint256 inQ) {
         uint256 splitRatio = IFundV3(fund).splitRatio();
         return minOutB.mul(1e18).add(splitRatio.sub(1)).div(splitRatio);
     }
@@ -241,7 +218,7 @@ contract EthPrimaryMarket is
     /// @param inB Spent BISHOP amount, which is also spent ROOK amount
     /// @return outQ Received QUEEN amount
     /// @return feeQ QUEEN amount charged as merge fee
-    function getMerge(uint256 inB) public view override returns (uint256 outQ, uint256 feeQ) {
+    function getMerge(uint256 inB) public view returns (uint256 outQ, uint256 feeQ) {
         uint256 outQBeforeFee = inB.divideDecimal(IFundV3(fund).splitRatio());
         feeQ = outQBeforeFee.multiplyDecimal(mergeFeeRate);
         outQ = outQBeforeFee.sub(feeQ);
@@ -252,7 +229,7 @@ contract EthPrimaryMarket is
     /// @dev The return value may not be the minimum solution due to rounding errors.
     /// @param minOutQ Minimum received QUEEN amount
     /// @return inB BISHOP amount that should be merged, which is also spent ROOK amount
-    function getMergeForQ(uint256 minOutQ) external view override returns (uint256 inB) {
+    function getMergeForQ(uint256 minOutQ) external view returns (uint256 inB) {
         // Assume:
         //   minOutQ * 1e18 = a * (1e18 - mergeFeeRate) + b
         //   c = ceil(a * splitRatio / 1e18)
@@ -268,6 +245,47 @@ contract EthPrimaryMarket is
         //     = minOutQ
         uint256 outQBeforeFee = minOutQ.divideDecimal(1e18 - mergeFeeRate);
         inB = outQBeforeFee.mul(IFundV3(fund).splitRatio()).add(1e18 - 1).div(1e18);
+    }
+
+    function getRedemptionRateIndexForHead() external view returns (uint256 redemptionRateIndex) {
+        return getRedemptionRateIndex(redemptionQueueHead);
+    }
+
+    function getBatchRedemptionRateIndex(uint256[] memory indices)
+        external
+        view
+        returns (uint256[] memory redemptionRateIndices)
+    {
+        redemptionRateIndices = new uint256[](indices.length);
+        for (uint256 i = 0; i < indices.length; i++) {
+            redemptionRateIndices[i] = getRedemptionRateIndex(indices[i]);
+        }
+    }
+
+    function getRedemptionRateIndex(uint256 index)
+        public
+        view
+        returns (uint256 redemptionRateIndex)
+    {
+        if (redemptionRateSize == 0) return 0;
+
+        uint256 l = 0;
+        uint256 r = redemptionRateSize - 1;
+        // If the index is greater than the redemption rate size, it is not yet finalized,
+        // returns the index of the next potential finalization.
+        if (redemptionRates[r].nextIndex <= index) {
+            return r + 1;
+        }
+        // Iteration count is bounded by log2(tail - head), which is at most 256.
+        while (l + 1 < r) {
+            uint256 m = (l + r) / 2;
+            if (redemptionRates[m].nextIndex <= index) {
+                l = m;
+            } else {
+                r = m;
+            }
+        }
+        return l;
     }
 
     /// @notice Search in the redemption queue.
@@ -316,7 +334,7 @@ contract EthPrimaryMarket is
     }
 
     /// @notice Return whether the fund can change its primary market to another contract.
-    function canBeRemovedFromFund() external view override returns (bool) {
+    function canBeRemovedFromFund() external view returns (bool) {
         return redemptionQueueHead == redemptionQueueTail;
     }
 
@@ -339,7 +357,7 @@ contract EthPrimaryMarket is
         address recipient,
         uint256 minOutQ,
         uint256 version
-    ) external override nonReentrant returns (uint256 outQ) {
+    ) external nonReentrant returns (uint256 outQ) {
         uint256 underlying = _tokenUnderlying.balanceOf(address(this)).sub(claimableUnderlying);
         outQ = getCreation(underlying);
         require(outQ >= minOutQ && outQ > 0, "Min QUEEN created");
@@ -355,24 +373,6 @@ contract EthPrimaryMarket is
         }
     }
 
-    function redeem(
-        address,
-        uint256,
-        uint256,
-        uint256
-    ) external override returns (uint256) {
-        revert("Not supported");
-    }
-
-    function redeemAndUnwrap(
-        address,
-        uint256,
-        uint256,
-        uint256
-    ) external override returns (uint256) {
-        revert("Not supported");
-    }
-
     /// @notice Redeem QUEEN and wait in the redemption queue. Redeemed underlying tokens will
     ///         be claimable when the fund has enough balance to pay this redemption and all
     ///         previous ones in the queue.
@@ -386,7 +386,7 @@ contract EthPrimaryMarket is
         uint256 inQ,
         uint256, // minUnderlying is ignored
         uint256 version
-    ) external override nonReentrant allowRedemption returns (uint256, uint256 index) {
+    ) external nonReentrant allowRedemption returns (uint256, uint256 index) {
         index = redemptionQueueTail;
         QueuedRedemption storage newRedemption = queuedRedemptions[index];
         newRedemption.amountQ = inQ;
@@ -400,7 +400,8 @@ contract EthPrimaryMarket is
         emit RedemptionQueued(recipient, index, inQ);
     }
 
-    function finalizeRedemptions(uint256 count) external onlyOwner {
+    function finalizeRedemptions(uint256 count) external {
+        require(msg.sender == IFundV3(fund).strategy(), "Only Strategy");
         uint256 oldFinalizedIndex = getLatestFinalizationIndex();
         uint256 newFinalizedIndex = oldFinalizedIndex.add(count);
         require(newFinalizedIndex <= redemptionQueueTail, "Redemption queue out of bound");
@@ -429,11 +430,11 @@ contract EthPrimaryMarket is
     ///         fetch underlying tokens of these redemptions from the fund. Revert if the fund
     ///         cannot pay these redemptions now.
     /// @param count The number of redemptions to be removed, or zero to completely empty the queue
-    function popRedemptionQueue(uint256 count) external nonReentrant {
-        _popRedemptionQueue(count);
+    function popRedemptionQueue(uint256 count, uint256 redemptionRateIndex) external nonReentrant {
+        _popRedemptionQueue(count, redemptionRateIndex);
     }
 
-    function _popRedemptionQueue(uint256 count) private {
+    function _popRedemptionQueue(uint256 count, uint256 redemptionRateIndex) private {
         uint256 oldHead = redemptionQueueHead;
         uint256 oldTail = getLatestFinalizationIndex();
         uint256 newHead;
@@ -447,24 +448,30 @@ contract EthPrimaryMarket is
             require(newHead <= oldTail, "Redemption queue out of bound");
         }
 
-        uint256 redemptionIndex = lastRedemptionIndex;
+        require(redemptionRateIndex < redemptionRateSize, "Invalid rate index");
+        require(
+            redemptionRateIndex == 0 ||
+                oldHead >= redemptionRates[redemptionRateIndex - 1].nextIndex,
+            "Invalid rate index"
+        );
+        require(oldHead < redemptionRates[redemptionRateIndex].nextIndex, "Invalid rate index");
+
         uint256 startIndex = oldHead;
         uint256 requiredUnderlying = 0;
         while (startIndex < newHead) {
-            uint256 nextIndex = redemptionRates[redemptionIndex].nextIndex;
+            uint256 nextIndex = redemptionRates[redemptionRateIndex].nextIndex;
             uint256 endIndex = newHead.min(nextIndex);
             requiredUnderlying = requiredUnderlying.add(
-                redemptionRates[redemptionIndex].underlyingPerQ.multiplyDecimalPrecise(
+                redemptionRates[redemptionRateIndex].underlyingPerQ.multiplyDecimalPrecise(
                     queuedRedemptions[endIndex].previousPrefixSum -
                         queuedRedemptions[startIndex].previousPrefixSum
                 ) // overflow is desired
             );
             if (endIndex == nextIndex) {
-                redemptionIndex++;
+                redemptionRateIndex++;
             }
             startIndex = endIndex;
         }
-        lastRedemptionIndex = redemptionIndex;
         // Redundant check for user-friendly revert message.
         require(
             requiredUnderlying <= _tokenUnderlying.balanceOf(fund),
@@ -485,9 +492,10 @@ contract EthPrimaryMarket is
     function claimRedemptions(
         address account,
         uint256[] calldata indices,
-        uint256[] calldata rateIndices
-    ) external override nonReentrant returns (uint256 underlying) {
-        underlying = _claimRedemptions(account, indices, rateIndices);
+        uint256[] calldata rateIndices,
+        uint256 redemptionRateIndex
+    ) external nonReentrant returns (uint256 underlying) {
+        underlying = _claimRedemptions(account, indices, rateIndices, redemptionRateIndex);
         _tokenUnderlying.safeTransfer(account, underlying);
     }
 
@@ -500,9 +508,10 @@ contract EthPrimaryMarket is
     function claimRedemptionsAndUnwrap(
         address account,
         uint256[] calldata indices,
-        uint256[] calldata rateIndices
-    ) external override nonReentrant returns (uint256 underlying) {
-        underlying = _claimRedemptions(account, indices, rateIndices);
+        uint256[] calldata rateIndices,
+        uint256 redemptionRateIndex
+    ) external nonReentrant returns (uint256 underlying) {
+        underlying = _claimRedemptions(account, indices, rateIndices, redemptionRateIndex);
         IWrappedERC20(address(_tokenUnderlying)).withdraw(underlying);
         (bool success, ) = account.call{value: underlying}("");
         require(success, "Transfer failed");
@@ -511,7 +520,8 @@ contract EthPrimaryMarket is
     function _claimRedemptions(
         address account,
         uint256[] calldata indices,
-        uint256[] calldata rateIndices
+        uint256[] calldata rateIndices,
+        uint256 redemptionRateIndex
     ) private returns (uint256 underlying) {
         uint256 count = indices.length;
         require(count != rateIndices.length, "Invalid rate indices");
@@ -520,7 +530,7 @@ contract EthPrimaryMarket is
         }
         uint256 head = redemptionQueueHead;
         if (indices[count - 1] >= head) {
-            _popRedemptionQueue(indices[count - 1] - head + 1);
+            _popRedemptionQueue(indices[count - 1] - head + 1, redemptionRateIndex);
         }
         for (uint256 i = 0; i < count; i++) {
             require(i == 0 || indices[i] > indices[i - 1], "Indices out of order");
@@ -553,7 +563,7 @@ contract EthPrimaryMarket is
         address recipient,
         uint256 inQ,
         uint256 version
-    ) external override returns (uint256 outB) {
+    ) external returns (uint256 outB) {
         outB = getSplit(inQ);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_B, recipient, outB, version);
@@ -565,7 +575,7 @@ contract EthPrimaryMarket is
         address recipient,
         uint256 inB,
         uint256 version
-    ) external override returns (uint256 outQ) {
+    ) external returns (uint256 outQ) {
         uint256 feeQ;
         (outQ, feeQ) = getMerge(inB);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_B, msg.sender, inB, version);
@@ -576,7 +586,7 @@ contract EthPrimaryMarket is
     }
 
     /// @dev Nothing to do for daily fund settlement.
-    function settle(uint256 day) external override onlyFund {}
+    function settle(uint256 day) external onlyFund {}
 
     function _updateFundCap(uint256 newCap) private {
         fundCap = newCap;
@@ -585,16 +595,6 @@ contract EthPrimaryMarket is
 
     function updateFundCap(uint256 newCap) external onlyOwner {
         _updateFundCap(newCap);
-    }
-
-    function _updateRedemptionFeeRate(uint256 newRedemptionFeeRate) private {
-        require(newRedemptionFeeRate <= MAX_REDEMPTION_FEE_RATE, "Exceed max redemption fee rate");
-        redemptionFeeRate = newRedemptionFeeRate;
-        emit RedemptionFeeRateUpdated(newRedemptionFeeRate);
-    }
-
-    function updateRedemptionFeeRate(uint256 newRedemptionFeeRate) external onlyOwner {
-        _updateRedemptionFeeRate(newRedemptionFeeRate);
     }
 
     function _updateMergeFeeRate(uint256 newMergeFeeRate) private {
