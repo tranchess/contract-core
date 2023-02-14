@@ -47,6 +47,7 @@ contract EthPrimaryMarket is
     event RedemptionFeeRateUpdated(uint256 newRedemptionFeeRate);
     event MergeFeeRateUpdated(uint256 newMergeFeeRate);
 
+    using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
@@ -94,9 +95,11 @@ contract EthPrimaryMarket is
     ///         redemption will be written at this index.
     uint256 public redemptionQueueTail;
 
-    mapping(uint256 => RedemptionRate) private _redemptionRates;
+    uint256 public lastRedemptionIndex;
 
-    uint256 private _redemptionRateSize;
+    mapping(uint256 => RedemptionRate) public redemptionRates;
+
+    uint256 public redemptionRateSize;
 
     constructor(
         address fund_,
@@ -113,8 +116,6 @@ contract EthPrimaryMarket is
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
         redemptionFlag = redemptionFlag_;
-
-        _redemptionRateSize = 1;
     }
 
     /// @notice Calculate the result of a creation.
@@ -269,31 +270,6 @@ contract EthPrimaryMarket is
         inB = outQBeforeFee.mul(IFundV3(fund).splitRatio()).add(1e18 - 1).div(1e18);
     }
 
-    /// @notice Return index of the first queued redemption that cannot be claimed now.
-    ///         Users can use this function to determine which indices can be passed to
-    ///         `claimRedemptions()`.
-    /// @return Index of the first redemption that cannot be claimed now
-    function getNewRedemptionQueueHead() external view returns (uint256) {
-        uint256 available = _tokenUnderlying.balanceOf(fund);
-        uint256 l = redemptionQueueHead;
-        uint256 r = _redemptionRates[_redemptionRateSize - 1].nextIndex;
-        uint256 startPrefixSum = queuedRedemptions[l].previousPrefixSum;
-        // overflow is desired
-        if (queuedRedemptions[r].previousPrefixSum - startPrefixSum <= available) {
-            return r;
-        }
-        // Iteration count is bounded by log2(tail - head), which is at most 256.
-        while (l + 1 < r) {
-            uint256 m = (l + r) / 2;
-            if (queuedRedemptions[m].previousPrefixSum - startPrefixSum <= available) {
-                l = m;
-            } else {
-                r = m;
-            }
-        }
-        return l;
-    }
-
     /// @notice Search in the redemption queue.
     /// @param account Owner of the redemptions, or zero address to return all redemptions
     /// @param startIndex Redemption index where the search starts, or zero to start from the head
@@ -307,10 +283,7 @@ contract EthPrimaryMarket is
         uint256 maxIterationCount
     ) external view returns (uint256[] memory indices, uint256 amountQ) {
         uint256 head = redemptionQueueHead;
-        uint256 tail =
-            onlyFinalized
-                ? _redemptionRates[_redemptionRateSize - 1].nextIndex
-                : redemptionQueueTail;
+        uint256 tail = onlyFinalized ? getLatestFinalizationIndex() : redemptionQueueTail;
         if (startIndex == 0) {
             startIndex = head;
         } else {
@@ -335,6 +308,11 @@ contract EthPrimaryMarket is
                 mstore(indices, count)
             }
         }
+    }
+
+    function getLatestFinalizationIndex() public view returns (uint256 index) {
+        if (redemptionRateSize == 0) return 0;
+        return redemptionRates[redemptionRateSize - 1].nextIndex;
     }
 
     /// @notice Return whether the fund can change its primary market to another contract.
@@ -408,7 +386,7 @@ contract EthPrimaryMarket is
         uint256 inQ,
         uint256, // minUnderlying is ignored
         uint256 version
-    ) external override nonReentrant allowRedemption returns (uint256 underlying, uint256 index) {
+    ) external override nonReentrant allowRedemption returns (uint256, uint256 index) {
         index = redemptionQueueTail;
         QueuedRedemption storage newRedemption = queuedRedemptions[index];
         newRedemption.amountQ = inQ;
@@ -418,12 +396,12 @@ contract EthPrimaryMarket is
         // Transfer QUEEN from the sender to this contract
         IFundV3(fund).trancheTransferFrom(TRANCHE_Q, msg.sender, address(this), inQ, version);
         // Mint the redemption NFT
-        _safeMint(recipient, redemptionQueueTail);
-        emit RedemptionQueued(recipient, index, underlying);
+        _safeMint(recipient, index);
+        emit RedemptionQueued(recipient, index, inQ);
     }
 
-    function finalizeRedemptions(uint256 count) external {
-        uint256 oldFinalizedIndex = _redemptionRates[_redemptionRateSize - 1].nextIndex;
+    function finalizeRedemptions(uint256 count) external onlyOwner {
+        uint256 oldFinalizedIndex = getLatestFinalizationIndex();
         uint256 newFinalizedIndex = oldFinalizedIndex.add(count);
         require(newFinalizedIndex <= redemptionQueueTail, "Redemption queue out of bound");
 
@@ -440,7 +418,7 @@ contract EthPrimaryMarket is
             feeQ,
             0
         );
-        _redemptionRates[_redemptionRateSize++] = RedemptionRate({
+        redemptionRates[redemptionRateSize++] = RedemptionRate({
             nextIndex: newFinalizedIndex,
             underlyingPerQ: underlying.divideDecimalPrecise(amountQ)
         });
@@ -457,7 +435,7 @@ contract EthPrimaryMarket is
 
     function _popRedemptionQueue(uint256 count) private {
         uint256 oldHead = redemptionQueueHead;
-        uint256 oldTail = _redemptionRates[_redemptionRateSize - 1].nextIndex;
+        uint256 oldTail = getLatestFinalizationIndex();
         uint256 newHead;
         if (count == 0) {
             if (oldHead == oldTail) {
@@ -468,10 +446,25 @@ contract EthPrimaryMarket is
             newHead = oldHead.add(count);
             require(newHead <= oldTail, "Redemption queue out of bound");
         }
-        // overflow is desired
-        uint256 requiredUnderlying =
-            queuedRedemptions[newHead].previousPrefixSum -
-                queuedRedemptions[oldHead].previousPrefixSum;
+
+        uint256 redemptionIndex = lastRedemptionIndex;
+        uint256 startIndex = oldHead;
+        uint256 requiredUnderlying = 0;
+        while (startIndex < newHead) {
+            uint256 nextIndex = redemptionRates[redemptionIndex].nextIndex;
+            uint256 endIndex = newHead.min(nextIndex);
+            requiredUnderlying = requiredUnderlying.add(
+                redemptionRates[redemptionIndex].underlyingPerQ.multiplyDecimalPrecise(
+                    queuedRedemptions[endIndex].previousPrefixSum -
+                        queuedRedemptions[startIndex].previousPrefixSum
+                ) // overflow is desired
+            );
+            if (endIndex == nextIndex) {
+                redemptionIndex++;
+            }
+            startIndex = endIndex;
+        }
+        lastRedemptionIndex = redemptionIndex;
         // Redundant check for user-friendly revert message.
         require(
             requiredUnderlying <= _tokenUnderlying.balanceOf(fund),
@@ -532,18 +525,18 @@ contract EthPrimaryMarket is
         for (uint256 i = 0; i < count; i++) {
             require(i == 0 || indices[i] > indices[i - 1], "Indices out of order");
             require(
-                rateIndices[i] > 0 && rateIndices[i] < _redemptionRateSize,
+                rateIndices[i] > 0 && rateIndices[i] < redemptionRateSize,
                 "Invalid rate index"
             );
             require(
-                indices[i] < _redemptionRates[rateIndices[i]].nextIndex &&
-                    indices[i] >= _redemptionRates[rateIndices[i] - 1].nextIndex,
+                indices[i] < redemptionRates[rateIndices[i]].nextIndex &&
+                    indices[i] >= redemptionRates[rateIndices[i] - 1].nextIndex,
                 "Invalid index"
             );
             QueuedRedemption storage redemption = queuedRedemptions[indices[i]];
             uint256 redemptionUnderlying =
                 redemption.amountQ.multiplyDecimalPrecise(
-                    _redemptionRates[rateIndices[i]].underlyingPerQ
+                    redemptionRates[rateIndices[i]].underlyingPerQ
                 );
             require(
                 ownerOf(indices[i]) == account && redemption.amountQ != 0,
