@@ -25,6 +25,10 @@ interface IDepositContract {
     ) external payable;
 }
 
+interface IEthPrimaryMarket {
+    function finalizeRedemptions(uint256 count) external;
+}
+
 /// @notice Strategy for delegating ETH to ETH2 validators and earn rewards.
 contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
     using Math for uint256;
@@ -42,8 +46,15 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
         uint256 indexed id,
         uint256 beaconBalance,
         uint256 validatorCount,
-        uint256 executionLayerRewards
+        uint256 executionLayerReward
     );
+
+    struct OperatorData {
+        uint256 id;
+        uint256 beaconBalance;
+        uint256 validatorCount;
+        uint256 executionLayerReward;
+    }
 
     uint256 private constant MAX_TOTAL_FEE_RATE = 0.5e18;
     uint256 private constant MAX_OPERATOR_WEIGHT = 1e18;
@@ -139,17 +150,16 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
     /// @notice Report profit to the fund for an individual node operator.
     function report(
         uint256 epoch,
-        uint256 id,
-        uint256 beaconBalance,
-        uint256 validatorCount
+        OperatorData calldata operatorData,
+        uint256 finalizationCount
     ) external onlyReporter {
         (uint256 profit, uint256 loss, uint256 totalFee, uint256 operatorFee) =
-            _report(epoch, id, beaconBalance, validatorCount);
+            _report(epoch, operatorData);
         if (profit != 0) {
             uint256 feeQ = IFundForStrategyV2(fund).reportProfit(profit, totalFee, operatorFee);
             IFundV3(fund).trancheTransfer(
                 TRANCHE_Q,
-                registry.getRewardAddress(id),
+                registry.getRewardAddress(operatorData.id),
                 feeQ,
                 IFundV3(fund).getRebalanceSize()
             );
@@ -157,29 +167,27 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
         if (loss != 0) {
             IFundForStrategyV2(fund).reportLoss(loss);
         }
+        if (finalizationCount != 0) {
+            IEthPrimaryMarket(IFundV3(fund).primaryMarket()).finalizeRedemptions(finalizationCount);
+        }
     }
 
     /// @notice Report profit to the fund for multiple node operators.
     function batchReport(
         uint256 epoch,
-        uint256[] memory ids,
-        uint256[] memory beaconBalances,
-        uint256[] memory validatorCounts
+        OperatorData[] calldata operatorData,
+        uint256 finalizationCount
     ) external onlyReporter {
-        uint256 size = ids.length;
-        require(
-            beaconBalances.length == size && validatorCounts.length == size,
-            "Unaligned params"
-        );
+        uint256 size = operatorData.length;
         uint256 sumProfit;
         uint256 sumLoss;
         uint256 sumTotalFee;
         uint256 sumOperatorFee;
         uint256[] memory operatorFees = new uint256[](size);
         for (uint256 i = 0; i < size; i++) {
-            require(i == 0 || ids[i] > ids[i - 1], "IDs out of order");
+            require(i == 0 || operatorData[i].id > operatorData[i - 1].id, "IDs out of order");
             (uint256 profit, uint256 loss, uint256 totalFee, uint256 operatorFee) =
-                _report(epoch, ids[i], beaconBalances[i], validatorCounts[i]);
+                _report(epoch, operatorData[i]);
             sumProfit = sumProfit.add(profit);
             sumLoss = sumLoss.add(loss);
             sumTotalFee = sumTotalFee.add(totalFee);
@@ -198,7 +206,7 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
                     if (operatorFees[i] == 0) {
                         continue;
                     }
-                    address rewardAddress = registry.getRewardAddress(ids[i]);
+                    address rewardAddress = registry.getRewardAddress(operatorData[i].id);
                     IFundV3(fund).trancheTransfer(
                         TRANCHE_Q,
                         rewardAddress,
@@ -208,14 +216,12 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
                 }
             }
         }
+        if (finalizationCount != 0) {
+            IEthPrimaryMarket(IFundV3(fund).primaryMarket()).finalizeRedemptions(finalizationCount);
+        }
     }
 
-    function _report(
-        uint256 epoch,
-        uint256 id,
-        uint256 beaconBalance,
-        uint256 validatorCount
-    )
+    function _report(uint256 epoch, OperatorData calldata operatorData)
         private
         returns (
             uint256 profit,
@@ -224,41 +230,52 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
             uint256 operatorFee
         )
     {
-        address withdrawalAddress = registry.getWithdrawalAddress(id);
+        address withdrawalAddress = registry.getWithdrawalAddress(operatorData.id);
         require(withdrawalAddress != address(0), "Invalid operator id");
-        uint256 lastValidatorCount = lastValidatorCounts[id];
-        require(validatorCount <= registry.getKeyStat(id).usedCount, "More than deposited");
-        require(validatorCount >= lastValidatorCount, "Less than previous");
+        uint256 lastValidatorCount = lastValidatorCounts[operatorData.id];
+        require(
+            operatorData.validatorCount <= registry.getKeyStat(operatorData.id).usedCount,
+            "More than deposited"
+        );
 
         uint256 oldBalance =
-            (validatorCount - lastValidatorCount).mul(DEPOSIT_AMOUNT).add(lastBeaconBalances[id]);
-        lastBeaconBalances[id] = beaconBalance;
-        lastValidatorCounts[id] = validatorCount;
+            lastBeaconBalances[operatorData.id]
+                .add((operatorData.validatorCount).mul(DEPOSIT_AMOUNT))
+                .sub((lastValidatorCount).mul(DEPOSIT_AMOUNT));
+        lastBeaconBalances[operatorData.id] = operatorData.beaconBalance;
+        lastValidatorCounts[operatorData.id] = operatorData.validatorCount;
 
-        // Get the exectuion layer rewards
-        uint256 executionLayerRewards = withdrawalAddress.balance;
-        if (executionLayerRewards != 0) {
-            IWithdrawalManager(withdrawalAddress).transferToStrategy(executionLayerRewards);
+        // Get the total withdrawable amount, including exectuion layer rewards and withdraw balances
+        uint256 withdrawableAmount = withdrawalAddress.balance;
+        require(withdrawableAmount >= operatorData.executionLayerReward, "Not enough rewards");
+        if (withdrawableAmount != 0) {
+            IWithdrawalManager(withdrawalAddress).transferToStrategy(withdrawableAmount);
         }
-        emit BalanceReported(epoch, id, beaconBalance, validatorCount, executionLayerRewards);
-        uint256 newBalance = beaconBalance.add(executionLayerRewards);
+        emit BalanceReported(
+            epoch,
+            operatorData.id,
+            operatorData.beaconBalance,
+            operatorData.validatorCount,
+            operatorData.executionLayerReward
+        );
+        uint256 newBalance = operatorData.beaconBalance.add(operatorData.executionLayerReward);
 
         // Update drawdown and calculate fees
-        uint256 oldDrawdown = currentDrawdowns[id];
+        uint256 oldDrawdown = currentDrawdowns[operatorData.id];
         if (newBalance >= oldBalance) {
             profit = newBalance - oldBalance;
             if (profit <= oldDrawdown) {
-                currentDrawdowns[id] = oldDrawdown - profit;
+                currentDrawdowns[operatorData.id] = oldDrawdown - profit;
             } else {
                 if (oldDrawdown > 0) {
-                    currentDrawdowns[id] = 0;
+                    currentDrawdowns[operatorData.id] = 0;
                 }
                 totalFee = (profit - oldDrawdown).multiplyDecimal(totalFeeRate);
                 operatorFee = (profit - oldDrawdown).multiplyDecimal(operatorFeeRate);
             }
         } else {
             loss = oldBalance - newBalance;
-            currentDrawdowns[id] = oldDrawdown.add(loss);
+            currentDrawdowns[operatorData.id] = oldDrawdown.add(loss);
         }
     }
 
@@ -334,6 +351,8 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
         require(msg.sender == safeStaking, "Only safe staking");
 
         require(amount % DEPOSIT_AMOUNT == 0);
+        // If there is debt, the fund should prioritize debt repayment
+        require(IFundV3(fund).getTotalDebt() == 0);
         if (address(this).balance < amount) {
             IFundForStrategyV2(fund).transferToStrategy(amount - address(this).balance);
             _unwrap(IERC20(_tokenUnderlying).balanceOf(address(this)));
@@ -367,6 +386,7 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
             _wrap(unwrapped);
         }
         uint256 amount = IWrappedERC20(_tokenUnderlying).balanceOf(address(this));
+        amount = amount.min(IFundV3(fund).getTotalDebt()); // Do not transfer more than the fund needs
         IWrappedERC20(_tokenUnderlying).safeApprove(fund, amount);
         IFundForStrategyV2(fund).transferFromStrategy(amount);
     }

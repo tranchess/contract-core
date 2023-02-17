@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
+pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/EnumerableSet.sol";
@@ -9,13 +10,19 @@ import "../../utils/SafeDecimalMath.sol";
 import "../../interfaces/IFundV3.sol";
 
 interface IEthStakingStrategy {
+    struct OperatorData {
+        uint256 id;
+        uint256 beaconBalance;
+        uint256 validatorCount;
+        uint256 executionLayerReward;
+    }
+
     function fund() external view returns (address);
 
     function batchReport(
         uint256 epoch,
-        uint256[] memory ids,
-        uint256[] memory beaconBalances,
-        uint256[] memory validatorCounts
+        OperatorData[] calldata operatorData,
+        uint256 finalizationCount
     ) external;
 }
 
@@ -24,13 +31,7 @@ contract BeaconStakingOracle is Ownable {
     using SafeDecimalMath for uint256;
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    event BeaconReported(
-        uint256 epochId,
-        uint256[] ids,
-        uint256[] beaconBalance,
-        uint256[] beaconValidators,
-        address caller
-    );
+    event BeaconReported(uint256 epochId, bytes32 report, address caller);
     event MemberAdded(address member);
     event MemberRemoved(address member);
     event AnnualMaxChangeUpdated(uint256 newAnnualMaxChange);
@@ -80,14 +81,12 @@ contract BeaconStakingOracle is Ownable {
 
     /// @notice Report validator balances on Beacon chain
     /// @param epoch Beacon chain epoch
-    /// @param ids Node operator IDs, which must be sorted in ascending order
-    /// @param beaconBalances Balance in wei of all validators of each node operator
-    /// @param validatorCounts Number of validators visible in this epoch
+    /// @param operatorData Per-operator report data including Node operator IDs, which must be sorted in ascending order
+    /// @param finalizationCount Number of finalizable withdrawals
     function batchReport(
         uint256 epoch,
-        uint256[] memory ids,
-        uint256[] memory beaconBalances,
-        uint256[] memory validatorCounts
+        IEthStakingStrategy.OperatorData[] calldata operatorData,
+        uint256 finalizationCount
     ) external onlyMember {
         require(
             epoch <= getLatestReportableEpoch() &&
@@ -99,13 +98,13 @@ contract BeaconStakingOracle is Ownable {
         lastReportedEpoch[msg.sender] = epoch;
 
         // Push the result to `reports` queue, report to strategy if counts exceed `quorum`
-        bytes32 report = encodeBatchReport(ids, beaconBalances, validatorCounts);
+        bytes32 report = encodeBatchReport(operatorData, finalizationCount);
         uint256 currentCount = reports[epoch][report] + 1;
-        emit BeaconReported(epoch, ids, beaconBalances, validatorCounts, msg.sender);
+        emit BeaconReported(epoch, report, msg.sender);
 
         if (currentCount >= quorum) {
             uint256 preTotalUnderlying = fund.getTotalUnderlying();
-            strategy.batchReport(epoch, ids, beaconBalances, validatorCounts);
+            strategy.batchReport(epoch, operatorData, finalizationCount);
             uint256 postTotalUnderlying = fund.getTotalUnderlying();
 
             uint256 timeElapsed = (epoch - lastCompletedEpoch) * secondsPerEpoch;
@@ -144,11 +143,21 @@ contract BeaconStakingOracle is Ownable {
     }
 
     function encodeBatchReport(
-        uint256[] memory ids,
-        uint256[] memory beaconBalances,
-        uint256[] memory validatorCounts
+        IEthStakingStrategy.OperatorData[] calldata operatorData,
+        uint256 finalizationCount
     ) public view returns (bytes32) {
-        return keccak256(abi.encodePacked(ids, beaconBalances, validatorCounts, nonce));
+        uint256[] memory ids = new uint256[](operatorData.length);
+        uint256[] memory beaconBalances = new uint256[](operatorData.length);
+        uint256[] memory validatorCounts = new uint256[](operatorData.length);
+        for (uint256 i = 0; i < operatorData.length; i++) {
+            ids[i] = operatorData[i].id;
+            beaconBalances[i] = operatorData[i].beaconBalance;
+            validatorCounts[i] = operatorData[i].validatorCount;
+        }
+        return
+            keccak256(
+                abi.encodePacked(ids, beaconBalances, validatorCounts, finalizationCount, nonce)
+            );
     }
 
     /// @notice Return the epoch that an oracle member should report now,

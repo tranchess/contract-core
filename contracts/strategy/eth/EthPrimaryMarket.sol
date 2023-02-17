@@ -54,12 +54,10 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, Withdraw
         uint256 underlyingPerQ;
     }
 
-    uint256 private constant MAX_REDEMPTION_FEE_RATE = 0.01e18;
     uint256 private constant MAX_MERGE_FEE_RATE = 0.01e18;
     uint256 public constant redemptionFeeRate = 0;
 
     address public immutable fund;
-    bool public immutable redemptionFlag;
     IERC20 private immutable _tokenUnderlying;
 
     uint256 public mergeFeeRate;
@@ -95,7 +93,6 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, Withdraw
         address fund_,
         uint256 mergeFeeRate_,
         uint256 fundCap_,
-        bool redemptionFlag_,
         string memory name_,
         string memory symbol_
     ) public Ownable() WithdrawalNFT(name_, symbol_) {
@@ -103,7 +100,6 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, Withdraw
         _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
-        redemptionFlag = redemptionFlag_;
     }
 
     /// @notice Calculate the result of a creation.
@@ -386,7 +382,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, Withdraw
         uint256 inQ,
         uint256, // minUnderlying is ignored
         uint256 version
-    ) external nonReentrant allowRedemption returns (uint256, uint256 index) {
+    ) external nonReentrant returns (uint256, uint256 index) {
         index = redemptionQueueTail;
         QueuedRedemption storage newRedemption = queuedRedemptions[index];
         newRedemption.amountQ = inQ;
@@ -555,6 +551,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, Withdraw
             underlying = underlying.add(redemptionUnderlying);
             emit RedemptionClaimed(account, indices[i], redemptionUnderlying);
             delete queuedRedemptions[indices[i]];
+            _burn(indices[i]);
         }
         claimableUnderlying = claimableUnderlying.sub(underlying);
     }
@@ -612,11 +609,6 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, Withdraw
 
     modifier onlyFund() {
         require(msg.sender == fund, "Only fund");
-        _;
-    }
-
-    modifier allowRedemption() {
-        require(redemptionFlag, "Redemption N/A");
         _;
     }
 }
