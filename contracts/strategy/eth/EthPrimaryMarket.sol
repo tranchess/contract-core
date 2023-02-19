@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
 import "../../utils/SafeDecimalMath.sol";
 
@@ -15,9 +16,9 @@ import "../../interfaces/IFundV3.sol";
 import "../../interfaces/IFundForPrimaryMarketV4.sol";
 import "../../interfaces/ITrancheIndexV2.sol";
 import "../../interfaces/IWrappedERC20.sol";
-import "./WithdrawalNFT.sol";
+import "../../nonfungible/NonfungibleWithdrawalDescriptor.sol";
 
-contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, WithdrawalNFT {
+contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
     event Created(address indexed account, uint256 underlying, uint256 outQ);
     event Split(address indexed account, uint256 inQ, uint256 outB, uint256 outR);
     event Merged(
@@ -59,6 +60,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, Withdraw
 
     address public immutable fund;
     IERC20 private immutable _tokenUnderlying;
+    NonfungibleWithdrawalDescriptor private immutable _descriptor;
 
     uint256 public mergeFeeRate;
 
@@ -94,12 +96,14 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, Withdraw
         uint256 mergeFeeRate_,
         uint256 fundCap_,
         string memory name_,
-        string memory symbol_
-    ) public Ownable() WithdrawalNFT(name_, symbol_) {
+        string memory symbol_,
+        address descriptor_
+    ) public Ownable() ERC721(name_, symbol_) {
         fund = fund_;
         _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
+        _descriptor = NonfungibleWithdrawalDescriptor(descriptor_);
     }
 
     /// @notice Calculate the result of a creation.
@@ -336,7 +340,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, Withdraw
 
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(_exists(tokenId));
-        return generateSVG(SVGParams({tokenId: tokenId}));
+        return _descriptor.tokenURI(this, tokenId);
     }
 
     // save bytecode by removing implementation of unused method
