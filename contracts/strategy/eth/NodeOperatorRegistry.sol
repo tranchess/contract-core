@@ -9,6 +9,12 @@ import "./WithdrawalManagerFactory.sol";
 
 interface IEthStakingStrategy {
     function safeStaking() external view returns (address);
+
+    function registry() external view returns (address);
+
+    function depositContract() external view returns (address);
+
+    function deposit(uint256 amount) external;
 }
 
 contract NodeOperatorRegistry is Ownable {

@@ -12,14 +12,6 @@ interface IDepositContractView {
     function get_deposit_root() external view returns (bytes32 rootHash);
 }
 
-interface IEthStakingStrategy {
-    function registry() external view returns (NodeOperatorRegistry);
-
-    function depositContract() external view returns (IDepositContractView);
-
-    function deposit(uint256 amount) external;
-}
-
 contract SafeStaking is Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
 
@@ -52,8 +44,8 @@ contract SafeStaking is Ownable {
         uint256 minDepositTimeInterval_
     ) public {
         strategy = IEthStakingStrategy(strategy_);
-        depositContract = IEthStakingStrategy(strategy_).depositContract();
-        registry = IEthStakingStrategy(strategy_).registry();
+        depositContract = IDepositContractView(IEthStakingStrategy(strategy_).depositContract());
+        registry = NodeOperatorRegistry(IEthStakingStrategy(strategy_).registry());
         uint256 chainID = _getChainID();
         DEPOSIT_MESSAGE_PREFIX = keccak256(
             abi.encodePacked(keccak256("chess.SafeStaking.DEPOSIT_MESSAGE"), chainID)
