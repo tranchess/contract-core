@@ -228,8 +228,9 @@ describe("NodeOperatorRegistry", function () {
 
     describe("useKeys()", function () {
         beforeEach(async function () {
+            await strategy.mock.safeStaking.returns(owner.address);
             await registry.connect(operator0).updateDepositLimit(0, 3);
-            await registry.connect(owner).updateVerifiedCount(0, 4);
+            await registry.connect(owner).updateVerifiedCount(0, 4, 2);
         });
 
         it("Should revert if not called by strategy", async function () {
@@ -240,7 +241,7 @@ describe("NodeOperatorRegistry", function () {
             await expect(strategy.call(registry, "useKeys", 0, 4)).to.be.revertedWith(
                 "No enough pubkeys"
             );
-            await registry.connect(owner).updateVerifiedCount(0, 2);
+            await registry.connect(owner).updateVerifiedCount(0, 2, 3);
             await expect(strategy.call(registry, "useKeys", 0, 3)).to.be.revertedWith(
                 "No enough pubkeys"
             );
@@ -285,8 +286,9 @@ describe("NodeOperatorRegistry", function () {
 
     describe("truncateUnusedKeys()", function () {
         beforeEach(async function () {
+            await strategy.mock.safeStaking.returns(owner.address);
             await registry.connect(operator0).updateDepositLimit(0, 2);
-            await registry.connect(owner).updateVerifiedCount(0, 3);
+            await registry.connect(owner).updateVerifiedCount(0, 3, 2);
             await strategy.call(registry, "useKeys", 0, 1);
         });
 
@@ -315,8 +317,9 @@ describe("NodeOperatorRegistry", function () {
 
     describe("truncateAllUnusedKeys()", function () {
         beforeEach(async function () {
+            await strategy.mock.safeStaking.returns(owner.address);
             await registry.connect(operator0).updateDepositLimit(0, 2);
-            await registry.connect(owner).updateVerifiedCount(0, 3);
+            await registry.connect(owner).updateVerifiedCount(0, 3, 2);
             await strategy.call(registry, "useKeys", 0, 1);
         });
 
@@ -410,8 +413,9 @@ describe("NodeOperatorRegistry", function () {
 
     describe("Batch getters", function () {
         beforeEach(async function () {
+            await strategy.mock.safeStaking.returns(owner.address);
             await registry.connect(operator0).updateDepositLimit(0, 2);
-            await registry.connect(owner).updateVerifiedCount(0, 3);
+            await registry.connect(owner).updateVerifiedCount(0, 3, 2);
             await strategy.call(registry, "useKeys", 0, 1);
         });
 
