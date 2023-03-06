@@ -7,6 +7,10 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./IWithdrawalManager.sol";
 import "./WithdrawalManagerFactory.sol";
 
+interface IEthStakingStrategy {
+    function safeStaking() external view returns (address);
+}
+
 contract NodeOperatorRegistry is Ownable {
     event OperatorAdded(uint256 indexed id, string name, address operatorOwner);
     event OperatorOwnerUpdated(uint256 indexed id, address newOperatorOwner);
@@ -67,9 +71,41 @@ contract NodeOperatorRegistry is Ownable {
     /// @dev Mapping of node operator ID => index => validator pubkey and deposit signature.
     mapping(uint256 => mapping(uint256 => Key)) private _keys;
 
+    uint256 public registryVersion;
+
     constructor(address strategy_, address withdrawalManagerFactory_) public {
         _updateStrategy(strategy_);
         factory = WithdrawalManagerFactory(withdrawalManagerFactory_);
+    }
+
+    function initialize(address oldRegistry) external onlyOwner {
+        require(operatorCount == 0);
+
+        operatorCount = NodeOperatorRegistry(oldRegistry).operatorCount();
+        for (uint256 i = 0; i < operatorCount; i++) {
+            Operator memory operator = NodeOperatorRegistry(oldRegistry).getOperator(i);
+            operator.operatorOwner = msg.sender;
+            uint64 usedCount = operator.keyStat.usedCount;
+            operator.keyStat.totalCount = usedCount;
+            operator.keyStat.verifiedCount = usedCount;
+            _operators[i] = operator;
+            emit OperatorAdded(i, operator.name, msg.sender);
+            if (operator.rewardAddress != msg.sender) {
+                emit RewardAddressUpdated(i, operator.rewardAddress);
+            }
+            emit DepositLimitUpdated(i, operator.keyStat.depositLimit);
+
+            Key[] memory keys = NodeOperatorRegistry(oldRegistry).getKeys(i, 0, usedCount);
+            for (uint256 j = 0; j < usedCount; j++) {
+                bytes32 pk0 = keys[j].pubkey0;
+                bytes32 pk1 = keys[j].pubkey1;
+                _keys[i][j].pubkey0 = pk0;
+                _keys[i][j].pubkey1 = pk1;
+                emit KeyAdded(i, abi.encodePacked(pk0, bytes16(pk1)), j);
+            }
+            emit VerifiedCountUpdated(i, usedCount);
+            emit KeyUsed(i, usedCount);
+        }
     }
 
     function getOperator(uint256 id) external view returns (Operator memory) {
@@ -206,6 +242,7 @@ contract NodeOperatorRegistry is Ownable {
         }
         stat.totalCount += uint64(count);
         operator.keyStat = stat;
+        registryVersion++;
     }
 
     function truncateUnusedKeys(uint256 id) external onlyOperatorOwner(id) {
@@ -222,6 +259,7 @@ contract NodeOperatorRegistry is Ownable {
 
     function updateDepositLimit(uint256 id, uint64 newDepositLimit) external onlyOperatorOwner(id) {
         _operators[id].keyStat.depositLimit = newDepositLimit;
+        registryVersion++;
         emit DepositLimitUpdated(id, newDepositLimit);
     }
 
@@ -254,6 +292,7 @@ contract NodeOperatorRegistry is Ownable {
         operator.keyStat = stat;
         withdrawalCredential = IWithdrawalManager(operator.withdrawalAddress)
             .getWithdrawalCredential();
+        registryVersion++;
         emit KeyUsed(id, count);
     }
 
@@ -278,8 +317,16 @@ contract NodeOperatorRegistry is Ownable {
         emit OperatorOwnerUpdated(id, newOperatorOwner);
     }
 
-    function updateVerifiedCount(uint256 id, uint64 newVerifiedCount) external onlyOwner {
+    function updateVerifiedCount(
+        uint256 id,
+        uint64 newVerifiedCount,
+        uint256 offchainregistryVersion
+    ) external {
+        require(msg.sender == IEthStakingStrategy(strategy).safeStaking(), "Only safe staking");
+        require(registryVersion == offchainregistryVersion, "Registry version changed");
+
         _operators[id].keyStat.verifiedCount = newVerifiedCount;
+        registryVersion++;
         emit VerifiedCountUpdated(id, newVerifiedCount);
     }
 
