@@ -33,6 +33,7 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
     using SafeERC20 for IWrappedERC20;
 
     event ReporterUpdated(address reporter);
+    event SafeStakingUpdated(address safeStaking);
     event Received(address from, uint256 amount);
     event FeeRateUpdated(uint256 newTotalFeeRate, uint256 newOperatorFeeRate);
     event OperatorWeightUpdated(uint256 indexed id, uint256 newWeight);
@@ -89,6 +90,8 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
     mapping(uint256 => uint256) public lastBeaconBalances;
     mapping(uint256 => uint256) public lastValidatorCounts;
 
+    address public safeStaking;
+
     constructor(
         address fund_,
         address depositContract_,
@@ -103,6 +106,19 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
         _updateFeeRate(totalFeeRate_, operatorFeeRate_);
     }
 
+    function initialize(address payable oldStrategy) external onlyOwner {
+        require(totalValidatorCount == 0);
+
+        totalValidatorCount = EthStakingStrategy(oldStrategy).totalValidatorCount();
+        operatorCursor = EthStakingStrategy(oldStrategy).operatorCursor();
+        uint256 operatorCount = registry.operatorCount();
+        for (uint256 i = 0; i < operatorCount; i++) {
+            lastBeaconBalances[i] = EthStakingStrategy(oldStrategy).lastBeaconBalances(i);
+            lastValidatorCounts[i] = EthStakingStrategy(oldStrategy).lastValidatorCounts(i);
+            currentDrawdowns[i] = EthStakingStrategy(oldStrategy).currentDrawdowns(i);
+        }
+    }
+
     receive() external payable {}
 
     modifier onlyReporter() {
@@ -113,6 +129,11 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
     function updateReporter(address reporter_) public onlyOwner {
         reporter = reporter_;
         emit ReporterUpdated(reporter);
+    }
+
+    function updateSafeStaking(address safeStaking_) public onlyOwner {
+        safeStaking = safeStaking_;
+        emit SafeStakingUpdated(safeStaking_);
     }
 
     /// @notice Report profit to the fund for an individual node operator.
@@ -310,6 +331,8 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
     /// @notice Deposit underlying tokens from the fund to the ETH2 deposit contract.
     /// @param amount Amount of underlying transfered from the fund, including cross-chain relay fee
     function deposit(uint256 amount) public {
+        require(msg.sender == safeStaking, "Only safe staking");
+
         require(amount % DEPOSIT_AMOUNT == 0);
         if (address(this).balance < amount) {
             IFundForStrategyV2(fund).transferToStrategy(amount - address(this).balance);
@@ -334,13 +357,8 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
         totalValidatorCount = totalValidatorCount + total;
     }
 
-    function onPrimaryMarketCreate() external {
-        uint256 balance = IERC20(_tokenUnderlying).balanceOf(fund) + address(this).balance;
-        uint256 count = balance / DEPOSIT_AMOUNT;
-        if (count > 0) {
-            deposit(count.min(MAX_AUTO_DEPOSIT_COUNT) * DEPOSIT_AMOUNT);
-        }
-    }
+    /// @dev Nothing to do on primary market creation.
+    function onPrimaryMarketCreate() external {}
 
     /// @notice Transfer all underlying tokens, both wrapped and unwrapped, to the fund.
     function transferToFund() external onlyOwner {
