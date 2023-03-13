@@ -59,7 +59,6 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
     uint256 private constant MAX_TOTAL_FEE_RATE = 0.5e18;
     uint256 private constant MAX_OPERATOR_WEIGHT = 1e18;
     uint256 private constant DEPOSIT_AMOUNT = 32 ether;
-    uint256 private constant MAX_AUTO_DEPOSIT_COUNT = 100;
 
     /// @dev Little endian representation of the deposit amount in Gwei.
     bytes32 private constant LITTLE_ENDIAN_DEPOSIT_AMOUNT =
