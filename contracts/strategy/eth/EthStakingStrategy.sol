@@ -146,31 +146,6 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
         emit SafeStakingUpdated(safeStaking_);
     }
 
-    /// @notice Report profit to the fund for an individual node operator.
-    function report(
-        uint256 epoch,
-        OperatorData calldata operatorData,
-        uint256 finalizationCount
-    ) external onlyReporter {
-        (uint256 profit, uint256 loss, uint256 totalFee, uint256 operatorFee) =
-            _report(epoch, operatorData);
-        if (profit != 0) {
-            uint256 feeQ = IFundForStrategyV2(fund).reportProfit(profit, totalFee, operatorFee);
-            IFundV3(fund).trancheTransfer(
-                TRANCHE_Q,
-                registry.getRewardAddress(operatorData.id),
-                feeQ,
-                IFundV3(fund).getRebalanceSize()
-            );
-        }
-        if (loss != 0) {
-            IFundForStrategyV2(fund).reportLoss(loss);
-        }
-        if (finalizationCount != 0) {
-            IEthPrimaryMarket(IFundV3(fund).primaryMarket()).finalizeRedemptions(finalizationCount);
-        }
-    }
-
     /// @notice Report profit to the fund for multiple node operators.
     function batchReport(
         uint256 epoch,
