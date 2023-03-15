@@ -204,30 +204,27 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
             uint256 operatorFee
         )
     {
-        address withdrawalAddress = registry.getWithdrawalAddress(operatorData.id);
+        uint256 id = operatorData.id;
+        address withdrawalAddress = registry.getWithdrawalAddress(id);
         require(withdrawalAddress != address(0), "Invalid operator id");
-        uint256 lastValidatorCount = lastValidatorCounts[operatorData.id];
+        uint256 lastValidatorCount = lastValidatorCounts[id];
         require(
-            operatorData.validatorCount <= registry.getKeyStat(operatorData.id).usedCount,
+            operatorData.validatorCount <= registry.getKeyStat(id).usedCount,
             "More than deposited"
         );
 
         uint256 oldBalance =
-            lastBeaconBalances[operatorData.id]
-                .add((operatorData.validatorCount).mul(DEPOSIT_AMOUNT))
-                .sub((lastValidatorCount).mul(DEPOSIT_AMOUNT));
-        lastBeaconBalances[operatorData.id] = operatorData.beaconBalance;
-        lastValidatorCounts[operatorData.id] = operatorData.validatorCount;
+            lastBeaconBalances[id].add((operatorData.validatorCount).mul(DEPOSIT_AMOUNT)).sub(
+                (lastValidatorCount).mul(DEPOSIT_AMOUNT)
+            );
+        lastBeaconBalances[id] = operatorData.beaconBalance;
+        lastValidatorCounts[id] = operatorData.validatorCount;
 
-        // Get the total withdrawable amount, including exectuion layer rewards and withdraw balances
-        uint256 withdrawableAmount = withdrawalAddress.balance;
-        require(withdrawableAmount >= operatorData.executionLayerReward, "Not enough rewards");
-        if (withdrawableAmount != 0) {
-            IWithdrawalManager(withdrawalAddress).transferToStrategy(withdrawableAmount);
-        }
+        // Get the exectuion layer rewards
+        IWithdrawalManager(withdrawalAddress).transferToStrategy(operatorData.executionLayerReward);
         emit BalanceReported(
             epoch,
-            operatorData.id,
+            id,
             operatorData.beaconBalance,
             operatorData.validatorCount,
             operatorData.executionLayerReward
@@ -235,21 +232,21 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
         uint256 newBalance = operatorData.beaconBalance.add(operatorData.executionLayerReward);
 
         // Update drawdown and calculate fees
-        uint256 oldDrawdown = currentDrawdowns[operatorData.id];
+        uint256 oldDrawdown = currentDrawdowns[id];
         if (newBalance >= oldBalance) {
             profit = newBalance - oldBalance;
             if (profit <= oldDrawdown) {
-                currentDrawdowns[operatorData.id] = oldDrawdown - profit;
+                currentDrawdowns[id] = oldDrawdown - profit;
             } else {
                 if (oldDrawdown > 0) {
-                    currentDrawdowns[operatorData.id] = 0;
+                    currentDrawdowns[id] = 0;
                 }
                 totalFee = (profit - oldDrawdown).multiplyDecimal(totalFeeRate);
                 operatorFee = (profit - oldDrawdown).multiplyDecimal(operatorFeeRate);
             }
         } else {
             loss = oldBalance - newBalance;
-            currentDrawdowns[operatorData.id] = oldDrawdown.add(loss);
+            currentDrawdowns[id] = oldDrawdown.add(loss);
         }
     }
 
@@ -360,7 +357,6 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
             _wrap(unwrapped);
         }
         uint256 amount = IWrappedERC20(_tokenUnderlying).balanceOf(address(this));
-        amount = amount.min(IFundV3(fund).getTotalDebt()); // Do not transfer more than the fund needs
         IWrappedERC20(_tokenUnderlying).safeApprove(fund, amount);
         IFundForStrategyV2(fund).transferFromStrategy(amount);
     }

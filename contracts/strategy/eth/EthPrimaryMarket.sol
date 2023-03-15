@@ -39,6 +39,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
     event RedemptionClaimed(address indexed account, uint256 index, uint256 underlying);
     event FundCapUpdated(uint256 newCap);
     event MergeFeeRateUpdated(uint256 newMergeFeeRate);
+    event RedemptionBoundsUpdated(uint256 newLowerBound, uint256 newUpperBound);
 
     using Math for uint256;
     using SafeMath for uint256;
@@ -91,19 +92,28 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
 
     uint256 public redemptionRateSize;
 
+    /// @notice Minimal amount to withdraw by a single request
+    uint256 public redemptionLowerBound;
+
+    /// @notice Maximum amount to withdraw by a single request
+    uint256 public redemptionUpperBound;
+
     constructor(
         address fund_,
         uint256 mergeFeeRate_,
         uint256 fundCap_,
         string memory name_,
         string memory symbol_,
-        address descriptor_
+        address descriptor_,
+        uint256 redemptionLowerBound_,
+        uint256 redemptionUpperBound_
     ) public Ownable() ERC721(name_, symbol_) {
         fund = fund_;
         _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
         _descriptor = NonfungibleWithdrawalDescriptor(descriptor_);
+        _updateRedemptionBounds(redemptionLowerBound_, redemptionUpperBound_);
     }
 
     /// @notice Calculate the result of a creation.
@@ -301,7 +311,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
         uint256 maxIterationCount
     ) external view returns (uint256[] memory indices, uint256 amountQ) {
         uint256 head = redemptionQueueHead;
-        uint256 tail = onlyFinalized ? getLatestFinalizationIndex() : redemptionQueueTail;
+        uint256 tail = onlyFinalized ? getNextFinalizationIndex() : redemptionQueueTail;
         if (startIndex == 0) {
             startIndex = head;
         } else {
@@ -328,7 +338,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
         }
     }
 
-    function getLatestFinalizationIndex() public view returns (uint256 index) {
+    function getNextFinalizationIndex() public view returns (uint256 index) {
         if (redemptionRateSize == 0) return 0;
         return redemptionRates[redemptionRateSize - 1].nextIndex;
     }
@@ -387,6 +397,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
         uint256, // minUnderlying is ignored
         uint256 version
     ) external nonReentrant returns (uint256, uint256 index) {
+        require(inQ > redemptionLowerBound && inQ < redemptionUpperBound, "Invalid amount");
         index = redemptionQueueTail;
         QueuedRedemption storage newRedemption = queuedRedemptions[index];
         newRedemption.amountQ = inQ;
@@ -394,7 +405,8 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
         queuedRedemptions[index + 1].previousPrefixSum = newRedemption.previousPrefixSum + inQ;
         redemptionQueueTail = index + 1;
         // Transfer QUEEN from the sender to this contract
-        IFundV3(fund).trancheTransferFrom(TRANCHE_Q, msg.sender, address(this), inQ, version);
+        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
+        IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_Q, address(this), inQ, version);
         // Mint the redemption NFT
         _safeMint(recipient, index);
         emit RedemptionQueued(recipient, index, inQ);
@@ -402,7 +414,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
 
     function finalizeRedemptions(uint256 count) external {
         require(msg.sender == IFundV3(fund).strategy(), "Only Strategy");
-        uint256 oldFinalizedIndex = getLatestFinalizationIndex();
+        uint256 oldFinalizedIndex = getNextFinalizationIndex();
         uint256 newFinalizedIndex = oldFinalizedIndex.add(count);
         require(newFinalizedIndex <= redemptionQueueTail, "Redemption queue out of bound");
 
@@ -411,19 +423,13 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
             queuedRedemptions[newFinalizedIndex].previousPrefixSum -
                 queuedRedemptions[oldFinalizedIndex].previousPrefixSum;
 
-        (uint256 underlying, uint256 feeQ) = getRedemption(amountQ);
+        (uint256 underlying, ) = getRedemption(amountQ);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, address(this), amountQ, 0);
-        IFundForPrimaryMarketV4(fund).primaryMarketMint(
-            TRANCHE_Q,
-            IFundV3(fund).feeCollector(),
-            feeQ,
-            0
-        );
         redemptionRates[redemptionRateSize++] = RedemptionRate({
             nextIndex: newFinalizedIndex,
             underlyingPerQ: underlying.divideDecimalPrecise(amountQ)
         });
-        emit RedemptionFinalized(newFinalizedIndex, amountQ, underlying, feeQ);
+        emit RedemptionFinalized(newFinalizedIndex, amountQ, underlying, 0);
     }
 
     /// @notice Remove a given number of redemptions from the front of the redemption queue and
@@ -436,7 +442,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
 
     function _popRedemptionQueue(uint256 count, uint256 redemptionRateIndex) private {
         uint256 oldHead = redemptionQueueHead;
-        uint256 oldTail = getLatestFinalizationIndex();
+        uint256 oldTail = getNextFinalizationIndex();
         uint256 newHead;
         if (count == 0) {
             if (oldHead == oldTail) {
@@ -606,6 +612,23 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
 
     function updateMergeFeeRate(uint256 newMergeFeeRate) external onlyOwner {
         _updateMergeFeeRate(newMergeFeeRate);
+    }
+
+    function _updateRedemptionBounds(
+        uint256 newredemptionLowerBound,
+        uint256 newredemptionUpperBound
+    ) private {
+        require(newredemptionLowerBound <= newredemptionUpperBound, "Invalid redemption bounds");
+        redemptionLowerBound = newredemptionLowerBound;
+        redemptionUpperBound = newredemptionUpperBound;
+        emit RedemptionBoundsUpdated(newredemptionLowerBound, newredemptionUpperBound);
+    }
+
+    function updateRedemptionBounds(
+        uint256 newredemptionLowerBound,
+        uint256 newredemptionUpperBound
+    ) external onlyOwner {
+        _updateRedemptionBounds(newredemptionLowerBound, newredemptionUpperBound);
     }
 
     /// @notice Receive unwrapped transfer from the wrapped token.
