@@ -53,6 +53,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
 
     struct RedemptionRate {
         uint256 nextIndex;
+        /// @dev ETH/Queen rate is with 10^27 precision.
         uint256 underlyingPerQ;
     }
 

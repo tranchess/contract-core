@@ -146,18 +146,7 @@ contract BeaconStakingOracle is Ownable {
         IEthStakingStrategy.OperatorData[] calldata operatorData,
         uint256 finalizationCount
     ) public view returns (bytes32) {
-        uint256[] memory ids = new uint256[](operatorData.length);
-        uint256[] memory beaconBalances = new uint256[](operatorData.length);
-        uint256[] memory validatorCounts = new uint256[](operatorData.length);
-        for (uint256 i = 0; i < operatorData.length; i++) {
-            ids[i] = operatorData[i].id;
-            beaconBalances[i] = operatorData[i].beaconBalance;
-            validatorCounts[i] = operatorData[i].validatorCount;
-        }
-        return
-            keccak256(
-                abi.encodePacked(ids, beaconBalances, validatorCounts, finalizationCount, nonce)
-            );
+        return keccak256(abi.encode(operatorData, finalizationCount, nonce));
     }
 
     /// @notice Return the epoch that an oracle member should report now,
