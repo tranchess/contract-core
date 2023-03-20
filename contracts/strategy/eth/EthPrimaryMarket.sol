@@ -16,7 +16,18 @@ import "../../interfaces/IFundV3.sol";
 import "../../interfaces/IFundForPrimaryMarketV4.sol";
 import "../../interfaces/ITrancheIndexV2.sol";
 import "../../interfaces/IWrappedERC20.sol";
-import "../../nonfungible/NonfungibleWithdrawalDescriptor.sol";
+
+interface INonfungibleWithdrawalDescriptor {
+    function tokenURI(EthPrimaryMarket primaryMarket, uint256 tokenId)
+        external
+        view
+        returns (string memory);
+
+    function generateRandomNumber(uint256 tokenId, uint256 amountQ)
+        external
+        view
+        returns (uint256 randomNumber);
+}
 
 contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
     event Created(address indexed account, uint256 underlying, uint256 outQ);
@@ -44,11 +55,12 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
     struct QueuedRedemption {
         uint256 amountQ;
         uint256 previousPrefixSum;
+        uint256 seed;
     }
 
     struct RedemptionRate {
         uint256 nextIndex;
-        /// @dev ETH/Queen rate is with 10^27 precision.
+        // ETH/Queen rate is with 10^27 precision.
         uint256 underlyingPerQ;
     }
 
@@ -57,7 +69,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
 
     address public immutable fund;
     IERC20 private immutable _tokenUnderlying;
-    NonfungibleWithdrawalDescriptor private immutable _descriptor;
+    INonfungibleWithdrawalDescriptor private immutable _descriptor;
 
     uint256 public mergeFeeRate;
 
@@ -108,7 +120,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
         _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
-        _descriptor = NonfungibleWithdrawalDescriptor(descriptor_);
+        _descriptor = INonfungibleWithdrawalDescriptor(descriptor_);
         _updateRedemptionBounds(minRedemptionBound_, maxRedemptionBound_);
     }
 
@@ -202,6 +214,10 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
         uint256 inQAfterFee =
             minUnderlying.mul(fundEquivalentTotalQ).add(fundUnderlying - 1).div(fundUnderlying);
         return inQAfterFee.divideDecimal(1e18 - redemptionFeeRate);
+    }
+
+    function getQueuedRedemption(uint256 index) external view returns (QueuedRedemption memory) {
+        return queuedRedemptions[index];
     }
 
     /// @notice Calculate the result of a split.
@@ -404,7 +420,8 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_Q, address(this), inQ, version);
         // Mint the redemption NFT
-        _safeMint(recipient, index);
+        _mint(recipient, index);
+        newRedemption.seed = _descriptor.generateRandomNumber(index, inQ);
         emit RedemptionQueued(recipient, index, inQ);
     }
 
