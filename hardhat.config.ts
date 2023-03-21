@@ -35,21 +35,6 @@ import "./tasks/test_deploy";
 import { ETH_RPC, ETH_CHAIN_ID, DEPLOYER_PK, DEPLOYER_HD_PATH, ETHERSCAN_API_KEY } from "./config";
 import "hardhat-gas-reporter";
 
-const LOWEST_OPTIMIZER_COMPILER_SETTINGS = {
-    version: "0.6.12",
-    settings: {},
-};
-
-const DEFAULT_COMPILER_SETTINGS = {
-    version: "0.6.12",
-    settings: {
-        optimizer: {
-            enabled: true,
-            runs: 200,
-        },
-    },
-};
-
 const networks: NetworksUserConfig = {
     hardhat: {
         // Waffle's `changeEtherBalance` does not support the London hard fork yet.
@@ -76,10 +61,12 @@ if (ETH_RPC && ETH_CHAIN_ID) {
 const config: HardhatUserConfig = {
     networks: networks,
     solidity: {
-        compilers: [DEFAULT_COMPILER_SETTINGS],
-        overrides: {
-            "contracts/nonfungible/NonfungibleWithdrawalDescriptor.sol":
-                LOWEST_OPTIMIZER_COMPILER_SETTINGS,
+        version: "0.6.12",
+        settings: {
+            optimizer: {
+                enabled: true,
+                runs: 200,
+            },
         },
     },
     etherscan: {

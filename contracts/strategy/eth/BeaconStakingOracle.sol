@@ -82,7 +82,7 @@ contract BeaconStakingOracle is Ownable {
     /// @notice Report validator balances on Beacon chain
     /// @param epoch Beacon chain epoch
     /// @param operatorData Per-operator report data including Node operator IDs, which must be sorted in ascending order
-    /// @param finalizationCount Number of finalizable withdrawals
+    /// @param finalizationCount Number of finalizable redemptions
     function batchReport(
         uint256 epoch,
         IEthStakingStrategy.OperatorData[] calldata operatorData,

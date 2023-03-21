@@ -17,11 +17,15 @@ import "../../interfaces/IFundForPrimaryMarketV4.sol";
 import "../../interfaces/ITrancheIndexV2.sol";
 import "../../interfaces/IWrappedERC20.sol";
 
-interface INonfungibleWithdrawalDescriptor {
-    function tokenURI(EthPrimaryMarket primaryMarket, uint256 tokenId)
-        external
-        view
-        returns (string memory);
+interface INonfungibleRedemptionDescriptor {
+    function tokenURI(
+        uint256 amountQ,
+        uint256 seed,
+        bool claimable,
+        address fund,
+        string memory name,
+        uint256 tokenId
+    ) external view returns (string memory);
 
     function generateRandomNumber(uint256 tokenId, uint256 amountQ)
         external
@@ -69,7 +73,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
 
     address public immutable fund;
     IERC20 private immutable _tokenUnderlying;
-    INonfungibleWithdrawalDescriptor private immutable _descriptor;
+    INonfungibleRedemptionDescriptor private immutable _descriptor;
 
     uint256 public mergeFeeRate;
 
@@ -100,10 +104,10 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
 
     uint256 public redemptionRateSize;
 
-    /// @notice Minimal amount to withdraw by a single request
+    /// @notice Minimal amount to redeem by a single request
     uint256 public minRedemptionBound;
 
-    /// @notice Maximum amount to withdraw by a single request
+    /// @notice Maximum amount to redeem by a single request
     uint256 public maxRedemptionBound;
 
     constructor(
@@ -120,7 +124,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
         _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
-        _descriptor = INonfungibleWithdrawalDescriptor(descriptor_);
+        _descriptor = INonfungibleRedemptionDescriptor(descriptor_);
         _updateRedemptionBounds(minRedemptionBound_, maxRedemptionBound_);
     }
 
@@ -362,7 +366,15 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
 
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(_exists(tokenId));
-        return _descriptor.tokenURI(this, tokenId);
+        return
+            _descriptor.tokenURI(
+                queuedRedemptions[tokenId].amountQ,
+                queuedRedemptions[tokenId].seed,
+                tokenId < redemptionQueueHead,
+                fund,
+                name(),
+                tokenId
+            );
     }
 
     // save bytecode by removing implementation of unused method

@@ -7,10 +7,10 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 import "base64-sol/base64.sol";
 
 import "../interfaces/IFundV3.sol";
+import "../interfaces/IEthPrimaryMarket.sol";
 import "../utils/HexString.sol";
-import "../strategy/eth/EthPrimaryMarket.sol";
 
-contract NonfungibleWithdrawalDescriptor {
+contract NonfungibleRedemptionDescriptor {
     using Strings for uint256;
     using HexStrings for uint256;
 
@@ -22,15 +22,16 @@ contract NonfungibleWithdrawalDescriptor {
         string[] randomStrings;
     }
 
-    function tokenURI(EthPrimaryMarket primaryMarket, uint256 tokenId)
-        external
-        view
-        returns (string memory)
-    {
-        EthPrimaryMarket.QueuedRedemption memory queuedRedemption =
-            primaryMarket.getQueuedRedemption(tokenId);
-        bool animated = queuedRedemption.seed % 100 < 10; // 10% chance of being animated
-        uint256[] memory randomNumbers = _unrollRandomNumbers(queuedRedemption.seed, 32);
+    function tokenURI(
+        uint256 amountQ,
+        uint256 seed,
+        bool claimable,
+        address fund,
+        string memory name,
+        uint256 tokenId
+    ) external view returns (string memory) {
+        bool animated = seed % 100 < 10; // 10% chance of being animated
+        uint256[] memory randomNumbers = _unrollRandomNumbers(seed, 32);
         string[] memory randomStrings = new string[](randomNumbers.length);
         for (uint256 i = 0; i < randomNumbers.length; i++) {
             if (animated)
@@ -46,9 +47,9 @@ contract NonfungibleWithdrawalDescriptor {
         SVGParams memory params =
             SVGParams({
                 tokenId: tokenId,
-                amount: queuedRedemption.amountQ,
+                amount: amountQ,
                 animated: animated,
-                claimable: tokenId < primaryMarket.redemptionQueueHead(),
+                claimable: claimable,
                 randomStrings: randomStrings
             });
 
@@ -60,13 +61,11 @@ contract NonfungibleWithdrawalDescriptor {
                         bytes(
                             abi.encodePacked(
                                 '{"name":"',
-                                _generateName(
-                                    ERC20(IFundV3(primaryMarket.fund()).tokenUnderlying()).symbol()
-                                ),
+                                _generateName(ERC20(IFundV3(fund).tokenUnderlying()).symbol()),
                                 '", "description":"',
                                 _generateDescription(
-                                    _escapeQuotes(primaryMarket.name()),
-                                    _addressToString(address(primaryMarket))
+                                    _escapeQuotes(name),
+                                    _addressToString(msg.sender)
                                 ),
                                 '", "image": "',
                                 "data:image/svg+xml;base64,",
@@ -122,7 +121,7 @@ contract NonfungibleWithdrawalDescriptor {
                     " - ",
                     _escapeQuotes(symbol),
                     " - ",
-                    "Withdrawal Request"
+                    "Redemption Request"
                 )
             );
     }
@@ -135,7 +134,7 @@ contract NonfungibleWithdrawalDescriptor {
         return
             string(
                 abi.encodePacked(
-                    "This NFT represents a withdrawal request in the Tranchess ",
+                    "This NFT represents a redemption request in the Tranchess ",
                     symbol,
                     " primary market. ",
                     "The owner of this NFT can claim the redemption.\\n",
@@ -151,18 +150,20 @@ contract NonfungibleWithdrawalDescriptor {
                 abi.encodePacked(
                     '<svg width="1000" height="1000" viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg" font-family="Tahoma, sans-serif">',
                     _generateSVGDefs(),
-                    "<g>",
-                    '<rect width="1000" height="1000" fill="black" />',
-                    '<g filter="url(#filter-1)">',
-                    '<ellipse cx="-69.5" cy="585.5" rx="647.5" ry="646.5" fill="#8968B4" />',
-                    "</g>",
-                    '<g filter="url(#filter-2)">',
-                    '<ellipse cx="801" cy="1000" rx="415" ry="414" fill="#4956B7" />',
-                    "</g>",
-                    '<g filter="url(#filter-3)">',
-                    '<ellipse cx="1059" cy="-35" rx="696" ry="695" fill="#8AA0EE" />',
-                    "</g>",
-                    "</g>",
+                    abi.encodePacked(
+                        "<g>",
+                        '<rect width="1000" height="1000" fill="black" />',
+                        '<g filter="url(#filter-1)">',
+                        '<ellipse cx="-69.5" cy="585.5" rx="647.5" ry="646.5" fill="#8968B4" />',
+                        "</g>",
+                        '<g filter="url(#filter-2)">',
+                        '<ellipse cx="801" cy="1000" rx="415" ry="414" fill="#4956B7" />',
+                        "</g>",
+                        '<g filter="url(#filter-3)">',
+                        '<ellipse cx="1059" cy="-35" rx="696" ry="695" fill="#8AA0EE" />',
+                        "</g>",
+                        "</g>"
+                    ),
                     _generateChessboard(params),
                     '<g style="mix-blend-mode:screen" fill="white" letter-spacing="0em">',
                     '<text x="60" y="86.6821" opacity="0.5" font-size="30">Unstaked qETH</text>',
@@ -184,18 +185,20 @@ contract NonfungibleWithdrawalDescriptor {
             string(
                 abi.encodePacked(
                     "<defs>",
-                    '<filter id="filter-1" x="-1217" y="-561" width="2295" height="2293" filterUnits="userSpaceOnUse"',
-                    ' color-interpolation-filters="sRGB">',
-                    '<feGaussianBlur stdDeviation="250" />',
-                    "</filter>",
-                    '<filter id="filter-2" x="-114" y="86" width="1830" height="1828" filterUnits="userSpaceOnUse"',
-                    ' color-interpolation-filters="sRGB">',
-                    '<feGaussianBlur stdDeviation="250" />',
-                    "</filter>",
-                    '<filter id="filter-3" x="-137" y="-1230" width="2392" height="2390" filterUnits="userSpaceOnUse"',
-                    ' color-interpolation-filters="sRGB">',
-                    '<feGaussianBlur stdDeviation="250" />',
-                    "</filter>",
+                    abi.encodePacked(
+                        '<filter id="filter-1" x="-1217" y="-561" width="2295" height="2293" filterUnits="userSpaceOnUse"',
+                        ' color-interpolation-filters="sRGB">',
+                        '<feGaussianBlur stdDeviation="250" />',
+                        "</filter>",
+                        '<filter id="filter-2" x="-114" y="86" width="1830" height="1828" filterUnits="userSpaceOnUse"',
+                        ' color-interpolation-filters="sRGB">',
+                        '<feGaussianBlur stdDeviation="250" />',
+                        "</filter>",
+                        '<filter id="filter-3" x="-137" y="-1230" width="2392" height="2390" filterUnits="userSpaceOnUse"',
+                        ' color-interpolation-filters="sRGB">',
+                        '<feGaussianBlur stdDeviation="250" />',
+                        "</filter>"
+                    ),
                     '<linearGradient id="grad-symbol">',
                     '<stop offset="0.8" stop-color="white" stop-opacity="1" />',
                     '<stop offset=".95" stop-color="white" stop-opacity="0" />',
