@@ -7,7 +7,6 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 import "base64-sol/base64.sol";
 
 import "../interfaces/IFundV3.sol";
-import "../interfaces/IEthPrimaryMarket.sol";
 import "../utils/HexString.sol";
 
 contract NonfungibleRedemptionDescriptor {
