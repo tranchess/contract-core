@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { constants, Contract, Wallet } from "ethers";
+import { BigNumberish, constants, Contract, Wallet } from "ethers";
 import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
@@ -108,6 +108,19 @@ describe("BeaconStakingOracle", function () {
     });
 
     describe("batchReport()", function () {
+        function hashPack(
+            operatorDatas: Array<Array<BigNumberish>>,
+            finalizationCount: BigNumberish,
+            nonce: BigNumberish
+        ): any {
+            return ethers.utils.keccak256(
+                ethers.utils.defaultAbiCoder.encode(
+                    ["tuple(uint256,uint256,uint256,uint256)[]", "uint256", "uint256"],
+                    [operatorDatas, finalizationCount, nonce]
+                )
+            );
+        }
+
         beforeEach(async function () {
             await stakingOracle.addMember(user1.address, QUORUM);
             await stakingOracle.addMember(user2.address, QUORUM);
@@ -118,14 +131,26 @@ describe("BeaconStakingOracle", function () {
             await strategy.mock.batchReport.returns();
             await stakingOracle
                 .connect(user1)
-                .batchReport(EPOCH_INTERVAL, [0], [parseUnits("1", 18)], [10]);
+                .batchReport(
+                    EPOCH_INTERVAL,
+                    [[0, parseUnits("1", 18), 10, parseUnits("1", 18)]],
+                    0
+                );
             await stakingOracle
                 .connect(user2)
-                .batchReport(EPOCH_INTERVAL, [0], [parseUnits("1", 18)], [10]);
+                .batchReport(
+                    EPOCH_INTERVAL,
+                    [[0, parseUnits("1", 18), 10, parseUnits("1", 18)]],
+                    0
+                );
             await expect(
                 stakingOracle
                     .connect(user1)
-                    .batchReport(EPOCH_INTERVAL, [0], [parseUnits("1", 18)], [10])
+                    .batchReport(
+                        EPOCH_INTERVAL,
+                        [[0, parseUnits("1", 18), 10, parseUnits("1", 18)]],
+                        0
+                    )
             ).to.be.revertedWith("Invalid epoch");
         });
 
@@ -133,52 +158,88 @@ describe("BeaconStakingOracle", function () {
             await strategy.mock.batchReport.returns();
             await stakingOracle
                 .connect(user1)
-                .batchReport(EPOCH_INTERVAL, [0], [parseUnits("1", 18)], [10]);
+                .batchReport(
+                    EPOCH_INTERVAL,
+                    [[0, parseUnits("1", 18), 10, parseUnits("1", 18)]],
+                    0
+                );
             await expect(
                 stakingOracle
                     .connect(user1)
-                    .batchReport(EPOCH_INTERVAL, [0], [parseUnits("2", 18)], [10])
+                    .batchReport(
+                        EPOCH_INTERVAL,
+                        [[0, parseUnits("2", 18), 10, parseUnits("1", 18)]],
+                        0
+                    )
             ).to.be.revertedWith("Already reported");
         });
 
         it("Should revert if jump to an invalid epoch", async function () {
             await expect(
-                stakingOracle.connect(user1).batchReport(1, [0], [parseUnits("1", 18)], [10])
+                stakingOracle
+                    .connect(user1)
+                    .batchReport(1, [[0, parseUnits("1", 18), 10, parseUnits("1", 18)]], 0)
             ).to.be.revertedWith("Invalid epoch");
         });
 
         it("Should invalidate previous reports if a oracle member is removed", async function () {
+            let nonce: number = await stakingOracle.nonce();
             await expect(
                 stakingOracle
                     .connect(user1)
-                    .batchReport(EPOCH_INTERVAL, [0], [parseUnits("1", 18)], [10])
+                    .batchReport(
+                        EPOCH_INTERVAL,
+                        [[0, parseUnits("1", 18), 10, parseUnits("1", 18)]],
+                        0
+                    )
             )
                 .to.emit(stakingOracle, "BeaconReported")
-                .withArgs(EPOCH_INTERVAL, [0], [parseUnits("1", 18)], [10], user1.address);
+                .withArgs(
+                    EPOCH_INTERVAL,
+                    hashPack([[0, parseUnits("1", 18), 10, parseUnits("1", 18)]], 0, nonce),
+                    user1.address
+                );
 
             await expect(stakingOracle.removeMember(user1.address, QUORUM))
                 .to.emit(stakingOracle, "MemberRemoved")
                 .withArgs(user1.address);
 
+            nonce++;
             await expect(
                 stakingOracle
                     .connect(user2)
-                    .batchReport(EPOCH_INTERVAL, [0], [parseUnits("1", 18)], [10])
+                    .batchReport(
+                        EPOCH_INTERVAL,
+                        [[0, parseUnits("1", 18), 10, parseUnits("1", 18)]],
+                        0
+                    )
             )
                 .to.emit(stakingOracle, "BeaconReported")
-                .withArgs(EPOCH_INTERVAL, [0], [parseUnits("1", 18)], [10], user2.address);
+                .withArgs(
+                    EPOCH_INTERVAL,
+                    hashPack([[0, parseUnits("1", 18), 10, parseUnits("1", 18)]], 0, nonce),
+                    user2.address
+                );
 
             await strategy.mock.batchReport
-                .withArgs(EPOCH_INTERVAL, [0], [parseUnits("1", 18)], [10])
+                .withArgs(EPOCH_INTERVAL, [[0, parseUnits("1", 18), 10, parseUnits("1", 18)]], 0)
                 .returns();
 
             await expect(
                 stakingOracle
                     .connect(user3)
-                    .batchReport(EPOCH_INTERVAL, [0], [parseUnits("1", 18)], [10])
+                    .batchReport(
+                        EPOCH_INTERVAL,
+                        [[0, parseUnits("1", 18), 10, parseUnits("1", 18)]],
+                        0
+                    )
             )
                 .to.emit(stakingOracle, "BeaconReported")
-                .withArgs(EPOCH_INTERVAL, [0], [parseUnits("1", 18)], [10], user3.address);
+                .withArgs(
+                    EPOCH_INTERVAL,
+                    hashPack([[0, parseUnits("1", 18), 10, parseUnits("1", 18)]], 0, nonce),
+                    user3.address
+                );
         });
     });
 });
