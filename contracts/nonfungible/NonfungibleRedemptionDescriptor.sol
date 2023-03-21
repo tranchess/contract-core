@@ -108,7 +108,7 @@ contract NonfungibleRedemptionDescriptor {
     {
         randomNumbers = new uint256[](size);
         randomNumbers[0] = uint256(keccak256(abi.encodePacked(seed)));
-        for (uint256 i = 0; i < size; i++) {
+        for (uint256 i = 1; i < size; i++) {
             randomNumbers[i] = uint256(keccak256(abi.encodePacked(randomNumbers[i - 1])));
         }
     }
@@ -222,7 +222,7 @@ contract NonfungibleRedemptionDescriptor {
             string(
                 abi.encodePacked(
                     '<g style="mix-blend-mode:overlay" transform="scale(',
-                    uint256(params.amount).toString(),
+                    scale.toString(),
                     ')" transform-origin="500 75.7359">',
                     '<g transform="rotate(45 500 500)" fill="white">',
                     _generateGrids(params),
