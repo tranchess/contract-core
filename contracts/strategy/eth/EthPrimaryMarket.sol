@@ -19,18 +19,13 @@ import "../../interfaces/IWrappedERC20.sol";
 
 interface INonfungibleRedemptionDescriptor {
     function tokenURI(
+        uint256 tokenId,
         uint256 amountQ,
-        uint256 seed,
-        bool claimable,
-        address fund,
-        string memory name,
-        uint256 tokenId
+        uint256 amountUnderlying,
+        uint256 seed
     ) external view returns (string memory);
 
-    function generateRandomNumber(uint256 tokenId, uint256 amountQ)
-        external
-        view
-        returns (uint256 randomNumber);
+    function generateSeed(uint256 tokenId, uint256 amountQ) external view returns (uint256);
 }
 
 contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
@@ -366,14 +361,18 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
 
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(_exists(tokenId));
+        uint256 rateIndex = getRedemptionRateIndex(tokenId);
+        uint256 amountQ = queuedRedemptions[tokenId].amountQ;
+        uint256 amountUnderlying =
+            rateIndex < redemptionRateSize
+                ? amountQ.multiplyDecimalPrecise(redemptionRates[rateIndex].underlyingPerQ)
+                : 0;
         return
             _descriptor.tokenURI(
-                queuedRedemptions[tokenId].amountQ,
-                queuedRedemptions[tokenId].seed,
-                tokenId < redemptionQueueHead,
-                fund,
-                name(),
-                tokenId
+                tokenId,
+                amountQ,
+                amountUnderlying,
+                queuedRedemptions[tokenId].seed
             );
     }
 
@@ -433,7 +432,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_Q, address(this), inQ, version);
         // Mint the redemption NFT
         _safeMint(recipient, index);
-        newRedemption.seed = _descriptor.generateRandomNumber(index, inQ);
+        newRedemption.seed = _descriptor.generateSeed(index, inQ);
         emit RedemptionQueued(recipient, index, inQ);
     }
 
