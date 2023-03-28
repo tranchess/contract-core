@@ -462,7 +462,9 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
                 queuedRedemptions[oldFinalizedIndex].previousPrefixSum;
 
         (uint256 underlying, ) = getRedemption(amountQ);
-        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, address(this), amountQ, 0);
+        uint256 version = IFundV3(fund).getRebalanceSize();
+        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, address(this), amountQ, version);
+        IFundForPrimaryMarketV4(fund).primaryMarketAddDebtAndFee(underlying, 0);
         redemptionRates[redemptionRateSize++] = RedemptionRate({
             nextIndex: newFinalizedIndex,
             underlyingPerQ: underlying.divideDecimalPrecise(amountQ)
