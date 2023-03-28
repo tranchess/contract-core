@@ -28,7 +28,20 @@ interface INonfungibleRedemptionDescriptor {
     function generateSeed(uint256 tokenId, uint256 amountQ) external view returns (uint256);
 }
 
-contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
+/// @title EIP-721 Metadata Update Extension
+interface IERC4906 is IERC165, IERC721 {
+    /// @dev This event emits when the metadata of a token is changed.
+    ///      So that the third-party platforms such as NFT market could
+    ///      timely update the images and related attributes of the NFT.
+    event MetadataUpdate(uint256 _tokenId);
+
+    /// @dev This event emits when the metadata of a range of tokens is changed.
+    ///      So that the third-party platforms such as NFT market could
+    ///      timely update the images and related attributes of the NFTs.
+    event BatchMetadataUpdate(uint256 _fromTokenId, uint256 _toTokenId);
+}
+
+contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, IERC4906 {
     event Created(address indexed account, uint256 underlying, uint256 outQ);
     event Split(address indexed account, uint256 inQ, uint256 outB, uint256 outR);
     event Merged(
@@ -121,6 +134,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
         _updateFundCap(fundCap_);
         _descriptor = INonfungibleRedemptionDescriptor(descriptor_);
         _updateRedemptionBounds(minRedemptionBound_, maxRedemptionBound_);
+        _registerInterface(bytes4(0x49064906));
     }
 
     /// @notice Calculate the result of a creation.
@@ -454,6 +468,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
             underlyingPerQ: underlying.divideDecimalPrecise(amountQ)
         });
         emit RedemptionFinalized(newFinalizedIndex, amountQ, underlying);
+        emit BatchMetadataUpdate(oldFinalizedIndex, newFinalizedIndex - 1);
     }
 
     /// @notice Remove a given number of redemptions from the front of the redemption queue and
@@ -513,42 +528,37 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
         emit RedemptionPopped(newHead - oldHead, newHead, requiredUnderlying);
     }
 
-    /// @notice Claim underlying tokens of queued redemptions. All these redemptions must
-    ///         belong to the same account.
-    /// @param account Recipient of the redemptions
+    /// @notice Claim underlying tokens of queued redemptions. All these redemptions must belong
+    ///         to msg.sender.
     /// @param indices Indices of the redemptions in the queue, which must be in increasing order
     /// @param rateIndices Indices of the redemption rates, which must corrspond to the indices
     /// @return underlying Total claimed underlying amount
     function claimRedemptions(
-        address account,
         uint256[] calldata indices,
         uint256[] calldata rateIndices,
         uint256 redemptionRateIndex
     ) external nonReentrant returns (uint256 underlying) {
-        underlying = _claimRedemptions(account, indices, rateIndices, redemptionRateIndex);
-        _tokenUnderlying.safeTransfer(account, underlying);
+        underlying = _claimRedemptions(indices, rateIndices, redemptionRateIndex);
+        _tokenUnderlying.safeTransfer(msg.sender, underlying);
     }
 
     /// @notice Claim native currency of queued redemptions. The underlying must be wrapped token
-    ///         of the native currency. All these redemptions must belong to the same account.
-    /// @param account Recipient of the redemptions
+    ///         of the native currency. All these redemptions must belong to msg.sender.
     /// @param indices Indices of the redemptions in the queue, which must be in increasing order
     /// @param rateIndices Indices of the redemption rates, which must corrspond to the indices
     /// @return underlying Total claimed underlying amount
     function claimRedemptionsAndUnwrap(
-        address account,
         uint256[] calldata indices,
         uint256[] calldata rateIndices,
         uint256 redemptionRateIndex
     ) external nonReentrant returns (uint256 underlying) {
-        underlying = _claimRedemptions(account, indices, rateIndices, redemptionRateIndex);
+        underlying = _claimRedemptions(indices, rateIndices, redemptionRateIndex);
         IWrappedERC20(address(_tokenUnderlying)).withdraw(underlying);
-        (bool success, ) = account.call{value: underlying}("");
+        (bool success, ) = msg.sender.call{value: underlying}("");
         require(success, "Transfer failed");
     }
 
     function _claimRedemptions(
-        address account,
         uint256[] calldata indices,
         uint256[] calldata rateIndices,
         uint256 redemptionRateIndex
@@ -576,11 +586,11 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721 {
                     redemptionRates[rateIndices[i]].underlyingPerQ
                 );
             require(
-                ownerOf(indices[i]) == account && redemption.amountQ != 0,
+                ownerOf(indices[i]) == msg.sender && redemption.amountQ != 0,
                 "Invalid redemption index"
             );
             underlying = underlying.add(redemptionUnderlying);
-            emit RedemptionClaimed(account, indices[i], redemptionUnderlying);
+            emit RedemptionClaimed(msg.sender, indices[i], redemptionUnderlying);
             delete queuedRedemptions[indices[i]];
             _burn(indices[i]);
         }
