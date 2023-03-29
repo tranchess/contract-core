@@ -442,13 +442,6 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
         _tokenUnderlying.safeTransfer(fund, underlying);
         emit Created(recipient, underlying, outQ);
-
-        // Call an optional hook in the strategy and ignore errors.
-        (bool success, ) =
-            IFundV3(fund).strategy().call(abi.encodeWithSignature("onPrimaryMarketCreate()"));
-        if (!success) {
-            // ignore
-        }
     }
 
     /// @notice Redeem QUEEN and wait in the redemption queue. Redeemed underlying tokens will

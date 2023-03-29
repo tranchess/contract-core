@@ -348,9 +348,6 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
         totalValidatorCount = totalValidatorCount + total;
     }
 
-    /// @dev Nothing to do on primary market creation.
-    function onPrimaryMarketCreate() external {}
-
     /// @notice Transfer all underlying tokens, both wrapped and unwrapped, to the fund.
     function transferToFund() external onlyOwner {
         _transferToFund();
