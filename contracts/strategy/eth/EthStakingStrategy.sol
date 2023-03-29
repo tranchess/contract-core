@@ -190,6 +190,7 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
                 }
             }
         }
+        _transferToFund();
         if (finalizationCount != 0) {
             IEthPrimaryMarket(IFundV3(fund).primaryMarket()).finalizeRedemptions(finalizationCount);
         }
@@ -352,13 +353,19 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
 
     /// @notice Transfer all underlying tokens, both wrapped and unwrapped, to the fund.
     function transferToFund() external onlyOwner {
+        _transferToFund();
+    }
+
+    function _transferToFund() private {
         uint256 unwrapped = address(this).balance;
         if (unwrapped > 0) {
             _wrap(unwrapped);
         }
         uint256 amount = IWrappedERC20(_tokenUnderlying).balanceOf(address(this));
-        IWrappedERC20(_tokenUnderlying).safeApprove(fund, amount);
-        IFundForStrategyV2(fund).transferFromStrategy(amount);
+        if (amount > 0) {
+            IWrappedERC20(_tokenUnderlying).safeApprove(fund, amount);
+            IFundForStrategyV2(fund).transferFromStrategy(amount);
+        }
     }
 
     /// @dev Convert ETH into WETH

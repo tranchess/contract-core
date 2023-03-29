@@ -37,6 +37,7 @@ describe("BeaconStakingOracle", function () {
 
         const fund = await deployMockForName(owner, "IFundV3");
         await fund.mock.getTotalUnderlying.returns(0);
+        await fund.mock.getEquivalentTotalQ.returns(0);
 
         const strategy = await deployMockForName(owner, "EthStakingStrategy");
         await strategy.mock.fund.returns(fund.address);
