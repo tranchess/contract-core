@@ -229,10 +229,6 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         return inQAfterFee.divideDecimal(1e18 - redemptionFeeRate);
     }
 
-    function getQueuedRedemption(uint256 index) external view returns (QueuedRedemption memory) {
-        return queuedRedemptions[index];
-    }
-
     /// @notice Calculate the result of a split.
     /// @param inQ QUEEN amount to be split
     /// @return outB Received BISHOP amount, which is also received ROOK amount
@@ -282,39 +278,39 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         inB = outQBeforeFee.mul(IFundV3(fund).splitRatio()).add(1e18 - 1).div(1e18);
     }
 
-    function getRedemptionRateIndexForHead() external view returns (uint256 redemptionRateIndex) {
-        return getRedemptionRateIndex(redemptionQueueHead);
-    }
-
-    function getBatchRedemptionRateIndex(uint256[] memory indices)
-        external
-        view
-        returns (uint256[] memory redemptionRateIndices)
-    {
-        redemptionRateIndices = new uint256[](indices.length);
-        for (uint256 i = 0; i < indices.length; i++) {
-            redemptionRateIndices[i] = getRedemptionRateIndex(indices[i]);
+    /// @notice Return index of the first queued redemption that cannot be claimed now.
+    ///         Users can use this function to determine which indices can be passed to
+    ///         `claimRedemptions()`.
+    /// @return Index of the first redemption that cannot be claimed now
+    function getNewRedemptionQueueHead() public view returns (uint256) {
+        uint256 available = _tokenUnderlying.balanceOf(fund);
+        uint256 l = redemptionQueueHead;
+        uint256 startPrefixSum = queuedRedemptions[l].previousPrefixSum;
+        uint256 rateSize = redemptionRateSize;
+        uint256 rateIndex = getRedemptionRateIndex(l);
+        uint256 r = l;
+        while (rateIndex < rateSize) {
+            r = redemptionRates[rateIndex].nextIndex;
+            uint256 endPrefixSum = queuedRedemptions[r].previousPrefixSum;
+            uint256 underlying =
+                (endPrefixSum - startPrefixSum).multiplyDecimalPrecise(
+                    redemptionRates[rateIndex].underlyingPerQ
+                );
+            if (available < underlying) {
+                break;
+            }
+            available -= underlying;
+            l = r;
+            startPrefixSum = endPrefixSum;
+            rateIndex += 1;
         }
-    }
-
-    function getRedemptionRateIndex(uint256 index)
-        public
-        view
-        returns (uint256 redemptionRateIndex)
-    {
-        if (redemptionRateSize == 0) return 0;
-
-        uint256 l = 0;
-        uint256 r = redemptionRateSize - 1;
-        // If the index is greater than the redemption rate size, it is not yet finalized,
-        // returns the index of the next potential finalization.
-        if (redemptionRates[r].nextIndex <= index) {
-            return r + 1;
+        if (rateIndex >= rateSize) {
+            return r; // All finalized redemptions can be claimed
         }
         // Iteration count is bounded by log2(tail - head), which is at most 256.
         while (l + 1 < r) {
             uint256 m = (l + r) / 2;
-            if (redemptionRates[m].nextIndex <= index) {
+            if (queuedRedemptions[m].previousPrefixSum - startPrefixSum <= available) {
                 l = m;
             } else {
                 r = m;
@@ -323,44 +319,83 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         return l;
     }
 
-    /// @notice Search in the redemption queue.
-    /// @param account Owner of the redemptions, or zero address to return all redemptions
-    /// @param startIndex Redemption index where the search starts, or zero to start from the head
-    /// @param maxIterationCount Maximum number of redemptions to be scanned, or zero for no limit
-    /// @return indices Indices of found redemptions
-    /// @return amountQ Total amount of Queen in found redemptions
-    function getQueuedRedemptions(
-        address account,
-        uint256 startIndex,
-        bool onlyFinalized,
-        uint256 maxIterationCount
-    ) external view returns (uint256[] memory indices, uint256 amountQ) {
-        uint256 head = redemptionQueueHead;
-        uint256 tail = onlyFinalized ? getNextFinalizationIndex() : redemptionQueueTail;
-        if (startIndex == 0) {
-            startIndex = head;
-        } else {
-            require(startIndex >= head && startIndex <= tail, "startIndex out of bound");
+    function getRedemptionRateIndexOfHead() external view returns (uint256) {
+        return getRedemptionRateIndex(redemptionQueueHead);
+    }
+
+    /// @notice Search the redemption rate index of a queued redemption.
+    /// @return Index of the redemption rate that covers the given queued redemption, or index
+    ///         beyond the last redemption rate if this redemption is not finalized yet.
+    function getRedemptionRateIndex(uint256 index) public view returns (uint256) {
+        if (redemptionRateSize == 0) return 0;
+
+        uint256 l = 0;
+        uint256 r = redemptionRateSize;
+        // If the index is greater than the redemption rate size, it is not yet finalized.
+        // Return the index of the next potential finalization.
+        if (redemptionRates[r - 1].nextIndex <= index) {
+            return r;
         }
-        uint256 endIndex = tail;
-        if (maxIterationCount != 0 && tail - startIndex > maxIterationCount) {
-            endIndex = startIndex + maxIterationCount;
-        }
-        indices = new uint256[](endIndex - startIndex);
-        uint256 count = 0;
-        for (uint256 i = startIndex; i < endIndex; i++) {
-            if (account == address(0) || ownerOf(i) == account) {
-                indices[count] = i;
-                amountQ += queuedRedemptions[i].amountQ;
-                count++;
+        while (l + 1 < r) {
+            uint256 m = (l + r) / 2;
+            if (redemptionRates[m - 1].nextIndex <= index) {
+                l = m;
+            } else {
+                r = m;
             }
         }
-        if (count != endIndex - startIndex) {
-            // Shrink the array
-            assembly {
-                mstore(indices, count)
+        return l;
+    }
+
+    /// @notice Return claimable underlying tokens of a queued redemption, or zero if
+    ///         the redemption is not finalized yet.
+    function getRedemptionUnderlying(uint256 index) public view returns (uint256) {
+        uint256 rateIndex = getRedemptionRateIndex(index);
+        return
+            rateIndex < redemptionRateSize
+                ? queuedRedemptions[index].amountQ.multiplyDecimalPrecise(
+                    redemptionRates[rateIndex].underlyingPerQ
+                )
+                : 0;
+    }
+
+    /// @notice Get queued redemptions of an account. This function returns all information
+    ///         required to claim underlying tokens from these redemptions.
+    /// @param account Owner of the redemptions
+    /// @return indices Indices of found redemptions. Note that there are no guarantees on the
+    ///                 ordering.
+    /// @return rateIndices Redemption rate indices of found redemptions
+    /// @return rateIndexOfHead Redemption rate index of the first redemption in the queue
+    ///         (index `redemptionQueueHead`)
+    /// @return newRedemptionQueueHead Index of the first redemption that cannot be claimed now
+    /// @return amountQ Total amount of QUEEN in found redemptions
+    /// @return underlying Total claimable underlying tokens in found redemptions
+    function getQueuedRedemptions(address account)
+        external
+        view
+        returns (
+            uint256[] memory indices,
+            uint256[] memory rateIndices,
+            uint256 rateIndexOfHead,
+            uint256 newRedemptionQueueHead,
+            uint256 amountQ,
+            uint256 underlying
+        )
+    {
+        newRedemptionQueueHead = getNewRedemptionQueueHead();
+        uint256 count = balanceOf(account);
+        indices = new uint256[](count);
+        rateIndices = new uint256[](count);
+        for (uint256 i = 0; i < count; i++) {
+            uint256 index = tokenOfOwnerByIndex(account, i);
+            indices[i] = index;
+            rateIndices[i] = getRedemptionRateIndex(index);
+            amountQ += queuedRedemptions[index].amountQ;
+            if (index < newRedemptionQueueHead) {
+                underlying += getRedemptionUnderlying(index);
             }
         }
+        rateIndexOfHead = getRedemptionRateIndex(redemptionQueueHead);
     }
 
     function getNextFinalizationIndex() public view returns (uint256 index) {
@@ -375,12 +410,8 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
 
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(_exists(tokenId));
-        uint256 rateIndex = getRedemptionRateIndex(tokenId);
         uint256 amountQ = queuedRedemptions[tokenId].amountQ;
-        uint256 amountUnderlying =
-            rateIndex < redemptionRateSize
-                ? amountQ.multiplyDecimalPrecise(redemptionRates[rateIndex].underlyingPerQ)
-                : 0;
+        uint256 amountUnderlying = getRedemptionUnderlying(tokenId);
         return
             _descriptor.tokenURI(
                 tokenId,
@@ -477,11 +508,13 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     ///         fetch underlying tokens of these redemptions from the fund. Revert if the fund
     ///         cannot pay these redemptions now.
     /// @param count The number of redemptions to be removed, or zero to completely empty the queue
-    function popRedemptionQueue(uint256 count, uint256 redemptionRateIndex) external nonReentrant {
-        _popRedemptionQueue(count, redemptionRateIndex);
+    /// @param rateIndexOfHead Redemption rate index of the first redemption in the queue
+    ///        (index `redemptionQueueHead`). Call `getRedemptionRateIndexOfHead()` for this value.
+    function popRedemptionQueue(uint256 count, uint256 rateIndexOfHead) external nonReentrant {
+        _popRedemptionQueue(count, rateIndexOfHead);
     }
 
-    function _popRedemptionQueue(uint256 count, uint256 redemptionRateIndex) private {
+    function _popRedemptionQueue(uint256 count, uint256 rateIndexOfHead) private {
         uint256 oldHead = redemptionQueueHead;
         uint256 oldTail = getNextFinalizationIndex();
         uint256 newHead;
@@ -495,27 +528,26 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
             require(newHead <= oldTail, "Redemption queue out of bound");
         }
 
-        require(redemptionRateIndex < redemptionRateSize, "Invalid rate index");
+        require(rateIndexOfHead < redemptionRateSize, "Invalid rate index");
         require(
-            redemptionRateIndex == 0 ||
-                oldHead >= redemptionRates[redemptionRateIndex - 1].nextIndex,
+            rateIndexOfHead == 0 || oldHead >= redemptionRates[rateIndexOfHead - 1].nextIndex,
             "Invalid rate index"
         );
-        require(oldHead < redemptionRates[redemptionRateIndex].nextIndex, "Invalid rate index");
+        require(oldHead < redemptionRates[rateIndexOfHead].nextIndex, "Invalid rate index");
 
         uint256 startIndex = oldHead;
         uint256 requiredUnderlying = 0;
         while (startIndex < newHead) {
-            uint256 nextIndex = redemptionRates[redemptionRateIndex].nextIndex;
+            uint256 nextIndex = redemptionRates[rateIndexOfHead].nextIndex;
             uint256 endIndex = newHead.min(nextIndex);
             requiredUnderlying = requiredUnderlying.add(
-                redemptionRates[redemptionRateIndex].underlyingPerQ.multiplyDecimalPrecise(
+                redemptionRates[rateIndexOfHead].underlyingPerQ.multiplyDecimalPrecise(
                     queuedRedemptions[endIndex].previousPrefixSum -
                         queuedRedemptions[startIndex].previousPrefixSum
                 ) // overflow is desired
             );
             if (endIndex == nextIndex) {
-                redemptionRateIndex++;
+                rateIndexOfHead++;
             }
             startIndex = endIndex;
         }
@@ -533,14 +565,17 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     /// @notice Claim underlying tokens of queued redemptions. All these redemptions must belong
     ///         to msg.sender.
     /// @param indices Indices of the redemptions in the queue, which must be in increasing order
-    /// @param rateIndices Indices of the redemption rates, which must corrspond to the indices
+    /// @param rateIndices Indices of the redemption rates, which must corrspond to the queued
+    ///        redemption indices
+    /// @param rateIndexOfHead Redemption rate index of the first redemption in the queue
+    ///        (index `redemptionQueueHead`). Call `getRedemptionRateIndexOfHead()` for this value.
     /// @return underlying Total claimed underlying amount
     function claimRedemptions(
         uint256[] calldata indices,
         uint256[] calldata rateIndices,
-        uint256 redemptionRateIndex
+        uint256 rateIndexOfHead
     ) external nonReentrant returns (uint256 underlying) {
-        underlying = _claimRedemptions(indices, rateIndices, redemptionRateIndex);
+        underlying = _claimRedemptions(indices, rateIndices, rateIndexOfHead);
         _tokenUnderlying.safeTransfer(msg.sender, underlying);
     }
 
@@ -548,13 +583,15 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     ///         of the native currency. All these redemptions must belong to msg.sender.
     /// @param indices Indices of the redemptions in the queue, which must be in increasing order
     /// @param rateIndices Indices of the redemption rates, which must corrspond to the indices
+    /// @param rateIndexOfHead Redemption rate index of the first redemption in the queue
+    ///        (index `redemptionQueueHead`). Call `getRedemptionRateIndexOfHead()` for this value.
     /// @return underlying Total claimed underlying amount
     function claimRedemptionsAndUnwrap(
         uint256[] calldata indices,
         uint256[] calldata rateIndices,
-        uint256 redemptionRateIndex
+        uint256 rateIndexOfHead
     ) external nonReentrant returns (uint256 underlying) {
-        underlying = _claimRedemptions(indices, rateIndices, redemptionRateIndex);
+        underlying = _claimRedemptions(indices, rateIndices, rateIndexOfHead);
         IWrappedERC20(address(_tokenUnderlying)).withdraw(underlying);
         (bool success, ) = msg.sender.call{value: underlying}("");
         require(success, "Transfer failed");
@@ -563,7 +600,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     function _claimRedemptions(
         uint256[] calldata indices,
         uint256[] calldata rateIndices,
-        uint256 redemptionRateIndex
+        uint256 rateIndexOfHead
     ) private returns (uint256 underlying) {
         uint256 count = indices.length;
         require(count == rateIndices.length, "Invalid rate indices");
@@ -572,7 +609,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         }
         uint256 head = redemptionQueueHead;
         if (indices[count - 1] >= head) {
-            _popRedemptionQueue(indices[count - 1] - head + 1, redemptionRateIndex);
+            _popRedemptionQueue(indices[count - 1] - head + 1, rateIndexOfHead);
         }
         for (uint256 i = 0; i < count; i++) {
             require(i == 0 || indices[i] > indices[i - 1], "Indices out of order");
