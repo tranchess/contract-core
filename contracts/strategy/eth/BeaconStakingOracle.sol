@@ -104,11 +104,19 @@ contract BeaconStakingOracle is Ownable {
 
         if (currentCount >= quorum) {
             uint256 preTotalUnderlying = fund.getTotalUnderlying();
+            uint256 preEquivalentTotalQ = fund.getEquivalentTotalQ();
             strategy.batchReport(epoch, operatorData, finalizationCount);
             uint256 postTotalUnderlying = fund.getTotalUnderlying();
+            uint256 postEquivalentTotalQ = fund.getEquivalentTotalQ();
 
             uint256 timeElapsed = (epoch - lastCompletedEpoch) * secondsPerEpoch;
-            _sanityCheck(postTotalUnderlying, preTotalUnderlying, timeElapsed);
+            _sanityCheck(
+                postTotalUnderlying,
+                postEquivalentTotalQ,
+                preTotalUnderlying,
+                preEquivalentTotalQ,
+                timeElapsed
+            );
             lastCompletedEpoch = epoch;
 
             if (currentCount > 1) {
@@ -122,16 +130,19 @@ contract BeaconStakingOracle is Ownable {
     /// @dev Performs logical consistency check of the underlying changes as the result of reports push
     function _sanityCheck(
         uint256 postTotalUnderlying,
+        uint256 postEquivalentTotalQ,
         uint256 preTotalUnderlying,
+        uint256 preEquivalentTotalQ,
         uint256 timeElapsed
     ) private view {
-        uint256 delta =
-            postTotalUnderlying >= preTotalUnderlying
-                ? postTotalUnderlying - preTotalUnderlying
-                : preTotalUnderlying - postTotalUnderlying;
+        if (postEquivalentTotalQ == 0 || preEquivalentTotalQ == 0) {
+            return;
+        }
+        uint256 postNav = postTotalUnderlying.divideDecimal(postEquivalentTotalQ);
+        uint256 preNav = preTotalUnderlying.divideDecimal(preEquivalentTotalQ);
+        uint256 delta = postNav >= preNav ? postNav - preNav : preNav - postNav;
         require(
-            delta.mul(365 days) / timeElapsed <=
-                preTotalUnderlying.multiplyDecimal(annualMaxChange),
+            delta.mul(365 days) / timeElapsed <= preNav.multiplyDecimal(annualMaxChange),
             "Annual max delta"
         );
     }
