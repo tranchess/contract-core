@@ -566,7 +566,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         uint256 redemptionRateIndex
     ) private returns (uint256 underlying) {
         uint256 count = indices.length;
-        require(count != rateIndices.length, "Invalid rate indices");
+        require(count == rateIndices.length, "Invalid rate indices");
         if (count == 0) {
             return 0;
         }
