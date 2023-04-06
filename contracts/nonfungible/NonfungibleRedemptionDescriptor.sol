@@ -232,9 +232,9 @@ contract NonfungibleRedemptionDescriptor {
     {
         bytes memory unstaked =
             abi.encodePacked(
-                '<text x="60" y="86.6821" opacity="0.5" font-size="30">Unstaked ',
+                '<text x="60" y="86.6821" opacity="0.5" font-size="30">',
                 _qSymbol,
-                '</text><text x="60" y="188.95" mask="url(#fade-symbol)" font-size="100" font-weight="bold">',
+                ' submitted</text><text x="60" y="188.95" mask="url(#fade-symbol)" font-size="100" font-weight="bold">',
                 _formatDecimal(amountQ, 18),
                 "</text>"
             );
@@ -242,7 +242,7 @@ contract NonfungibleRedemptionDescriptor {
             return
                 abi.encodePacked(
                     unstaked,
-                    '<text x="60" y="276.685" font-size="30" font-weight="bold">Claimable ',
+                    '<text x="60" y="276.685" font-size="30" font-weight="bold">Unstaked ',
                     _underlyingSymbol,
                     '</text><text x="60" y="378.95" mask="url(#fade-symbol)" font-size="100" font-weight="bold">',
                     _formatDecimal(amountUnderlying, _underlyingDecimals),
