@@ -474,10 +474,10 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         // Transfer QUEEN from the sender to this contract
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_Q, address(this), inQ, version);
-        // Mint the redemption NFT
-        _safeMint(recipient, index);
         newRedemption.seed = _descriptor.generateSeed(index, inQ);
         emit RedemptionQueued(recipient, index, inQ);
+        // Mint the redemption NFT
+        _safeMint(recipient, index);
     }
 
     function finalizeRedemptions(uint256 count) external {
