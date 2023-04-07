@@ -113,7 +113,7 @@ describe("BeaconStakingOracle", function () {
             operatorDatas: Array<Array<BigNumberish>>,
             finalizationCount: BigNumberish,
             nonce: BigNumberish
-        ): any {
+        ): string {
             return ethers.utils.keccak256(
                 ethers.utils.defaultAbiCoder.encode(
                     ["tuple(uint256,uint256,uint256,uint256)[]", "uint256", "uint256"],
