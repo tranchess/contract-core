@@ -88,9 +88,6 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
 
     /// @notice The upper limit of underlying that the fund can hold. This contract rejects
     ///         creations that may break this limit.
-    /// @dev This limit can be bypassed if the fund has multiple primary markets.
-    ///
-    ///      Set it to uint(-1) to skip the check and save gas.
     uint256 public fundCap;
 
     /// @notice Queue of redemptions that cannot be claimed yet. Key is a sequential index
@@ -109,8 +106,12 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     ///         redemption will be written at this index.
     uint256 public redemptionQueueTail;
 
+    /// @notice Rates of underlying tokens per redeemed QUEEN. Key is a sequential index starting
+    ///         from zero. Each value corresponds to a continuous part of the redemption queue that
+    ///         was finalized in a single transaction.
     mapping(uint256 => RedemptionRate) public redemptionRates;
 
+    /// @notice Total number of redemption rates.
     uint256 public redemptionRateSize;
 
     /// @notice Minimal amount to redeem by a single request
@@ -609,6 +610,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         for (uint256 i = 0; i < count; i++) {
             require(i == 0 || indices[i] > indices[i - 1], "Indices out of order");
             require(rateIndices[i] < redemptionRateSize, "Invalid rate index");
+            // redemptionRates[rateIndices[i] - 1].nextIndex == 0 if rateIndices[i] == 0
             require(
                 indices[i] < redemptionRates[rateIndices[i]].nextIndex &&
                     indices[i] >= redemptionRates[rateIndices[i] - 1].nextIndex,
