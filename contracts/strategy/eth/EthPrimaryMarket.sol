@@ -43,6 +43,7 @@ interface IERC4906 is IERC165, IERC721 {
 
 contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, IERC4906 {
     event Created(address indexed account, uint256 underlying, uint256 outQ);
+    event Redeemed(address indexed account, uint256 inQ, uint256 underlying, uint256 feeQ);
     event Split(address indexed account, uint256 inQ, uint256 outB, uint256 outR);
     event Merged(
         address indexed account,
@@ -489,6 +490,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         uint256 version = IFundV3(fund).getRebalanceSize();
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, address(this), amountQ, version);
         IFundForPrimaryMarketV4(fund).primaryMarketAddDebtAndFee(underlying, 0);
+        emit Redeemed(address(0), amountQ, underlying, 0);
         redemptionRates[redemptionRateSize++] = RedemptionRate({
             nextIndex: newFinalizedIndex,
             underlyingPerQ: underlying.divideDecimalPrecise(amountQ)
