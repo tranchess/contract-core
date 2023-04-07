@@ -334,10 +334,9 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     /// @return Index of the redemption rate that covers the given queued redemption, or index
     ///         beyond the last redemption rate if this redemption is not finalized yet.
     function getRedemptionRateIndex(uint256 index) public view returns (uint256) {
-        if (redemptionRateSize == 0) return 0;
-
         uint256 l = 0;
         uint256 r = redemptionRateSize;
+        if (r == 0) return 0;
         // If the index is greater than the redemption rate size, it is not yet finalized.
         // Return the index of the next potential finalization.
         if (redemptionRates[r - 1].nextIndex <= index) {
