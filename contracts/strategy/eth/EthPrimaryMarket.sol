@@ -310,9 +310,14 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
             return r; // All finalized redemptions can be claimed
         }
         // Iteration count is bounded by log2(tail - head), which is at most 256.
+        uint256 underlyingPerQ = redemptionRates[rateIndex].underlyingPerQ;
         while (l + 1 < r) {
             uint256 m = (l + r) / 2;
-            if (queuedRedemptions[m].previousPrefixSum - startPrefixSum <= available) {
+            uint256 underlying =
+                (queuedRedemptions[m].previousPrefixSum - startPrefixSum).multiplyDecimalPrecise(
+                    underlyingPerQ
+                );
+            if (underlying <= available) {
                 l = m;
             } else {
                 r = m;
