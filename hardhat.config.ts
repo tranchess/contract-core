@@ -31,7 +31,7 @@ import "./tasks/dev_deploy_anyswap";
 import "./tasks/dev_deploy_curve";
 import "./tasks/dev_deploy_deposit_contract";
 import "./tasks/dev_deploy_token_hub";
-import "./tasks/dev_redemption_svg";
+import "./tasks/dev_redemption_nft_metadata";
 import "./tasks/test_deploy";
 import { ETH_RPC, ETH_CHAIN_ID, DEPLOYER_PK, DEPLOYER_HD_PATH, ETHERSCAN_API_KEY } from "./config";
 import "hardhat-gas-reporter";
