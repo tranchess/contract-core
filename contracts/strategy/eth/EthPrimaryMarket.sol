@@ -53,7 +53,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         uint256 feeUnderlying
     );
     event RedemptionQueued(address indexed account, uint256 index, uint256 underlying);
-    event RedemptionFinalized(uint256 newFinalizedIndex, uint256 inQ, uint256 underlying);
+    event RedemptionFinalized(uint256 nextFinalizationIndex, uint256 inQ, uint256 underlying);
     event RedemptionPopped(uint256 count, uint256 newHead, uint256 requiredUnderlying);
     event RedemptionClaimed(address indexed account, uint256 index, uint256 underlying);
     event FundCapUpdated(uint256 newCap);
