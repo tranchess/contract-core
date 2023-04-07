@@ -94,8 +94,8 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     uint256 public fundCap;
 
     /// @notice Queue of redemptions that cannot be claimed yet. Key is a sequential index
-    ///         starting from zero. Value is a tuple of user address, redeemed QUEEN and
-    ///         prefix sum before this entry.
+    ///         starting from zero. Value is a tuple of redeemed QUEEN and prefix sum before
+    ///         this entry.
     mapping(uint256 => QueuedRedemption) public queuedRedemptions;
 
     /// @notice Total underlying tokens of claimable queued redemptions.
@@ -196,7 +196,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     /// @param inQ QUEEN amount spent for the redemption
     /// @return underlying Redeemed underlying amount
     /// @return feeQ QUEEN amount charged as redemption fee
-    function getRedemption(uint256 inQ) public view returns (uint256 underlying, uint256) {
+    function getRedemption(uint256 inQ) public view returns (uint256 underlying, uint256 feeQ) {
         underlying = _getRedemption(inQ);
     }
 
@@ -458,7 +458,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         uint256 inQ,
         uint256, // minUnderlying is ignored
         uint256 version
-    ) external nonReentrant returns (uint256, uint256 index) {
+    ) external nonReentrant returns (uint256 underlying, uint256 index) {
         require(inQ >= minRedemptionBound && inQ <= maxRedemptionBound, "Invalid amount");
         index = redemptionQueueTail;
         QueuedRedemption storage newRedemption = queuedRedemptions[index];
