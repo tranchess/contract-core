@@ -209,17 +209,14 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
         address withdrawalAddress = registry.getWithdrawalAddress(id);
         require(withdrawalAddress != address(0), "Invalid operator id");
         uint256 lastValidatorCount = lastValidatorCounts[id];
-        require(
-            operatorData.validatorCount <= registry.getKeyStat(id).usedCount,
-            "More than deposited"
-        );
+        uint256 validatorCount = operatorData.validatorCount;
+        require(validatorCount <= registry.getKeyStat(id).usedCount, "More than deposited");
+        require(validatorCount >= lastValidatorCount, "Less than previous");
 
         uint256 oldBalance =
-            lastBeaconBalances[id].add((operatorData.validatorCount).mul(DEPOSIT_AMOUNT)).sub(
-                (lastValidatorCount).mul(DEPOSIT_AMOUNT)
-            );
+            (validatorCount - lastValidatorCount).mul(DEPOSIT_AMOUNT).add(lastBeaconBalances[id]);
         lastBeaconBalances[id] = operatorData.beaconBalance;
-        lastValidatorCounts[id] = operatorData.validatorCount;
+        lastValidatorCounts[id] = validatorCount;
 
         // Get the exectuion layer rewards
         IWithdrawalManager(withdrawalAddress).transferToStrategy(operatorData.executionLayerReward);
@@ -227,7 +224,7 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
             epoch,
             id,
             operatorData.beaconBalance,
-            operatorData.validatorCount,
+            validatorCount,
             operatorData.executionLayerReward
         );
         uint256 newBalance = operatorData.beaconBalance.add(operatorData.executionLayerReward);
