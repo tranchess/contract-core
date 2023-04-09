@@ -25,6 +25,8 @@ contract ChessSubSchedule is
     /// @dev Reserved storage slots for future base contract upgrades
     uint256[32] private _reservedSlots;
 
+    event WeeklySupplyUpdated(uint256 week, uint256 newSupply, uint256 newOutstandingSupply);
+
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -93,6 +95,17 @@ contract ChessSubSchedule is
         _removeMinter(account);
     }
 
+    function distributeOutstanding() external onlyOwner {
+        uint256 outstandingSupply_ = outstandingSupply;
+        if (outstandingSupply_ != 0) {
+            uint256 currentWeek = _endOfWeek(block.timestamp) - 1 weeks;
+            availableSupply = availableSupply.add(outstandingSupply_);
+            _weeklySupplies[currentWeek] = _weeklySupplies[currentWeek].add(outstandingSupply_);
+            outstandingSupply = 0;
+            emit WeeklySupplyUpdated(currentWeek, _weeklySupplies[currentWeek], 0);
+        }
+    }
+
     /// @notice Send the total veCHESS amount voted to all pools on this chain to the main chain.
     function crossChainSync() external payable {
         uint256 week = _endOfWeek(block.timestamp);
@@ -126,13 +139,15 @@ contract ChessSubSchedule is
         if (_weeklySupplies[currentWeek] == 0) {
             if (outstandingSupply_ != 0) {
                 totalAmount = totalAmount.add(outstandingSupply_);
-                outstandingSupply = 0;
+                outstandingSupply_ = 0;
             }
             availableSupply = availableSupply.add(totalAmount);
             _weeklySupplies[currentWeek] = totalAmount;
         } else {
-            outstandingSupply = outstandingSupply_.add(totalAmount);
+            outstandingSupply_ = outstandingSupply_.add(totalAmount);
         }
+        outstandingSupply = outstandingSupply_;
+        emit WeeklySupplyUpdated(currentWeek, totalAmount, outstandingSupply_);
     }
 
     function _anyFallback(bytes memory) internal override {
