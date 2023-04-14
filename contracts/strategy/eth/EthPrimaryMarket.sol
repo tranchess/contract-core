@@ -553,6 +553,14 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
             }
             startIndex = endIndex;
         }
+        if (newHead == oldTail) {
+            // The fund's debt can be slightly larger than the sum of all finalized redemptions
+            // due to rounding errors. In this case, we completely clear the debt, so that it
+            // won't block `FundV4.applyStrategyUpdate()`.
+            uint256 debt = IFundV4(fund).getTotalDebt();
+            require(debt >= requiredUnderlying);
+            requiredUnderlying = debt;
+        }
         // Redundant check for user-friendly revert message.
         require(
             requiredUnderlying <= _tokenUnderlying.balanceOf(fund),
