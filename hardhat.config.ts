@@ -14,7 +14,7 @@ import "./tasks/deploy_controller_ballot";
 import "./tasks/deploy_eth_staking_strategy";
 import "./tasks/deploy_fee_distributor";
 import "./tasks/deploy_fund";
-import "./tasks/deploy_fund_v4";
+import "./tasks/deploy_fund_eth";
 import "./tasks/deploy_governance";
 import "./tasks/deploy_liquidity_gauge_curve";
 import "./tasks/deploy_misc";
