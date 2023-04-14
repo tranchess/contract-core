@@ -199,6 +199,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     /// @return feeQ QUEEN amount charged as redemption fee
     function getRedemption(uint256 inQ) public view returns (uint256 underlying, uint256 feeQ) {
         underlying = _getRedemption(inQ);
+        feeQ = 0;
     }
 
     /// @notice Calculate the amount of QUEEN that can be redeemed for at least the given amount
@@ -465,6 +466,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         uint256 version
     ) external nonReentrant returns (uint256 underlying, uint256 index) {
         require(inQ >= minRedemptionBound && inQ <= maxRedemptionBound, "Invalid amount");
+        underlying = 0;
         index = redemptionQueueTail;
         QueuedRedemption storage newRedemption = queuedRedemptions[index];
         newRedemption.amountQ = inQ;
