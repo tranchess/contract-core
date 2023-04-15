@@ -23,17 +23,16 @@ export interface FundAddresses extends Addresses {
     shareR: string;
     primaryMarket: string;
     primaryMarketRouter: string;
+    nonfungibleRedemptionDescriptor: string;
     shareStaking: string;
     upgradeTool: string;
 }
 
-task("deploy_fund_v4", "Deploy fund contracts")
+task("deploy_fund_eth", "Deploy fund contracts")
     .addParam("underlyingSymbol", "Underlying token symbol")
     .addParam("quoteSymbol", "Quote token symbol")
     .addParam("shareSymbols", "Symbols of share tokens")
-    .addParam("redemptionFeeRate", "Primary market redemption fee rate")
     .addParam("mergeFeeRate", "Primary market merge fee rate")
-    .addFlag("disableRedemption", "Disable redemption in primary market")
     .addParam("fundCap", "Fund cap (in underlying's precision), or -1 for no cap")
     .addParam("strategy", "Name of the strategy (snake_case), or 'NONE' for no strategy")
     .addOptionalParam(
@@ -103,6 +102,19 @@ task("deploy_fund_v4", "Deploy fund contracts")
         const fundLastNavR = parseEther(fundInitializationParams.lastNavR || "1");
 
         const [deployer] = await ethers.getSigners();
+
+        const NonfungibleRedemptionDescriptor = await ethers.getContractFactory(
+            "NonfungibleRedemptionDescriptor"
+        );
+        const redemptionDescriptor = await NonfungibleRedemptionDescriptor.deploy(
+            quoteSymbol,
+            underlyingSymbol,
+            18,
+            0x8968b4,
+            0x4956b7,
+            0x8aa0ee,
+            parseEther("1")
+        );
 
         // +0 ShareQ
         // +1 ShareB
@@ -177,17 +189,18 @@ task("deploy_fund_v4", "Deploy fund contracts")
             "Before setting protocol fee rate, make sure people have synced in FeeDistributor"
         );
 
-        const redemptionFeeRate = parseEther(args.redemptionFeeRate);
         const mergeFeeRate = parseEther(args.mergeFeeRate);
-        const redemptionFlag = !args.disableRedemption;
-        const PrimaryMarket = await ethers.getContractFactory("PrimaryMarketV4");
+        const PrimaryMarket = await ethers.getContractFactory("EthPrimaryMarket");
         const primaryMarket = await PrimaryMarket.deploy(
             fund.address,
-            redemptionFeeRate,
             mergeFeeRate,
             fundCap,
-            redemptionFlag,
-            { gasLimit: 5e6 } // Gas estimation may fail
+            "Tranchess Unstaking NFT",
+            "TRANCHESS-UNSTAKE",
+            redemptionDescriptor.address,
+            parseEther("1"),
+            parseEther("3200"),
+            { gasLimit: 8e6 } // Gas estimation may fail
         );
         console.log(`PrimaryMarket: ${primaryMarket.address}`);
 
@@ -244,6 +257,7 @@ task("deploy_fund_v4", "Deploy fund contracts")
             shareR: shareR.address,
             primaryMarket: primaryMarket.address,
             primaryMarketRouter: primaryMarketRouter.address,
+            nonfungibleRedemptionDescriptor: redemptionDescriptor.address,
             shareStaking: "",
             upgradeTool: "",
         };

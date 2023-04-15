@@ -12,7 +12,7 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
 import "../../utils/SafeDecimalMath.sol";
 
-import "../../interfaces/IFundV3.sol";
+import "../../interfaces/IFundV4.sol";
 import "../../interfaces/IFundForPrimaryMarketV4.sol";
 import "../../interfaces/ITrancheIndexV2.sol";
 import "../../interfaces/IWrappedERC20.sol";
@@ -131,7 +131,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         uint256 maxRedemptionBound_
     ) public Ownable() ERC721(name_, symbol_) {
         fund = fund_;
-        _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
+        _tokenUnderlying = IERC20(IFundV4(fund_).tokenUnderlying());
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
         _descriptor = INonfungibleRedemptionDescriptor(descriptor_);
@@ -143,16 +143,16 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     /// @param underlying Underlying amount spent for the creation
     /// @return outQ Created QUEEN amount
     function getCreation(uint256 underlying) public view returns (uint256 outQ) {
-        uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
-        uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
+        uint256 fundUnderlying = IFundV4(fund).getTotalUnderlying();
+        uint256 fundEquivalentTotalQ = IFundV4(fund).getEquivalentTotalQ();
         require(fundUnderlying.add(underlying) <= fundCap, "Exceed fund cap");
         if (fundEquivalentTotalQ == 0) {
-            outQ = underlying.mul(IFundV3(fund).underlyingDecimalMultiplier());
-            uint256 splitRatio = IFundV3(fund).splitRatio();
+            outQ = underlying.mul(IFundV4(fund).underlyingDecimalMultiplier());
+            uint256 splitRatio = IFundV4(fund).splitRatio();
             require(splitRatio != 0, "Fund is not initialized");
-            uint256 settledDay = IFundV3(fund).currentDay() - 1 days;
-            uint256 underlyingPrice = IFundV3(fund).twapOracle().getTwap(settledDay);
-            (uint256 navB, uint256 navR) = IFundV3(fund).historicalNavs(settledDay);
+            uint256 settledDay = IFundV4(fund).currentDay() - 1 days;
+            uint256 underlyingPrice = IFundV4(fund).twapOracle().getTwap(settledDay);
+            (uint256 navB, uint256 navR) = IFundV4(fund).historicalNavs(settledDay);
             outQ = outQ.mul(underlyingPrice).div(splitRatio).divideDecimal(navB.add(navR));
         } else {
             require(
@@ -181,15 +181,15 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         //     = floor((a * fundEquivalentTotalQ - fundEquivalentTotalQ) / fundUnderlying)
         //     < (a * fundEquivalentTotalQ - b) / fundUnderlying
         //     = minOutQ
-        uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
-        uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
+        uint256 fundUnderlying = IFundV4(fund).getTotalUnderlying();
+        uint256 fundEquivalentTotalQ = IFundV4(fund).getEquivalentTotalQ();
         require(fundEquivalentTotalQ > 0, "Cannot calculate creation for empty fund");
         return minOutQ.mul(fundUnderlying).add(fundEquivalentTotalQ - 1).div(fundEquivalentTotalQ);
     }
 
     function _getRedemption(uint256 inQ) private view returns (uint256 underlying) {
-        uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
-        uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
+        uint256 fundUnderlying = IFundV4(fund).getTotalUnderlying();
+        uint256 fundEquivalentTotalQ = IFundV4(fund).getEquivalentTotalQ();
         underlying = inQ.mul(fundUnderlying).div(fundEquivalentTotalQ);
     }
 
@@ -199,6 +199,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     /// @return feeQ QUEEN amount charged as redemption fee
     function getRedemption(uint256 inQ) public view returns (uint256 underlying, uint256 feeQ) {
         underlying = _getRedemption(inQ);
+        feeQ = 0;
     }
 
     /// @notice Calculate the amount of QUEEN that can be redeemed for at least the given amount
@@ -224,8 +225,8 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         //     = floor(a * fundUnderlying / fundEquivalentTotalQ)
         //     => floor((a * fundUnderlying - b) / fundEquivalentTotalQ)
         //     = minUnderlying
-        uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
-        uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
+        uint256 fundUnderlying = IFundV4(fund).getTotalUnderlying();
+        uint256 fundEquivalentTotalQ = IFundV4(fund).getEquivalentTotalQ();
         uint256 inQAfterFee =
             minUnderlying.mul(fundEquivalentTotalQ).add(fundUnderlying - 1).div(fundUnderlying);
         return inQAfterFee.divideDecimal(1e18 - redemptionFeeRate);
@@ -235,7 +236,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     /// @param inQ QUEEN amount to be split
     /// @return outB Received BISHOP amount, which is also received ROOK amount
     function getSplit(uint256 inQ) public view returns (uint256 outB) {
-        return inQ.multiplyDecimal(IFundV3(fund).splitRatio());
+        return inQ.multiplyDecimal(IFundV4(fund).splitRatio());
     }
 
     /// @notice Calculate the amount of QUEEN that can be split into at least the given amount of
@@ -243,7 +244,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     /// @param minOutB Received BISHOP amount, which is also received ROOK amount
     /// @return inQ QUEEN amount that should be split
     function getSplitForB(uint256 minOutB) external view returns (uint256 inQ) {
-        uint256 splitRatio = IFundV3(fund).splitRatio();
+        uint256 splitRatio = IFundV4(fund).splitRatio();
         return minOutB.mul(1e18).add(splitRatio.sub(1)).div(splitRatio);
     }
 
@@ -252,7 +253,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     /// @return outQ Received QUEEN amount
     /// @return feeQ QUEEN amount charged as merge fee
     function getMerge(uint256 inB) public view returns (uint256 outQ, uint256 feeQ) {
-        uint256 outQBeforeFee = inB.divideDecimal(IFundV3(fund).splitRatio());
+        uint256 outQBeforeFee = inB.divideDecimal(IFundV4(fund).splitRatio());
         feeQ = outQBeforeFee.multiplyDecimal(mergeFeeRate);
         outQ = outQBeforeFee.sub(feeQ);
     }
@@ -277,7 +278,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         //     = (a * (1e18 - mergeFeeRate) + b) / 1e18         // because b < 1e18
         //     = minOutQ
         uint256 outQBeforeFee = minOutQ.divideDecimal(1e18 - mergeFeeRate);
-        inB = outQBeforeFee.mul(IFundV3(fund).splitRatio()).add(1e18 - 1).div(1e18);
+        inB = outQBeforeFee.mul(IFundV4(fund).splitRatio()).add(1e18 - 1).div(1e18);
     }
 
     /// @notice Return index of the first queued redemption that cannot be claimed now.
@@ -465,6 +466,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         uint256 version
     ) external nonReentrant returns (uint256 underlying, uint256 index) {
         require(inQ >= minRedemptionBound && inQ <= maxRedemptionBound, "Invalid amount");
+        underlying = 0;
         index = redemptionQueueTail;
         QueuedRedemption storage newRedemption = queuedRedemptions[index];
         newRedemption.amountQ = inQ;
@@ -481,7 +483,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     }
 
     function finalizeRedemptions(uint256 count) external {
-        require(msg.sender == IFundV3(fund).strategy(), "Only Strategy");
+        require(msg.sender == IFundV4(fund).strategy(), "Only Strategy");
         uint256 oldFinalizedIndex = getNextFinalizationIndex();
         uint256 newFinalizedIndex = oldFinalizedIndex.add(count);
         require(newFinalizedIndex <= redemptionQueueTail, "Redemption queue out of bound");
@@ -492,7 +494,7 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
                 queuedRedemptions[oldFinalizedIndex].previousPrefixSum;
 
         (uint256 underlying, ) = getRedemption(amountQ);
-        uint256 version = IFundV3(fund).getRebalanceSize();
+        uint256 version = IFundV4(fund).getRebalanceSize();
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, address(this), amountQ, version);
         IFundForPrimaryMarketV4(fund).primaryMarketAddDebtAndFee(underlying, 0);
         emit Redeemed(address(0), amountQ, underlying, 0);
@@ -550,6 +552,14 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
                 rateIndexOfHead++;
             }
             startIndex = endIndex;
+        }
+        if (newHead == oldTail) {
+            // The fund's debt can be slightly larger than the sum of all finalized redemptions
+            // due to rounding errors. In this case, we completely clear the debt, so that it
+            // won't block `FundV4.applyStrategyUpdate()`.
+            uint256 debt = IFundV4(fund).getTotalDebt();
+            require(debt >= requiredUnderlying);
+            requiredUnderlying = debt;
         }
         // Redundant check for user-friendly revert message.
         require(
