@@ -318,12 +318,16 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
     /// @param amount Amount of underlying transfered from the fund, including cross-chain relay fee
     function deposit(uint256 amount) public {
         require(msg.sender == safeStaking, "Only safe staking");
-
         require(amount % DEPOSIT_AMOUNT == 0);
-        // If there is debt, the fund should prioritize debt repayment
-        require(IFundV3(fund).getTotalDebt() == 0);
         if (address(this).balance < amount) {
-            IFundForStrategyV2(fund).transferToStrategy(amount - address(this).balance);
+            uint256 transferAmount = amount - address(this).balance;
+            uint256 fundBalance = IWrappedERC20(_tokenUnderlying).balanceOf(fund);
+            uint256 fundDebt = IFundV3(fund).getTotalDebt();
+            require(
+                fundBalance >= transferAmount && fundBalance - transferAmount >= fundDebt,
+                "No enough underlying in fund"
+            );
+            IFundForStrategyV2(fund).transferToStrategy(transferAmount);
             _unwrap(IERC20(_tokenUnderlying).balanceOf(address(this)));
         }
 
