@@ -25,7 +25,7 @@ contract RewardCashier is Ownable {
         require(claimed[account] < version, "Already claimed");
         require(version > 0 && version <= currentVersion, "Invalid version");
 
-        bytes32 leaf = keccak256(abi.encodePacked(account, amount, version));
+        bytes32 leaf = keccak256(abi.encodePacked(keccak256(abi.encode(account, amount, version))));
         require(checkValidity(merkleProof, roots[version], leaf), "Invalid proof");
 
         claimed[account] = version;
