@@ -23,21 +23,20 @@ contract RewardCashier is Ownable {
     }
 
     function claim(
-        address account,
         uint256 amount,
         uint256 version,
         bytes32[] calldata merkleProof
     ) external {
         require(block.timestamp < deadline, "Deadline passed");
-        require(claimed[account] < version, "Already claimed");
+        require(claimed[msg.sender] < version, "Already claimed");
         require(version > 0 && version <= currentVersion, "Invalid version");
 
-        bytes32 leaf = keccak256(abi.encodePacked(keccak256(abi.encode(account, amount, version))));
+        bytes32 leaf = keccak256(abi.encodePacked(keccak256(abi.encode(msg.sender, amount, version))));
         require(checkValidity(merkleProof, roots[version], leaf), "Invalid proof");
 
-        claimed[account] = version;
+        claimed[msg.sender] = version;
         uint256 reward = amount.multiplyDecimal(ratios[version]);
-        IERC20(token).transfer(account, reward);
+        IERC20(token).transfer(msg.sender, reward);
     }
 
     function checkValidity(
