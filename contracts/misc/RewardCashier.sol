@@ -42,22 +42,13 @@ contract RewardCashier is Ownable {
                 keccak256(
                     abi.encodePacked(keccak256(abi.encode(msg.sender, amounts[i], versions[i])))
                 );
-            require(checkValidity(merkleProofs[i], roots[versions[i]], leaf), "Invalid proof");
+            require(MerkleProof.verify(merkleProofs[i], roots[versions[i]], leaf), "Invalid proof");
             reward = reward.add(amounts[i].multiplyDecimal(ratios[versions[i]]));
         }
 
         nextClaimableVersion[msg.sender] = versions[versions.length - 1] + 1;
         IERC20(token).transfer(msg.sender, reward);
         return reward;
-    }
-
-    function checkValidity(
-        bytes32[] calldata _merkleProof,
-        bytes32 root,
-        bytes32 leaf
-    ) public pure returns (bool) {
-        require(MerkleProof.verify(_merkleProof, root, leaf), "Incorrect proof");
-        return true;
     }
 
     function addNewRoot(
