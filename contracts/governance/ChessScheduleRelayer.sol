@@ -7,25 +7,23 @@ import "../interfaces/IChessSchedule.sol";
 import "../interfaces/IChessController.sol";
 import "../utils/CoreUtility.sol";
 import "../utils/SafeDecimalMath.sol";
-import "../anyswap/AnyCallAppBase.sol";
-import "../interfaces/IAnyswapV6ERC20.sol";
+import "../layerzero/NonblockingLzApp.sol";
+import "../layerzero/interfaces/IOFTCore.sol";
 
-contract ChessScheduleRelayer is CoreUtility, AnyCallAppBase {
+contract ChessScheduleRelayer is CoreUtility, NonblockingLzApp {
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
     event CrossChainMinted(uint256 chainID, uint256 amount);
     event CrossChainSynced(uint256 chainID, uint256 week, uint256 veSupply);
 
-    uint256 public immutable subChainID;
-
-    address public immutable subSchedule;
+    uint16 public immutable subLzChainID;
 
     IChessSchedule public immutable chessSchedule;
 
     IChessController public immutable chessController;
 
-    address public immutable anyswapChessPool;
+    address public immutable chessPool;
 
     address public immutable chess;
 
@@ -34,68 +32,66 @@ contract ChessScheduleRelayer is CoreUtility, AnyCallAppBase {
     uint256 public lastWeek;
 
     constructor(
-        uint256 subChainID_,
-        address subSchedule_,
+        uint16 subLzChainID_,
         address chessSchedule_,
         address chessController_,
-        address anyswapChessPool_,
-        address anyCallProxy_
-    ) public AnyCallAppBase(anyCallProxy_, false, false) {
-        subChainID = subChainID_;
-        subSchedule = subSchedule_;
+        address chessPool_,
+        address endpoint_
+    ) public NonblockingLzApp(endpoint_) {
+        subLzChainID = subLzChainID_;
         chessSchedule = IChessSchedule(chessSchedule_);
         chessController = IChessController(chessController_);
-        anyswapChessPool = anyswapChessPool_;
-        chess = IAnyswapV6ERC20(anyswapChessPool_).underlying();
+        chessPool = chessPool_;
+        chess = IOFTCore(chessPool_).token();
     }
 
-    function crossChainMint() external {
+    function crossChainMint(bytes memory adapterParams) external payable {
         uint256 startWeek = _endOfWeek(block.timestamp) - 1 weeks;
-        if (startWeek <= lastWeek) {
-            return;
-        }
+        require(startWeek > lastWeek, "Not a new week");
         lastWeek = startWeek;
         uint256 amount =
             chessSchedule.getWeeklySupply(startWeek).multiplyDecimal(
                 chessController.getFundRelativeWeight(address(this), startWeek)
             );
         if (amount != 0) {
-            chessSchedule.mint(anyswapChessPool, amount);
+            chessSchedule.mint(chessPool, amount);
         }
         uint256 balance = IERC20(chess).balanceOf(address(this));
         if (balance != 0) {
             // Additional CHESS rewards directly transferred to this contract
-            IERC20(chess).safeTransfer(anyswapChessPool, balance);
+            IERC20(chess).safeTransfer(chessPool, balance);
             amount += balance;
         }
         if (amount != 0) {
-            _anyCall(subSchedule, subChainID, abi.encode(amount));
-            emit CrossChainMinted(subChainID, amount);
+            _checkGasLimit(
+                subLzChainID,
+                0, /*type*/
+                adapterParams,
+                0 /*extraGas*/
+            );
+            _lzSend(
+                subLzChainID,
+                abi.encode(amount),
+                msg.sender,
+                address(0x0),
+                adapterParams,
+                msg.value
+            );
+            emit CrossChainMinted(subLzChainID, amount);
         }
     }
 
-    function _checkAnyExecuteFrom(address from, uint256 fromChainID)
-        internal
-        override
-        returns (bool)
-    {
-        return from == subSchedule && fromChainID == subChainID;
-    }
-
-    function _checkAnyFallbackTo(address, uint256) internal override returns (bool) {
-        return false;
-    }
-
-    function _anyExecute(uint256, bytes calldata data) internal override {
+    function _nonblockingLzReceive(
+        uint16,
+        bytes memory,
+        uint64,
+        bytes memory data
+    ) internal override {
         (uint256 week, uint256 supply, uint256 nextWeekSupply) =
             abi.decode(data, (uint256, uint256, uint256));
         veSupplyPerWeek[week] = supply;
         veSupplyPerWeek[week + 1 weeks] = nextWeekSupply;
-        emit CrossChainSynced(subChainID, week, supply);
-        emit CrossChainSynced(subChainID, week + 1 weeks, nextWeekSupply);
-    }
-
-    function _anyFallback(bytes calldata) internal override {
-        revert("N/A");
+        emit CrossChainSynced(subLzChainID, week, supply);
+        emit CrossChainSynced(subLzChainID, week + 1 weeks, nextWeekSupply);
     }
 }
