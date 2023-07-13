@@ -119,7 +119,7 @@ contract ChessSubSchedule is
         _lzSend(
             mainLzChainID,
             abi.encode(week, supply, nextWeekSupply),
-            msg.sender,
+            msg.sender == tx.origin ? msg.sender : payable(owner()), // To avoid reentrancy
             address(0x0),
             adapterParams,
             msg.value

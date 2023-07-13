@@ -72,7 +72,7 @@ contract ChessScheduleRelayer is CoreUtility, NonblockingLzApp {
             _lzSend(
                 subLzChainID,
                 abi.encode(amount),
-                msg.sender,
+                msg.sender == tx.origin ? msg.sender : payable(owner()), // To avoid reentrancy
                 address(0x0),
                 adapterParams,
                 msg.value

@@ -338,7 +338,7 @@ contract VotingEscrowV4 is
         _lzSend(
             toLzChainID,
             abi.encode(msg.sender, amount, lockedBalance.unlockTime),
-            msg.sender,
+            msg.sender == tx.origin ? msg.sender : payable(owner()), // To avoid reentrancy
             address(0x0),
             adapterParams,
             msg.value
