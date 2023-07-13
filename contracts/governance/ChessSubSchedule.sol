@@ -76,13 +76,11 @@ contract ChessSubSchedule is
         return _weeklySupplies[_endOfWeek(timestamp) - 1 weeks] / 1 weeks;
     }
 
-    /// @notice Creates `amount` CHESS tokens and assigns them to `account`,
-    ///         increasing the total supply. This is guarded by `Minter` role.
+    /// @notice Transfer `amount` CHESS tokens to `account`. This is guarded by `Minter` role.
     /// @param account recipient of the token
     /// @param amount amount of the token
     function mint(address account, uint256 amount) external override onlyMinter {
         require(minted.add(amount) <= availableSupply, "Exceeds allowable mint amount");
-        chessPool.withdrawUnderlying(amount);
         chess.safeTransfer(account, amount);
         minted = minted.add(amount);
     }
@@ -128,7 +126,8 @@ contract ChessSubSchedule is
         );
     }
 
-    /// @dev Receive CHESS emission from the main chain.
+    /// @dev Receive CHESS emission from the main chain. Createt the `totalAmount`of CHESS,
+    /// increasing the total supply.
     function _nonblockingLzReceive(
         uint16,
         bytes memory,
@@ -147,6 +146,7 @@ contract ChessSubSchedule is
             }
             availableSupply = availableSupply.add(totalAmount);
             _weeklySupplies[currentWeek] = totalAmount;
+            chessPool.withdrawUnderlying(totalAmount);
         } else {
             outstandingSupply_ = outstandingSupply_.add(totalAmount);
         }
