@@ -26,6 +26,7 @@ contract ChessSubSchedule is
     uint256[28] private _reservedSlots;
 
     event WeeklySupplyUpdated(uint256 week, uint256 newSupply, uint256 newOutstandingSupply);
+    event CrossChainSyncInitiated(uint256 week, uint256 veSupply, uint256 nextWeekVeSupply);
 
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
@@ -124,9 +125,11 @@ contract ChessSubSchedule is
             adapterParams,
             msg.value
         );
+
+        emit CrossChainSyncInitiated(week, supply, nextWeekSupply);
     }
 
-    /// @dev Receive CHESS emission from the main chain. Createt the `totalAmount`of CHESS,
+    /// @dev Receive CHESS emission from the main chain. Create the `totalAmount`of CHESS,
     /// increasing the total supply.
     function _nonblockingLzReceive(
         uint16,
