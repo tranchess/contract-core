@@ -23,7 +23,7 @@ contract ChessSubSchedule is
     UpgradeableNonblockingLzApp
 {
     /// @dev Reserved storage slots for future base contract upgrades
-    uint256[28] private _reservedSlots;
+    uint256[27] private _reservedSlots;
 
     event WeeklySupplyUpdated(uint256 week, uint256 newSupply, uint256 newOutstandingSupply);
     event CrossChainSyncInitiated(uint256 week, uint256 veSupply, uint256 nextWeekVeSupply);
