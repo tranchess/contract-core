@@ -22,6 +22,5 @@ export const GOVERNANCE_CONFIG = {
     LAUNCH_TIMESTAMP: endOfWeek(
         new Date(process.env.GOVERNANCE_LAUNCH_DATE ?? "1970-01-01").getTime() / 1000
     ),
-    ANYSWAP_ROUTER: process.env.ANYSWAP_ROUTER,
-    ANY_CALL_PROXY: process.env.ANY_CALL_PROXY,
+    LZ_ENDPOINT: process.env.LZ_ENDPOINT,
 };

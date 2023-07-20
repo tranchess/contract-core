@@ -11,7 +11,7 @@ export interface ChessScheduleRelayerAddresses extends Addresses {
 
 task("deploy_chess_schedule_relayer", "Deploy ChessScheduleRelayer")
     .addFlag("dry", "Get contract address without deploying it")
-    .addParam("chainId", "Sub chain ID")
+    .addParam("lzChainId", "LayerZero sub chain ID")
     .addParam("subSchedule", "Address of ChessSubSchedule on the sub chain")
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
@@ -28,25 +28,26 @@ task("deploy_chess_schedule_relayer", "Deploy ChessScheduleRelayer")
             return;
         }
 
-        const chainId = parseInt(args.chainId);
-        assert.ok(chainId > 0 && chainId < 1e9, "Invalid sub chain ID");
+        const lzChainId = parseInt(args.lzChainId);
+        assert.ok(lzChainId > 0 && lzChainId < 1e9, "Invalid sub chain ID");
         const subSchedule = args.subSchedule;
         const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
 
         const ChessScheduleRelayer = await ethers.getContractFactory("ChessScheduleRelayer");
         const relayer = await ChessScheduleRelayer.deploy(
-            chainId,
-            subSchedule,
+            lzChainId,
             governanceAddresses.chessSchedule,
             governanceAddresses.chessController,
-            governanceAddresses.anyswapChessPool,
-            GOVERNANCE_CONFIG.ANY_CALL_PROXY
+            governanceAddresses.chessPool,
+            GOVERNANCE_CONFIG.LZ_ENDPOINT
         );
         console.log(`ChessScheduleRelayer: ${relayer.address}`);
+
+        await relayer.setTrustedRemoteAddress(lzChainId, subSchedule);
 
         const addresses: ChessScheduleRelayerAddresses = {
             ...newAddresses(hre),
             relayer: relayer.address,
         };
-        saveAddressFile(hre, `chess_schedule_relayer_${chainId}`, addresses);
+        saveAddressFile(hre, `chess_schedule_relayer_${lzChainId}`, addresses);
     });

@@ -1,7 +1,7 @@
 import { task } from "hardhat/config";
 import { loadAddressFile } from "./address_file";
 import type { MockAddresses } from "./deploy_mock";
-import type { AnyswapAddresses } from "./dev_deploy_anyswap";
+import type { LzAddresses } from "./dev_deploy_lz";
 import { endOfWeek, GOVERNANCE_CONFIG } from "../config";
 
 task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (_args, hre) => {
@@ -15,11 +15,10 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     const mockAddresses = loadAddressFile<MockAddresses>(hre, "mock");
 
     console.log();
-    console.log("[+] Deploying Anyswap");
-    await hre.run("dev_deploy_anyswap");
-    const anyswapAddresses = loadAddressFile<AnyswapAddresses>(hre, "dev_anyswap");
-    GOVERNANCE_CONFIG.ANYSWAP_ROUTER = anyswapAddresses.router;
-    GOVERNANCE_CONFIG.ANY_CALL_PROXY = anyswapAddresses.anyCallProxy;
+    console.log("[+] Deploying LayerZero");
+    await hre.run("dev_deploy_lz");
+    const lzAddresses = loadAddressFile<LzAddresses>(hre, "dev_lz");
+    GOVERNANCE_CONFIG.LZ_ENDPOINT = lzAddresses.endpoint;
 
     console.log();
     console.log("[+] Deploying mock TwapOracle");
