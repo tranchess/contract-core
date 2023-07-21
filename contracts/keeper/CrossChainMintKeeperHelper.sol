@@ -5,28 +5,28 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@chainlink/contracts/src/v0.6/interfaces/KeeperCompatibleInterface.sol";
 import "../layerzero/interfaces/ILayerZeroEndpoint.sol";
 
-interface ISubSchedule {
+interface IScheduleRelayer {
     function lzEndpoint() external view returns (ILayerZeroEndpoint);
 
-    function mainLzChainID() external view returns (uint16);
+    function subLzChainID() external view returns (uint16);
 
-    function crossChainSync(bytes memory adapterParams) external payable;
+    function crossChainMint(bytes memory adapterParams) external payable;
 }
 
-contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
-    uint256 private constant DATA_LENGTH = 96; // abi.encode(uint256,uint256,uint256)
-    uint256 private constant SYNC_GAS_LIMIT = 90000;
+contract CrossChainMintKeeperHelper is KeeperCompatibleInterface, Ownable {
+    uint256 private constant DATA_LENGTH = 32; // abi.encode(uint256)
+    uint256 private constant MINT_GAS_LIMIT = 100000;
 
-    ISubSchedule public immutable subSchedule;
-    uint16 public immutable mainLzChainID;
+    IScheduleRelayer public immutable relayer;
+    uint16 public immutable subLzChainID;
     ILayerZeroEndpoint public immutable lzEndpoint;
 
     uint256 public lastTimestamp;
 
-    constructor(address subSchedule_) public {
-        subSchedule = ISubSchedule(subSchedule_);
-        mainLzChainID = ISubSchedule(subSchedule_).mainLzChainID();
-        lzEndpoint = ISubSchedule(subSchedule_).lzEndpoint();
+    constructor(address relayer_) public {
+        relayer = IScheduleRelayer(relayer_);
+        subLzChainID = IScheduleRelayer(relayer_).subLzChainID();
+        lzEndpoint = IScheduleRelayer(relayer_).lzEndpoint();
         _updateLastTimestamp(block.timestamp);
     }
 
@@ -55,14 +55,14 @@ contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
 
         (uint256 srcFees, ) =
             lzEndpoint.estimateFees(
-                mainLzChainID,
-                address(subSchedule),
+                subLzChainID,
+                address(relayer),
                 new bytes(DATA_LENGTH),
                 false,
-                abi.encodePacked(uint16(1), SYNC_GAS_LIMIT)
+                abi.encodePacked(uint16(1), MINT_GAS_LIMIT)
             );
         require(address(this).balance >= srcFees, "Not enough balance");
-        subSchedule.crossChainSync{value: srcFees}(abi.encodePacked(uint16(1), SYNC_GAS_LIMIT));
+        relayer.crossChainMint{value: srcFees}(abi.encodePacked(uint16(1), MINT_GAS_LIMIT));
 
         // Always skip to the lastest week
         _updateLastTimestamp(
