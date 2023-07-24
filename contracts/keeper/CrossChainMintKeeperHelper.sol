@@ -18,7 +18,7 @@ interface IScheduleRelayer {
 
 contract CrossChainMintKeeperHelper is KeeperCompatibleInterface, Ownable, CoreUtility {
     uint256 private constant DATA_LENGTH = 32; // abi.encode(uint256)
-    uint256 private constant MINT_GAS_LIMIT = 100000;
+    uint256 private constant MINT_GAS_LIMIT = 140000;
 
     IScheduleRelayer public immutable relayer;
     uint16 public immutable subLzChainID;
