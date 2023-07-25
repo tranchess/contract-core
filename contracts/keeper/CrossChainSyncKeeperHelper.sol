@@ -10,7 +10,7 @@ interface ISubSchedule {
 
     function mainLzChainID() external view returns (uint16);
 
-    function crossChainSync() external payable;
+    function crossChainSync(bytes memory adapterParams) external payable;
 }
 
 contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
@@ -62,7 +62,7 @@ contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
                 abi.encodePacked(uint16(1), SYNC_GAS_LIMIT)
             );
         require(address(this).balance >= srcFees, "Not enough balance");
-        subSchedule.crossChainSync{value: srcFees}();
+        subSchedule.crossChainSync{value: srcFees}(abi.encodePacked(uint16(1), SYNC_GAS_LIMIT));
 
         // Always skip to the lastest week
         _updateLastTimestamp(
