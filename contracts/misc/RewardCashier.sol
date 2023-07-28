@@ -38,10 +38,9 @@ contract RewardCashier is Ownable {
         uint256 reward = 0;
         for (uint256 i = 0; i < versions.length; i++) {
             if (i > 0) require(versions[i - 1] < versions[i], "Invalid version");
-            bytes32 leaf =
-                keccak256(
-                    abi.encodePacked(keccak256(abi.encode(msg.sender, amounts[i], versions[i])))
-                );
+            bytes32 leaf = keccak256(
+                abi.encodePacked(keccak256(abi.encode(msg.sender, amounts[i], versions[i])))
+            );
             require(MerkleProof.verify(merkleProofs[i], roots[versions[i]], leaf), "Invalid proof");
             reward = reward.add(amounts[i].multiplyDecimal(ratios[versions[i]]));
         }

@@ -28,11 +28,7 @@ contract ChessControllerV5 is IChessController, CoreUtility {
     /// @notice Start timestamp of the last trading week that has weights updated.
     uint256 public lastTimestamp;
 
-    constructor(
-        address fund0_,
-        uint256 guardedLaunchStart_,
-        address controllerBallot_
-    ) public {
+    constructor(address fund0_, uint256 guardedLaunchStart_, address controllerBallot_) public {
         fund0 = fund0_;
         guardedLaunchStart = guardedLaunchStart_;
         require(_endOfWeek(guardedLaunchStart_) == guardedLaunchStart_ + 1 weeks);
@@ -62,11 +58,10 @@ contract ChessControllerV5 is IChessController, CoreUtility {
     /// @notice Get Fund relative weight (not more than 1.0) normalized to 1e18
     ///         (e.g. 1.0 == 1e18).
     /// @return weight Value of relative weight normalized to 1e18
-    function getFundRelativeWeight(address fundAddress, uint256 timestamp)
-        external
-        override
-        returns (uint256)
-    {
+    function getFundRelativeWeight(
+        address fundAddress,
+        uint256 timestamp
+    ) external override returns (uint256) {
         require(timestamp <= block.timestamp, "Too soon");
         if (timestamp < guardedLaunchStart) {
             return fundAddress == fund0 ? 1e18 : 0;
@@ -81,12 +76,13 @@ contract ChessControllerV5 is IChessController, CoreUtility {
         return _updateFundWeight(weekTimestamp, fundAddress);
     }
 
-    function _updateFundWeight(uint256 weekTimestamp, address fundAddress)
-        private
-        returns (uint256 weight)
-    {
-        (uint256[] memory ballotWeights, address[] memory funds) =
-            IControllerBallot(controllerBallot).count(weekTimestamp);
+    function _updateFundWeight(
+        uint256 weekTimestamp,
+        address fundAddress
+    ) private returns (uint256 weight) {
+        (uint256[] memory ballotWeights, address[] memory funds) = IControllerBallot(
+            controllerBallot
+        ).count(weekTimestamp);
 
         uint256 totalWeight;
         for (uint256 i = 0; i < ballotWeights.length; i++) {

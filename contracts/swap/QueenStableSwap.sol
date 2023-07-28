@@ -30,10 +30,12 @@ contract QueenStableSwap is StableSwap, ITrancheIndexV2 {
             adminFeeRate_
         )
     {
-        require(10**(18 - quoteDecimals_) == IFundV3(fund_).underlyingDecimalMultiplier());
+        require(10 ** (18 - quoteDecimals_) == IFundV3(fund_).underlyingDecimalMultiplier());
     }
 
-    function _getRebalanceResult(uint256)
+    function _getRebalanceResult(
+        uint256
+    )
         internal
         view
         override
@@ -50,11 +52,9 @@ contract QueenStableSwap is StableSwap, ITrancheIndexV2 {
         return (baseBalance, quoteBalance, 0, 0, 0, 0, false);
     }
 
-    function _handleRebalance(uint256)
-        internal
-        override
-        returns (uint256 newBase, uint256 newQuote)
-    {
+    function _handleRebalance(
+        uint256
+    ) internal override returns (uint256 newBase, uint256 newQuote) {
         return (baseBalance, quoteBalance);
     }
 

@@ -111,12 +111,7 @@ contract ChessSubSchedule is
         uint256 supply = controllerBallot.totalSupplyAtWeek(week);
         uint256 nextWeekSupply = controllerBallot.totalSupplyAtWeek(week + 1 weeks);
 
-        _checkGasLimit(
-            mainLzChainID,
-            0, /*type*/
-            adapterParams,
-            0 /*extraGas*/
-        );
+        _checkGasLimit(mainLzChainID, 0 /*type*/, adapterParams, 0 /*extraGas*/);
         _lzSend(
             mainLzChainID,
             abi.encode(week, supply, nextWeekSupply),

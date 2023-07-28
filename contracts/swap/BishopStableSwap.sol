@@ -48,7 +48,9 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
         _;
     }
 
-    function _getRebalanceResult(uint256 latestVersion)
+    function _getRebalanceResult(
+        uint256 latestVersion
+    )
         internal
         view
         override
@@ -95,11 +97,9 @@ contract BishopStableSwap is StableSwap, ITrancheIndexV2 {
         }
     }
 
-    function _handleRebalance(uint256 latestVersion)
-        internal
-        override
-        returns (uint256 newBase, uint256 newQuote)
-    {
+    function _handleRebalance(
+        uint256 latestVersion
+    ) internal override returns (uint256 newBase, uint256 newQuote) {
         uint256 excessiveQ;
         uint256 excessiveB;
         uint256 excessiveR;

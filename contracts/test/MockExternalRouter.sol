@@ -12,20 +12,15 @@ contract MockExternalRouter {
     // keccak256(path) => amountIn => amountOut
     mapping(bytes32 => mapping(uint256 => uint256)) public nextOut;
 
-    function setNextSwap(
-        address[] memory path,
-        uint256 amountIn,
-        uint256 amountOut
-    ) external {
+    function setNextSwap(address[] memory path, uint256 amountIn, uint256 amountOut) external {
         nextIn[keccak256(abi.encode(path))][amountOut] = amountIn;
         nextOut[keccak256(abi.encode(path))][amountIn] = amountOut;
     }
 
-    function getAmountsIn(uint256 amountOut, address[] calldata path)
-        external
-        view
-        returns (uint256[] memory amounts)
-    {
+    function getAmountsIn(
+        uint256 amountOut,
+        address[] calldata path
+    ) external view returns (uint256[] memory amounts) {
         uint256 amountIn = nextIn[keccak256(abi.encode(path))][amountOut];
         require(amountIn != 0, "No mock for the swap");
         amounts = new uint256[](path.length);

@@ -55,14 +55,7 @@ interface IFundV3 {
 
     function trancheBalanceOf(uint256 tranche, address account) external view returns (uint256);
 
-    function trancheAllBalanceOf(address account)
-        external
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        );
+    function trancheAllBalanceOf(address account) external view returns (uint256, uint256, uint256);
 
     function trancheBalanceVersion(address account) external view returns (uint256);
 
@@ -72,10 +65,10 @@ interface IFundV3 {
         address spender
     ) external view returns (uint256);
 
-    function trancheAllowanceVersion(address owner, address spender)
-        external
-        view
-        returns (uint256);
+    function trancheAllowanceVersion(
+        address owner,
+        address spender
+    ) external view returns (uint256);
 
     function trancheTransfer(
         uint256 tranche,
@@ -123,28 +116,14 @@ interface IFundV3 {
 
     function historicalNavs(uint256 timestamp) external view returns (uint256 navB, uint256 navR);
 
-    function extrapolateNav(uint256 price)
-        external
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        );
+    function extrapolateNav(uint256 price) external view returns (uint256, uint256, uint256);
 
     function doRebalance(
         uint256 amountQ,
         uint256 amountB,
         uint256 amountR,
         uint256 index
-    )
-        external
-        view
-        returns (
-            uint256 newAmountQ,
-            uint256 newAmountB,
-            uint256 newAmountR
-        );
+    ) external view returns (uint256 newAmountQ, uint256 newAmountB, uint256 newAmountR);
 
     function batchRebalance(
         uint256 amountQ,
@@ -152,28 +131,13 @@ interface IFundV3 {
         uint256 amountR,
         uint256 fromIndex,
         uint256 toIndex
-    )
-        external
-        view
-        returns (
-            uint256 newAmountQ,
-            uint256 newAmountB,
-            uint256 newAmountR
-        );
+    ) external view returns (uint256 newAmountQ, uint256 newAmountB, uint256 newAmountR);
 
     function refreshBalance(address account, uint256 targetVersion) external;
 
-    function refreshAllowance(
-        address owner,
-        address spender,
-        uint256 targetVersion
-    ) external;
+    function refreshAllowance(address owner, address spender, uint256 targetVersion) external;
 
-    function shareTransfer(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) external;
+    function shareTransfer(address sender, address recipient, uint256 amount) external;
 
     function shareTransferFrom(
         address spender,
@@ -194,11 +158,7 @@ interface IFundV3 {
         uint256 subtractedValue
     ) external returns (uint256 newAllowance);
 
-    function shareApprove(
-        address owner,
-        address spender,
-        uint256 amount
-    ) external;
+    function shareApprove(address owner, address spender, uint256 amount) external;
 
     function historicalUnderlying(uint256 timestamp) external view returns (uint256);
 

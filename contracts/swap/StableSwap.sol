@@ -104,7 +104,7 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
         baseTranche = baseTranche_;
         quoteAddress = quoteAddress_;
         require(quoteDecimals_ <= 18, "Quote asset decimals larger than 18");
-        _quoteDecimalMultiplier = 10**(18 - quoteDecimals_);
+        _quoteDecimalMultiplier = 10 ** (18 - quoteDecimals_);
 
         require(ampl_ > 0 && ampl_ < AMPL_MAX_VALUE, "Invalid A");
         amplRampEnd = ampl_;
@@ -190,8 +190,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     function getQuoteOut(uint256 baseIn) external view override returns (uint256 quoteOut) {
-        (uint256 oldBase, uint256 oldQuote, , , , , ) =
-            _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 oldBase, uint256 oldQuote, , , , , ) = _getRebalanceResult(
+            fund.getRebalanceSize()
+        );
         uint256 newBase = oldBase.add(baseIn);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
@@ -204,8 +205,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     function getQuoteIn(uint256 baseOut) external view override returns (uint256 quoteIn) {
-        (uint256 oldBase, uint256 oldQuote, , , , , ) =
-            _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 oldBase, uint256 oldQuote, , , , , ) = _getRebalanceResult(
+            fund.getRebalanceSize()
+        );
         uint256 newBase = oldBase.sub(baseOut);
         uint256 ampl = getAmpl();
         uint256 oraclePrice = getOraclePrice();
@@ -219,8 +221,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     function getBaseOut(uint256 quoteIn) external view override returns (uint256 baseOut) {
-        (uint256 oldBase, uint256 oldQuote, , , , , ) =
-            _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 oldBase, uint256 oldQuote, , , , , ) = _getRebalanceResult(
+            fund.getRebalanceSize()
+        );
         // Round down input after fee
         uint256 quoteInAfterFee = quoteIn.multiplyDecimal(1e18 - feeRate);
         uint256 newQuote = oldQuote.add(quoteInAfterFee);
@@ -233,8 +236,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     function getBaseIn(uint256 quoteOut) external view override returns (uint256 baseIn) {
-        (uint256 oldBase, uint256 oldQuote, , , , , ) =
-            _getRebalanceResult(fund.getRebalanceSize());
+        (uint256 oldBase, uint256 oldQuote, , , , , ) = _getRebalanceResult(
+            fund.getRebalanceSize()
+        );
         uint256 feeRate_ = feeRate;
         // Round up output before fee
         uint256 quoteOutBeforeFee = quoteOut.mul(1e18).add(1e18 - feeRate_ - 1) / (1e18 - feeRate_);
@@ -339,14 +343,10 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     /// @param version The latest rebalance version
     /// @param recipient Recipient of minted LP tokens
     /// @param lpOut Amount of minted LP tokens
-    function addLiquidity(uint256 version, address recipient)
-        external
-        override
-        nonReentrant
-        checkVersion(version)
-        whenNotPaused
-        returns (uint256 lpOut)
-    {
+    function addLiquidity(
+        uint256 version,
+        address recipient
+    ) external override nonReentrant checkVersion(version) whenNotPaused returns (uint256 lpOut) {
         (uint256 oldBase, uint256 oldQuote) = _handleRebalance(version);
         uint256 newBase = fund.trancheBalanceOf(baseTranche, address(this));
         uint256 newQuote = _getNewQuoteBalance();
@@ -376,8 +376,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
                 // New invariant before charging fee
                 uint256 d1 = _getD(newBase, newQuote, ampl, oraclePrice);
                 uint256 idealQuote = d1.mul(oldQuote) / d0;
-                uint256 difference =
-                    idealQuote > newQuote ? idealQuote - newQuote : newQuote - idealQuote;
+                uint256 difference = idealQuote > newQuote
+                    ? idealQuote - newQuote
+                    : newQuote - idealQuote;
                 fee = difference.multiplyDecimal(feeRate);
             }
             adminFee = fee.multiplyDecimal(adminFeeRate);
@@ -738,7 +739,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     }
 
     /// @dev Check if the user-specified version is correct.
-    modifier checkVersion(uint256 version) virtual {_;}
+    modifier checkVersion(uint256 version) virtual {
+        _;
+    }
 
     /// @dev Compute the new base and quote amount after rebalanced to the latest version.
     ///      If any tokens should be distributed to LP holders, their amounts are also returned.
@@ -753,7 +756,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     /// @return excessiveR Amount of ROOK that should be distributed to LP holders due to rebalance
     /// @return excessiveQuote Amount of quote tokens that should be distributed to LP holders due to rebalance
     /// @return isRebalanced Whether the stored base and quote amount are rebalanced
-    function _getRebalanceResult(uint256 latestVersion)
+    function _getRebalanceResult(
+        uint256 latestVersion
+    )
         internal
         view
         virtual
@@ -775,10 +780,9 @@ abstract contract StableSwap is IStableSwap, Ownable, ReentrancyGuard, ManagedPa
     /// @param latestVersion The latest rebalance version
     /// @return newBase Amount of stored base tokens after rebalance
     /// @return newQuote Amount of stored quote tokens after rebalance
-    function _handleRebalance(uint256 latestVersion)
-        internal
-        virtual
-        returns (uint256 newBase, uint256 newQuote);
+    function _handleRebalance(
+        uint256 latestVersion
+    ) internal virtual returns (uint256 newBase, uint256 newQuote);
 
     /// @notice Get the base token price from the price oracle. The returned price is normalized
     ///         to 18 decimal places.

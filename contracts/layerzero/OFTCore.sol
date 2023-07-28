@@ -18,13 +18,9 @@ abstract contract OFTCore is NonblockingLzApp, ERC165, IOFTCore {
 
     constructor(address _lzEndpoint) public NonblockingLzApp(_lzEndpoint) {}
 
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        virtual
-        override(ERC165, IERC165)
-        returns (bool)
-    {
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view virtual override(ERC165, IERC165) returns (bool) {
         return interfaceId == type(IOFTCore).interfaceId || super.supportsInterface(interfaceId);
     }
 
@@ -116,8 +112,10 @@ abstract contract OFTCore is NonblockingLzApp, ERC165, IOFTCore {
         uint64,
         bytes memory _payload
     ) internal virtual {
-        (, bytes memory toAddressBytes, uint256 amount) =
-            abi.decode(_payload, (uint16, bytes, uint256));
+        (, bytes memory toAddressBytes, uint256 amount) = abi.decode(
+            _payload,
+            (uint16, bytes, uint256)
+        );
 
         address to = toAddressBytes.toAddress(0);
 

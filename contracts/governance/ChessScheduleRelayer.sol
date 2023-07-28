@@ -49,10 +49,9 @@ contract ChessScheduleRelayer is CoreUtility, NonblockingLzApp {
         uint256 startWeek = _endOfWeek(block.timestamp) - 1 weeks;
         require(startWeek > lastWeek, "Not a new week");
         lastWeek = startWeek;
-        uint256 amount =
-            chessSchedule.getWeeklySupply(startWeek).multiplyDecimal(
-                chessController.getFundRelativeWeight(address(this), startWeek)
-            );
+        uint256 amount = chessSchedule.getWeeklySupply(startWeek).multiplyDecimal(
+            chessController.getFundRelativeWeight(address(this), startWeek)
+        );
         if (amount != 0) {
             chessSchedule.mint(chessPool, amount);
         }
@@ -63,12 +62,7 @@ contract ChessScheduleRelayer is CoreUtility, NonblockingLzApp {
             amount += balance;
         }
         if (amount != 0) {
-            _checkGasLimit(
-                subLzChainID,
-                0, /*type*/
-                adapterParams,
-                0 /*extraGas*/
-            );
+            _checkGasLimit(subLzChainID, 0 /*type*/, adapterParams, 0 /*extraGas*/);
             _lzSend(
                 subLzChainID,
                 abi.encode(amount),
@@ -87,8 +81,10 @@ contract ChessScheduleRelayer is CoreUtility, NonblockingLzApp {
         uint64,
         bytes memory data
     ) internal override {
-        (uint256 week, uint256 supply, uint256 nextWeekSupply) =
-            abi.decode(data, (uint256, uint256, uint256));
+        (uint256 week, uint256 supply, uint256 nextWeekSupply) = abi.decode(
+            data,
+            (uint256, uint256, uint256)
+        );
         veSupplyPerWeek[week] = supply;
         veSupplyPerWeek[week + 1 weeks] = nextWeekSupply;
         emit CrossChainSynced(subLzChainID, week, supply);

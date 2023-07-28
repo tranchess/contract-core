@@ -40,17 +40,17 @@ interface ILayerZeroEndpoint is ILayerZeroUserApplicationConfig {
     // @notice get the inboundNonce of a lzApp from a source chain which could be EVM or non-EVM chain
     // @param _srcChainId - the source chain identifier
     // @param _srcAddress - the source chain contract address
-    function getInboundNonce(uint16 _srcChainId, bytes calldata _srcAddress)
-        external
-        view
-        returns (uint64);
+    function getInboundNonce(
+        uint16 _srcChainId,
+        bytes calldata _srcAddress
+    ) external view returns (uint64);
 
     // @notice get the outboundNonce from this source chain which, consequently, is always an EVM
     // @param _srcAddress - the source chain contract address
-    function getOutboundNonce(uint16 _dstChainId, address _srcAddress)
-        external
-        view
-        returns (uint64);
+    function getOutboundNonce(
+        uint16 _dstChainId,
+        address _srcAddress
+    ) external view returns (uint64);
 
     // @notice gets a quote in source native gas, for the amount that send() requires to pay for message delivery
     // @param _dstChainId - the destination chain identifier
@@ -82,10 +82,10 @@ interface ILayerZeroEndpoint is ILayerZeroUserApplicationConfig {
     // @notice query if any STORED payload (message blocking) at the endpoint.
     // @param _srcChainId - the source chain identifier
     // @param _srcAddress - the source chain contract address
-    function hasStoredPayload(uint16 _srcChainId, bytes calldata _srcAddress)
-        external
-        view
-        returns (bool);
+    function hasStoredPayload(
+        uint16 _srcChainId,
+        bytes calldata _srcAddress
+    ) external view returns (bool);
 
     // @notice query if the _libraryAddress is valid for sending msgs.
     // @param _userApplication - the user app address on this EVM chain

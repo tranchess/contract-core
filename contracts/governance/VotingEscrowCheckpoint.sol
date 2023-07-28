@@ -45,11 +45,7 @@ abstract contract VotingEscrowCheckpoint is CoreUtility {
         mapping(uint256 => uint256) storage veSupplyPerWeek
     )
         internal
-        returns (
-            uint256 newCheckpointWeek,
-            uint256 newNextWeekSupply,
-            uint256 newTotalLocked
-        )
+        returns (uint256 newCheckpointWeek, uint256 newNextWeekSupply, uint256 newTotalLocked)
     {
         uint256 nextWeek = _endOfWeek(block.timestamp);
         for (uint256 w = checkpointWeek + 1 weeks; w < nextWeek; w += 1 weeks) {

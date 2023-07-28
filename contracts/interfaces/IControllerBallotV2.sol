@@ -6,10 +6,9 @@ interface IControllerBallotV2 {
 
     function sumAtWeek(address pool, uint256 week) external view returns (uint256);
 
-    function count(uint256 week)
-        external
-        view
-        returns (uint256[] memory sums, address[] memory funds);
+    function count(
+        uint256 week
+    ) external view returns (uint256[] memory sums, address[] memory funds);
 
     function cast(uint256[] memory weights) external;
 }

@@ -86,11 +86,7 @@ contract AnyswapChessPool is IAnyswapV6ERC20, ERC20, ChessRoles, Ownable {
         return _withdraw(from, amount, to);
     }
 
-    function _withdraw(
-        address from,
-        uint256 amount,
-        address to
-    ) internal returns (uint256) {
+    function _withdraw(address from, uint256 amount, address to) internal returns (uint256) {
         _burn(from, amount);
         IERC20(underlying).safeTransfer(to, amount);
         return amount;

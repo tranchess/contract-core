@@ -53,43 +53,19 @@ library LowLevelDecoder {
         return abi.decode(data, (uint256, uint256));
     }
 
-    function toUintUintUint(bytes memory data)
-        internal
-        pure
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
-    {
+    function toUintUintUint(bytes memory data) internal pure returns (uint256, uint256, uint256) {
         return abi.decode(data, (uint256, uint256, uint256));
     }
 
-    function toUintUintUintUint(bytes memory data)
-        internal
-        pure
-        returns (
-            uint256,
-            uint256,
-            uint256,
-            uint256
-        )
-    {
+    function toUintUintUintUint(
+        bytes memory data
+    ) internal pure returns (uint256, uint256, uint256, uint256) {
         return abi.decode(data, (uint256, uint256, uint256, uint256));
     }
 
-    function toUintUintUintUintUintUint(bytes memory data)
-        internal
-        pure
-        returns (
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256
-        )
-    {
+    function toUintUintUintUintUintUint(
+        bytes memory data
+    ) internal pure returns (uint256, uint256, uint256, uint256, uint256, uint256) {
         return abi.decode(data, (uint256, uint256, uint256, uint256, uint256, uint256));
     }
 
@@ -441,26 +417,24 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         address shareStaking,
         address account
     ) public returns (FundAllData memory data) {
-        address fund =
-            primaryMarketRouter
-                .get(abi.encodeWithSelector(PrimaryMarketRouter(0).fund.selector))
-                .toAddr();
+        address fund = primaryMarketRouter
+            .get(abi.encodeWithSelector(PrimaryMarketRouter(0).fund.selector))
+            .toAddr();
         data.fund = getFundData(fund);
 
-        address primaryMarket =
-            primaryMarketRouter
-                .get(abi.encodeWithSelector(PrimaryMarketRouter(0).primaryMarket.selector))
-                .toAddr();
+        address primaryMarket = primaryMarketRouter
+            .get(abi.encodeWithSelector(PrimaryMarketRouter(0).primaryMarket.selector))
+            .toAddr();
         data.primaryMarket = getPrimaryMarketData(primaryMarket);
 
         data.shareStaking = getShareStakingData(shareStaking, data.fund.splitRatio, account);
-        address underlyingToken =
-            fund.get(abi.encodeWithSelector(FundV3(0).tokenUnderlying.selector)).toAddr();
+        address underlyingToken = fund
+            .get(abi.encodeWithSelector(FundV3(0).tokenUnderlying.selector))
+            .toAddr();
 
         if (swapRouter != address(0)) {
-            address bishopStableSwap =
-                swapRouter
-                    .get(
+            address bishopStableSwap = swapRouter
+                .get(
                     abi.encodeWithSelector(
                         SwapRouter.getSwap.selector,
                         fund
@@ -469,12 +443,11 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
                         bishopQuoteToken
                     )
                 )
-                    .toAddr();
+                .toAddr();
             data.bishopStableSwap = getStableSwapData(bishopStableSwap, account);
 
-            address queenStableSwap =
-                swapRouter
-                    .get(
+            address queenStableSwap = swapRouter
+                .get(
                     abi.encodeWithSelector(
                         SwapRouter.getSwap.selector,
                         fund
@@ -483,7 +456,7 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
                         underlyingToken
                     )
                 )
-                    .toAddr();
+                .toAddr();
             data.queenStableSwap = getStableSwapData(queenStableSwap, account);
         }
 
@@ -506,78 +479,89 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             .toUint();
         data.account.allowance.primaryMarketRouterTrancheQ = fund
             .get(
-            abi.encodeWithSelector(
-                FundV3.trancheAllowance.selector,
-                TRANCHE_Q,
-                account,
-                primaryMarketRouter
+                abi.encodeWithSelector(
+                    FundV3.trancheAllowance.selector,
+                    TRANCHE_Q,
+                    account,
+                    primaryMarketRouter
+                )
             )
-        )
             .toUint();
         data.account.allowance.swapRouterUnderlying = underlyingToken
             .get(abi.encodeWithSelector(IERC20.allowance.selector, account, swapRouter))
             .toUint();
         data.account.allowance.swapRouterTrancheQ = fund
             .get(
-            abi.encodeWithSelector(FundV3.trancheAllowance.selector, TRANCHE_Q, account, swapRouter)
-        )
+                abi.encodeWithSelector(
+                    FundV3.trancheAllowance.selector,
+                    TRANCHE_Q,
+                    account,
+                    swapRouter
+                )
+            )
             .toUint();
         data.account.allowance.swapRouterTrancheB = fund
             .get(
-            abi.encodeWithSelector(FundV3.trancheAllowance.selector, TRANCHE_B, account, swapRouter)
-        )
+                abi.encodeWithSelector(
+                    FundV3.trancheAllowance.selector,
+                    TRANCHE_B,
+                    account,
+                    swapRouter
+                )
+            )
             .toUint();
         data.account.allowance.swapRouterQuote = bishopQuoteToken
             .get(abi.encodeWithSelector(IERC20.allowance.selector, account, swapRouter))
             .toUint();
         data.account.allowance.flashSwapRouterTrancheR = fund
             .get(
-            abi.encodeWithSelector(
-                FundV3.trancheAllowance.selector,
-                TRANCHE_R,
-                account,
-                flashSwapRouter
+                abi.encodeWithSelector(
+                    FundV3.trancheAllowance.selector,
+                    TRANCHE_R,
+                    account,
+                    flashSwapRouter
+                )
             )
-        )
             .toUint();
         data.account.allowance.flashSwapRouterQuote = bishopQuoteToken
             .get(abi.encodeWithSelector(IERC20.allowance.selector, account, flashSwapRouter))
             .toUint();
         data.account.allowance.shareStakingTrancheQ = fund
             .get(
-            abi.encodeWithSelector(
-                FundV3.trancheAllowance.selector,
-                TRANCHE_Q,
-                account,
-                shareStaking
+                abi.encodeWithSelector(
+                    FundV3.trancheAllowance.selector,
+                    TRANCHE_Q,
+                    account,
+                    shareStaking
+                )
             )
-        )
             .toUint();
         data.account.allowance.shareStakingTrancheB = fund
             .get(
-            abi.encodeWithSelector(
-                FundV3.trancheAllowance.selector,
-                TRANCHE_B,
-                account,
-                shareStaking
+                abi.encodeWithSelector(
+                    FundV3.trancheAllowance.selector,
+                    TRANCHE_B,
+                    account,
+                    shareStaking
+                )
             )
-        )
             .toUint();
         data.account.allowance.shareStakingTrancheR = fund
             .get(
-            abi.encodeWithSelector(
-                FundV3.trancheAllowance.selector,
-                TRANCHE_R,
-                account,
-                shareStaking
+                abi.encodeWithSelector(
+                    FundV3.trancheAllowance.selector,
+                    TRANCHE_R,
+                    account,
+                    shareStaking
+                )
             )
-        )
             .toUint();
     }
 
     function getFundData(address fund) public view returns (FundData memory data) {
-        address twapOracle =
-            fund.get(abi.encodeWithSelector(FundV3(0).twapOracle.selector)).toAddr();
+        address twapOracle = fund
+            .get(abi.encodeWithSelector(FundV3(0).twapOracle.selector))
+            .toAddr();
 
         data.isFundActive = fund
             .get(abi.encodeWithSelector(FundV3.isFundActive.selector, block.timestamp))
@@ -618,16 +602,19 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         if (data.splitRatio != 0) {
             (, data.navB, data.navR) = fund
                 .get(
-                abi.encodeWithSelector(FundV3.extrapolateNav.selector, data.latestUnderlyingPrice)
-            )
+                    abi.encodeWithSelector(
+                        FundV3.extrapolateNav.selector,
+                        data.latestUnderlyingPrice
+                    )
+                )
                 .toUintUintUint();
             data.currentInterestRate = fund
                 .get(
-                abi.encodeWithSelector(
-                    FundV3(0).historicalInterestRate.selector,
-                    data.currentDay - 1 days
+                    abi.encodeWithSelector(
+                        FundV3(0).historicalInterestRate.selector,
+                        data.currentDay - 1 days
+                    )
                 )
-            )
                 .toUint();
         }
         (
@@ -637,32 +624,32 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             data.lastRebalance.timestamp
         ) = fund
             .get(
-            abi.encodeWithSelector(
-                FundV3.getRebalance.selector,
-                data.rebalanceSize == 0 ? 0 : data.rebalanceSize - 1
+                abi.encodeWithSelector(
+                    FundV3.getRebalance.selector,
+                    data.rebalanceSize == 0 ? 0 : data.rebalanceSize - 1
+                )
             )
-        )
             .toUintUintUintUint();
     }
 
     function getLatestPrice(address twapOracle) public view returns (uint256) {
-        (bool success, bytes memory encodedPrice) =
-            twapOracle.staticcall(abi.encodeWithSelector(ITwapOracleV2.getLatest.selector));
+        (bool success, bytes memory encodedPrice) = twapOracle.staticcall(
+            abi.encodeWithSelector(ITwapOracleV2.getLatest.selector)
+        );
         if (success) {
             return abi.decode(encodedPrice, (uint256));
         } else {
             uint256 lastEpoch = (block.timestamp / 30 minutes) * 30 minutes;
             for (uint256 i = 0; i < 48; i++) {
                 // Search for the latest TWAP
-                uint256 twap =
-                    twapOracle
-                        .get(
+                uint256 twap = twapOracle
+                    .get(
                         abi.encodeWithSelector(
                             ITwapOracle.getTwap.selector,
                             lastEpoch - i * 30 minutes
                         )
                     )
-                        .toUint();
+                    .toUint();
                 if (twap != 0) {
                     return twap;
                 }
@@ -670,11 +657,9 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         }
     }
 
-    function getPrimaryMarketData(address primaryMarket)
-        public
-        view
-        returns (PrimaryMarketData memory data)
-    {
+    function getPrimaryMarketData(
+        address primaryMarket
+    ) public view returns (PrimaryMarketData memory data) {
         data.fundCap = primaryMarket
             .get(abi.encodeWithSelector(PrimaryMarketV3(0).fundCap.selector))
             .toUint();
@@ -711,14 +696,14 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             .toUint();
         data.weightedSupply = shareStaking
             .get(
-            abi.encodeWithSelector(
-                ShareStaking.weightedBalance.selector,
-                data.totalSupplyQ,
-                data.totalSupplyB,
-                data.totalSupplyR,
-                splitRatio
+                abi.encodeWithSelector(
+                    ShareStaking.weightedBalance.selector,
+                    data.totalSupplyQ,
+                    data.totalSupplyB,
+                    data.totalSupplyR,
+                    splitRatio
+                )
             )
-        )
             .toUint();
         data.workingSupply = shareStaking
             .get(abi.encodeWithSelector(ShareStaking.workingSupply.selector))
@@ -737,31 +722,33 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             .toUint();
         data.account.weightedBalance = shareStaking
             .get(
-            abi.encodeWithSelector(
-                ShareStaking.weightedBalance.selector,
-                data.account.balanceQ,
-                data.account.balanceB,
-                data.account.balanceR,
-                splitRatio
+                abi.encodeWithSelector(
+                    ShareStaking.weightedBalance.selector,
+                    data.account.balanceQ,
+                    data.account.balanceB,
+                    data.account.balanceR,
+                    splitRatio
+                )
             )
-        )
             .toUint();
         data.account.workingBalance = shareStaking
             .get(abi.encodeWithSelector(ShareStaking.workingBalanceOf.selector, account))
             .toUint();
     }
 
-    function getStableSwapData(address stableSwap, address account)
-        public
-        returns (StableSwapData memory data)
-    {
+    function getStableSwapData(
+        address stableSwap,
+        address account
+    ) public returns (StableSwapData memory data) {
         if (stableSwap == address(0)) {
             return data;
         }
-        address lp =
-            stableSwap.get(abi.encodeWithSelector(StableSwap(0).lpToken.selector)).toAddr();
-        address swapBonus =
-            lp.get(abi.encodeWithSelector(LiquidityGauge(0).swapBonus.selector)).toAddr();
+        address lp = stableSwap
+            .get(abi.encodeWithSelector(StableSwap(0).lpToken.selector))
+            .toAddr();
+        address swapBonus = lp
+            .get(abi.encodeWithSelector(LiquidityGauge(0).swapBonus.selector))
+            .toAddr();
 
         // Trigger checkpoint
         (
@@ -791,8 +778,9 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         data.lpTotalSupply = lp
             .get(abi.encodeWithSelector(LiquidityGauge(0).totalSupply.selector))
             .toUint();
-        (bool success, bytes memory encodedOraclePrice) =
-            stableSwap.staticcall(abi.encodeWithSelector(StableSwap.getOraclePrice.selector));
+        (bool success, bytes memory encodedOraclePrice) = stableSwap.staticcall(
+            abi.encodeWithSelector(StableSwap.getOraclePrice.selector)
+        );
         if (success) {
             data.currentD = stableSwap
                 .get(abi.encodeWithSelector(StableSwap.getCurrentD.selector))
@@ -813,8 +801,9 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             .get(abi.encodeWithSelector(StableSwap.allBalances.selector))
             .toUintUint();
         data.chessRate = lp.get(abi.encodeWithSelector(LiquidityGauge.getRate.selector)).toUint();
-        uint256 lpVersion =
-            lp.get(abi.encodeWithSelector(LiquidityGauge(0).latestVersion.selector)).toUint();
+        uint256 lpVersion = lp
+            .get(abi.encodeWithSelector(LiquidityGauge(0).latestVersion.selector))
+            .toUint();
         (
             data.lastDistributionQ,
             data.lastDistributionB,
@@ -825,8 +814,11 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             .toUintUintUintUint();
         data.lastDistributionTotalSupply = lp
             .get(
-            abi.encodeWithSelector(LiquidityGauge(0).distributionTotalSupplies.selector, lpVersion)
-        )
+                abi.encodeWithSelector(
+                    LiquidityGauge(0).distributionTotalSupplies.selector,
+                    lpVersion
+                )
+            )
             .toUint();
         data.bonusToken = swapBonus
             .get(abi.encodeWithSelector(SwapBonus(0).bonusToken.selector))
@@ -855,8 +847,11 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             .toUint();
         data.votingEscrow.tradingWeekTotalSupply = votingEscrow
             .get(
-            abi.encodeWithSelector(VotingEscrowV2.totalSupplyAtTimestamp.selector, blockCurrentWeek)
-        )
+                abi.encodeWithSelector(
+                    VotingEscrowV2.totalSupplyAtTimestamp.selector,
+                    blockCurrentWeek
+                )
+            )
             .toUint();
         data.votingEscrow.crossChainFees = new AnyCallSrcFee[](_otherChainCount);
         for (uint256 i = 0; i < _otherChainCount; i++) {
@@ -864,13 +859,13 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             fee.chainId = otherChainIds[i];
             fee.fee = anyCallProxy
                 .get(
-                abi.encodeWithSignature(
-                    "calcSrcFees(address,uint256,uint256)",
-                    votingEscrow,
-                    fee.chainId,
-                    96
+                    abi.encodeWithSignature(
+                        "calcSrcFees(address,uint256,uint256)",
+                        votingEscrow,
+                        fee.chainId,
+                        96
+                    )
                 )
-            )
                 .toUint();
         }
         (data.votingEscrow.account.amount, data.votingEscrow.account.unlockTime) = votingEscrow
@@ -879,24 +874,27 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
 
         data.interestRateBallot.tradingWeekTotalSupply = interestRateBallot
             .get(
-            abi.encodeWithSelector(
-                InterestRateBallotV2.totalSupplyAtWeek.selector,
-                blockCurrentWeek
+                abi.encodeWithSelector(
+                    InterestRateBallotV2.totalSupplyAtWeek.selector,
+                    blockCurrentWeek
+                )
             )
-        )
             .toUint();
         data.interestRateBallot.tradingWeekAverage = interestRateBallot
             .get(
-            abi.encodeWithSelector(InterestRateBallotV2.averageAtWeek.selector, blockCurrentWeek)
-        )
+                abi.encodeWithSelector(
+                    InterestRateBallotV2.averageAtWeek.selector,
+                    blockCurrentWeek
+                )
+            )
             .toUint();
         data.interestRateBallot.lastWeekAverage = interestRateBallot
             .get(
-            abi.encodeWithSelector(
-                InterestRateBallotV2.averageAtWeek.selector,
-                blockCurrentWeek - 1 weeks
+                abi.encodeWithSelector(
+                    InterestRateBallotV2.averageAtWeek.selector,
+                    blockCurrentWeek - 1 weeks
+                )
             )
-        )
             .toUint();
         (
             data.interestRateBallot.account.amount,
@@ -917,11 +915,9 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             .toUint();
     }
 
-    function getControllerBallotData(address account)
-        public
-        view
-        returns (ControllerBallotData memory data)
-    {
+    function getControllerBallotData(
+        address account
+    ) public view returns (ControllerBallotData memory data) {
         data.pools = controllerBallot
             .get(abi.encodeWithSelector(ControllerBallotV2.getPools.selector))
             .toAddrs();
@@ -936,34 +932,38 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             address pool = data.pools[i];
             data.currentSums[i] = controllerBallot
                 .get(
-                abi.encodeWithSelector(
-                    ControllerBallotV2.sumAtWeek.selector,
-                    pool,
-                    blockCurrentWeek
+                    abi.encodeWithSelector(
+                        ControllerBallotV2.sumAtWeek.selector,
+                        pool,
+                        blockCurrentWeek
+                    )
                 )
-            )
                 .toUint();
             data.lastWeekSums[i] = controllerBallot
                 .get(
-                abi.encodeWithSelector(
-                    ControllerBallotV2.sumAtWeek.selector,
-                    pool,
-                    blockCurrentWeek - 1 weeks
+                    abi.encodeWithSelector(
+                        ControllerBallotV2.sumAtWeek.selector,
+                        pool,
+                        blockCurrentWeek - 1 weeks
+                    )
                 )
-            )
                 .toUint();
             data.account.weights[i] = controllerBallot
                 .get(
-                abi.encodeWithSelector(ControllerBallotV2(0).userWeights.selector, account, pool)
-            )
+                    abi.encodeWithSelector(
+                        ControllerBallotV2(0).userWeights.selector,
+                        account,
+                        pool
+                    )
+                )
                 .toUint();
         }
     }
 
-    function getFeeDistributorData(address feeDistributor, address account)
-        public
-        returns (FeeDistributorData memory data)
-    {
+    function getFeeDistributorData(
+        address feeDistributor,
+        address account
+    ) public returns (FeeDistributorData memory data) {
         data.account.claimableRewards = feeDistributor
             .post(abi.encodeWithSelector(FeeDistributor.userCheckpoint.selector, account))
             .toUint();
@@ -976,24 +976,27 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         uint256 blockCurrentWeek = _endOfWeek(block.timestamp);
         data.currentRewards = feeDistributor
             .get(
-            abi.encodeWithSelector(
-                FeeDistributor(0).rewardsPerWeek.selector,
-                blockCurrentWeek - 1 weeks
+                abi.encodeWithSelector(
+                    FeeDistributor(0).rewardsPerWeek.selector,
+                    blockCurrentWeek - 1 weeks
+                )
             )
-        )
             .toUint();
         data.currentSupply = feeDistributor
             .get(
-            abi.encodeWithSelector(
-                FeeDistributor(0).veSupplyPerWeek.selector,
-                blockCurrentWeek - 1 weeks
+                abi.encodeWithSelector(
+                    FeeDistributor(0).veSupplyPerWeek.selector,
+                    blockCurrentWeek - 1 weeks
+                )
             )
-        )
             .toUint();
         data.tradingWeekTotalSupply = feeDistributor
             .get(
-            abi.encodeWithSelector(FeeDistributor.totalSupplyAtTimestamp.selector, blockCurrentWeek)
-        )
+                abi.encodeWithSelector(
+                    FeeDistributor.totalSupplyAtTimestamp.selector,
+                    blockCurrentWeek
+                )
+            )
             .toUint();
         data.adminFeeRate = feeDistributor
             .get(abi.encodeWithSelector(FeeDistributor(0).adminFeeRate.selector))
@@ -1005,14 +1008,13 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         address token0,
         address token1
     ) public view returns (ExternalSwapData memory data) {
-        IUniswapV2Pair pair =
-            IUniswapV2Pair(
-                router
-                    .get(abi.encodeWithSelector(IUniswapV2Router01.factory.selector))
-                    .toAddr()
-                    .get(abi.encodeWithSelector(IUniswapV2Factory.getPair.selector, token0, token1))
-                    .toAddr()
-            );
+        IUniswapV2Pair pair = IUniswapV2Pair(
+            router
+                .get(abi.encodeWithSelector(IUniswapV2Router01.factory.selector))
+                .toAddr()
+                .get(abi.encodeWithSelector(IUniswapV2Factory.getPair.selector, token0, token1))
+                .toAddr()
+        );
         data.symbol0 = token0
             .get(abi.encodeWithSelector(IUniswapV2Pair.symbol.selector))
             .toString();
@@ -1029,25 +1031,24 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
         }
     }
 
-    function getCurveData(address curveRouter, address account)
-        public
-        returns (CurveData memory data)
-    {
+    function getCurveData(
+        address curveRouter,
+        address account
+    ) public returns (CurveData memory data) {
         data.pool = getCurvePoolData(curveRouter, account);
         data.gauge = getCurveGaugeData(curveRouter, account);
     }
 
-    function getCurvePoolData(address curveRouter, address account)
-        public
-        view
-        returns (CurvePoolData memory data)
-    {
-        address pool =
-            curveRouter.get(abi.encodeWithSelector(CurveRouter(0).curvePool.selector)).toAddr();
-        address lp =
-            curveRouter
-                .get(abi.encodeWithSelector(CurveRouter(0).curveLiquidityToken.selector))
-                .toAddr();
+    function getCurvePoolData(
+        address curveRouter,
+        address account
+    ) public view returns (CurvePoolData memory data) {
+        address pool = curveRouter
+            .get(abi.encodeWithSelector(CurveRouter(0).curvePool.selector))
+            .toAddr();
+        address lp = curveRouter
+            .get(abi.encodeWithSelector(CurveRouter(0).curveLiquidityToken.selector))
+            .toAddr();
         data.pool = pool;
         data.lpToken = lp;
         data.lpTotalSupply = lp.get(abi.encodeWithSignature("totalSupply()")).toUint();
@@ -1070,16 +1071,20 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             data.lpPrice = pool.get(abi.encodeWithSignature("lp_price()")).toUint();
         }
 
-        data.account.balances[0] = data.coins[0]
+        data.account.balances[0] = data
+            .coins[0]
             .get(abi.encodeWithSelector(IERC20.balanceOf.selector, account))
             .toUint();
-        data.account.balances[1] = data.coins[1]
+        data.account.balances[1] = data
+            .coins[1]
             .get(abi.encodeWithSelector(IERC20.balanceOf.selector, account))
             .toUint();
-        data.account.allowances[0] = data.coins[0]
+        data.account.allowances[0] = data
+            .coins[0]
             .get(abi.encodeWithSelector(IERC20.allowance.selector, account, curveRouter))
             .toUint();
-        data.account.allowances[1] = data.coins[1]
+        data.account.allowances[1] = data
+            .coins[1]
             .get(abi.encodeWithSelector(IERC20.allowance.selector, account, curveRouter))
             .toUint();
         data.account.lpBalance = lp
@@ -1087,18 +1092,16 @@ contract DataAggregator is ITrancheIndexV2, CoreUtility {
             .toUint();
     }
 
-    function getCurveGaugeData(address curveRouter, address account)
-        public
-        returns (CurveGaugeData memory data)
-    {
-        address gauge =
-            curveRouter
-                .get(abi.encodeWithSelector(CurveRouter(0).tranchessLiquidityGauge.selector))
-                .toAddr();
-        address lp =
-            curveRouter
-                .get(abi.encodeWithSelector(CurveRouter(0).curveLiquidityToken.selector))
-                .toAddr();
+    function getCurveGaugeData(
+        address curveRouter,
+        address account
+    ) public returns (CurveGaugeData memory data) {
+        address gauge = curveRouter
+            .get(abi.encodeWithSelector(CurveRouter(0).tranchessLiquidityGauge.selector))
+            .toAddr();
+        address lp = curveRouter
+            .get(abi.encodeWithSelector(CurveRouter(0).curveLiquidityToken.selector))
+            .toAddr();
         (data.account.claimableChess, data.account.claimableBonus) = gauge
             .post(abi.encodeWithSelector(LiquidityGaugeCurve.claimableRewards.selector, account))
             .toUintUint();

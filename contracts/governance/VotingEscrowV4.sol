@@ -146,11 +146,7 @@ contract VotingEscrowV4 is
         _initializeV2(pauser_, name_, symbol_);
     }
 
-    function _initializeV2(
-        address pauser_,
-        string memory name_,
-        string memory symbol_
-    ) private {
+    function _initializeV2(address pauser_, string memory name_, string memory symbol_) private {
         _initializeManagedPausable(pauser_);
         require(bytes(name).length == 0 && bytes(symbol).length == 0);
         name = name_;
@@ -179,12 +175,10 @@ contract VotingEscrowV4 is
         return _maxTime;
     }
 
-    function getTimestampDropBelow(address account, uint256 threshold)
-        external
-        view
-        override
-        returns (uint256)
-    {
+    function getTimestampDropBelow(
+        address account,
+        uint256 threshold
+    ) external view override returns (uint256) {
         LockedBalance memory lockedBalance = locked[account];
         if (lockedBalance.amount == 0 || lockedBalance.amount < threshold) {
             return 0;
@@ -200,21 +194,16 @@ contract VotingEscrowV4 is
         return _veTotalSupply(scheduledUnlock, checkpointWeek, nextWeekSupply, totalLocked);
     }
 
-    function getLockedBalance(address account)
-        external
-        view
-        override
-        returns (LockedBalance memory)
-    {
+    function getLockedBalance(
+        address account
+    ) external view override returns (LockedBalance memory) {
         return locked[account];
     }
 
-    function balanceOfAtTimestamp(address account, uint256 timestamp)
-        external
-        view
-        override
-        returns (uint256)
-    {
+    function balanceOfAtTimestamp(
+        address account,
+        uint256 timestamp
+    ) external view override returns (uint256) {
         return _balanceOfAtTimestamp(account, timestamp);
     }
 
@@ -329,12 +318,7 @@ contract VotingEscrowV4 is
         // Deposit CHESS to CHESS pool
         IERC20(token).safeTransfer(chessPool, amount);
 
-        _checkGasLimit(
-            toLzChainID,
-            0, /*type*/
-            adapterParams,
-            0 /*extraGas*/
-        );
+        _checkGasLimit(toLzChainID, 0 /*type*/, adapterParams, 0 /*extraGas*/);
         _lzSend(
             toLzChainID,
             abi.encode(msg.sender, amount, lockedBalance.unlockTime),
@@ -366,8 +350,10 @@ contract VotingEscrowV4 is
         uint64,
         bytes memory data
     ) internal override {
-        (address account, uint256 amount, uint256 unlockTime) =
-            abi.decode(data, (address, uint256, uint256));
+        (address account, uint256 amount, uint256 unlockTime) = abi.decode(
+            data,
+            (address, uint256, uint256)
+        );
         _receiveCrossChain(account, amount, unlockTime, fromChainID);
     }
 
@@ -391,10 +377,9 @@ contract VotingEscrowV4 is
             );
         }
         uint256 newAmount = lockedBalance.amount.add(amount);
-        uint256 newUnlockTime =
-            lockedBalance.unlockTime.max(unlockTime).max(
-                _endOfWeek(block.timestamp) + MIN_CROSS_CHAIN_RECEIVER_LOCK_PERIOD
-            );
+        uint256 newUnlockTime = lockedBalance.unlockTime.max(unlockTime).max(
+            _endOfWeek(block.timestamp) + MIN_CROSS_CHAIN_RECEIVER_LOCK_PERIOD
+        );
         _checkpointAndUpdateLock(
             lockedBalance.amount,
             lockedBalance.unlockTime,
@@ -442,11 +427,10 @@ contract VotingEscrowV4 is
         }
     }
 
-    function _balanceOfAtTimestamp(address account, uint256 timestamp)
-        private
-        view
-        returns (uint256)
-    {
+    function _balanceOfAtTimestamp(
+        address account,
+        uint256 timestamp
+    ) private view returns (uint256) {
         require(timestamp >= block.timestamp, "Must be current or future time");
         LockedBalance memory lockedBalance = locked[account];
         if (timestamp > lockedBalance.unlockTime) {

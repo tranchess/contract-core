@@ -160,8 +160,10 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
         uint256[] memory operatorFees = new uint256[](size);
         for (uint256 i = 0; i < size; i++) {
             require(i == 0 || operatorData[i].id > operatorData[i - 1].id, "IDs out of order");
-            (uint256 profit, uint256 loss, uint256 totalFee, uint256 operatorFee) =
-                _report(epoch, operatorData[i]);
+            (uint256 profit, uint256 loss, uint256 totalFee, uint256 operatorFee) = _report(
+                epoch,
+                operatorData[i]
+            );
             sumProfit = sumProfit.add(profit);
             sumLoss = sumLoss.add(loss);
             sumTotalFee = sumTotalFee.add(totalFee);
@@ -172,8 +174,11 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
             IFundForStrategyV2(fund).reportLoss(sumLoss);
         }
         if (sumProfit != 0) {
-            uint256 totalFeeQ =
-                IFundForStrategyV2(fund).reportProfit(sumProfit, sumTotalFee, sumOperatorFee);
+            uint256 totalFeeQ = IFundForStrategyV2(fund).reportProfit(
+                sumProfit,
+                sumTotalFee,
+                sumOperatorFee
+            );
             if (sumOperatorFee != 0) {
                 uint256 version = IFundV3(fund).getRebalanceSize();
                 for (uint256 i = 0; i < size; i++) {
@@ -196,15 +201,10 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
         }
     }
 
-    function _report(uint256 epoch, OperatorData calldata operatorData)
-        private
-        returns (
-            uint256 profit,
-            uint256 loss,
-            uint256 totalFee,
-            uint256 operatorFee
-        )
-    {
+    function _report(
+        uint256 epoch,
+        OperatorData calldata operatorData
+    ) private returns (uint256 profit, uint256 loss, uint256 totalFee, uint256 operatorFee) {
         uint256 id = operatorData.id;
         address withdrawalAddress = registry.getWithdrawalAddress(id);
         require(withdrawalAddress != address(0), "Invalid operator id");
@@ -213,8 +213,9 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
         require(validatorCount <= registry.getKeyStat(id).usedCount, "More than deposited");
         require(validatorCount >= lastValidatorCount, "Less than previous");
 
-        uint256 oldBalance =
-            (validatorCount - lastValidatorCount).mul(DEPOSIT_AMOUNT).add(lastBeaconBalances[id]);
+        uint256 oldBalance = (validatorCount - lastValidatorCount).mul(DEPOSIT_AMOUNT).add(
+            lastBeaconBalances[id]
+        );
         lastBeaconBalances[id] = operatorData.beaconBalance;
         lastValidatorCounts[id] = validatorCount;
 
@@ -271,11 +272,9 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
     /// @param total Number of new validators
     /// @return keyCounts Number of pubkeys to be used from each node operator
     /// @return cursor New cursor of the selection algorithm
-    function selectOperators(uint256 total)
-        public
-        view
-        returns (uint256[] memory keyCounts, uint256 cursor)
-    {
+    function selectOperators(
+        uint256 total
+    ) public view returns (uint256[] memory keyCounts, uint256 cursor) {
         uint256 operatorCount = registry.operatorCount();
         keyCounts = new uint256[](operatorCount);
         uint256[] memory limits = new uint256[](operatorCount);
@@ -340,8 +339,10 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
                 continue;
             }
             total += keyCount;
-            (NodeOperatorRegistry.Key[] memory vs, bytes32 withdrawalCredential) =
-                registry.useKeys(i, keyCount);
+            (NodeOperatorRegistry.Key[] memory vs, bytes32 withdrawalCredential) = registry.useKeys(
+                i,
+                keyCount
+            );
             for (uint256 j = 0; j < keyCount; j++) {
                 _deposit(vs[j], withdrawalCredential);
             }
@@ -381,20 +382,18 @@ contract EthStakingStrategy is Ownable, ITrancheIndexV2 {
         bytes memory signature = abi.encode(key.signature0, key.signature1, key.signature2);
         // Lower 16 bytes of pubkey1 are cleared by the registry
         bytes32 pubkeyRoot = sha256(abi.encode(key.pubkey0, key.pubkey1));
-        bytes32 signatureRoot =
-            sha256(
-                abi.encodePacked(
-                    sha256(abi.encode(key.signature0, key.signature1)),
-                    sha256(abi.encode(key.signature2, bytes32(0)))
-                )
-            );
-        bytes32 depositDataRoot =
-            sha256(
-                abi.encodePacked(
-                    sha256(abi.encodePacked(pubkeyRoot, withdrawalCredential)),
-                    sha256(abi.encodePacked(LITTLE_ENDIAN_DEPOSIT_AMOUNT, signatureRoot))
-                )
-            );
+        bytes32 signatureRoot = sha256(
+            abi.encodePacked(
+                sha256(abi.encode(key.signature0, key.signature1)),
+                sha256(abi.encode(key.signature2, bytes32(0)))
+            )
+        );
+        bytes32 depositDataRoot = sha256(
+            abi.encodePacked(
+                sha256(abi.encodePacked(pubkeyRoot, withdrawalCredential)),
+                sha256(abi.encodePacked(LITTLE_ENDIAN_DEPOSIT_AMOUNT, signatureRoot))
+            )
+        );
         depositContract.deposit{value: DEPOSIT_AMOUNT}(
             pubkey,
             abi.encode(withdrawalCredential),

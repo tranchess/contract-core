@@ -227,8 +227,9 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         //     = minUnderlying
         uint256 fundUnderlying = IFundV4(fund).getTotalUnderlying();
         uint256 fundEquivalentTotalQ = IFundV4(fund).getEquivalentTotalQ();
-        uint256 inQAfterFee =
-            minUnderlying.mul(fundEquivalentTotalQ).add(fundUnderlying - 1).div(fundUnderlying);
+        uint256 inQAfterFee = minUnderlying.mul(fundEquivalentTotalQ).add(fundUnderlying - 1).div(
+            fundUnderlying
+        );
         return inQAfterFee.divideDecimal(1e18 - redemptionFeeRate);
     }
 
@@ -295,10 +296,9 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         while (rateIndex < rateSize) {
             r = redemptionRates[rateIndex].nextIndex;
             uint256 endPrefixSum = queuedRedemptions[r].previousPrefixSum;
-            uint256 underlying =
-                (endPrefixSum - startPrefixSum).multiplyDecimalPrecise(
-                    redemptionRates[rateIndex].underlyingPerQ
-                );
+            uint256 underlying = (endPrefixSum - startPrefixSum).multiplyDecimalPrecise(
+                redemptionRates[rateIndex].underlyingPerQ
+            );
             if (available < underlying) {
                 break;
             }
@@ -314,10 +314,8 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         uint256 underlyingPerQ = redemptionRates[rateIndex].underlyingPerQ;
         while (l + 1 < r) {
             uint256 m = (l + r) / 2;
-            uint256 underlying =
-                (queuedRedemptions[m].previousPrefixSum - startPrefixSum).multiplyDecimalPrecise(
-                    underlyingPerQ
-                );
+            uint256 underlying = (queuedRedemptions[m].previousPrefixSum - startPrefixSum)
+                .multiplyDecimalPrecise(underlyingPerQ);
             if (underlying <= available) {
                 l = m;
             } else {
@@ -377,7 +375,9 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
     /// @return newRedemptionQueueHead Index of the first redemption that cannot be claimed now
     /// @return amountQ Total amount of QUEEN in found redemptions
     /// @return underlying Total claimable underlying tokens in found redemptions
-    function getQueuedRedemptions(address account)
+    function getQueuedRedemptions(
+        address account
+    )
         external
         view
         returns (
@@ -489,9 +489,8 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         require(newFinalizedIndex <= redemptionQueueTail, "Redemption queue out of bound");
 
         // overflow is desired
-        uint256 amountQ =
-            queuedRedemptions[newFinalizedIndex].previousPrefixSum -
-                queuedRedemptions[oldFinalizedIndex].previousPrefixSum;
+        uint256 amountQ = queuedRedemptions[newFinalizedIndex].previousPrefixSum -
+            queuedRedemptions[oldFinalizedIndex].previousPrefixSum;
 
         (uint256 underlying, ) = getRedemption(amountQ);
         uint256 version = IFundV4(fund).getRebalanceSize();
@@ -631,10 +630,9 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
                 "Invalid index"
             );
             QueuedRedemption storage redemption = queuedRedemptions[indices[i]];
-            uint256 redemptionUnderlying =
-                redemption.amountQ.multiplyDecimalPrecise(
-                    redemptionRates[rateIndices[i]].underlyingPerQ
-                );
+            uint256 redemptionUnderlying = redemption.amountQ.multiplyDecimalPrecise(
+                redemptionRates[rateIndices[i]].underlyingPerQ
+            );
             require(
                 ownerOf(indices[i]) == msg.sender && redemption.amountQ != 0,
                 "Invalid redemption index"
@@ -695,19 +693,20 @@ contract EthPrimaryMarket is ReentrancyGuard, ITrancheIndexV2, Ownable, ERC721, 
         _updateMergeFeeRate(newMergeFeeRate);
     }
 
-    function _updateRedemptionBounds(uint256 newMinRedemptionBound, uint256 newMaxRedemptionBound)
-        private
-    {
+    function _updateRedemptionBounds(
+        uint256 newMinRedemptionBound,
+        uint256 newMaxRedemptionBound
+    ) private {
         require(newMinRedemptionBound <= newMaxRedemptionBound, "Invalid redemption bounds");
         minRedemptionBound = newMinRedemptionBound;
         maxRedemptionBound = newMaxRedemptionBound;
         emit RedemptionBoundsUpdated(newMinRedemptionBound, newMaxRedemptionBound);
     }
 
-    function updateRedemptionBounds(uint256 newMinRedemptionBound, uint256 newMaxRedemptionBound)
-        external
-        onlyOwner
-    {
+    function updateRedemptionBounds(
+        uint256 newMinRedemptionBound,
+        uint256 newMaxRedemptionBound
+    ) external onlyOwner {
         _updateRedemptionBounds(newMinRedemptionBound, newMaxRedemptionBound);
     }
 

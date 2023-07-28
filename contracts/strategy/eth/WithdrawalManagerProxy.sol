@@ -21,8 +21,9 @@ contract WithdrawalManagerProxy is Proxy {
         address implAddress = withdrawalManagerFactory_.implementation();
         require(implAddress.isContract(), "Delegate contract does not exist");
         // Call Initialize on delegate
-        (bool success, ) =
-            implAddress.delegatecall(abi.encodeWithSignature("initialize(uint256)", operatorID_));
+        (bool success, ) = implAddress.delegatecall(
+            abi.encodeWithSignature("initialize(uint256)", operatorID_)
+        );
         if (!success) {
             revert("Failed delegatecall");
         }
