@@ -94,12 +94,9 @@ abstract contract LzApp is Ownable, ILayerZeroReceiver, ILayerZeroUserApplicatio
         require(providedGasLimit >= minGasLimit, "LzApp: gas limit is too low");
     }
 
-    function _getGasLimit(bytes memory _adapterParams)
-        internal
-        pure
-        virtual
-        returns (uint256 gasLimit)
-    {
+    function _getGasLimit(
+        bytes memory _adapterParams
+    ) internal pure virtual returns (uint256 gasLimit) {
         require(_adapterParams.length >= 34, "LzApp: invalid adapterParams");
         assembly {
             gasLimit := mload(add(_adapterParams, 34))
@@ -143,11 +140,10 @@ abstract contract LzApp is Ownable, ILayerZeroReceiver, ILayerZeroUserApplicatio
         lzEndpoint.setReceiveVersion(_version);
     }
 
-    function forceResumeReceive(uint16 _srcChainId, bytes calldata _srcAddress)
-        external
-        override
-        onlyOwner
-    {
+    function forceResumeReceive(
+        uint16 _srcChainId,
+        bytes calldata _srcAddress
+    ) external override onlyOwner {
         lzEndpoint.forceResumeReceive(_srcChainId, _srcAddress);
     }
 
@@ -158,10 +154,10 @@ abstract contract LzApp is Ownable, ILayerZeroReceiver, ILayerZeroUserApplicatio
         emit SetTrustedRemote(_remoteChainId, _path);
     }
 
-    function setTrustedRemoteAddress(uint16 _remoteChainId, bytes calldata _remoteAddress)
-        external
-        onlyOwner
-    {
+    function setTrustedRemoteAddress(
+        uint16 _remoteChainId,
+        bytes calldata _remoteAddress
+    ) external onlyOwner {
         trustedRemoteLookup[_remoteChainId] = abi.encodePacked(_remoteAddress, address(this));
         emit SetTrustedRemoteAddress(_remoteChainId, _remoteAddress);
     }
@@ -193,11 +189,10 @@ abstract contract LzApp is Ownable, ILayerZeroReceiver, ILayerZeroUserApplicatio
     }
 
     //--------------------------- VIEW FUNCTION ----------------------------------------
-    function isTrustedRemote(uint16 _srcChainId, bytes calldata _srcAddress)
-        external
-        view
-        returns (bool)
-    {
+    function isTrustedRemote(
+        uint16 _srcChainId,
+        bytes calldata _srcAddress
+    ) external view returns (bool) {
         bytes memory trustedSource = trustedRemoteLookup[_srcChainId];
         return keccak256(trustedSource) == keccak256(_srcAddress);
     }

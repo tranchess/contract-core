@@ -37,25 +37,22 @@ contract CrossChainMintKeeperHelper is KeeperCompatibleInterface, Ownable, CoreU
         require(success, "ETH transfer failed");
     }
 
-    function checkUpkeep(bytes calldata)
-        external
-        override
-        returns (bool upkeepNeeded, bytes memory)
-    {
+    function checkUpkeep(
+        bytes calldata
+    ) external override returns (bool upkeepNeeded, bytes memory) {
         uint256 startWeek = _endOfWeek(block.timestamp) - 1 weeks;
         uint256 lastWeek = relayer.lastWeek();
         upkeepNeeded = (startWeek > lastWeek);
     }
 
     function performUpkeep(bytes calldata) external override {
-        (uint256 srcFees, ) =
-            lzEndpoint.estimateFees(
-                subLzChainID,
-                address(relayer),
-                new bytes(DATA_LENGTH),
-                false,
-                abi.encodePacked(uint16(1), MINT_GAS_LIMIT)
-            );
+        (uint256 srcFees, ) = lzEndpoint.estimateFees(
+            subLzChainID,
+            address(relayer),
+            new bytes(DATA_LENGTH),
+            false,
+            abi.encodePacked(uint16(1), MINT_GAS_LIMIT)
+        );
         require(address(this).balance >= srcFees, "Not enough balance");
         relayer.crossChainMint{value: srcFees}(abi.encodePacked(uint16(1), MINT_GAS_LIMIT));
     }

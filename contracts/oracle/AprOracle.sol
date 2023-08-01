@@ -27,7 +27,7 @@ contract AprOracle is IAprOracle, Exponential, CoreUtility {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
 
-    uint256 public constant DECIMAL = 10**18;
+    uint256 public constant DECIMAL = 10 ** 18;
     uint256 public constant COMPOUND_BORROW_MAX_MANTISSA = 0.0005e16;
 
     // Mainnet: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
@@ -73,8 +73,10 @@ contract AprOracle is IAprOracle, Exponential, CoreUtility {
 
         (, uint256 blockDelta) = subUInt(block.number, accrualBlockNumber);
 
-        (, Exp memory simpleInterestFactor) =
-            mulScalar(Exp({mantissa: borrowRateMantissa}), blockDelta);
+        (, Exp memory simpleInterestFactor) = mulScalar(
+            Exp({mantissa: borrowRateMantissa}),
+            blockDelta
+        );
         (, newBorrowIndex) = mulScalarTruncateAddUInt(
             simpleInterestFactor,
             borrowIndexPrior,
@@ -83,37 +85,31 @@ contract AprOracle is IAprOracle, Exponential, CoreUtility {
     }
 
     // Aave
-    function getAaveBorrowIndex(address aaveLendingPool, address token)
-        public
-        view
-        returns (uint256 newBorrowRate)
-    {
+    function getAaveBorrowIndex(
+        address aaveLendingPool,
+        address token
+    ) public view returns (uint256 newBorrowRate) {
         newBorrowRate = ILendingPool(aaveLendingPool).getReserveNormalizedVariableDebt(token);
     }
 
     function getAverageDailyRate()
         public
         view
-        returns (
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256
-        )
+        returns (uint256, uint256, uint256, uint256, uint256)
     {
         uint256 newCompoundBorrowIndex = getCompoundBorrowIndex(cUsdc);
         uint256 newAaveBorrowRate = getAaveBorrowIndex(aaveUsdcLendingPool, usdc);
 
-        uint256 compoundPeriodicRate =
-            newCompoundBorrowIndex.sub(compoundBorrowIndex).divideDecimal(compoundBorrowIndex);
-        uint256 aavePeriodicRate =
-            newAaveBorrowRate.sub(aaveBorrowIndex).divideDecimal(aaveBorrowIndex);
+        uint256 compoundPeriodicRate = newCompoundBorrowIndex
+            .sub(compoundBorrowIndex)
+            .divideDecimal(compoundBorrowIndex);
+        uint256 aavePeriodicRate = newAaveBorrowRate.sub(aaveBorrowIndex).divideDecimal(
+            aaveBorrowIndex
+        );
 
-        uint256 dailyRate =
-            compoundPeriodicRate.add(aavePeriodicRate).mul(1 days).div(2).div(
-                block.timestamp.sub(timestamp)
-            );
+        uint256 dailyRate = compoundPeriodicRate.add(aavePeriodicRate).mul(1 days).div(2).div(
+            block.timestamp.sub(timestamp)
+        );
 
         return (
             newCompoundBorrowIndex,

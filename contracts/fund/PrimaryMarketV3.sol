@@ -148,12 +148,9 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     /// @param inQ QUEEN amount spent for the redemption
     /// @return underlying Redeemed underlying amount
     /// @return fee Underlying amount charged as redemption fee
-    function getRedemption(uint256 inQ)
-        public
-        view
-        override
-        returns (uint256 underlying, uint256 fee)
-    {
+    function getRedemption(
+        uint256 inQ
+    ) public view override returns (uint256 underlying, uint256 fee) {
         underlying = _getRedemptionBeforeFee(inQ);
         fee = underlying.multiplyDecimal(redemptionFeeRate);
         underlying = underlying.sub(fee);
@@ -164,12 +161,9 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     /// @dev The return value may not be the minimum solution due to rounding errors.
     /// @param minUnderlying Minimum received underlying amount
     /// @return inQ QUEEN amount that should be redeemed
-    function getRedemptionForUnderlying(uint256 minUnderlying)
-        external
-        view
-        override
-        returns (uint256 inQ)
-    {
+    function getRedemptionForUnderlying(
+        uint256 minUnderlying
+    ) external view override returns (uint256 inQ) {
         // Assume:
         //   minUnderlying * 1e18 = a * (1e18 - redemptionFeeRate) + b
         //   a * fundEquivalentTotalQ = c * fundUnderlying - d
@@ -443,9 +437,8 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
             require(newHead <= oldTail, "Redemption queue out of bound");
         }
         // overflow is desired
-        uint256 requiredUnderlying =
-            queuedRedemptions[newHead].previousPrefixSum -
-                queuedRedemptions[oldHead].previousPrefixSum;
+        uint256 requiredUnderlying = queuedRedemptions[newHead].previousPrefixSum -
+            queuedRedemptions[oldHead].previousPrefixSum;
         // Redundant check for user-friendly revert message.
         require(
             requiredUnderlying <= _tokenUnderlying.balanceOf(fund),
@@ -462,12 +455,10 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     /// @param account Recipient of the redemptions
     /// @param indices Indices of the redemptions in the queue, which must be in increasing order
     /// @return underlying Total claimed underlying amount
-    function claimRedemptions(address account, uint256[] calldata indices)
-        external
-        override
-        nonReentrant
-        returns (uint256 underlying)
-    {
+    function claimRedemptions(
+        address account,
+        uint256[] calldata indices
+    ) external override nonReentrant returns (uint256 underlying) {
         underlying = _claimRedemptions(account, indices);
         _tokenUnderlying.safeTransfer(account, underlying);
     }
@@ -477,22 +468,20 @@ contract PrimaryMarketV3 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     /// @param account Recipient of the redemptions
     /// @param indices Indices of the redemptions in the queue, which must be in increasing order
     /// @return underlying Total claimed underlying amount
-    function claimRedemptionsAndUnwrap(address account, uint256[] calldata indices)
-        external
-        override
-        nonReentrant
-        returns (uint256 underlying)
-    {
+    function claimRedemptionsAndUnwrap(
+        address account,
+        uint256[] calldata indices
+    ) external override nonReentrant returns (uint256 underlying) {
         underlying = _claimRedemptions(account, indices);
         IWrappedERC20(address(_tokenUnderlying)).withdraw(underlying);
         (bool success, ) = account.call{value: underlying}("");
         require(success, "Transfer failed");
     }
 
-    function _claimRedemptions(address account, uint256[] calldata indices)
-        private
-        returns (uint256 underlying)
-    {
+    function _claimRedemptions(
+        address account,
+        uint256[] calldata indices
+    ) private returns (uint256 underlying) {
         uint256 count = indices.length;
         if (count == 0) {
             return 0;

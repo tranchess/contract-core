@@ -138,11 +138,7 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         );
     }
 
-    function _transfer(
-        address,
-        address,
-        uint256
-    ) internal override {
+    function _transfer(address, address, uint256) internal override {
         revert("Transfer is not allowed");
     }
 
@@ -154,7 +150,9 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         return _workingSupply;
     }
 
-    function claimableRewards(address account)
+    function claimableRewards(
+        address account
+    )
         external
         override
         returns (
@@ -245,13 +243,11 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         if (veBalance > 0) {
             uint256 veTotalSupply = _votingEscrow.totalSupply();
             uint256 maxWorkingBalance = newWorkingBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
-            uint256 boostedWorkingBalance =
-                newWorkingBalance.add(
-                    newTotalSupply
-                        .mul(veBalance)
-                        .multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
-                        .div(veTotalSupply)
-                );
+            uint256 boostedWorkingBalance = newWorkingBalance.add(
+                newTotalSupply.mul(veBalance).multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE).div(
+                    veTotalSupply
+                )
+            );
             newWorkingBalance = maxWorkingBalance.min(boostedWorkingBalance);
         }
         _workingSupply = oldWorkingSupply.sub(oldWorkingBalance).add(newWorkingBalance);
@@ -349,15 +345,10 @@ contract LiquidityGauge is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC20 
         _bonusUserIntegral[account] = integral;
     }
 
-    function _distributionCheckpoint(address account, uint256 balance)
-        private
-        returns (
-            uint256 amountQ,
-            uint256 amountB,
-            uint256 amountR,
-            uint256 quoteAmount
-        )
-    {
+    function _distributionCheckpoint(
+        address account,
+        uint256 balance
+    ) private returns (uint256 amountQ, uint256 amountB, uint256 amountR, uint256 quoteAmount) {
         uint256 version = userVersions[account];
         uint256 newVersion = latestVersion;
 

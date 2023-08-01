@@ -17,9 +17,7 @@ contract MockTwapOracleKeeper is KeeperCompatibleInterface, CoreUtility {
         return (block.timestamp > _endOfDay(mockTwap.lastStoredEpoch()), bytes(""));
     }
 
-    function performUpkeep(
-        bytes calldata /*performData*/
-    ) external override {
+    function performUpkeep(bytes calldata /*performData*/) external override {
         mockTwap.catchUp();
     }
 

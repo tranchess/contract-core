@@ -44,10 +44,9 @@ contract InterestRateBallotV2 is IBallot, CoreUtility, VotingEscrowCheckpoint {
 
     uint256 public checkpointWeek;
 
-    constructor(address votingEscrow_)
-        public
-        VotingEscrowCheckpoint(IVotingEscrow(votingEscrow_).maxTime())
-    {
+    constructor(
+        address votingEscrow_
+    ) public VotingEscrowCheckpoint(IVotingEscrow(votingEscrow_).maxTime()) {
         votingEscrow = IVotingEscrow(votingEscrow_);
         checkpointWeek = _endOfWeek(block.timestamp) - 1 weeks;
     }
@@ -76,13 +75,12 @@ contract InterestRateBallotV2 is IBallot, CoreUtility, VotingEscrowCheckpoint {
     /// @param fund Address of the fund
     /// @return incomeOverQ The ratio of income to the fund's total value
     /// @return incomeOverB The ratio of income to equivalent BISHOP total value if all QUEEN are split
-    function getFundRelativeIncome(IFundV3 fund)
-        public
-        view
-        returns (uint256 incomeOverQ, uint256 incomeOverB)
-    {
-        (bool success, bytes memory encodedDay) =
-            address(fund).staticcall(abi.encodeWithSignature("currentDay()"));
+    function getFundRelativeIncome(
+        IFundV3 fund
+    ) public view returns (uint256 incomeOverQ, uint256 incomeOverB) {
+        (bool success, bytes memory encodedDay) = address(fund).staticcall(
+            abi.encodeWithSignature("currentDay()")
+        );
         if (!success || encodedDay.length != 0x20) {
             return (0, 0);
         }
@@ -105,10 +103,8 @@ contract InterestRateBallotV2 is IBallot, CoreUtility, VotingEscrowCheckpoint {
             return (0, 0);
         }
         {
-            uint256 ratio =
-                ((lastUnderlying * currentEquivalentTotalB) / currentUnderlying).divideDecimal(
-                    lastEquivalentTotalB
-                );
+            uint256 ratio = ((lastUnderlying * currentEquivalentTotalB) / currentUnderlying)
+                .divideDecimal(lastEquivalentTotalB);
             incomeOverQ = ratio > 1e18 ? 0 : 1e18 - ratio;
         }
         uint256 underlyingPrice = ITwapOracleV2(fund.twapOracle()).getTwap(currentDay);
@@ -132,8 +128,9 @@ contract InterestRateBallotV2 is IBallot, CoreUtility, VotingEscrowCheckpoint {
     function cast(uint256 weight) external {
         require(weight <= 1e18, "Invalid weight");
 
-        IVotingEscrow.LockedBalance memory lockedBalance =
-            votingEscrow.getLockedBalance(msg.sender);
+        IVotingEscrow.LockedBalance memory lockedBalance = votingEscrow.getLockedBalance(
+            msg.sender
+        );
         Voter memory voter = voters[msg.sender];
         require(
             lockedBalance.amount > 0 && lockedBalance.unlockTime > block.timestamp,
@@ -245,14 +242,13 @@ contract InterestRateBallotV2 is IBallot, CoreUtility, VotingEscrowCheckpoint {
         uint256 newWeight
     ) private {
         uint256 oldCheckpointWeek = checkpointWeek;
-        (, uint256 newNextWeekSupply, uint256 newTotalLocked) =
-            _veCheckpoint(
-                scheduledUnlock,
-                oldCheckpointWeek,
-                nextWeekSupply,
-                totalLocked,
-                veSupplyPerWeek
-            );
+        (, uint256 newNextWeekSupply, uint256 newTotalLocked) = _veCheckpoint(
+            scheduledUnlock,
+            oldCheckpointWeek,
+            nextWeekSupply,
+            totalLocked,
+            veSupplyPerWeek
+        );
         (nextWeekSupply, totalLocked) = _veUpdateLock(
             newNextWeekSupply,
             newTotalLocked,

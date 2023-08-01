@@ -48,8 +48,10 @@ contract BscAprOracle is IAprOracle, Exponential, CoreUtility {
 
         (, uint256 blockDelta) = subUInt(block.number, accrualBlockNumber);
 
-        (, Exp memory simpleInterestFactor) =
-            mulScalar(Exp({mantissa: borrowRateMantissa}), blockDelta);
+        (, Exp memory simpleInterestFactor) = mulScalar(
+            Exp({mantissa: borrowRateMantissa}),
+            blockDelta
+        );
         (, newBorrowIndex) = mulScalarTruncateAddUInt(
             simpleInterestFactor,
             borrowIndexPrior,
@@ -57,19 +59,12 @@ contract BscAprOracle is IAprOracle, Exponential, CoreUtility {
         );
     }
 
-    function getAverageDailyRate()
-        public
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
-    {
+    function getAverageDailyRate() public view returns (uint256, uint256, uint256) {
         uint256 newVenusBorrowIndex = getVenusBorrowIndex(vUsdc);
 
-        uint256 venusPeriodicRate =
-            newVenusBorrowIndex.sub(venusBorrowIndex).divideDecimal(venusBorrowIndex);
+        uint256 venusPeriodicRate = newVenusBorrowIndex.sub(venusBorrowIndex).divideDecimal(
+            venusBorrowIndex
+        );
 
         uint256 dailyRate = venusPeriodicRate.mul(1 days).div(block.timestamp.sub(timestamp));
 

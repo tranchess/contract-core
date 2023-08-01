@@ -40,11 +40,9 @@ contract BatchKeeperHelperBase is KeeperCompatibleInterface, Ownable {
         }
     }
 
-    function checkUpkeep(bytes calldata)
-        external
-        override
-        returns (bool upkeepNeeded, bytes memory performData)
-    {
+    function checkUpkeep(
+        bytes calldata
+    ) external override returns (bool upkeepNeeded, bytes memory performData) {
         uint256 length = _allowlist.length();
         for (uint256 i = 0; i < length; i++) {
             address contractAddress = _allowlist.at(i);

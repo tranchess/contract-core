@@ -59,10 +59,9 @@ contract ControllerBallotV2 is
     /// @notice Mapping of pool => status of the pool
     mapping(uint256 => bool) public disabledPools;
 
-    constructor(address votingEscrow_)
-        public
-        VotingEscrowCheckpoint(IVotingEscrow(votingEscrow_).maxTime())
-    {
+    constructor(
+        address votingEscrow_
+    ) public VotingEscrowCheckpoint(IVotingEscrow(votingEscrow_).maxTime()) {
         votingEscrow = IVotingEscrow(votingEscrow_);
         checkpointWeek = _endOfWeek(block.timestamp) - 1 weeks;
     }
@@ -99,11 +98,10 @@ contract ControllerBallotV2 is
         return balanceOfAtTimestamp(account, block.timestamp);
     }
 
-    function balanceOfAtTimestamp(address account, uint256 timestamp)
-        public
-        view
-        returns (uint256)
-    {
+    function balanceOfAtTimestamp(
+        address account,
+        uint256 timestamp
+    ) public view returns (uint256) {
         require(timestamp >= block.timestamp, "Must be current or future time");
         IVotingEscrow.LockedBalance memory locked = userLockedBalances[account];
         if (timestamp >= locked.unlockTime) {
@@ -136,12 +134,9 @@ contract ControllerBallotV2 is
                 );
     }
 
-    function count(uint256 week)
-        external
-        view
-        override
-        returns (uint256[] memory sums, address[] memory pools)
-    {
+    function count(
+        uint256 week
+    ) external view override returns (uint256[] memory sums, address[] memory pools) {
         uint256 poolSize_ = poolSize;
         uint256 size = poolSize_ - disabledPoolSize;
         pools = new address[](size);
@@ -173,8 +168,9 @@ contract ControllerBallotV2 is
         }
 
         IVotingEscrow.LockedBalance memory oldLockedBalance = userLockedBalances[msg.sender];
-        IVotingEscrow.LockedBalance memory lockedBalance =
-            votingEscrow.getLockedBalance(msg.sender);
+        IVotingEscrow.LockedBalance memory lockedBalance = votingEscrow.getLockedBalance(
+            msg.sender
+        );
         require(
             lockedBalance.amount > 0 && lockedBalance.unlockTime > block.timestamp,
             "No veCHESS"

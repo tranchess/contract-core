@@ -105,11 +105,7 @@ contract VotingEscrowV2 is
         _initializeV2(pauser_, name_, symbol_);
     }
 
-    function _initializeV2(
-        address pauser_,
-        string memory name_,
-        string memory symbol_
-    ) private {
+    function _initializeV2(address pauser_, string memory name_, string memory symbol_) private {
         _initializeManagedPausable(pauser_);
         require(bytes(name).length == 0 && bytes(symbol).length == 0);
         name = name_;
@@ -134,12 +130,10 @@ contract VotingEscrowV2 is
         checkpointWeek = nextWeek - 1 weeks;
     }
 
-    function getTimestampDropBelow(address account, uint256 threshold)
-        external
-        view
-        override
-        returns (uint256)
-    {
+    function getTimestampDropBelow(
+        address account,
+        uint256 threshold
+    ) external view override returns (uint256) {
         LockedBalance memory lockedBalance = locked[account];
         if (lockedBalance.amount == 0 || lockedBalance.amount < threshold) {
             return 0;
@@ -178,21 +172,16 @@ contract VotingEscrowV2 is
         return newNextWeekSupply;
     }
 
-    function getLockedBalance(address account)
-        external
-        view
-        override
-        returns (LockedBalance memory)
-    {
+    function getLockedBalance(
+        address account
+    ) external view override returns (LockedBalance memory) {
         return locked[account];
     }
 
-    function balanceOfAtTimestamp(address account, uint256 timestamp)
-        external
-        view
-        override
-        returns (uint256)
-    {
+    function balanceOfAtTimestamp(
+        address account,
+        uint256 timestamp
+    ) external view override returns (uint256) {
         return _balanceOfAtTimestamp(account, timestamp);
     }
 
@@ -333,11 +322,10 @@ contract VotingEscrowV2 is
         }
     }
 
-    function _balanceOfAtTimestamp(address account, uint256 timestamp)
-        private
-        view
-        returns (uint256)
-    {
+    function _balanceOfAtTimestamp(
+        address account,
+        uint256 timestamp
+    ) private view returns (uint256) {
         require(timestamp >= block.timestamp, "Must be current or future time");
         LockedBalance memory lockedBalance = locked[account];
         if (timestamp > lockedBalance.unlockTime) {

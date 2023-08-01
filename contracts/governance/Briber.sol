@@ -29,11 +29,7 @@ contract Briber is Ownable {
     RewardClaimer public immutable rewardClaimer;
     address public immutable token;
 
-    constructor(
-        address bribeMarket_,
-        address rewardClaimer_,
-        address token_
-    ) public {
+    constructor(address bribeMarket_, address rewardClaimer_, address token_) public {
         bribeMarket = IBribeMarket(bribeMarket_);
         rewardClaimer = RewardClaimer(rewardClaimer_);
         token = token_;

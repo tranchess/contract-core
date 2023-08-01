@@ -73,11 +73,7 @@ contract BscStakingStrategy is Ownable {
     /// @notice The last trading day when a reporter reports daily profit.
     uint256 public reportedDay;
 
-    constructor(
-        address fund_,
-        address staker_,
-        uint256 performanceFeeRate_
-    ) public {
+    constructor(address fund_, address staker_, uint256 performanceFeeRate_) public {
         fund = fund_;
         _tokenUnderlying = IFundV3(fund_).tokenUnderlying();
         staker = staker_;

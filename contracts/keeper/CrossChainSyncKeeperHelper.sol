@@ -41,11 +41,9 @@ contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
         _updateLastTimestamp(lastTimestamp_);
     }
 
-    function checkUpkeep(bytes calldata)
-        external
-        override
-        returns (bool upkeepNeeded, bytes memory)
-    {
+    function checkUpkeep(
+        bytes calldata
+    ) external override returns (bool upkeepNeeded, bytes memory) {
         upkeepNeeded = (block.timestamp > lastTimestamp + 1 weeks);
     }
 
@@ -53,14 +51,13 @@ contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
         uint256 lastTimestamp_ = lastTimestamp;
         require(block.timestamp > lastTimestamp_ + 1 weeks, "Not yet");
 
-        (uint256 srcFees, ) =
-            lzEndpoint.estimateFees(
-                mainLzChainID,
-                address(subSchedule),
-                new bytes(DATA_LENGTH),
-                false,
-                abi.encodePacked(uint16(1), SYNC_GAS_LIMIT)
-            );
+        (uint256 srcFees, ) = lzEndpoint.estimateFees(
+            mainLzChainID,
+            address(subSchedule),
+            new bytes(DATA_LENGTH),
+            false,
+            abi.encodePacked(uint16(1), SYNC_GAS_LIMIT)
+        );
         require(address(this).balance >= srcFees, "Not enough balance");
         subSchedule.crossChainSync{value: srcFees}(abi.encodePacked(uint16(1), SYNC_GAS_LIMIT));
 

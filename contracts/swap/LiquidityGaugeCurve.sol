@@ -17,11 +17,7 @@ import "../utils/SafeDecimalMath.sol";
 interface ICurveLiquidityGauge {
     function lp_token() external view returns (address);
 
-    function deposit(
-        uint256 _value,
-        address _addr,
-        bool _claim_rewards
-    ) external;
+    function deposit(uint256 _value, address _addr, bool _claim_rewards) external;
 
     function withdraw(uint256 _value, bool _claim_rewards) external;
 
@@ -128,11 +124,7 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
         _updateWorkingBalance(msg.sender, oldWorkingBalance, oldWorkingSupply);
     }
 
-    function _transfer(
-        address,
-        address,
-        uint256
-    ) internal override {
+    function _transfer(address, address, uint256) internal override {
         revert("Transfer is not allowed");
     }
 
@@ -144,18 +136,20 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
         return _workingSupply;
     }
 
-    function claimableRewards(address account)
-        external
-        returns (uint256 chessAmount, uint256 bonusAmount)
-    {
+    function claimableRewards(
+        address account
+    ) external returns (uint256 chessAmount, uint256 bonusAmount) {
         return _checkpoint(account, _workingBalances[account], _workingSupply);
     }
 
     function claimRewards(address account) external {
         uint256 oldWorkingBalance = _workingBalances[account];
         uint256 oldWorkingSupply = _workingSupply;
-        (uint256 chessAmount, uint256 bonusAmount) =
-            _checkpoint(account, oldWorkingBalance, oldWorkingSupply);
+        (uint256 chessAmount, uint256 bonusAmount) = _checkpoint(
+            account,
+            oldWorkingBalance,
+            oldWorkingSupply
+        );
         _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply);
 
         if (chessAmount != 0) {
@@ -201,12 +195,11 @@ contract LiquidityGaugeCurve is CoreUtility, ERC20, Ownable {
         if (veBalance > 0) {
             uint256 veTotalSupply = _votingEscrow.totalSupply();
             uint256 maxWorkingBalance = newWorkingBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
-            uint256 boostedWorkingBalance =
-                newWorkingBalance.add(
-                    totalSupply().mul(veBalance).multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE).div(
-                        veTotalSupply
-                    )
-                );
+            uint256 boostedWorkingBalance = newWorkingBalance.add(
+                totalSupply().mul(veBalance).multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE).div(
+                    veTotalSupply
+                )
+            );
             newWorkingBalance = maxWorkingBalance.min(boostedWorkingBalance);
         }
         _workingSupply = oldWorkingSupply.sub(oldWorkingBalance).add(newWorkingBalance);

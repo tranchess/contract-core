@@ -15,7 +15,9 @@ interface ILiquidityGauge is IERC20 {
 
     function workingBalanceOf(address account) external view returns (uint256);
 
-    function claimableRewards(address account)
+    function claimableRewards(
+        address account
+    )
         external
         returns (
             uint256 chessAmount,

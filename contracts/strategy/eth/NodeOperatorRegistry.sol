@@ -255,10 +255,10 @@ contract NodeOperatorRegistry is Ownable {
         _truncateUnusedKeys(id);
     }
 
-    function updateRewardAddress(uint256 id, address newRewardAddress)
-        external
-        onlyOperatorOwner(id)
-    {
+    function updateRewardAddress(
+        uint256 id,
+        address newRewardAddress
+    ) external onlyOperatorOwner(id) {
         _operators[id].rewardAddress = newRewardAddress;
         emit RewardAddressUpdated(id, newRewardAddress);
     }
@@ -269,11 +269,10 @@ contract NodeOperatorRegistry is Ownable {
         emit DepositLimitUpdated(id, newDepositLimit);
     }
 
-    function useKeys(uint256 id, uint256 count)
-        external
-        onlyStrategy
-        returns (Key[] memory keys, bytes32 withdrawalCredential)
-    {
+    function useKeys(
+        uint256 id,
+        uint256 count
+    ) external onlyStrategy returns (Key[] memory keys, bytes32 withdrawalCredential) {
         Operator storage operator = _operators[id];
         KeyStat memory stat = operator.keyStat;
         mapping(uint256 => Key) storage operatorKeys = _keys[id];
@@ -302,11 +301,10 @@ contract NodeOperatorRegistry is Ownable {
         emit KeyUsed(id, count);
     }
 
-    function addOperator(string calldata name, address operatorOwner)
-        external
-        onlyOwner
-        returns (uint256 id, address withdrawalAddress)
-    {
+    function addOperator(
+        string calldata name,
+        address operatorOwner
+    ) external onlyOwner returns (uint256 id, address withdrawalAddress) {
         id = operatorCount++;
         withdrawalAddress = factory.deployContract(id);
         Operator storage operator = _operators[id];

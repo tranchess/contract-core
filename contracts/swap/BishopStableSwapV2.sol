@@ -47,7 +47,9 @@ contract BishopStableSwapV2 is StableSwapV2, ITrancheIndexV2 {
         require(version == fund.getRebalanceSize(), "Obsolete rebalance version");
     }
 
-    function _getRebalanceResult(uint256 latestVersion)
+    function _getRebalanceResult(
+        uint256 latestVersion
+    )
         internal
         view
         override
@@ -94,11 +96,9 @@ contract BishopStableSwapV2 is StableSwapV2, ITrancheIndexV2 {
         }
     }
 
-    function _handleRebalance(uint256 latestVersion)
-        internal
-        override
-        returns (uint256 newBase, uint256 newQuote)
-    {
+    function _handleRebalance(
+        uint256 latestVersion
+    ) internal override returns (uint256 newBase, uint256 newQuote) {
         uint256 excessiveQ;
         uint256 excessiveB;
         uint256 excessiveR;

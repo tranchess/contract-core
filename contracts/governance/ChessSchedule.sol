@@ -69,23 +69,18 @@ contract ChessSchedule is IChessSchedule, OwnableUpgradeable, ChessRoles, CoreUt
     /// @notice Get supply of the week containing the given timestamp.
     /// @param timestamp Any timestamp in the week to be queried
     /// @return weeklySupply Weekly supply
-    function getWeeklySupply(uint256 timestamp)
-        public
-        view
-        override
-        returns (uint256 weeklySupply)
-    {
+    function getWeeklySupply(
+        uint256 timestamp
+    ) public view override returns (uint256 weeklySupply) {
         if (timestamp < startTimestamp) {
             return 0;
         }
         (, weeklySupply) = _getWeeklySupply((timestamp - startTimestamp) / 1 weeks);
     }
 
-    function _getWeeklySupply(uint256 index)
-        private
-        pure
-        returns (uint256 currentWeekCumulativeSupply, uint256 weeklySupply)
-    {
+    function _getWeeklySupply(
+        uint256 index
+    ) private pure returns (uint256 currentWeekCumulativeSupply, uint256 weeklySupply) {
         uint256 length = getScheduleLength();
         bytes memory scheduleBytes = CUMULATIVE_SUPPLY_SCHEDULE;
         if (index == 0) {
@@ -114,8 +109,9 @@ contract ChessSchedule is IChessSchedule, OwnableUpgradeable, ChessRoles, CoreUt
         if (block.timestamp < startTimestamp) {
             return 0;
         }
-        (uint256 currentWeekCumulativeSupply, uint256 weeklySupply) =
-            _getWeeklySupply((block.timestamp - startTimestamp) / 1 weeks);
+        (uint256 currentWeekCumulativeSupply, uint256 weeklySupply) = _getWeeklySupply(
+            (block.timestamp - startTimestamp) / 1 weeks
+        );
         return currentWeekCumulativeSupply.add(weeklySupply);
     }
 
