@@ -31,12 +31,12 @@ library SafeDecimalMath {
     uint256 private constant highPrecisionDecimals = 27;
 
     /* The number representing 1.0. */
-    uint256 private constant UNIT = 10**uint256(decimals);
+    uint256 private constant UNIT = 10 ** uint256(decimals);
 
     /* The number representing 1.0 for higher fidelity numbers. */
-    uint256 private constant PRECISE_UNIT = 10**uint256(highPrecisionDecimals);
+    uint256 private constant PRECISE_UNIT = 10 ** uint256(highPrecisionDecimals);
     uint256 private constant UNIT_TO_HIGH_PRECISION_CONVERSION_FACTOR =
-        10**uint256(highPrecisionDecimals - decimals);
+        10 ** uint256(highPrecisionDecimals - decimals);
 
     /**
      * @return The result of multiplying x and y, interpreting the operands as fixed-point

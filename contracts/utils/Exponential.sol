@@ -77,11 +77,10 @@ abstract contract Exponential is CarefulMath, ExponentialNoError {
     /**
      * @dev Multiply an Exp by a scalar, then truncate to return an unsigned integer.
      */
-    function mulScalarTruncate(Exp memory a, uint256 scalar)
-        internal
-        pure
-        returns (MathError, uint256)
-    {
+    function mulScalarTruncate(
+        Exp memory a,
+        uint256 scalar
+    ) internal pure returns (MathError, uint256) {
         (MathError err, Exp memory product) = mulScalar(a, scalar);
         if (err != MathError.NO_ERROR) {
             return (err, 0);
@@ -121,11 +120,10 @@ abstract contract Exponential is CarefulMath, ExponentialNoError {
     /**
      * @dev Divide a scalar by an Exp, returning a new Exp.
      */
-    function divScalarByExp(uint256 scalar, Exp memory divisor)
-        internal
-        pure
-        returns (MathError, Exp memory)
-    {
+    function divScalarByExp(
+        uint256 scalar,
+        Exp memory divisor
+    ) internal pure returns (MathError, Exp memory) {
         /*
           We are doing this as:
           getExp(mulUInt(expScale, scalar), divisor.mantissa)
@@ -145,11 +143,10 @@ abstract contract Exponential is CarefulMath, ExponentialNoError {
     /**
      * @dev Divide a scalar by an Exp, then truncate to return an unsigned integer.
      */
-    function divScalarByExpTruncate(uint256 scalar, Exp memory divisor)
-        internal
-        pure
-        returns (MathError, uint256)
-    {
+    function divScalarByExpTruncate(
+        uint256 scalar,
+        Exp memory divisor
+    ) internal pure returns (MathError, uint256) {
         (MathError err, Exp memory fraction) = divScalarByExp(scalar, divisor);
         if (err != MathError.NO_ERROR) {
             return (err, 0);
@@ -170,8 +167,10 @@ abstract contract Exponential is CarefulMath, ExponentialNoError {
         // We add half the scale before dividing so that we get rounding instead of truncation.
         //  See "Listing 6" and text above it at https://accu.org/index.php/journals/1717
         // Without this change, a result like 6.6...e-19 will be truncated to 0 instead of being rounded to 1e-18.
-        (MathError err1, uint256 doubleScaledProductWithHalfScale) =
-            addUInt(halfExpScale, doubleScaledProduct);
+        (MathError err1, uint256 doubleScaledProductWithHalfScale) = addUInt(
+            halfExpScale,
+            doubleScaledProduct
+        );
         if (err1 != MathError.NO_ERROR) {
             return (err1, Exp({mantissa: 0}));
         }

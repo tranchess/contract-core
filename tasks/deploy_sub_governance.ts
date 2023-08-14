@@ -4,12 +4,12 @@ import type { GovernanceAddresses } from "./deploy_governance";
 import type { VotingEscrowImplAddresses } from "./deploy_voting_escrow_impl";
 import type { ControllerBallotAddresses } from "./deploy_controller_ballot";
 import type { ChessControllerImplAddresses } from "./deploy_chess_controller_impl";
-import type { AnyswapChessPoolAddresses } from "./deploy_anyswap_chess_pool";
+import type { ChessPoolAddresses } from "./deploy_chess_pool";
 import { GOVERNANCE_CONFIG } from "../config";
 import { updateHreSigner } from "./signers";
 
 task("deploy_sub_governance", "Deploy sub chain governance contracts")
-    .addParam("mainChainId", "Main chain ID")
+    .addParam("mainLzChainId", "Main LayerZero chain ID")
     .addParam("mainChainRelayer", "ChessScheduleRelayer address on the main chain")
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
@@ -18,7 +18,7 @@ task("deploy_sub_governance", "Deploy sub chain governance contracts")
         await hre.run("compile");
         const [deployer] = await ethers.getSigners();
 
-        const mainChainId = parseInt(args.mainChainId);
+        const mainLzChainId = parseInt(args.mainLzChainId);
         const mainChainRelayer = args.mainChainRelayer;
 
         const TimelockController = await ethers.getContractFactory("TimelockController");
@@ -44,24 +44,24 @@ task("deploy_sub_governance", "Deploy sub chain governance contracts")
         );
         console.log(`Chess: ${chess.address}`);
 
-        await hre.run("deploy_anyswap_chess_pool", {
+        await hre.run("deploy_chess_pool", {
             chess: chess.address,
         });
-        const anyswapChessPool = await ethers.getContractAt(
-            "AnyswapChessPool",
-            loadAddressFile<AnyswapChessPoolAddresses>(hre, "anyswap_chess_pool").anyswapChessPool
+        const chessPool = await ethers.getContractAt(
+            "ProxyOFTPool",
+            loadAddressFile<ChessPoolAddresses>(hre, "chess_pool").chessPool
         );
-        console.log(`AnyswapChessPool: ${anyswapChessPool.address}`);
+        console.log(`ChessPool: ${chessPool.address}`);
 
         await hre.run("deploy_voting_escrow_impl", {
             chess: chess.address,
-            anyswapChess: chess.address,
+            chessPool: chessPool.address,
         });
         const votingEscrowImplAddresses = loadAddressFile<VotingEscrowImplAddresses>(
             hre,
-            "voting_escrow_v3_impl"
+            "voting_escrow_v4_impl"
         );
-        const VotingEscrow = await ethers.getContractFactory("VotingEscrowV3");
+        const VotingEscrow = await ethers.getContractFactory("VotingEscrowV4");
         const votingEscrowImpl = VotingEscrow.attach(votingEscrowImplAddresses.votingEscrowImpl);
 
         const votingEscrowInitTx = await votingEscrowImpl.populateTransaction.initialize(
@@ -125,11 +125,10 @@ task("deploy_sub_governance", "Deploy sub chain governance contracts")
 
         const ChessSubSchedule = await ethers.getContractFactory("ChessSubSchedule");
         const chessSubScheduleImpl = await ChessSubSchedule.deploy(
-            mainChainId,
-            mainChainRelayer,
+            mainLzChainId,
             controllerBallot.address,
-            chess.address,
-            GOVERNANCE_CONFIG.ANY_CALL_PROXY
+            chessPool.address,
+            GOVERNANCE_CONFIG.LZ_ENDPOINT
         );
         console.log(`ChessSubSchedule implementation: ${chessSubScheduleImpl.address}`);
 
@@ -143,17 +142,19 @@ task("deploy_sub_governance", "Deploy sub chain governance contracts")
         const chessSubSchedule = ChessSubSchedule.attach(chessSubScheduleProxy.address);
         console.log(`ChessSubSchedule: ${chessSubSchedule.address}`);
 
-        console.log("Set VotingEscrow, ChessSubSchedule and AnyswapRouter to be CHESS minters");
-        await chess.addMinter(votingEscrow.address);
-        await chess.addMinter(chessSubSchedule.address);
+        console.log("Set ChessSubSchedule's trusted remote address");
+        await chessSubSchedule.setTrustedRemoteAddress(mainLzChainId, mainChainRelayer);
+
+        console.log("Set VotingEscrow, ChessSubSchedule to be CHESS minters");
+        await chessPool.addMinter(votingEscrow.address);
+        await chessPool.addMinter(chessSubSchedule.address);
         await chess.addMinter(timelockController.address);
-        await anyswapChessPool.addMinter(GOVERNANCE_CONFIG.ANYSWAP_ROUTER);
-        await anyswapChessPool.addMinter(timelockController.address);
+        await chessPool.addMinter(timelockController.address);
 
         console.log("Transfering ownership to TimelockController");
         await chess.transferOwnership(timelockController.address);
         await proxyAdmin.transferOwnership(timelockController.address);
-        await anyswapChessPool.transferOwnership(timelockController.address);
+        await chessPool.transferOwnership(timelockController.address);
         await votingEscrow.transferOwnership(timelockController.address);
 
         const addresses: GovernanceAddresses = {
@@ -161,7 +162,7 @@ task("deploy_sub_governance", "Deploy sub chain governance contracts")
             timelockController: timelockController.address,
             proxyAdmin: proxyAdmin.address,
             chess: chess.address,
-            anyswapChessPool: anyswapChessPool.address,
+            chessPool: chessPool.address,
             chessScheduleImpl: chessSubScheduleImpl.address,
             chessSchedule: chessSubSchedule.address,
             votingEscrowImpl: votingEscrowImpl.address,

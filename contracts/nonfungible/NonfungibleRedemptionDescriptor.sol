@@ -162,11 +162,10 @@ contract NonfungibleRedemptionDescriptor {
             );
     }
 
-    function _generateChessboard(uint256 amountQ, uint256 seed)
-        private
-        view
-        returns (bytes memory)
-    {
+    function _generateChessboard(
+        uint256 amountQ,
+        uint256 seed
+    ) private view returns (bytes memory) {
         bytes memory grids;
         bool animated = seed % 10 == 0;
         seed /= 10;
@@ -224,19 +223,17 @@ contract NonfungibleRedemptionDescriptor {
         return 25;
     }
 
-    function _generateText(uint256 amountQ, uint256 amountUnderlying)
-        private
-        view
-        returns (bytes memory)
-    {
-        bytes memory unstaked =
-            abi.encodePacked(
-                '<text x="60" y="86.6821" opacity="0.5" font-size="30">',
-                _qSymbol,
-                ' submitted</text><text x="60" y="188.95" mask="url(#fade-symbol)" font-size="100" font-weight="bold">',
-                _formatDecimal(amountQ, 18),
-                "</text>"
-            );
+    function _generateText(
+        uint256 amountQ,
+        uint256 amountUnderlying
+    ) private view returns (bytes memory) {
+        bytes memory unstaked = abi.encodePacked(
+            '<text x="60" y="86.6821" opacity="0.5" font-size="30">',
+            _qSymbol,
+            ' submitted</text><text x="60" y="188.95" mask="url(#fade-symbol)" font-size="100" font-weight="bold">',
+            _formatDecimal(amountQ, 18),
+            "</text>"
+        );
         if (amountUnderlying > 0) {
             return
                 abi.encodePacked(
@@ -253,7 +250,7 @@ contract NonfungibleRedemptionDescriptor {
     }
 
     function _formatDecimal(uint256 value, uint256 decimals) private pure returns (bytes memory) {
-        uint256 mod = 10**decimals;
+        uint256 mod = 10 ** decimals;
         uint256 integerPart = value / mod;
         uint256 decimalPart = value % mod;
         if (decimalPart == 0) {

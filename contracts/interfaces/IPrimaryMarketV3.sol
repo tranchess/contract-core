@@ -49,25 +49,19 @@ interface IPrimaryMarketV3 {
         uint256 version
     ) external returns (uint256 underlying, uint256 index);
 
-    function claimRedemptions(address account, uint256[] calldata indices)
-        external
-        returns (uint256 underlying);
+    function claimRedemptions(
+        address account,
+        uint256[] calldata indices
+    ) external returns (uint256 underlying);
 
-    function claimRedemptionsAndUnwrap(address account, uint256[] calldata indices)
-        external
-        returns (uint256 underlying);
+    function claimRedemptionsAndUnwrap(
+        address account,
+        uint256[] calldata indices
+    ) external returns (uint256 underlying);
 
-    function split(
-        address recipient,
-        uint256 inQ,
-        uint256 version
-    ) external returns (uint256 outB);
+    function split(address recipient, uint256 inQ, uint256 version) external returns (uint256 outB);
 
-    function merge(
-        address recipient,
-        uint256 inB,
-        uint256 version
-    ) external returns (uint256 outQ);
+    function merge(address recipient, uint256 inB, uint256 version) external returns (uint256 outQ);
 
     function settle(uint256 day) external;
 }

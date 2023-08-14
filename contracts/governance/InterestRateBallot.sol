@@ -58,11 +58,10 @@ contract InterestRateBallot is IBallot, CoreUtility {
         return _totalSupplyAtTimestamp(block.timestamp);
     }
 
-    function balanceOfAtTimestamp(address account, uint256 timestamp)
-        external
-        view
-        returns (uint256)
-    {
+    function balanceOfAtTimestamp(
+        address account,
+        uint256 timestamp
+    ) external view returns (uint256) {
         return _balanceOfAtTimestamp(account, timestamp);
     }
 
@@ -81,8 +80,9 @@ contract InterestRateBallot is IBallot, CoreUtility {
     function cast(uint256 option) external {
         require(option < maxOption, "Invalid option");
 
-        IVotingEscrow.LockedBalance memory lockedBalance =
-            votingEscrow.getLockedBalance(msg.sender);
+        IVotingEscrow.LockedBalance memory lockedBalance = votingEscrow.getLockedBalance(
+            msg.sender
+        );
         Voter memory voter = voters[msg.sender];
         uint256 weight = getWeight(option);
         require(lockedBalance.amount > 0, "Zero value");
@@ -98,8 +98,7 @@ contract InterestRateBallot is IBallot, CoreUtility {
         );
         scheduledWeightedUnlock[lockedBalance.unlockTime] = scheduledWeightedUnlock[
             lockedBalance.unlockTime
-        ]
-            .add(lockedBalance.amount * weight);
+        ].add(lockedBalance.amount * weight);
 
         emit Voted(
             msg.sender,
@@ -141,8 +140,7 @@ contract InterestRateBallot is IBallot, CoreUtility {
         );
         scheduledWeightedUnlock[lockedBalance.unlockTime] = scheduledWeightedUnlock[
             lockedBalance.unlockTime
-        ]
-            .add(lockedBalance.amount * voter.weight);
+        ].add(lockedBalance.amount * voter.weight);
 
         emit Voted(
             account,
@@ -159,11 +157,10 @@ contract InterestRateBallot is IBallot, CoreUtility {
         voters[account].unlockTime = lockedBalance.unlockTime;
     }
 
-    function _balanceOfAtTimestamp(address account, uint256 timestamp)
-        private
-        view
-        returns (uint256)
-    {
+    function _balanceOfAtTimestamp(
+        address account,
+        uint256 timestamp
+    ) private view returns (uint256) {
         require(timestamp >= block.timestamp, "Must be current or future time");
         Voter memory voter = voters[account];
         if (timestamp > voter.unlockTime) {

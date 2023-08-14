@@ -9,7 +9,10 @@ import "../interfaces/ITrancheIndexV2.sol";
 
 /// @dev See IVault.sol under https://github.com/balancer-labs/balancer-v2-monorepo/
 interface IBalancerVault {
-    enum SwapKind {GIVEN_IN, GIVEN_OUT}
+    enum SwapKind {
+        GIVEN_IN,
+        GIVEN_OUT
+    }
 
     struct SingleSwap {
         bytes32 poolId;
@@ -64,11 +67,7 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
     IBalancerVault public immutable vault;
     bytes32 public immutable poolId;
 
-    constructor(
-        address fund_,
-        address vault_,
-        bytes32 poolId_
-    ) public {
+    constructor(address fund_, address vault_, bytes32 poolId_) public {
         fund = IFundV3(fund_);
         _tokenUnderlying = IFundV3(fund_).tokenUnderlying();
         _tokenQ = IFundV3(fund_).tokenQ();
@@ -147,22 +146,20 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
         uint256 routerQuoteBalance = IERC20(_tokenUnderlying).balanceOf(address(this));
         IERC20(_tokenUnderlying).safeApprove(address(vault), routerQuoteBalance);
 
-        IBalancerVault.SingleSwap memory singleSwap =
-            IBalancerVault.SingleSwap({
-                poolId: poolId,
-                kind: IBalancerVault.SwapKind.GIVEN_IN,
-                assetIn: _tokenUnderlying,
-                assetOut: _tokenQ,
-                amount: routerQuoteBalance,
-                userData: ""
-            });
-        IBalancerVault.FundManagement memory funds =
-            IBalancerVault.FundManagement({
-                sender: address(this),
-                fromInternalBalance: false,
-                recipient: recipient,
-                toInternalBalance: false
-            });
+        IBalancerVault.SingleSwap memory singleSwap = IBalancerVault.SingleSwap({
+            poolId: poolId,
+            kind: IBalancerVault.SwapKind.GIVEN_IN,
+            assetIn: _tokenUnderlying,
+            assetOut: _tokenQ,
+            amount: routerQuoteBalance,
+            userData: ""
+        });
+        IBalancerVault.FundManagement memory funds = IBalancerVault.FundManagement({
+            sender: address(this),
+            fromInternalBalance: false,
+            recipient: recipient,
+            toInternalBalance: false
+        });
 
         realBaseOut = vault.swap(singleSwap, funds, baseOut, block.timestamp);
     }
@@ -178,22 +175,20 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
         uint256 routerBaseBalance = fund.trancheBalanceOf(TRANCHE_Q, address(this));
         fund.trancheApprove(TRANCHE_Q, address(vault), routerBaseBalance, fund.getRebalanceSize());
 
-        IBalancerVault.SingleSwap memory singleSwap =
-            IBalancerVault.SingleSwap({
-                poolId: poolId,
-                kind: IBalancerVault.SwapKind.GIVEN_IN,
-                assetIn: _tokenQ,
-                assetOut: _tokenUnderlying,
-                amount: routerBaseBalance,
-                userData: ""
-            });
-        IBalancerVault.FundManagement memory funds =
-            IBalancerVault.FundManagement({
-                sender: address(this),
-                fromInternalBalance: false,
-                recipient: recipient,
-                toInternalBalance: false
-            });
+        IBalancerVault.SingleSwap memory singleSwap = IBalancerVault.SingleSwap({
+            poolId: poolId,
+            kind: IBalancerVault.SwapKind.GIVEN_IN,
+            assetIn: _tokenQ,
+            assetOut: _tokenUnderlying,
+            amount: routerBaseBalance,
+            userData: ""
+        });
+        IBalancerVault.FundManagement memory funds = IBalancerVault.FundManagement({
+            sender: address(this),
+            fromInternalBalance: false,
+            recipient: recipient,
+            toInternalBalance: false
+        });
 
         realQuoteOut = vault.swap(singleSwap, funds, quoteOut, block.timestamp);
     }
@@ -218,13 +213,12 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
             userData: singleSwap.userData
         });
 
-        IBalancerVault.FundManagement memory funds =
-            IBalancerVault.FundManagement({
-                sender: address(0),
-                fromInternalBalance: false,
-                recipient: address(0),
-                toInternalBalance: false
-            });
+        IBalancerVault.FundManagement memory funds = IBalancerVault.FundManagement({
+            sender: address(0),
+            fromInternalBalance: false,
+            recipient: address(0),
+            toInternalBalance: false
+        });
 
         int256[] memory assetDeltas = queryBatchSwap(singleSwap.kind, swaps, assets, funds);
 
@@ -250,16 +244,15 @@ contract BalancerV2Router is IStableSwapCoreInternalRevertExpected, ITrancheInde
         address[] memory assets,
         IBalancerVault.FundManagement memory funds
     ) public returns (int256[] memory assetDeltas) {
-        (, bytes memory returnData) =
-            address(vault).call(
-                abi.encodeWithSelector(
-                    IBalancerVault.queryBatchSwap.selector,
-                    kind,
-                    swaps,
-                    assets,
-                    funds
-                )
-            );
+        (, bytes memory returnData) = address(vault).call(
+            abi.encodeWithSelector(
+                IBalancerVault.queryBatchSwap.selector,
+                kind,
+                swaps,
+                assets,
+                funds
+            )
+        );
         assetDeltas = abi.decode(returnData, (int256[]));
         require(assetDeltas.length == swaps.length.add(1), "Unexpected length");
     }

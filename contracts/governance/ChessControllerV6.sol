@@ -37,11 +37,7 @@ contract ChessControllerV6 is IChessController, CoreUtility {
 
     EnumerableSet.AddressSet private _scheduleRelayers;
 
-    constructor(
-        address fund0_,
-        uint256 guardedLaunchStart_,
-        address controllerBallot_
-    ) public {
+    constructor(address fund0_, uint256 guardedLaunchStart_, address controllerBallot_) public {
         fund0 = fund0_;
         guardedLaunchStart = guardedLaunchStart_;
         require(_endOfWeek(guardedLaunchStart_) == guardedLaunchStart_ + 1 weeks);
@@ -89,11 +85,10 @@ contract ChessControllerV6 is IChessController, CoreUtility {
     /// @notice Get relative weight (not more than 1.0) normalized to 1e18
     ///         (e.g. 1.0 == 1e18).
     /// @return weight Value of relative weight normalized to 1e18
-    function getFundRelativeWeight(address pool, uint256 timestamp)
-        external
-        override
-        returns (uint256)
-    {
+    function getFundRelativeWeight(
+        address pool,
+        uint256 timestamp
+    ) external override returns (uint256) {
         require(timestamp <= block.timestamp, "Too soon");
         if (timestamp < guardedLaunchStart) {
             return pool == fund0 ? 1e18 : 0;
@@ -117,15 +112,17 @@ contract ChessControllerV6 is IChessController, CoreUtility {
         address[] memory relayers = getScheduleRelayers();
         uint256[] memory relayerSupplies = new uint256[](relayers.length);
         for (uint256 i = 0; i < relayers.length; i++) {
-            uint256 relayerSupply =
-                IChessScheduleRelayer(relayers[i]).veSupplyPerWeek(weekTimestamp);
+            uint256 relayerSupply = IChessScheduleRelayer(relayers[i]).veSupplyPerWeek(
+                weekTimestamp
+            );
             relayerSupplies[i] = relayerSupply;
             total = total.add(relayerSupply);
         }
 
         for (uint256 i = 0; i < pools.length; i++) {
-            uint256 w =
-                total != 0 ? sums[i].divideDecimal(total) : 1e18 / (pools.length + relayers.length);
+            uint256 w = total != 0
+                ? sums[i].divideDecimal(total)
+                : 1e18 / (pools.length + relayers.length);
             weights[weekTimestamp][pools[i]] = w;
             emit WeightUpdated(pools[i], weekTimestamp, w);
             if (pools[i] == pool) {
@@ -133,10 +130,9 @@ contract ChessControllerV6 is IChessController, CoreUtility {
             }
         }
         for (uint256 i = 0; i < relayers.length; i++) {
-            uint256 w =
-                total != 0
-                    ? relayerSupplies[i].divideDecimal(total)
-                    : 1e18 / (pools.length + relayers.length);
+            uint256 w = total != 0
+                ? relayerSupplies[i].divideDecimal(total)
+                : 1e18 / (pools.length + relayers.length);
             weights[weekTimestamp][relayers[i]] = w;
             emit WeightUpdated(relayers[i], weekTimestamp, w);
             if (relayers[i] == pool) {

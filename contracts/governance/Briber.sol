@@ -6,38 +6,48 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "./RewardClaimer.sol";
 
-interface IBribeVault {
+interface IBribeMarket {
     function BRIBE_VAULT() external view returns (address);
 
-    function depositBribeERC20(
+    function depositBribe(
         bytes32 proposal,
         address token,
-        uint256 amount
+        uint256 amount,
+        uint256 maxTokensPerVote,
+        uint256 periods
     ) external;
 }
 
 contract Briber is Ownable {
     using SafeERC20 for IERC20;
 
-    IBribeVault public immutable bribeVault;
+    // Hidden hands ve2 config
+    uint256 public constant NO_MAX_TOKENS_PER_VOTE = 0; // No limit
+    uint256 public constant ONE_PERIOD = 1; // 1 round
+
+    IBribeMarket public immutable bribeMarket;
     RewardClaimer public immutable rewardClaimer;
     address public immutable token;
 
-    constructor(
-        address bribeVault_,
-        address rewardClaimer_,
-        address token_
-    ) public {
-        bribeVault = IBribeVault(bribeVault_);
+    constructor(address bribeMarket_, address rewardClaimer_, address token_) public {
+        bribeMarket = IBribeMarket(bribeMarket_);
         rewardClaimer = RewardClaimer(rewardClaimer_);
         token = token_;
     }
 
-    function bribe(uint256 proposalIndex, uint256 choiceIndex) external onlyOwner {
-        bytes32 proposal = keccak256(abi.encodePacked(proposalIndex, choiceIndex));
+    function bribe(address gauge) external onlyOwner {
+        bytes32 proposal = keccak256(abi.encodePacked(gauge));
+        _bribe(proposal);
+    }
+
+    function bribe(bytes32 proposal) external onlyOwner {
+        _bribe(proposal);
+    }
+
+    function _bribe(bytes32 proposal) private {
         rewardClaimer.claimRewards();
         uint256 bribeAmount = IERC20(token).balanceOf(address(this));
-        IERC20(token).safeApprove(bribeVault.BRIBE_VAULT(), bribeAmount);
-        bribeVault.depositBribeERC20(proposal, token, bribeAmount);
+        IERC20(token).safeApprove(bribeMarket.BRIBE_VAULT(), bribeAmount);
+        bribeMarket.depositBribe(proposal, token, bribeAmount, NO_MAX_TOKENS_PER_VOTE, ONE_PERIOD);
     }
 }

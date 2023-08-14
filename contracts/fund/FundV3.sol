@@ -176,7 +176,9 @@ contract FundV3 is
         address feeCollector;
     }
 
-    constructor(ConstructorParameters memory params)
+    constructor(
+        ConstructorParameters memory params
+    )
         public
         Ownable()
         FundRolesV2(
@@ -189,7 +191,7 @@ contract FundV3 is
     {
         tokenUnderlying = params.tokenUnderlying;
         require(params.underlyingDecimals <= 18, "Underlying decimals larger than 18");
-        underlyingDecimalMultiplier = 10**(18 - params.underlyingDecimals);
+        underlyingDecimalMultiplier = 10 ** (18 - params.underlyingDecimals);
         _updateDailyProtocolFeeRate(params.dailyProtocolFeeRate);
         upperRebalanceThreshold = params.upperRebalanceThreshold;
         lowerRebalanceThreshold = params.lowerRebalanceThreshold;
@@ -347,12 +349,9 @@ contract FundV3 is
     /// @param day End timestamp of a trading day
     /// @return navB NAV of BISHOP
     /// @return navR NAV of ROOK
-    function historicalNavs(uint256 day)
-        external
-        view
-        override
-        returns (uint256 navB, uint256 navR)
-    {
+    function historicalNavs(
+        uint256 day
+    ) external view override returns (uint256 navB, uint256 navR) {
         return (_historicalNavB[day], _historicalNavR[day]);
     }
 
@@ -366,22 +365,15 @@ contract FundV3 is
     /// @return navSum Sum of the estimated NAV of BISHOP and ROOK
     /// @return navB Estimated NAV of BISHOP
     /// @return navROrZero Estimated NAV of ROOK, or zero if the NAV is negative
-    function extrapolateNav(uint256 price)
-        external
-        view
-        override
-        returns (
-            uint256 navSum,
-            uint256 navB,
-            uint256 navROrZero
-        )
-    {
+    function extrapolateNav(
+        uint256 price
+    ) external view override returns (uint256 navSum, uint256 navB, uint256 navROrZero) {
         uint256 settledDay = currentDay - 1 days;
         uint256 underlying = getTotalUnderlying();
-        uint256 protocolFee =
-            underlying.multiplyDecimal(dailyProtocolFeeRate).mul(block.timestamp - settledDay).div(
-                1 days
-            );
+        uint256 protocolFee = underlying
+            .multiplyDecimal(dailyProtocolFeeRate)
+            .mul(block.timestamp - settledDay)
+            .div(1 days);
         underlying = underlying.sub(protocolFee);
         return
             _extrapolateNav(block.timestamp, settledDay, price, getEquivalentTotalB(), underlying);
@@ -393,15 +385,7 @@ contract FundV3 is
         uint256 price,
         uint256 equivalentTotalB,
         uint256 underlying
-    )
-        private
-        view
-        returns (
-            uint256 navSum,
-            uint256 navB,
-            uint256 navROrZero
-        )
-    {
+    ) private view returns (uint256 navSum, uint256 navB, uint256 navROrZero) {
         navB = _historicalNavB[settledDay];
         if (equivalentTotalB > 0) {
             navSum = price.mul(underlying.mul(underlyingDecimalMultiplier)).div(equivalentTotalB);
@@ -431,16 +415,7 @@ contract FundV3 is
         uint256 amountB,
         uint256 amountR,
         uint256 index
-    )
-        public
-        view
-        override
-        returns (
-            uint256 newAmountQ,
-            uint256 newAmountB,
-            uint256 newAmountR
-        )
-    {
+    ) public view override returns (uint256 newAmountQ, uint256 newAmountB, uint256 newAmountR) {
         Rebalance storage rebalance = _rebalances[index];
         newAmountQ = amountQ.add(amountB.multiplyDecimal(rebalance.ratioB2Q)).add(
             amountR.multiplyDecimal(rebalance.ratioR2Q)
@@ -468,16 +443,7 @@ contract FundV3 is
         uint256 amountR,
         uint256 fromIndex,
         uint256 toIndex
-    )
-        external
-        view
-        override
-        returns (
-            uint256 newAmountQ,
-            uint256 newAmountB,
-            uint256 newAmountR
-        )
-    {
+    ) external view override returns (uint256 newAmountQ, uint256 newAmountB, uint256 newAmountR) {
         for (uint256 i = fromIndex; i < toIndex; i++) {
             (amountQ, amountB, amountR) = doRebalance(amountQ, amountB, amountR, i);
         }
@@ -513,12 +479,10 @@ contract FundV3 is
         _refreshAllowance(owner, spender, targetVersion);
     }
 
-    function trancheBalanceOf(uint256 tranche, address account)
-        external
-        view
-        override
-        returns (uint256)
-    {
+    function trancheBalanceOf(
+        uint256 tranche,
+        address account
+    ) external view override returns (uint256) {
         uint256 amountQ = _balances[account][TRANCHE_Q];
         uint256 amountB = _balances[account][TRANCHE_B];
         uint256 amountR = _balances[account][TRANCHE_R];
@@ -547,16 +511,9 @@ contract FundV3 is
 
     /// @notice Return all three share balances transformed to the latest rebalance version.
     /// @param account Owner of the shares
-    function trancheAllBalanceOf(address account)
-        external
-        view
-        override
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
-    {
+    function trancheAllBalanceOf(
+        address account
+    ) external view override returns (uint256, uint256, uint256) {
         uint256 amountQ = _balances[account][TRANCHE_Q];
         uint256 amountB = _balances[account][TRANCHE_B];
         uint256 amountR = _balances[account][TRANCHE_R];
@@ -609,12 +566,10 @@ contract FundV3 is
         }
     }
 
-    function trancheAllowanceVersion(address owner, address spender)
-        external
-        view
-        override
-        returns (uint256)
-    {
+    function trancheAllowanceVersion(
+        address owner,
+        address spender
+    ) external view override returns (uint256) {
         return _allowanceVersions[owner][spender];
     }
 
@@ -637,11 +592,10 @@ contract FundV3 is
         uint256 version
     ) external override onlyCurrentVersion(version) {
         _refreshAllowance(sender, msg.sender, version);
-        uint256 newAllowance =
-            _allowances[sender][msg.sender][tranche].sub(
-                amount,
-                "ERC20: transfer amount exceeds allowance"
-            );
+        uint256 newAllowance = _allowances[sender][msg.sender][tranche].sub(
+            amount,
+            "ERC20: transfer amount exceeds allowance"
+        );
         _approve(tranche, sender, msg.sender, newAllowance);
         _refreshBalance(sender, version);
         _refreshBalance(recipient, version);
@@ -682,11 +636,7 @@ contract FundV3 is
         _burn(tranche, account, amount);
     }
 
-    function shareTransfer(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) public override {
+    function shareTransfer(address sender, address recipient, uint256 amount) public override {
         uint256 tranche = _getTranche(msg.sender);
         if (tranche != TRANCHE_Q) {
             require(isFundActive(block.timestamp), "Transfer is inactive");
@@ -712,11 +662,7 @@ contract FundV3 is
         _approve(tranche, sender, spender, newAllowance);
     }
 
-    function shareApprove(
-        address owner,
-        address spender,
-        uint256 amount
-    ) external override {
+    function shareApprove(address owner, address spender, uint256 amount) external override {
         uint256 tranche = _getTranche(msg.sender);
         _refreshAllowance(owner, spender, _rebalanceSize);
         _approve(tranche, owner, spender, amount);
@@ -744,12 +690,7 @@ contract FundV3 is
         _approve(tranche, sender, spender, newAllowance);
     }
 
-    function _transfer(
-        uint256 tranche,
-        address sender,
-        address recipient,
-        uint256 amount
-    ) private {
+    function _transfer(uint256 tranche, address sender, address recipient, uint256 amount) private {
         require(sender != address(0), "ERC20: transfer from the zero address");
         require(recipient != address(0), "ERC20: transfer to the zero address");
         _balances[sender][tranche] = _balances[sender][tranche].sub(
@@ -760,22 +701,14 @@ contract FundV3 is
         IShareV2(_getShare(tranche)).fundEmitTransfer(sender, recipient, amount);
     }
 
-    function _mint(
-        uint256 tranche,
-        address account,
-        uint256 amount
-    ) private {
+    function _mint(uint256 tranche, address account, uint256 amount) private {
         require(account != address(0), "ERC20: mint to the zero address");
         _totalSupplies[tranche] = _totalSupplies[tranche].add(amount);
         _balances[account][tranche] = _balances[account][tranche].add(amount);
         IShareV2(_getShare(tranche)).fundEmitTransfer(address(0), account, amount);
     }
 
-    function _burn(
-        uint256 tranche,
-        address account,
-        uint256 amount
-    ) private {
+    function _burn(uint256 tranche, address account, uint256 amount) private {
         require(account != address(0), "ERC20: burn from the zero address");
         _balances[account][tranche] = _balances[account][tranche].sub(
             amount,
@@ -785,12 +718,7 @@ contract FundV3 is
         IShareV2(_getShare(tranche)).fundEmitTransfer(account, address(0), amount);
     }
 
-    function _approve(
-        uint256 tranche,
-        address owner,
-        address spender,
-        uint256 amount
-    ) private {
+    function _approve(uint256 tranche, address owner, address spender, uint256 amount) private {
         require(owner != address(0), "ERC20: approve from the zero address");
         require(spender != address(0), "ERC20: approve to the zero address");
         _allowances[owner][spender][tranche] = amount;
@@ -820,8 +748,13 @@ contract FundV3 is
         // Calculate NAV
         uint256 equivalentTotalB = getEquivalentTotalB();
         uint256 underlying = getTotalUnderlying();
-        (uint256 navSum, uint256 navB, uint256 navR) =
-            _extrapolateNav(day, day - 1 days, price, equivalentTotalB, underlying);
+        (uint256 navSum, uint256 navB, uint256 navR) = _extrapolateNav(
+            day,
+            day - 1 days,
+            price,
+            equivalentTotalB,
+            underlying
+        );
 
         if (_shouldTriggerRebalance(navB, navR)) {
             uint256 newSplitRatio = splitRatio.multiplyDecimal(navSum) / 2;
@@ -1161,11 +1094,7 @@ contract FundV3 is
     /// @param owner Owner of the allowance to rebalance
     /// @param spender Spender of the allowance to rebalance
     /// @param targetVersion The target rebalance version, or zero for the latest version
-    function _refreshAllowance(
-        address owner,
-        address spender,
-        uint256 targetVersion
-    ) private {
+    function _refreshAllowance(address owner, address spender, uint256 targetVersion) private {
         if (targetVersion == 0) {
             targetVersion = _rebalanceSize;
         }
@@ -1212,15 +1141,7 @@ contract FundV3 is
         uint256 allowanceB,
         uint256 allowanceR,
         uint256 index
-    )
-        private
-        view
-        returns (
-            uint256 newAllowanceQ,
-            uint256 newAllowanceB,
-            uint256 newAllowanceR
-        )
-    {
+    ) private view returns (uint256 newAllowanceQ, uint256 newAllowanceB, uint256 newAllowanceR) {
         Rebalance storage rebalance = _rebalances[index];
 
         /// @dev using saturating arithmetic to avoid unconscious overflow revert

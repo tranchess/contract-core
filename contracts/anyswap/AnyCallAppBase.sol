@@ -14,14 +14,7 @@ interface IAnyCallV6Proxy {
 }
 
 interface IAnyCallExecutor {
-    function context()
-        external
-        view
-        returns (
-            address from,
-            uint256 fromChainID,
-            uint256 nonce
-        );
+    function context() external view returns (address from, uint256 fromChainID, uint256 nonce);
 }
 
 interface IAnyFallback {
@@ -51,11 +44,7 @@ abstract contract AnyCallAppBase {
         _;
     }
 
-    function _anyCall(
-        address to,
-        uint256 toChainID,
-        bytes memory data
-    ) internal {
+    function _anyCall(address to, uint256 toChainID, bytes memory data) internal {
         uint256 callValue = anyCallFlag == ANY_CALL_FLAG_PAY_ON_DEST ? 0 : msg.value;
         address fallbackAddress = anyCallExecuteFallback ? address(this) : address(0);
         IAnyCallV6Proxy(anyCallProxy).anyCall{value: callValue}(
@@ -67,17 +56,18 @@ abstract contract AnyCallAppBase {
         );
     }
 
-    function anyExecute(bytes calldata data)
-        external
-        onlyExecutor
-        returns (bool success, bytes memory result)
-    {
-        (address from, uint256 fromChainID, ) =
-            IAnyCallExecutor(IAnyCallV6Proxy(anyCallProxy).executor()).context();
+    function anyExecute(
+        bytes calldata data
+    ) external onlyExecutor returns (bool success, bytes memory result) {
+        (address from, uint256 fromChainID, ) = IAnyCallExecutor(
+            IAnyCallV6Proxy(anyCallProxy).executor()
+        ).context();
         bytes4 selector = data.length >= 32 ? bytes4(abi.decode(data[0:32], (bytes32))) : bytes4(0);
         if (from == address(this) && selector == IAnyFallback.anyFallback.selector) {
-            (address to, bytes memory fallbackData) =
-                abi.decode(data[4:data.length], (address, bytes));
+            (address to, bytes memory fallbackData) = abi.decode(
+                data[4:data.length],
+                (address, bytes)
+            );
             require(_checkAnyFallbackTo(to, fromChainID), "Invalid anyFallback to");
             _anyFallback(fallbackData);
             return (true, "");
@@ -91,10 +81,10 @@ abstract contract AnyCallAppBase {
         return (true, "");
     }
 
-    function _checkAnyExecuteFrom(address from, uint256 fromChainID)
-        internal
-        virtual
-        returns (bool);
+    function _checkAnyExecuteFrom(
+        address from,
+        uint256 fromChainID
+    ) internal virtual returns (bool);
 
     function _checkAnyFallbackTo(address to, uint256 fromChainID) internal virtual returns (bool);
 

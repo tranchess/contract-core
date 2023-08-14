@@ -85,11 +85,10 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
         return balanceOfAtTimestamp(account, block.timestamp);
     }
 
-    function balanceOfAtTimestamp(address account, uint256 timestamp)
-        public
-        view
-        returns (uint256)
-    {
+    function balanceOfAtTimestamp(
+        address account,
+        uint256 timestamp
+    ) public view returns (uint256) {
         require(timestamp >= block.timestamp, "Must be current or future time");
         IVotingEscrow.LockedBalance memory locked = userLockedBalances[account];
         if (timestamp >= locked.unlockTime) {
@@ -125,12 +124,9 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
         return sum;
     }
 
-    function count(uint256 timestamp)
-        external
-        view
-        override
-        returns (uint256[] memory weights, address[] memory pools)
-    {
+    function count(
+        uint256 timestamp
+    ) external view override returns (uint256[] memory weights, address[] memory pools) {
         uint256 poolSize_ = poolSize;
         uint256 size = poolSize_ - disabledPoolSize;
         pools = new address[](size);
@@ -175,8 +171,9 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
         }
 
         IVotingEscrow.LockedBalance memory oldLockedBalance = userLockedBalances[msg.sender];
-        IVotingEscrow.LockedBalance memory lockedBalance =
-            votingEscrow.getLockedBalance(msg.sender);
+        IVotingEscrow.LockedBalance memory lockedBalance = votingEscrow.getLockedBalance(
+            msg.sender
+        );
         require(
             lockedBalance.amount > 0 && lockedBalance.unlockTime > block.timestamp,
             "No veCHESS"
@@ -216,13 +213,11 @@ contract ControllerBallot is IControllerBallot, IVotingEscrowCallback, Ownable, 
             address pool = _pools[i];
             poolScheduledUnlock[pool][oldLockedBalance.unlockTime] = poolScheduledUnlock[pool][
                 oldLockedBalance.unlockTime
-            ]
-                .sub(oldLockedBalance.amount.multiplyDecimal(oldWeights[i]));
+            ].sub(oldLockedBalance.amount.multiplyDecimal(oldWeights[i]));
 
             poolScheduledUnlock[pool][lockedBalance.unlockTime] = poolScheduledUnlock[pool][
                 lockedBalance.unlockTime
-            ]
-                .add(lockedBalance.amount.multiplyDecimal(weights[i]));
+            ].add(lockedBalance.amount.multiplyDecimal(weights[i]));
             userWeights[account][pool] = weights[i];
         }
         userLockedBalances[account] = lockedBalance;

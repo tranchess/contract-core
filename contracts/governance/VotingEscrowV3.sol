@@ -144,11 +144,7 @@ contract VotingEscrowV3 is
         _initializeV2(pauser_, name_, symbol_);
     }
 
-    function _initializeV2(
-        address pauser_,
-        string memory name_,
-        string memory symbol_
-    ) private {
+    function _initializeV2(address pauser_, string memory name_, string memory symbol_) private {
         _initializeManagedPausable(pauser_);
         require(bytes(name).length == 0 && bytes(symbol).length == 0);
         name = name_;
@@ -177,12 +173,10 @@ contract VotingEscrowV3 is
         return _maxTime;
     }
 
-    function getTimestampDropBelow(address account, uint256 threshold)
-        external
-        view
-        override
-        returns (uint256)
-    {
+    function getTimestampDropBelow(
+        address account,
+        uint256 threshold
+    ) external view override returns (uint256) {
         LockedBalance memory lockedBalance = locked[account];
         if (lockedBalance.amount == 0 || lockedBalance.amount < threshold) {
             return 0;
@@ -198,21 +192,16 @@ contract VotingEscrowV3 is
         return _veTotalSupply(scheduledUnlock, checkpointWeek, nextWeekSupply, totalLocked);
     }
 
-    function getLockedBalance(address account)
-        external
-        view
-        override
-        returns (LockedBalance memory)
-    {
+    function getLockedBalance(
+        address account
+    ) external view override returns (LockedBalance memory) {
         return locked[account];
     }
 
-    function balanceOfAtTimestamp(address account, uint256 timestamp)
-        external
-        view
-        override
-        returns (uint256)
-    {
+    function balanceOfAtTimestamp(
+        address account,
+        uint256 timestamp
+    ) external view override returns (uint256) {
         return _balanceOfAtTimestamp(account, timestamp);
     }
 
@@ -303,12 +292,10 @@ contract VotingEscrowV3 is
     ///         `IAnyCallV6Proxy(thisContract.anyCallProxy()).calcSrcFees(thisContract, toChainID, 96)`.
     /// @param amount Amount of locked CHESS
     /// @param toChainID Target chain ID
-    function veChessCrossChain(uint256 amount, uint256 toChainID)
-        external
-        payable
-        nonReentrant
-        whenNotPaused
-    {
+    function veChessCrossChain(
+        uint256 amount,
+        uint256 toChainID
+    ) external payable nonReentrant whenNotPaused {
         LockedBalance memory lockedBalance = locked[msg.sender];
         require(amount > 0, "Zero value");
         require(
@@ -355,11 +342,10 @@ contract VotingEscrowV3 is
         emit CrossChainSent(msg.sender, toChainID, amount, lockedBalance.unlockTime);
     }
 
-    function _checkAnyExecuteFrom(address from, uint256 fromChainID)
-        internal
-        override
-        returns (bool)
-    {
+    function _checkAnyExecuteFrom(
+        address from,
+        uint256 fromChainID
+    ) internal override returns (bool) {
         return from == crossChainVotingEscrows[fromChainID];
     }
 
@@ -369,16 +355,20 @@ contract VotingEscrowV3 is
 
     /// @dev Receive cross chain veCHESS transfer.
     function _anyExecute(uint256 fromChainID, bytes calldata data) internal override {
-        (address account, uint256 amount, uint256 unlockTime) =
-            abi.decode(data, (address, uint256, uint256));
+        (address account, uint256 amount, uint256 unlockTime) = abi.decode(
+            data,
+            (address, uint256, uint256)
+        );
         _receiveCrossChain(account, amount, unlockTime, fromChainID);
     }
 
     /// @dev When `veChessCrossChain` failed, this function is called by the anyCall proxy
     ///      to add locked CHESS back to the account.
     function _anyFallback(bytes memory data) internal override {
-        (address account, uint256 amount, uint256 unlockTime) =
-            abi.decode(data, (address, uint256, uint256));
+        (address account, uint256 amount, uint256 unlockTime) = abi.decode(
+            data,
+            (address, uint256, uint256)
+        );
         _receiveCrossChain(account, amount, unlockTime, 0);
     }
 
@@ -402,10 +392,9 @@ contract VotingEscrowV3 is
             );
         }
         uint256 newAmount = lockedBalance.amount.add(amount);
-        uint256 newUnlockTime =
-            lockedBalance.unlockTime.max(unlockTime).max(
-                _endOfWeek(block.timestamp) + MIN_CROSS_CHAIN_RECEIVER_LOCK_PERIOD
-            );
+        uint256 newUnlockTime = lockedBalance.unlockTime.max(unlockTime).max(
+            _endOfWeek(block.timestamp) + MIN_CROSS_CHAIN_RECEIVER_LOCK_PERIOD
+        );
         _checkpointAndUpdateLock(
             lockedBalance.amount,
             lockedBalance.unlockTime,
@@ -448,10 +437,10 @@ contract VotingEscrowV3 is
         callback = newCallback;
     }
 
-    function updateCrossChainVotingEscrow(uint256 chainID, address votingEscrow)
-        external
-        onlyOwner
-    {
+    function updateCrossChainVotingEscrow(
+        uint256 chainID,
+        address votingEscrow
+    ) external onlyOwner {
         crossChainVotingEscrows[chainID] = votingEscrow;
         emit CrossChainVotingEscrowUpdated(chainID, votingEscrow);
     }
@@ -468,11 +457,10 @@ contract VotingEscrowV3 is
         }
     }
 
-    function _balanceOfAtTimestamp(address account, uint256 timestamp)
-        private
-        view
-        returns (uint256)
-    {
+    function _balanceOfAtTimestamp(
+        address account,
+        uint256 timestamp
+    ) private view returns (uint256) {
         require(timestamp >= block.timestamp, "Must be current or future time");
         LockedBalance memory lockedBalance = locked[account];
         if (timestamp > lockedBalance.unlockTime) {

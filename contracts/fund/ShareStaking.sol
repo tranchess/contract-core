@@ -199,8 +199,11 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 version = _totalSupplyVersion;
         uint256 rebalanceSize = _fundRebalanceSize();
         if (version < rebalanceSize) {
-            (uint256 totalSupplyQ, uint256 totalSupplyB, uint256 totalSupplyR) =
-                _fundBatchRebalance(
+            (
+                uint256 totalSupplyQ,
+                uint256 totalSupplyB,
+                uint256 totalSupplyR
+            ) = _fundBatchRebalance(
                     _totalSupplies[TRANCHE_Q],
                     _totalSupplies[TRANCHE_B],
                     _totalSupplies[TRANCHE_R],
@@ -246,15 +249,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 amountB,
         uint256 amountR,
         uint256 index
-    )
-        internal
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
-    {
+    ) internal view returns (uint256, uint256, uint256) {
         return fund.doRebalance(amountQ, amountB, amountR, index);
     }
 
@@ -264,15 +259,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
         uint256 amountR,
         uint256 fromIndex,
         uint256 toIndex
-    )
-        internal
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
-    {
+    ) internal view returns (uint256, uint256, uint256) {
         return fund.batchRebalance(amountQ, amountB, amountR, fromIndex, toIndex);
     }
 
@@ -283,12 +270,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
     /// @param amount The amount to deposit
     /// @param recipient Address that receives deposit
     /// @param version The current rebalance version
-    function deposit(
-        uint256 tranche,
-        uint256 amount,
-        address recipient,
-        uint256 version
-    ) external {
+    function deposit(uint256 tranche, uint256 amount, address recipient, uint256 version) external {
         _checkpoint(version);
         _userCheckpoint(recipient, version);
         _balances[recipient][tranche] = _balances[recipient][tranche].add(amount);
@@ -315,11 +297,7 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
     /// @param tranche Tranche of the share
     /// @param amount The amount to withdraw
     /// @param version The current rebalance version
-    function withdraw(
-        uint256 tranche,
-        uint256 amount,
-        uint256 version
-    ) external {
+    function withdraw(uint256 tranche, uint256 amount, uint256 version) external {
         _checkpoint(version);
         _userCheckpoint(msg.sender, version);
         _balances[msg.sender][tranche] = _balances[msg.sender][tranche].sub(
@@ -558,27 +536,28 @@ contract ShareStaking is ITrancheIndexV2, CoreUtility {
             splitRatio = fund.historicalSplitRatio(rebalanceSize);
             _historicalSplitRatio[rebalanceSize] = splitRatio;
         }
-        uint256 weightedSupply =
-            weightedBalance(
-                _totalSupplies[TRANCHE_Q],
-                _totalSupplies[TRANCHE_B],
-                _totalSupplies[TRANCHE_R],
-                splitRatio
-            );
+        uint256 weightedSupply = weightedBalance(
+            _totalSupplies[TRANCHE_Q],
+            _totalSupplies[TRANCHE_B],
+            _totalSupplies[TRANCHE_R],
+            splitRatio
+        );
         uint256[TRANCHE_COUNT] storage balance = _balances[account];
-        uint256 newWorkingBalance =
-            weightedBalance(balance[TRANCHE_Q], balance[TRANCHE_B], balance[TRANCHE_R], splitRatio);
+        uint256 newWorkingBalance = weightedBalance(
+            balance[TRANCHE_Q],
+            balance[TRANCHE_B],
+            balance[TRANCHE_R],
+            splitRatio
+        );
         uint256 veBalance = _votingEscrow.balanceOf(account);
         if (veBalance > 0) {
             uint256 veTotalSupply = _votingEscrow.totalSupply();
             uint256 maxWorkingBalance = newWorkingBalance.multiplyDecimal(MAX_BOOSTING_FACTOR);
-            uint256 boostedWorkingBalance =
-                newWorkingBalance.add(
-                    weightedSupply
-                        .mul(veBalance)
-                        .multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE)
-                        .div(veTotalSupply)
-                );
+            uint256 boostedWorkingBalance = newWorkingBalance.add(
+                weightedSupply.mul(veBalance).multiplyDecimal(MAX_BOOSTING_FACTOR_MINUS_ONE).div(
+                    veTotalSupply
+                )
+            );
             newWorkingBalance = maxWorkingBalance.min(boostedWorkingBalance);
         }
 

@@ -24,11 +24,7 @@ contract SwapBonus is Ownable {
         bonusToken = bonusToken_;
     }
 
-    function updateBonus(
-        uint256 amount,
-        uint256 start,
-        uint256 interval
-    ) external onlyOwner {
+    function updateBonus(uint256 amount, uint256 start, uint256 interval) external onlyOwner {
         require(start >= block.timestamp, "Start time in the past");
         require(
             endTimestamp < block.timestamp && endTimestamp == lastTimestamp,

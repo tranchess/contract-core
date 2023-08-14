@@ -62,15 +62,15 @@ contract ChainlinkTwapOracleV2 is ITwapOracleV2, Ownable {
         chainlinkMinMessageCount = chainlinkMinMessageCount_;
         chainlinkMessageExpiration = chainlinkMessageExpiration_;
         uint256 decimal = AggregatorV3Interface(chainlinkAggregator_).decimals();
-        _chainlinkPriceMultiplier = 10**(uint256(18).sub(decimal));
+        _chainlinkPriceMultiplier = 10 ** (uint256(18).sub(decimal));
         symbol = symbol_;
         _fund = IFundV3(fund_);
     }
 
     /// @notice Return the latest price with 18 decimal places.
     function getLatest() external view override returns (uint256) {
-        (, int256 answer, , uint256 updatedAt, ) =
-            AggregatorV3Interface(chainlinkAggregator).latestRoundData();
+        (, int256 answer, , uint256 updatedAt, ) = AggregatorV3Interface(chainlinkAggregator)
+            .latestRoundData();
         require(updatedAt >= block.timestamp - chainlinkMessageExpiration, "Stale price oracle");
         // This check is to workaround an issue in `StableSwap` that may be triggered
         // in the same block of a rebalance.
@@ -95,15 +95,9 @@ contract ChainlinkTwapOracleV2 is ITwapOracleV2, Ownable {
 
     /// @notice Search for the last round before the given timestamp. Zeros are returned
     ///         if the search fails.
-    function findLastRoundBefore(uint256 timestamp)
-        public
-        view
-        returns (
-            uint80 roundID,
-            int256 answer,
-            uint256 updatedAt
-        )
-    {
+    function findLastRoundBefore(
+        uint256 timestamp
+    ) public view returns (uint80 roundID, int256 answer, uint256 updatedAt) {
         (roundID, answer, , updatedAt, ) = AggregatorV3Interface(chainlinkAggregator)
             .latestRoundData();
         if (updatedAt < timestamp + EPOCH) {
@@ -186,21 +180,12 @@ contract ChainlinkTwapOracleV2 is ITwapOracleV2, Ownable {
     }
 
     /// @dev Call `chainlinkAggregator.getRoundData(roundID)`. Return zero if the call reverts.
-    function _getChainlinkRoundData(uint80 roundID)
-        private
-        view
-        returns (
-            uint80,
-            int256,
-            uint256,
-            uint256,
-            uint80
-        )
-    {
-        (bool success, bytes memory returnData) =
-            chainlinkAggregator.staticcall(
-                abi.encodePacked(AggregatorV3Interface.getRoundData.selector, abi.encode(roundID))
-            );
+    function _getChainlinkRoundData(
+        uint80 roundID
+    ) private view returns (uint80, int256, uint256, uint256, uint80) {
+        (bool success, bytes memory returnData) = chainlinkAggregator.staticcall(
+            abi.encodePacked(AggregatorV3Interface.getRoundData.selector, abi.encode(roundID))
+        );
         if (success) {
             return abi.decode(returnData, (uint80, int256, uint256, uint256, uint80));
         } else {

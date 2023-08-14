@@ -10,15 +10,12 @@ jobs:
     test:
         name: Unit Test
         runs-on: ubuntu-latest
-        strategy:
-            matrix:
-                node-version: [14.x]
         steps:
             - uses: actions/checkout@v2
             - name: Setup Node.js ${{ matrix.node-version }} environment
               uses: actions/setup-node@v2.1.4
               with:
-                  node-version: ${{ matrix.node-version }}
+                  node-version: 20.x
             - name: Install dependencies
               run: yarn install --immutable
             - name: Run unit test
@@ -31,7 +28,7 @@ jobs:
             - name: Setup Node.js environment
               uses: actions/setup-node@v2.1.4
               with:
-                  node-version: 12.x
+                  node-version: 20.x
             - name: Install dependencies
               run: yarn install --immutable
             - name: Check lint and format

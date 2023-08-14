@@ -87,10 +87,10 @@ contract SafeStaking is Ownable {
         _updateMinDepositTimeInterval(newMinDepositTimeInterval);
     }
 
-    function updateSafeguardAndQuorum(address[] calldata newSafeguards, uint256 newQuorum)
-        external
-        onlyOwner
-    {
+    function updateSafeguardAndQuorum(
+        address[] calldata newSafeguards,
+        uint256 newQuorum
+    ) external onlyOwner {
         // Deletion in reverse order
         uint256 length = _safeguards.length();
         for (uint256 i = 0; i < length; i++) {
@@ -198,17 +198,16 @@ contract SafeStaking is Ownable {
             "Unexpected blockhash"
         );
 
-        bytes32 msgHash =
-            keccak256(
-                abi.encodePacked(
-                    DEPOSIT_MESSAGE_PREFIX,
-                    depositRoot,
-                    registryVersion,
-                    blockNumber,
-                    blockHash,
-                    depositAmount
-                )
-            );
+        bytes32 msgHash = keccak256(
+            abi.encodePacked(
+                DEPOSIT_MESSAGE_PREFIX,
+                depositRoot,
+                registryVersion,
+                blockNumber,
+                blockHash,
+                depositAmount
+            )
+        );
         _verifySignatures(msgHash, signatures);
 
         strategy.deposit(depositAmount);
@@ -221,10 +220,9 @@ contract SafeStaking is Ownable {
         uint256 registryVersion,
         bytes memory signatures
     ) external whenNotPaused {
-        bytes32 msgHash =
-            keccak256(
-                abi.encodePacked(KEY_VERIFY_MESSAGE_PREFIX, id, newVerifiedCount, registryVersion)
-            );
+        bytes32 msgHash = keccak256(
+            abi.encodePacked(KEY_VERIFY_MESSAGE_PREFIX, id, newVerifiedCount, registryVersion)
+        );
         _verifySignatures(msgHash, signatures);
 
         registry.updateVerifiedCount(id, newVerifiedCount, registryVersion);
@@ -250,15 +248,10 @@ contract SafeStaking is Ownable {
     ///      Make sure to peform a bounds check for @param pos, to avoid out of bounds access on @param signatures
     /// @param pos which signature to read. A prior bounds check of this parameter should be performed, to avoid out of bounds access
     /// @param signatures concatenated rsv signatures
-    function _splitSignature(bytes memory signatures, uint256 pos)
-        private
-        pure
-        returns (
-            uint8 v,
-            bytes32 r,
-            bytes32 s
-        )
-    {
+    function _splitSignature(
+        bytes memory signatures,
+        uint256 pos
+    ) private pure returns (uint8 v, bytes32 r, bytes32 s) {
         assembly {
             let signaturePos := add(signatures, mul(0x41, pos))
             r := mload(add(signaturePos, 0x20))

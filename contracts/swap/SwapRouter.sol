@@ -20,29 +20,25 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
     mapping(address => mapping(address => IStableSwap)) private _swapMap;
 
     /// @dev Returns the swap for the given token pair and fee. The swap contract may or may not exist.
-    function getSwap(address baseAddress, address quoteAddress)
-        public
-        view
-        override
-        returns (IStableSwap)
-    {
-        (address addr0, address addr1) =
-            baseAddress < quoteAddress ? (baseAddress, quoteAddress) : (quoteAddress, baseAddress);
+    function getSwap(
+        address baseAddress,
+        address quoteAddress
+    ) public view override returns (IStableSwap) {
+        (address addr0, address addr1) = baseAddress < quoteAddress
+            ? (baseAddress, quoteAddress)
+            : (quoteAddress, baseAddress);
         return _swapMap[addr0][addr1];
     }
 
-    function addSwap(
-        address baseAddress,
-        address quoteAddress,
-        address swap
-    ) external onlyOwner {
+    function addSwap(address baseAddress, address quoteAddress, address swap) external onlyOwner {
         require(
             swap == address(0) ||
                 (baseAddress == IStableSwap(swap).baseAddress() &&
                     quoteAddress == IStableSwap(swap).quoteAddress())
         ); // sanity check
-        (address addr0, address addr1) =
-            baseAddress < quoteAddress ? (baseAddress, quoteAddress) : (quoteAddress, baseAddress);
+        (address addr0, address addr1) = baseAddress < quoteAddress
+            ? (baseAddress, quoteAddress)
+            : (quoteAddress, baseAddress);
         _swapMap[addr0][addr1] = IStableSwap(swap);
         emit SwapAdded(addr0, addr1, swap);
     }
@@ -241,15 +237,14 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         require(success, "Transfer failed");
     }
 
-    function getAmountsOut(uint256 amount, address[] memory path)
+    function getAmountsOut(
+        uint256 amount,
+        address[] memory path
+    )
         public
         view
         override
-        returns (
-            uint256[] memory amounts,
-            IStableSwap[] memory swaps,
-            bool[] memory isBuy
-        )
+        returns (uint256[] memory amounts, IStableSwap[] memory swaps, bool[] memory isBuy)
     {
         amounts = new uint256[](path.length);
         swaps = new IStableSwap[](path.length - 1);
@@ -267,15 +262,14 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         }
     }
 
-    function getAmountsIn(uint256 amount, address[] memory path)
+    function getAmountsIn(
+        uint256 amount,
+        address[] memory path
+    )
         public
         view
         override
-        returns (
-            uint256[] memory amounts,
-            IStableSwap[] memory swaps,
-            bool[] memory isBuy
-        )
+        returns (uint256[] memory amounts, IStableSwap[] memory swaps, bool[] memory isBuy)
     {
         amounts = new uint256[](path.length);
         swaps = new IStableSwap[](path.length - 1);

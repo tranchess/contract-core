@@ -3,36 +3,30 @@ pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@chainlink/contracts/src/v0.6/interfaces/KeeperCompatibleInterface.sol";
-
-interface IAnyCallProxy {
-    function calcSrcFees(
-        address _app,
-        uint256 _toChainID,
-        uint256 _dataLength
-    ) external view returns (uint256);
-}
+import "../layerzero/interfaces/ILayerZeroEndpoint.sol";
 
 interface ISubSchedule {
-    function anyCallProxy() external view returns (address);
+    function lzEndpoint() external view returns (ILayerZeroEndpoint);
 
-    function mainChainID() external view returns (uint256);
+    function mainLzChainID() external view returns (uint16);
 
-    function crossChainSync() external payable;
+    function crossChainSync(bytes memory adapterParams) external payable;
 }
 
 contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
-    uint256 public constant DATA_LENGTH = 96; // abi.encode(uint256,uint256,uint256)
+    uint256 private constant DATA_LENGTH = 96; // abi.encode(uint256,uint256,uint256)
+    uint256 private constant SYNC_GAS_LIMIT = 90000;
 
     ISubSchedule public immutable subSchedule;
-    uint256 public immutable mainChainID;
-    address public immutable anyCallProxy;
+    uint16 public immutable mainLzChainID;
+    ILayerZeroEndpoint public immutable lzEndpoint;
 
     uint256 public lastTimestamp;
 
     constructor(address subSchedule_) public {
         subSchedule = ISubSchedule(subSchedule_);
-        mainChainID = ISubSchedule(subSchedule_).mainChainID();
-        anyCallProxy = ISubSchedule(subSchedule_).anyCallProxy();
+        mainLzChainID = ISubSchedule(subSchedule_).mainLzChainID();
+        lzEndpoint = ISubSchedule(subSchedule_).lzEndpoint();
         _updateLastTimestamp(block.timestamp);
     }
 
@@ -47,11 +41,9 @@ contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
         _updateLastTimestamp(lastTimestamp_);
     }
 
-    function checkUpkeep(bytes calldata)
-        external
-        override
-        returns (bool upkeepNeeded, bytes memory)
-    {
+    function checkUpkeep(
+        bytes calldata
+    ) external override returns (bool upkeepNeeded, bytes memory) {
         upkeepNeeded = (block.timestamp > lastTimestamp + 1 weeks);
     }
 
@@ -59,10 +51,15 @@ contract CrossChainSyncKeeperHelper is KeeperCompatibleInterface, Ownable {
         uint256 lastTimestamp_ = lastTimestamp;
         require(block.timestamp > lastTimestamp_ + 1 weeks, "Not yet");
 
-        uint256 srcFees =
-            IAnyCallProxy(anyCallProxy).calcSrcFees(address(subSchedule), mainChainID, DATA_LENGTH);
+        (uint256 srcFees, ) = lzEndpoint.estimateFees(
+            mainLzChainID,
+            address(subSchedule),
+            new bytes(DATA_LENGTH),
+            false,
+            abi.encodePacked(uint16(1), SYNC_GAS_LIMIT)
+        );
         require(address(this).balance >= srcFees, "Not enough balance");
-        subSchedule.crossChainSync{value: srcFees}();
+        subSchedule.crossChainSync{value: srcFees}(abi.encodePacked(uint16(1), SYNC_GAS_LIMIT));
 
         // Always skip to the lastest week
         _updateLastTimestamp(

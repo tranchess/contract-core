@@ -44,11 +44,7 @@ contract MockTwapOracle is ITwapOracleV2, CoreUtility, Ownable {
 
     mapping(address => bool) public reporters;
 
-    constructor(
-        uint256 initialTwap_,
-        address fallbackOracle_,
-        uint256 fallbackTimestamp_
-    ) public {
+    constructor(uint256 initialTwap_, address fallbackOracle_, uint256 fallbackTimestamp_) public {
         lastStoredEpoch = _endOfDay(block.timestamp) - 1 days;
         storedEpochs[lastStoredEpoch].twap = initialTwap_;
         fallbackOracle = ITwapOracle(fallbackOracle_);

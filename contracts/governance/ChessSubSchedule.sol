@@ -12,30 +12,31 @@ import "../utils/CoreUtility.sol";
 
 import "./ChessRoles.sol";
 
-import "../anyswap/AnyCallAppBase.sol";
-import "../interfaces/IAnyswapV6ERC20.sol";
+import "../layerzero/UpgradeableNonblockingLzApp.sol";
+import "../layerzero/ProxyOFTPool.sol";
 
 contract ChessSubSchedule is
     IChessSchedule,
     OwnableUpgradeable,
     ChessRoles,
     CoreUtility,
-    AnyCallAppBase
+    UpgradeableNonblockingLzApp
 {
     /// @dev Reserved storage slots for future base contract upgrades
-    uint256[32] private _reservedSlots;
+    uint256[27] private _reservedSlots;
 
     event WeeklySupplyUpdated(uint256 week, uint256 newSupply, uint256 newOutstandingSupply);
+    event CrossChainSyncInitiated(uint256 week, uint256 veSupply, uint256 nextWeekVeSupply);
 
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    uint256 public immutable mainChainID;
-    address public immutable scheduleRelayer;
+    uint16 public immutable mainLzChainID;
 
     IControllerBallotV2 public immutable controllerBallot;
 
-    IAnyswapV6ERC20 public immutable chess;
+    ProxyOFTPool public immutable chessPool;
+    IERC20 public immutable chess;
 
     /// @notice Current number of tokens in existence (claimed or unclaimed)
     uint256 public availableSupply;
@@ -44,16 +45,15 @@ contract ChessSubSchedule is
     mapping(uint256 => uint256) private _weeklySupplies;
 
     constructor(
-        uint256 mainChainID_,
-        address scheduleRelayer_,
+        uint16 mainLzChainID_,
         address controllerBallot_,
-        address chess_,
-        address anyCallProxy_
-    ) public AnyCallAppBase(anyCallProxy_, true, false) {
-        mainChainID = mainChainID_;
-        scheduleRelayer = scheduleRelayer_;
+        address chessPool_,
+        address endpoint_
+    ) public UpgradeableNonblockingLzApp(endpoint_) {
+        mainLzChainID = mainLzChainID_;
         controllerBallot = IControllerBallotV2(controllerBallot_);
-        chess = IAnyswapV6ERC20(chess_);
+        chessPool = ProxyOFTPool(chessPool_);
+        chess = IERC20(IOFTCore(chessPool_).token());
     }
 
     function initialize() external initializer {
@@ -77,13 +77,12 @@ contract ChessSubSchedule is
         return _weeklySupplies[_endOfWeek(timestamp) - 1 weeks] / 1 weeks;
     }
 
-    /// @notice Creates `amount` CHESS tokens and assigns them to `account`,
-    ///         increasing the total supply. This is guarded by `Minter` role.
+    /// @notice Transfer `amount` CHESS tokens to `account`. This is guarded by `Minter` role.
     /// @param account recipient of the token
     /// @param amount amount of the token
     function mint(address account, uint256 amount) external override onlyMinter {
         require(minted.add(amount) <= availableSupply, "Exceeds allowable mint amount");
-        chess.mint(account, amount);
+        chess.safeTransfer(account, amount);
         minted = minted.add(amount);
     }
 
@@ -107,29 +106,31 @@ contract ChessSubSchedule is
     }
 
     /// @notice Send the total veCHESS amount voted to all pools on this chain to the main chain.
-    function crossChainSync() external payable {
+    function crossChainSync(bytes memory adapterParams) external payable {
         uint256 week = _endOfWeek(block.timestamp);
         uint256 supply = controllerBallot.totalSupplyAtWeek(week);
         uint256 nextWeekSupply = controllerBallot.totalSupplyAtWeek(week + 1 weeks);
-        _anyCall(scheduleRelayer, mainChainID, abi.encode(week, supply, nextWeekSupply));
+
+        _checkGasLimit(mainLzChainID, 0 /*type*/, adapterParams, 0 /*extraGas*/);
+        _lzSend(
+            mainLzChainID,
+            abi.encode(week, supply, nextWeekSupply),
+            msg.sender == tx.origin ? msg.sender : payable(owner()), // To avoid reentrancy
+            address(0x0),
+            adapterParams,
+            msg.value
+        );
+
+        emit CrossChainSyncInitiated(week, supply, nextWeekSupply);
     }
 
-    function _checkAnyExecuteFrom(address from, uint256 fromChainID)
-        internal
-        override
-        returns (bool)
-    {
-        return from == scheduleRelayer && fromChainID == mainChainID;
-    }
-
-    function _checkAnyFallbackTo(address, uint256) internal override returns (bool) {
-        return false;
-    }
-
-    /// @dev Receive CHESS emission from the main chain.
-    function _anyExecute(
-        uint256, // fromChainID
-        bytes calldata data
+    /// @dev Receive CHESS emission from the main chain. Create the `totalAmount`of CHESS,
+    /// increasing the total supply.
+    function _nonblockingLzReceive(
+        uint16,
+        bytes memory,
+        uint64,
+        bytes memory data
     ) internal override {
         uint256 totalAmount = abi.decode(data, (uint256));
         uint256 currentWeek = _endOfWeek(block.timestamp) - 1 weeks;
@@ -143,14 +144,11 @@ contract ChessSubSchedule is
             }
             availableSupply = availableSupply.add(totalAmount);
             _weeklySupplies[currentWeek] = totalAmount;
+            chessPool.withdrawUnderlying(totalAmount);
         } else {
             outstandingSupply_ = outstandingSupply_.add(totalAmount);
         }
         outstandingSupply = outstandingSupply_;
         emit WeeklySupplyUpdated(currentWeek, totalAmount, outstandingSupply_);
-    }
-
-    function _anyFallback(bytes memory) internal override {
-        revert("N/A");
     }
 }
