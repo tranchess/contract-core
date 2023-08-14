@@ -35,8 +35,16 @@ contract Briber is Ownable {
         token = token_;
     }
 
-    function bribe(uint256 proposalIndex, uint256 choiceIndex) external onlyOwner {
-        bytes32 proposal = keccak256(abi.encodePacked(proposalIndex, choiceIndex));
+    function bribe(address gauge) external onlyOwner {
+        bytes32 proposal = keccak256(abi.encodePacked(gauge));
+        _bribe(proposal);
+    }
+
+    function bribe(bytes32 proposal) external onlyOwner {
+        _bribe(proposal);
+    }
+
+    function _bribe(bytes32 proposal) private {
         rewardClaimer.claimRewards();
         uint256 bribeAmount = IERC20(token).balanceOf(address(this));
         IERC20(token).safeApprove(bribeMarket.BRIBE_VAULT(), bribeAmount);
