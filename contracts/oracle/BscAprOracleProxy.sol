@@ -23,6 +23,10 @@ import "../fund/ShareStaking.sol";
 // for updating the ShareStaking contract itself, thus maintaining the integrity of the protocol
 // and safeguarding user funds.
 
+// Known Issue: The fix could be used to delay rebalance, but it is not economically viable for
+// an attacker to do so over a prolonged period, as the costs would quickly outweigh the potential
+// benefits, which is basically next to zero.
+
 contract BscAprOracleProxy is IAprOracle, ITrancheIndexV2 {
     uint256 public constant DEPOSIT_AMOUNT = 1e15;
     IAprOracle public immutable aprOracle;
