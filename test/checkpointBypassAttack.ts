@@ -281,6 +281,8 @@ describe("checkpointBypassAttack", function () {
             await setAutomine(true);
             await expect(fund.settle()).to.be.revertedWith("Rebalance check failed");
             expect(await fund.getRebalanceSize()).to.equal(0);
+            await fund.settle();
+            expect(await fund.getRebalanceSize()).to.equal(1);
         });
 
         it("Should allow settlement if no lower rebalance triggered", async function () {
@@ -304,6 +306,8 @@ describe("checkpointBypassAttack", function () {
             await setAutomine(true);
             await expect(fund.settle()).to.be.revertedWith("Rebalance check failed");
             expect(await fund.getRebalanceSize()).to.equal(0);
+            await fund.settle();
+            expect(await fund.getRebalanceSize()).to.equal(1);
         });
     });
 });
