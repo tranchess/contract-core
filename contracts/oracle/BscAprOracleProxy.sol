@@ -6,6 +6,23 @@ import "../interfaces/IFundV3.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "../fund/ShareStaking.sol";
 
+// Issue: The ShareStaking contract's _checkpoint() function had a vulnerability where
+// it could be skipped if invoked multiple times in the same block, potentially leading to
+// discrepancies between total supplies and actual balances after a rebalance event. This
+// could be exploited by an attacker through a series of transactions involving
+// frontrunning the rebalance call, thus draining user funds by manipulating the spareAmount.
+
+// Fix: This new BscAprOracleProxy contract has been introduced to wrap around the existing
+// BscAprOracle. It checks for fund version changes on every capture() call. If a change is
+// detected, it deliberately interacts with the ShareStaking contract to expose the potential
+// vulnerability by comparing total supplies before and after. Any mismatch triggers a revert,
+// preventing the checkpoint bypass and ensuring the rebalance can only happen if _checkpoint()
+// is properly called and updated in the same block as Fund.settle().
+
+// The fix is implemented as an external proxy to the immutable Fund contract to avoid the need
+// for updating the ShareStaking contract itself, thus maintaining the integrity of the protocol
+// and safeguarding user funds.
+
 contract BscAprOracleProxy is IAprOracle, ITrancheIndexV2 {
     uint256 public constant DEPOSIT_AMOUNT = 1e15;
     IAprOracle public immutable aprOracle;
