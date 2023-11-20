@@ -11,13 +11,13 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../utils/SafeDecimalMath.sol";
 
-import "../interfaces/IPrimaryMarketV3.sol";
-import "../interfaces/IFundV3.sol";
+import "../interfaces/IPrimaryMarketV5.sol";
+import "../interfaces/IFundV5.sol";
 import "../interfaces/IFundForPrimaryMarketV4.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "../interfaces/IWrappedERC20.sol";
 
-contract PrimaryMarketV5 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, Ownable {
+contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, Ownable {
     event Created(address indexed account, uint256 underlying, uint256 outQ);
     event Redeemed(address indexed account, uint256 inQ, uint256 underlying, uint256 feeQ);
     event Split(address indexed account, uint256 inQ, uint256 outB, uint256 outR);
@@ -50,6 +50,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
 
     address public immutable override fund;
     bool public immutable redemptionFlag;
+    uint256 public immutable weightB;
     IERC20 private immutable _tokenUnderlying;
 
     uint256 public redemptionFeeRate;
@@ -86,10 +87,11 @@ contract PrimaryMarketV5 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         bool redemptionFlag_
     ) public Ownable() {
         fund = fund_;
-        _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
+        _tokenUnderlying = IERC20(IFundV5(fund_).tokenUnderlying());
         _updateRedemptionFeeRate(redemptionFeeRate_);
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
+        weightB = IFundV5(fund_).WEIGHT_B();
         redemptionFlag = redemptionFlag_;
     }
 
@@ -97,17 +99,19 @@ contract PrimaryMarketV5 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     /// @param underlying Underlying amount spent for the creation
     /// @return outQ Created QUEEN amount
     function getCreation(uint256 underlying) public view override returns (uint256 outQ) {
-        uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
-        uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
+        uint256 fundUnderlying = IFundV5(fund).getTotalUnderlying();
+        uint256 fundEquivalentTotalQ = IFundV5(fund).getEquivalentTotalQ();
         require(fundUnderlying.add(underlying) <= fundCap, "Exceed fund cap");
         if (fundEquivalentTotalQ == 0) {
-            outQ = underlying.mul(IFundV3(fund).underlyingDecimalMultiplier());
-            uint256 splitRatio = IFundV3(fund).splitRatio();
+            outQ = underlying.mul(IFundV5(fund).underlyingDecimalMultiplier());
+            uint256 splitRatio = IFundV5(fund).splitRatio();
             require(splitRatio != 0, "Fund is not initialized");
-            uint256 settledDay = IFundV3(fund).currentDay() - 1 days;
-            uint256 underlyingPrice = IFundV3(fund).twapOracle().getTwap(settledDay);
-            (uint256 navB, uint256 navR) = IFundV3(fund).historicalNavs(settledDay);
-            outQ = outQ.mul(underlyingPrice).div(splitRatio).divideDecimal(navB.add(navR));
+            uint256 settledDay = IFundV5(fund).currentDay() - 1 days;
+            uint256 underlyingPrice = IFundV5(fund).twapOracle().getTwap(settledDay);
+            (uint256 navB, uint256 navR) = IFundV5(fund).historicalNavs(settledDay);
+            outQ = outQ.mul(underlyingPrice).div(splitRatio).divideDecimal(
+                navB.mul(weightB).add(navR)
+            );
         } else {
             require(
                 fundUnderlying != 0,
@@ -135,15 +139,15 @@ contract PrimaryMarketV5 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         //     = floor((a * fundEquivalentTotalQ - fundEquivalentTotalQ) / fundUnderlying)
         //     < (a * fundEquivalentTotalQ - b) / fundUnderlying
         //     = minOutQ
-        uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
-        uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
+        uint256 fundUnderlying = IFundV5(fund).getTotalUnderlying();
+        uint256 fundEquivalentTotalQ = IFundV5(fund).getEquivalentTotalQ();
         require(fundEquivalentTotalQ > 0, "Cannot calculate creation for empty fund");
         return minOutQ.mul(fundUnderlying).add(fundEquivalentTotalQ - 1).div(fundEquivalentTotalQ);
     }
 
     function _getRedemption(uint256 inQ) private view returns (uint256 underlying) {
-        uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
-        uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
+        uint256 fundUnderlying = IFundV5(fund).getTotalUnderlying();
+        uint256 fundEquivalentTotalQ = IFundV5(fund).getEquivalentTotalQ();
         underlying = inQ.mul(fundUnderlying).div(fundEquivalentTotalQ);
     }
 
@@ -183,8 +187,8 @@ contract PrimaryMarketV5 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         //     = floor(a * fundUnderlying / fundEquivalentTotalQ)
         //     => floor((a * fundUnderlying - b) / fundEquivalentTotalQ)
         //     = minUnderlying
-        uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
-        uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
+        uint256 fundUnderlying = IFundV5(fund).getTotalUnderlying();
+        uint256 fundEquivalentTotalQ = IFundV5(fund).getEquivalentTotalQ();
         uint256 inQAfterFee = minUnderlying.mul(fundEquivalentTotalQ).add(fundUnderlying - 1).div(
             fundUnderlying
         );
@@ -194,8 +198,9 @@ contract PrimaryMarketV5 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     /// @notice Calculate the result of a split.
     /// @param inQ QUEEN amount to be split
     /// @return outB Received BISHOP amount, which is also received ROOK amount
-    function getSplit(uint256 inQ) public view override returns (uint256 outB) {
-        return inQ.multiplyDecimal(IFundV3(fund).splitRatio());
+    function getSplit(uint256 inQ) public view override returns (uint256 outB, uint256 outR) {
+        outR = inQ.multiplyDecimal(IFundV5(fund).splitRatio());
+        outB = outR.mul(weightB);
     }
 
     /// @notice Calculate the amount of QUEEN that can be split into at least the given amount of
@@ -203,7 +208,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     /// @param minOutB Received BISHOP amount, which is also received ROOK amount
     /// @return inQ QUEEN amount that should be split
     function getSplitForB(uint256 minOutB) external view override returns (uint256 inQ) {
-        uint256 splitRatio = IFundV3(fund).splitRatio();
+        uint256 splitRatio = IFundV5(fund).splitRatio();
         return minOutB.mul(1e18).add(splitRatio.sub(1)).div(splitRatio);
     }
 
@@ -212,7 +217,8 @@ contract PrimaryMarketV5 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
     /// @return outQ Received QUEEN amount
     /// @return feeQ QUEEN amount charged as merge fee
     function getMerge(uint256 inB) public view override returns (uint256 outQ, uint256 feeQ) {
-        uint256 outQBeforeFee = inB.divideDecimal(IFundV3(fund).splitRatio());
+        uint256 splitRatio = IFundV5(fund).splitRatio();
+        uint256 outQBeforeFee = inB.divideDecimal(splitRatio.mul(weightB));
         feeQ = outQBeforeFee.multiplyDecimal(mergeFeeRate);
         outQ = outQBeforeFee.sub(feeQ);
     }
@@ -236,8 +242,9 @@ contract PrimaryMarketV5 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         //    >= ceil(a * (1e18 - mergeFeeRate) / 1e18)
         //     = (a * (1e18 - mergeFeeRate) + b) / 1e18         // because b < 1e18
         //     = minOutQ
+        uint256 splitRatio = IFundV5(fund).splitRatio();
         uint256 outQBeforeFee = minOutQ.divideDecimal(1e18 - mergeFeeRate);
-        inB = outQBeforeFee.mul(IFundV3(fund).splitRatio()).add(1e18 - 1).div(1e18);
+        inB = outQBeforeFee.mul(splitRatio.mul(weightB)).add(1e18 - 1).div(1e18);
     }
 
     /// @notice Return index of the first queued redemption that cannot be claimed now.
@@ -329,7 +336,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         emit Created(recipient, underlying, outQ);
 
         // Call an optional hook in the strategy and ignore errors.
-        (bool success, ) = IFundV3(fund).strategy().call(
+        (bool success, ) = IFundV5(fund).strategy().call(
             abi.encodeWithSignature("onPrimaryMarketCreate()")
         );
         if (!success) {
@@ -390,7 +397,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         emit Redeemed(recipient, inQ, underlying, feeQ);
 
         // Call an optional hook in the strategy and ignore errors.
-        (bool success, ) = IFundV3(fund).strategy().call(
+        (bool success, ) = IFundV5(fund).strategy().call(
             abi.encodeWithSignature("onPrimaryMarketRedeem()")
         );
         if (!success) {
@@ -525,12 +532,12 @@ contract PrimaryMarketV5 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         address recipient,
         uint256 inQ,
         uint256 version
-    ) external override returns (uint256 outB) {
-        outB = getSplit(inQ);
+    ) external override returns (uint256 outB, uint256 outR) {
+        (outB, outR) = getSplit(inQ);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_B, recipient, outB, version);
-        IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_R, recipient, outB, version);
-        emit Split(recipient, inQ, outB, outB);
+        IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_R, recipient, outR, version);
+        emit Split(recipient, inQ, outB, outR);
     }
 
     function merge(

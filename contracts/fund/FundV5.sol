@@ -12,19 +12,17 @@ import "../utils/SafeDecimalMath.sol";
 import "../utils/CoreUtility.sol";
 
 import "../interfaces/IPrimaryMarketV3.sol";
-import "../interfaces/IFundV4.sol";
+import "../interfaces/IFundV5.sol";
 import "../interfaces/IFundForPrimaryMarketV4.sol";
 import "../interfaces/IFundForStrategyV2.sol";
 import "../interfaces/IShareV2.sol";
 import "../interfaces/ITwapOracleV2.sol";
-import "../interfaces/IAprOracle.sol";
-import "../interfaces/IBallot.sol";
 import "../interfaces/IVotingEscrow.sol";
 
 import "./FundRolesV2.sol";
 
-contract FundV4 is
-    IFundV4,
+contract FundV5 is
+    IFundV5,
     IFundForPrimaryMarketV4,
     IFundForStrategyV2,
     Ownable,
@@ -41,16 +39,16 @@ contract FundV4 is
     event LossReported(uint256 loss);
     event DailyProtocolFeeRateUpdated(uint256 newDailyProtocolFeeRate);
     event TwapOracleUpdated(address newTwapOracle);
-    event AprOracleUpdated(address newAprOracle);
-    event BallotUpdated(address newBallot);
     event FeeCollectorUpdated(address newFeeCollector);
     event ActivityDelayTimeUpdated(uint256 delayTime);
     event SplitRatioUpdated(uint256 newSplitRatio);
     event TotalDebtUpdated(uint256 newTotalDebt);
 
     uint256 private constant UNIT = 1e18;
-    uint256 private constant MAX_INTEREST_RATE = 0.2e18; // 20% daily
+    uint256 private constant INTEREST_RATE = 8219178082191780; // 3% yearly
     uint256 private constant MAX_DAILY_PROTOCOL_FEE_RATE = 0.05e18; // 5% daily rate
+
+    uint256 public constant override WEIGHT_B = 9;
 
     /// @notice Upper bound of `NAV_R / NAV_B` to trigger a rebalance.
     uint256 public immutable upperRebalanceThreshold;
@@ -69,12 +67,6 @@ contract FundV4 is
 
     /// @notice TwapOracle address for the underlying asset.
     ITwapOracleV2 public override twapOracle;
-
-    /// @notice AprOracle address.
-    IAprOracle public aprOracle;
-
-    /// @notice Address of the interest rate ballot.
-    IBallot public ballot;
 
     /// @notice Fee Collector address.
     address public override feeCollector;
@@ -141,12 +133,6 @@ contract FundV4 is
     ///         the fund after settlement of that trading day.
     mapping(uint256 => uint256) public override historicalUnderlying;
 
-    /// @notice Mapping of trading week => interest rate of BISHOP.
-    ///
-    ///         Key is the end timestamp of a trading day. Value is the interest rate captured
-    ///         after settlement of that day, which will be effective in the following trading day.
-    mapping(uint256 => uint256) public historicalInterestRate;
-
     /// @dev Amount of redemption underlying that the fund owes the primary market
     uint256 private _totalDebt;
 
@@ -164,8 +150,6 @@ contract FundV4 is
         uint256 upperRebalanceThreshold;
         uint256 lowerRebalanceThreshold;
         address twapOracle;
-        address aprOracle;
-        address ballot;
         address feeCollector;
     }
 
@@ -189,8 +173,6 @@ contract FundV4 is
         upperRebalanceThreshold = params.upperRebalanceThreshold;
         lowerRebalanceThreshold = params.lowerRebalanceThreshold;
         _updateTwapOracle(params.twapOracle);
-        _updateAprOracle(params.aprOracle);
-        _updateBallot(params.ballot);
         _updateFeeCollector(params.feeCollector);
         _updateActivityDelayTime(30 minutes);
     }
@@ -216,9 +198,7 @@ contract FundV4 is
         _historicalNavB[lastDay] = lastNavB;
         _historicalNavR[lastDay] = lastNavR;
         _strategyUnderlying = strategyUnderlying;
-        uint256 lastInterestRate = _updateInterestRate(lastDay);
-        historicalInterestRate[lastDay] = lastInterestRate;
-        emit Settled(lastDay, lastNavB, lastNavR, lastInterestRate);
+        emit Settled(lastDay, lastNavB, lastNavR, INTEREST_RATE);
         fundActivityStartTime = lastDay;
     }
 
@@ -302,12 +282,18 @@ contract FundV4 is
 
     /// @notice Equivalent BISHOP supply, as if all QUEEN are split.
     function getEquivalentTotalB() public view override returns (uint256) {
-        return _totalSupplies[TRANCHE_Q].multiplyDecimal(splitRatio).add(_totalSupplies[TRANCHE_B]);
+        return
+            _totalSupplies[TRANCHE_Q].multiplyDecimal(splitRatio.mul(WEIGHT_B)).add(
+                _totalSupplies[TRANCHE_B]
+            );
     }
 
     /// @notice Equivalent QUEEN supply, as if all BISHOP and ROOK are merged.
     function getEquivalentTotalQ() public view override returns (uint256) {
-        return _totalSupplies[TRANCHE_B].divideDecimal(splitRatio).add(_totalSupplies[TRANCHE_Q]);
+        return
+            _totalSupplies[TRANCHE_B].divideDecimal(splitRatio.mul(WEIGHT_B)).add(
+                _totalSupplies[TRANCHE_Q]
+            );
     }
 
     /// @notice Return the rebalance matrix at a given index. A zero struct is returned
@@ -384,13 +370,16 @@ contract FundV4 is
         if (equivalentTotalB > 0) {
             navSum = price.mul(underlying.mul(underlyingDecimalMultiplier)).div(equivalentTotalB);
             navB = navB.multiplyDecimal(
-                historicalInterestRate[settledDay].mul(timestamp - settledDay).div(1 days).add(UNIT)
+                INTEREST_RATE.mul(timestamp - settledDay).div(1 days).add(UNIT)
             );
-            navROrZero = navSum >= navB ? navSum - navB : 0;
+
+            navROrZero = navSum.divideDecimal(splitRatio) >= navB.mul(WEIGHT_B)
+                ? navSum.divideDecimal(splitRatio) - navB.mul(WEIGHT_B)
+                : 0;
         } else {
             // If the fund is empty, use NAV in the last day
             navROrZero = _historicalNavR[settledDay];
-            navSum = navB + navROrZero;
+            navSum = navB.mul(WEIGHT_B) + navROrZero;
         }
     }
 
@@ -796,11 +785,9 @@ contract FundV4 is
         historicalUnderlying[day] = underlying;
         _historicalNavB[day] = navB;
         _historicalNavR[day] = navR;
-        uint256 interestRate = _updateInterestRate(day);
-        historicalInterestRate[day] = interestRate;
         currentDay = day + 1 days;
 
-        emit Settled(day, navB, navR, interestRate);
+        emit Settled(day, navB, navR, INTEREST_RATE);
     }
 
     function transferToStrategy(uint256 amount) external override onlyStrategy {
@@ -899,24 +886,6 @@ contract FundV4 is
         _updateTwapOracle(newTwapOracle);
     }
 
-    function _updateAprOracle(address newAprOracle) private {
-        aprOracle = IAprOracle(newAprOracle);
-        emit AprOracleUpdated(newAprOracle);
-    }
-
-    function updateAprOracle(address newAprOracle) external onlyOwner {
-        _updateAprOracle(newAprOracle);
-    }
-
-    function _updateBallot(address newBallot) private {
-        ballot = IBallot(newBallot);
-        emit BallotUpdated(newBallot);
-    }
-
-    function updateBallot(address newBallot) external onlyOwner {
-        _updateBallot(newBallot);
-    }
-
     function _updateFeeCollector(address newFeeCollector) private {
         feeCollector = newFeeCollector;
         emit FeeCollectorUpdated(newFeeCollector);
@@ -976,7 +945,7 @@ contract FundV4 is
         uint256 navROrZero,
         uint256 newSplitRatio
     ) private {
-        Rebalance memory rebalance = _calculateRebalance(navSum, navB, navROrZero, newSplitRatio);
+        Rebalance memory rebalance = _calculateRebalance(navB, navROrZero, newSplitRatio);
         uint256 oldSize = _rebalanceSize;
         splitRatio = newSplitRatio;
         _historicalSplitRatio[oldSize + 1] = newSplitRatio;
@@ -1012,13 +981,11 @@ contract FundV4 is
     ///      Note that ROOK's NAV can be negative before the rebalance when the underlying price
     ///      drops dramatically in a single trading day, in which case zero should be passed to
     ///      this function instead of the negative NAV.
-    /// @param navSum Sum of BISHOP and ROOK's NAV
     /// @param navB BISHOP's NAV before the rebalance
     /// @param navROrZero ROOK's NAV before the rebalance or zero if the NAV is negative
     /// @param newSplitRatio The new split ratio after this rebalance
     /// @return The rebalance matrix
     function _calculateRebalance(
-        uint256 navSum,
         uint256 navB,
         uint256 navROrZero,
         uint256 newSplitRatio
@@ -1028,8 +995,8 @@ contract FundV4 is
         uint256 ratioR2Q;
         if (navROrZero <= navB) {
             // Lower rebalance
-            ratioBR = navROrZero;
-            ratioB2Q = (navSum / 2 - navROrZero).divideDecimal(newSplitRatio);
+            ratioBR = UNIT;
+            ratioB2Q = 0;
             ratioR2Q = 0;
         } else {
             // Upper rebalance
@@ -1044,16 +1011,6 @@ contract FundV4 is
                 ratioBR: ratioBR,
                 timestamp: block.timestamp
             });
-    }
-
-    function _updateInterestRate(uint256 day) private returns (uint256) {
-        uint256 baseInterestRate = MAX_INTEREST_RATE.min(aprOracle.capture());
-        uint256 floatingInterestRate = ballot.count(day).div(365);
-        uint256 rate = baseInterestRate.add(floatingInterestRate);
-
-        emit InterestRateUpdated(baseInterestRate, floatingInterestRate);
-
-        return rate;
     }
 
     function _updateTotalDebt(uint256 newTotalDebt) private {
