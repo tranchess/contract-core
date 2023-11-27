@@ -14,7 +14,6 @@ import "../utils/CoreUtility.sol";
 import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/IFundV5.sol";
 import "../interfaces/IFundForPrimaryMarketV4.sol";
-import "../interfaces/IFundForStrategyV2.sol";
 import "../interfaces/IShareV2.sol";
 import "../interfaces/ITwapOracleV2.sol";
 import "../interfaces/IVotingEscrow.sol";
@@ -24,7 +23,6 @@ import "./FundRolesV2.sol";
 contract FundV5 is
     IFundV5,
     IFundForPrimaryMarketV4,
-    IFundForStrategyV2,
     Ownable,
     ReentrancyGuard,
     FundRolesV2,
@@ -35,26 +33,16 @@ contract FundV5 is
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
-    event ProfitReported(uint256 profit, uint256 totalFee, uint256 totalFeeQ, uint256 strategyFeeQ);
     event LossReported(uint256 loss);
-    event DailyProtocolFeeRateUpdated(uint256 newDailyProtocolFeeRate);
     event TwapOracleUpdated(address newTwapOracle);
-    event FeeCollectorUpdated(address newFeeCollector);
     event ActivityDelayTimeUpdated(uint256 delayTime);
     event SplitRatioUpdated(uint256 newSplitRatio);
     event TotalDebtUpdated(uint256 newTotalDebt);
 
     uint256 private constant UNIT = 1e18;
     uint256 private constant INTEREST_RATE = 8219178082191780; // 3% yearly
-    uint256 private constant MAX_DAILY_PROTOCOL_FEE_RATE = 0.05e18; // 5% daily rate
 
     uint256 public constant override WEIGHT_B = 9;
-
-    /// @notice Upper bound of `NAV_R / NAV_B` to trigger a rebalance.
-    uint256 public immutable upperRebalanceThreshold;
-
-    /// @notice Lower bound of `NAV_R / NAV_B` to trigger a rebalance.
-    uint256 public immutable lowerRebalanceThreshold;
 
     /// @notice Address of the underlying token.
     address public immutable override tokenUnderlying;
@@ -62,14 +50,8 @@ contract FundV5 is
     /// @notice A multipler that normalizes an underlying balance to 18 decimal places.
     uint256 public immutable override underlyingDecimalMultiplier;
 
-    /// @notice Daily protocol fee rate.
-    uint256 public dailyProtocolFeeRate;
-
     /// @notice TwapOracle address for the underlying asset.
     ITwapOracleV2 public override twapOracle;
-
-    /// @notice Fee Collector address.
-    address public override feeCollector;
 
     /// @notice End timestamp of the current trading day.
     ///         A trading day starts at UTC time `SETTLEMENT_TIME` of a day (inclusive)
@@ -136,8 +118,6 @@ contract FundV5 is
     /// @dev Amount of redemption underlying that the fund owes the primary market
     uint256 private _totalDebt;
 
-    uint256 private _strategyUnderlying;
-
     struct ConstructorParameters {
         address tokenUnderlying;
         uint256 underlyingDecimals;
@@ -145,12 +125,7 @@ contract FundV5 is
         address tokenB;
         address tokenR;
         address primaryMarket;
-        address strategy;
-        uint256 dailyProtocolFeeRate;
-        uint256 upperRebalanceThreshold;
-        uint256 lowerRebalanceThreshold;
         address twapOracle;
-        address feeCollector;
     }
 
     constructor(
@@ -163,17 +138,13 @@ contract FundV5 is
             params.tokenB,
             params.tokenR,
             params.primaryMarket,
-            params.strategy
+            address(0)
         )
     {
         tokenUnderlying = params.tokenUnderlying;
         require(params.underlyingDecimals <= 18, "Underlying decimals larger than 18");
         underlyingDecimalMultiplier = 10 ** (18 - params.underlyingDecimals);
-        _updateDailyProtocolFeeRate(params.dailyProtocolFeeRate);
-        upperRebalanceThreshold = params.upperRebalanceThreshold;
-        lowerRebalanceThreshold = params.lowerRebalanceThreshold;
         _updateTwapOracle(params.twapOracle);
-        _updateFeeCollector(params.feeCollector);
         _updateActivityDelayTime(30 minutes);
     }
 
@@ -181,25 +152,20 @@ contract FundV5 is
         uint256 newSplitRatio,
         uint256 lastNavB,
         uint256 lastNavR,
-        uint256 strategyUnderlying
     ) external onlyOwner {
         require(splitRatio == 0 && currentDay == 0, "Already initialized");
-        require(
-            newSplitRatio != 0 && lastNavB >= UNIT && !_shouldTriggerRebalance(lastNavB, lastNavR),
-            "Invalid parameters"
-        );
+        require(newSplitRatio != 0 && lastNavB >= UNIT, "Invalid parameters");
         currentDay = endOfDay(block.timestamp);
         splitRatio = newSplitRatio;
         _historicalSplitRatio[0] = newSplitRatio;
         emit SplitRatioUpdated(newSplitRatio);
-        uint256 lastDay = currentDay - 1 days;
-        uint256 lastDayPrice = twapOracle.getTwap(lastDay);
-        require(lastDayPrice != 0, "Price not available"); // required to do the first creation
-        _historicalNavB[lastDay] = lastNavB;
-        _historicalNavR[lastDay] = lastNavR;
-        _strategyUnderlying = strategyUnderlying;
-        emit Settled(lastDay, lastNavB, lastNavR, INTEREST_RATE);
-        fundActivityStartTime = lastDay;
+        uint256 lastYear = currentDay - 365 days;
+        uint256 lastYearPrice = twapOracle.getTwap(lastYear);
+        require(lastYearPrice != 0, "Price not available"); // required to do the first creation
+        _historicalNavB[lastYear] = lastNavB;
+        _historicalNavR[lastYear] = lastNavR;
+        emit Settled(lastYear, lastNavB, lastNavR, INTEREST_RATE);
+        fundActivityStartTime = lastYear;
     }
 
     /// @notice UTC time of a day when the fund settles.
@@ -251,14 +217,6 @@ contract FundV5 is
         return (_proposedPrimaryMarket, _proposedPrimaryMarketTimestamp);
     }
 
-    function strategy() external view override returns (address) {
-        return _strategy;
-    }
-
-    function strategyUpdateProposal() external view override returns (address, uint256) {
-        return (_proposedStrategy, _proposedStrategyTimestamp);
-    }
-
     /// @notice Return the status of the fund contract.
     /// @param timestamp Timestamp to assess
     /// @return True if the fund contract is active
@@ -268,11 +226,7 @@ contract FundV5 is
 
     function getTotalUnderlying() public view override returns (uint256) {
         uint256 hot = IERC20(tokenUnderlying).balanceOf(address(this));
-        return hot.add(_strategyUnderlying).sub(_totalDebt);
-    }
-
-    function getStrategyUnderlying() external view override returns (uint256) {
-        return _strategyUnderlying;
+        return hot.sub(_totalDebt);
     }
 
     /// @notice Get the amount of redemption underlying that the fund owes the primary market.
@@ -336,10 +290,10 @@ contract FundV5 is
     }
 
     /// @notice Estimate the current NAV of all tranches, considering underlying price change,
-    ///         accrued protocol fee and accrued interest since the previous settlement.
+    ///        and accrued interest since the previous settlement.
     ///
     ///         The extrapolation uses simple interest instead of daily compound interest in
-    ///         calculating protocol fee and BISHOP's interest. There may be significant error
+    ///         calculating BISHOP's interest. There may be significant error
     ///         in the returned values when `timestamp` is far beyond the last settlement.
     /// @param price Price of the underlying asset (18 decimal places)
     /// @return navSum Sum of the estimated NAV of BISHOP and ROOK
@@ -350,11 +304,6 @@ contract FundV5 is
     ) external view override returns (uint256 navSum, uint256 navB, uint256 navROrZero) {
         uint256 settledDay = currentDay - 1 days;
         uint256 underlying = getTotalUnderlying();
-        uint256 protocolFee = underlying
-            .multiplyDecimal(dailyProtocolFeeRate)
-            .mul(block.timestamp - settledDay)
-            .div(1 days);
-        underlying = underlying.sub(protocolFee);
         return
             _extrapolateNav(block.timestamp, settledDay, price, getEquivalentTotalB(), underlying);
     }
@@ -744,18 +693,15 @@ contract FundV5 is
     /// @notice Settle the current trading day. Settlement includes the following changes
     ///         to the fund.
     ///
-    ///         1. Charge protocol fee of the day.
-    ///         2. Settle all pending creations and redemptions from the primary market.
-    ///         3. Calculate NAV of the day and trigger rebalance if necessary.
-    ///         4. Capture new interest rate for BISHOP.
+    ///         1. Settle all pending creations and redemptions from the primary market.
+    ///         2. Calculate NAV of the day and trigger rebalance if necessary.
+    ///         3. Capture new interest rate for BISHOP.
     function settle() external nonReentrant {
         uint256 day = currentDay;
         require(day != 0, "Not initialized");
-        require(block.timestamp >= day, "The current trading day does not end yet");
+        require(block.timestamp >= day + 365 days, "The current trading year not end yet");
         uint256 price = twapOracle.getTwap(day);
         require(price != 0, "Underlying price for settlement is not ready yet");
-
-        _collectFee();
 
         IPrimaryMarketV3(_primaryMarket).settle(day);
 
@@ -764,40 +710,26 @@ contract FundV5 is
         uint256 underlying = getTotalUnderlying();
         (uint256 navSum, uint256 navB, uint256 navR) = _extrapolateNav(
             day,
-            day - 1 days,
+            day - 365 days,
             price,
             equivalentTotalB,
             underlying
         );
 
-        if (_shouldTriggerRebalance(navB, navR)) {
-            uint256 newSplitRatio = splitRatio.multiplyDecimal(navSum) / 2;
-            _triggerRebalance(day, navSum, navB, navR, newSplitRatio);
-            navB = UNIT;
-            navR = UNIT;
-            equivalentTotalB = getEquivalentTotalB();
-            fundActivityStartTime = day + activityDelayTimeAfterRebalance;
-        } else {
-            fundActivityStartTime = day;
-        }
+        uint256 newSplitRatio = splitRatio.multiplyDecimal(navSum) / 2;
+        _triggerRebalance(day, navSum, navB, navR, newSplitRatio);
+        navB = UNIT;
+        navR = UNIT;
+        equivalentTotalB = getEquivalentTotalB();
+        fundActivityStartTime = day + activityDelayTimeAfterRebalance;
 
         historicalEquivalentTotalB[day] = equivalentTotalB;
         historicalUnderlying[day] = underlying;
         _historicalNavB[day] = navB;
         _historicalNavR[day] = navR;
-        currentDay = day + 1 days;
+        currentDay = day + 365 days;
 
         emit Settled(day, navB, navR, INTEREST_RATE);
-    }
-
-    function transferToStrategy(uint256 amount) external override onlyStrategy {
-        _strategyUnderlying = _strategyUnderlying.add(amount);
-        IERC20(tokenUnderlying).safeTransfer(_strategy, amount);
-    }
-
-    function transferFromStrategy(uint256 amount) external override onlyStrategy {
-        _strategyUnderlying = _strategyUnderlying.sub(amount);
-        IERC20(tokenUnderlying).safeTransferFrom(_strategy, address(this), amount);
     }
 
     function primaryMarketTransferUnderlying(
@@ -822,27 +754,6 @@ contract FundV5 is
         IERC20(tokenUnderlying).safeTransfer(msg.sender, amount);
     }
 
-    function reportProfit(
-        uint256 profit,
-        uint256 totalFee,
-        uint256 strategyFee
-    ) external override onlyStrategy returns (uint256 strategyFeeQ) {
-        require(profit >= totalFee && totalFee >= strategyFee, "Fee cannot exceed profit");
-        _strategyUnderlying = _strategyUnderlying.add(profit);
-        uint256 equivalentTotalQ = getEquivalentTotalQ();
-        uint256 totalUnderlyingAfterFee = getTotalUnderlying() - totalFee;
-        uint256 totalFeeQ = totalFee.mul(equivalentTotalQ).div(totalUnderlyingAfterFee);
-        strategyFeeQ = strategyFee.mul(equivalentTotalQ).div(totalUnderlyingAfterFee);
-        _mint(TRANCHE_Q, feeCollector, totalFeeQ.sub(strategyFeeQ));
-        _mint(TRANCHE_Q, msg.sender, strategyFeeQ);
-        emit ProfitReported(profit, totalFee, totalFeeQ, strategyFeeQ);
-    }
-
-    function reportLoss(uint256 loss) external override onlyStrategy {
-        _strategyUnderlying = _strategyUnderlying.sub(loss);
-        emit LossReported(loss);
-    }
-
     function proposePrimaryMarketUpdate(address newPrimaryMarket) external onlyOwner {
         _proposePrimaryMarketUpdate(newPrimaryMarket);
     }
@@ -855,28 +766,6 @@ contract FundV5 is
         _applyPrimaryMarketUpdate(newPrimaryMarket);
     }
 
-    function proposeStrategyUpdate(address newStrategy) external onlyOwner {
-        _proposeStrategyUpdate(newStrategy);
-    }
-
-    function applyStrategyUpdate(address newStrategy) external onlyOwner {
-        require(_totalDebt == 0, "Cannot update strategy with debt");
-        _applyStrategyUpdate(newStrategy);
-    }
-
-    function _updateDailyProtocolFeeRate(uint256 newDailyProtocolFeeRate) private {
-        require(
-            newDailyProtocolFeeRate <= MAX_DAILY_PROTOCOL_FEE_RATE,
-            "Exceed max protocol fee rate"
-        );
-        dailyProtocolFeeRate = newDailyProtocolFeeRate;
-        emit DailyProtocolFeeRateUpdated(newDailyProtocolFeeRate);
-    }
-
-    function updateDailyProtocolFeeRate(uint256 newDailyProtocolFeeRate) external onlyOwner {
-        _updateDailyProtocolFeeRate(newDailyProtocolFeeRate);
-    }
-
     function _updateTwapOracle(address newTwapOracle) private {
         twapOracle = ITwapOracleV2(newTwapOracle);
         emit TwapOracleUpdated(newTwapOracle);
@@ -884,15 +773,6 @@ contract FundV5 is
 
     function updateTwapOracle(address newTwapOracle) external onlyOwner {
         _updateTwapOracle(newTwapOracle);
-    }
-
-    function _updateFeeCollector(address newFeeCollector) private {
-        feeCollector = newFeeCollector;
-        emit FeeCollectorUpdated(newFeeCollector);
-    }
-
-    function updateFeeCollector(address newFeeCollector) external onlyOwner {
-        _updateFeeCollector(newFeeCollector);
     }
 
     function _updateActivityDelayTime(uint256 delayTime) private {
@@ -906,29 +786,6 @@ contract FundV5 is
 
     function updateActivityDelayTime(uint256 delayTime) external onlyOwner {
         _updateActivityDelayTime(delayTime);
-    }
-
-    /// @dev Collect protocol fee by minting QUEEN tokens to the fee collector.
-    function _collectFee() private {
-        uint256 feeRate = dailyProtocolFeeRate;
-        if (feeRate == 0) {
-            return;
-        }
-        uint256 feeQ = getEquivalentTotalQ().mul(feeRate) / (1e18 - feeRate);
-        if (feeQ > 0) {
-            _mint(TRANCHE_Q, feeCollector, feeQ);
-        }
-    }
-
-    /// @dev Check whether a new rebalance should be triggered. Rebalance is triggered if
-    ///      ROOK's NAV over BISHOP's NAV is greater than the upper threshold or
-    ///      less than the lower threshold.
-    /// @param navB BISHOP's NAV before the rebalance
-    /// @param navROrZero ROOK's NAV before the rebalance or zero if the NAV is negative
-    /// @return Whether a new rebalance should be triggered
-    function _shouldTriggerRebalance(uint256 navB, uint256 navROrZero) private view returns (bool) {
-        uint256 rOverB = navROrZero.divideDecimal(navB);
-        return rOverB < lowerRebalanceThreshold || rOverB > upperRebalanceThreshold;
     }
 
     /// @dev Create a new rebalance that resets NAV of all tranches to 1. Total supplies are
@@ -945,72 +802,46 @@ contract FundV5 is
         uint256 navROrZero,
         uint256 newSplitRatio
     ) private {
-        Rebalance memory rebalance = _calculateRebalance(navB, navROrZero, newSplitRatio);
-        uint256 oldSize = _rebalanceSize;
-        splitRatio = newSplitRatio;
-        _historicalSplitRatio[oldSize + 1] = newSplitRatio;
-        emit SplitRatioUpdated(newSplitRatio);
-        _rebalances[oldSize] = rebalance;
-        _rebalanceSize = oldSize + 1;
-        emit RebalanceTriggered(
-            oldSize,
-            day,
-            navSum,
-            navB,
-            navROrZero,
-            rebalance.ratioB2Q,
-            rebalance.ratioR2Q,
-            rebalance.ratioBR
-        );
-
-        (
-            _totalSupplies[TRANCHE_Q],
-            _totalSupplies[TRANCHE_B],
-            _totalSupplies[TRANCHE_R]
-        ) = doRebalance(
-            _totalSupplies[TRANCHE_Q],
-            _totalSupplies[TRANCHE_B],
-            _totalSupplies[TRANCHE_R],
-            oldSize
-        );
-        _refreshBalance(address(this), oldSize + 1);
-    }
-
-    /// @dev Create a new rebalance matrix that resets given NAVs to (1, 1).
-    ///
-    ///      Note that ROOK's NAV can be negative before the rebalance when the underlying price
-    ///      drops dramatically in a single trading day, in which case zero should be passed to
-    ///      this function instead of the negative NAV.
-    /// @param navB BISHOP's NAV before the rebalance
-    /// @param navROrZero ROOK's NAV before the rebalance or zero if the NAV is negative
-    /// @param newSplitRatio The new split ratio after this rebalance
-    /// @return The rebalance matrix
-    function _calculateRebalance(
-        uint256 navB,
-        uint256 navROrZero,
-        uint256 newSplitRatio
-    ) private view returns (Rebalance memory) {
-        uint256 ratioBR;
-        uint256 ratioB2Q;
-        uint256 ratioR2Q;
-        if (navROrZero <= navB) {
-            // Lower rebalance
-            ratioBR = UNIT;
-            ratioB2Q = 0;
-            ratioR2Q = 0;
-        } else {
+        if (navROrZero > navB) {
             // Upper rebalance
-            ratioBR = UNIT;
-            ratioB2Q = (navB - UNIT).divideDecimal(newSplitRatio) / 2;
-            ratioR2Q = (navROrZero - UNIT).divideDecimal(newSplitRatio) / 2;
-        }
-        return
-            Rebalance({
-                ratioB2Q: ratioB2Q,
-                ratioR2Q: ratioR2Q,
-                ratioBR: ratioBR,
+            Rebalance memory rebalance = Rebalance({
+                ratioB2Q: (navB - UNIT).divideDecimal(newSplitRatio) / 2,
+                ratioR2Q: (navROrZero - UNIT).divideDecimal(newSplitRatio) / 2,
+                ratioBR: UNIT,
                 timestamp: block.timestamp
             });
+            uint256 oldSize = _rebalanceSize;
+            splitRatio = newSplitRatio;
+            _historicalSplitRatio[oldSize + 1] = newSplitRatio;
+            emit SplitRatioUpdated(newSplitRatio);
+            _rebalances[oldSize] = rebalance;
+            _rebalanceSize = oldSize + 1;
+            emit RebalanceTriggered(
+                oldSize,
+                day,
+                navSum,
+                navB,
+                navROrZero,
+                rebalance.ratioB2Q,
+                rebalance.ratioR2Q,
+                rebalance.ratioBR
+            );
+
+            (
+                _totalSupplies[TRANCHE_Q],
+                _totalSupplies[TRANCHE_B],
+                _totalSupplies[TRANCHE_R]
+            ) = doRebalance(
+                _totalSupplies[TRANCHE_Q],
+                _totalSupplies[TRANCHE_B],
+                _totalSupplies[TRANCHE_R],
+                oldSize
+            );
+            _refreshBalance(address(this), oldSize + 1);
+        } else {
+            // Lower rebalance
+            splitRatio = 0;
+        }
     }
 
     function _updateTotalDebt(uint256 newTotalDebt) private {
