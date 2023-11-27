@@ -150,8 +150,8 @@ contract RookStableSwapV2 is StableSwapV2, ITrancheIndexV2 {
     }
 
     function getOraclePrice() public view override returns (uint256) {
-        uint256 price = fund.twapOracle().getLatest();
-        (, uint256 navB, uint256 navR) = fund.extrapolateNav(price);
-        return navR;
+        uint256 price = fund.twapOracle().getLatest(); // wstETH / stETH
+        (, uint256 navB, uint256 navR) = fund.extrapolateNav(price); // ETH / ROOK
+        return navR.multiplyDecimal(price); // wstETH / ROOK
     }
 }
