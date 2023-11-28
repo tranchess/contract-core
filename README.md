@@ -1,6 +1,4 @@
-# Tranchess Core
-
-Tranchess core.
+# Code app predictions test
 
 # Local Development
 
