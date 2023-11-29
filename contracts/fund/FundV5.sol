@@ -33,11 +33,12 @@ contract FundV5 is
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
-    event LossReported(uint256 loss);
     event TwapOracleUpdated(address newTwapOracle);
+    event FeeCollectorUpdated(address newFeeCollector);
     event ActivityDelayTimeUpdated(uint256 delayTime);
     event SplitRatioUpdated(uint256 newSplitRatio);
     event TotalDebtUpdated(uint256 newTotalDebt);
+    event Frozen();
 
     uint256 private constant UNIT = 1e18;
     uint256 private constant INTEREST_RATE = 8219178082191780; // 3% yearly
@@ -52,6 +53,9 @@ contract FundV5 is
 
     /// @notice TwapOracle address for the underlying asset.
     ITwapOracleV2 public override twapOracle;
+
+    /// @notice Fee Collector address.
+    address public override feeCollector;
 
     /// @notice End timestamp of the current trading day.
     ///         A trading day starts at UTC time `SETTLEMENT_TIME` of a day (inclusive)
@@ -69,6 +73,8 @@ contract FundV5 is
     uint256 public override fundActivityStartTime;
 
     uint256 public activityDelayTimeAfterRebalance;
+
+    bool public override frozen = false;
 
     /// @dev Historical rebalances. Rebalances are often accessed in loops with bounds checking.
     ///      So we store them in a fixed-length array, in order to make compiler-generated
@@ -103,18 +109,6 @@ contract FundV5 is
     /// @dev Mapping of trading day => NAV of ROOK.
     mapping(uint256 => uint256) private _historicalNavR;
 
-    /// @notice Mapping of trading day => equivalent BISHOP supply.
-    ///
-    ///         Key is the end timestamp of a trading day. Value is the total supply of BISHOP,
-    ///         as if all QUEEN are split.
-    mapping(uint256 => uint256) public override historicalEquivalentTotalB;
-
-    /// @notice Mapping of trading day => underlying assets in the fund.
-    ///
-    ///         Key is the end timestamp of a trading day. Value is the underlying assets in
-    ///         the fund after settlement of that trading day.
-    mapping(uint256 => uint256) public override historicalUnderlying;
-
     /// @dev Amount of redemption underlying that the fund owes the primary market
     uint256 private _totalDebt;
 
@@ -126,6 +120,7 @@ contract FundV5 is
         address tokenR;
         address primaryMarket;
         address twapOracle;
+        address feeCollector;
     }
 
     constructor(
@@ -133,25 +128,20 @@ contract FundV5 is
     )
         public
         Ownable()
-        FundRolesV2(
-            params.tokenQ,
-            params.tokenB,
-            params.tokenR,
-            params.primaryMarket,
-            address(0)
-        )
+        FundRolesV2(params.tokenQ, params.tokenB, params.tokenR, params.primaryMarket, address(0))
     {
         tokenUnderlying = params.tokenUnderlying;
         require(params.underlyingDecimals <= 18, "Underlying decimals larger than 18");
         underlyingDecimalMultiplier = 10 ** (18 - params.underlyingDecimals);
         _updateTwapOracle(params.twapOracle);
+        _updateFeeCollector(params.feeCollector);
         _updateActivityDelayTime(30 minutes);
     }
 
     function initialize(
         uint256 newSplitRatio,
         uint256 lastNavB,
-        uint256 lastNavR,
+        uint256 lastNavR
     ) external onlyOwner {
         require(splitRatio == 0 && currentDay == 0, "Already initialized");
         require(newSplitRatio != 0 && lastNavB >= UNIT, "Invalid parameters");
@@ -330,43 +320,6 @@ contract FundV5 is
             navROrZero = _historicalNavR[settledDay];
             navSum = navB.mul(WEIGHT_B) + navROrZero;
         }
-    }
-
-    /// @notice Return the fund's relative income in a trading day. Note that denominators
-    ///         of the returned ratios are the latest value instead of that at the last settlement.
-    ///         If the amount of underlying token increases from 100 to 110 and assume that there's
-    ///         no creation/redemption or underlying price change, return value `incomeOverQ` will
-    ///         be 1/11 rather than 1/10.
-    /// @param day End timestamp of a trading day
-    /// @return incomeOverQ The ratio of income to the fund's total value
-    /// @return incomeOverB The ratio of income to equivalent BISHOP total value if all QUEEN are split
-    function getRelativeIncome(
-        uint256 day
-    ) external view override returns (uint256 incomeOverQ, uint256 incomeOverB) {
-        uint256 navB = _historicalNavB[day];
-        if (navB == 0) {
-            return (0, 0);
-        }
-        uint256 navR = _historicalNavR[day];
-        if (navB == UNIT && navR == UNIT) {
-            return (0, 0); // Rebalance is triggered
-        }
-        uint256 lastUnderlying = historicalUnderlying[day - 1 days];
-        uint256 lastEquivalentTotalB = historicalEquivalentTotalB[day - 1 days];
-        if (lastUnderlying == 0 || lastEquivalentTotalB == 0) {
-            return (0, 0);
-        }
-        uint256 currentUnderlying = historicalUnderlying[day];
-        uint256 currentEquivalentTotalB = historicalEquivalentTotalB[day];
-        if (currentUnderlying == 0 || currentEquivalentTotalB == 0) {
-            return (0, 0);
-        }
-        {
-            uint256 ratio = ((lastUnderlying * currentEquivalentTotalB) / currentUnderlying)
-                .divideDecimal(lastEquivalentTotalB);
-            incomeOverQ = ratio > 1e18 ? 0 : 1e18 - ratio;
-        }
-        incomeOverB = incomeOverQ.mul(navB + navR) / navB;
     }
 
     /// @notice Transform share amounts according to the rebalance at a given index.
@@ -696,7 +649,7 @@ contract FundV5 is
     ///         1. Settle all pending creations and redemptions from the primary market.
     ///         2. Calculate NAV of the day and trigger rebalance if necessary.
     ///         3. Capture new interest rate for BISHOP.
-    function settle() external nonReentrant {
+    function settle() external nonReentrant onlyNotFrozen {
         uint256 day = currentDay;
         require(day != 0, "Not initialized");
         require(block.timestamp >= day + 365 days, "The current trading year not end yet");
@@ -723,8 +676,6 @@ contract FundV5 is
         equivalentTotalB = getEquivalentTotalB();
         fundActivityStartTime = day + activityDelayTimeAfterRebalance;
 
-        historicalEquivalentTotalB[day] = equivalentTotalB;
-        historicalUnderlying[day] = underlying;
         _historicalNavB[day] = navB;
         _historicalNavR[day] = navR;
         currentDay = day + 365 days;
@@ -775,6 +726,15 @@ contract FundV5 is
         _updateTwapOracle(newTwapOracle);
     }
 
+    function _updateFeeCollector(address newFeeCollector) private {
+        feeCollector = newFeeCollector;
+        emit FeeCollectorUpdated(newFeeCollector);
+    }
+
+    function updateFeeCollector(address newFeeCollector) external onlyOwner {
+        _updateFeeCollector(newFeeCollector);
+    }
+
     function _updateActivityDelayTime(uint256 delayTime) private {
         require(
             delayTime >= 30 minutes && delayTime <= 12 hours,
@@ -802,46 +762,44 @@ contract FundV5 is
         uint256 navROrZero,
         uint256 newSplitRatio
     ) private {
+        Rebalance memory rebalance;
         if (navROrZero > navB) {
             // Upper rebalance
-            Rebalance memory rebalance = Rebalance({
+            rebalance = Rebalance({
                 ratioB2Q: (navB - UNIT).divideDecimal(newSplitRatio) / 2,
                 ratioR2Q: (navROrZero - UNIT).divideDecimal(newSplitRatio) / 2,
                 ratioBR: UNIT,
                 timestamp: block.timestamp
             });
-            uint256 oldSize = _rebalanceSize;
-            splitRatio = newSplitRatio;
-            _historicalSplitRatio[oldSize + 1] = newSplitRatio;
-            emit SplitRatioUpdated(newSplitRatio);
-            _rebalances[oldSize] = rebalance;
-            _rebalanceSize = oldSize + 1;
-            emit RebalanceTriggered(
-                oldSize,
-                day,
-                navSum,
-                navB,
-                navROrZero,
-                rebalance.ratioB2Q,
-                rebalance.ratioR2Q,
-                rebalance.ratioBR
-            );
-
-            (
-                _totalSupplies[TRANCHE_Q],
-                _totalSupplies[TRANCHE_B],
-                _totalSupplies[TRANCHE_R]
-            ) = doRebalance(
-                _totalSupplies[TRANCHE_Q],
-                _totalSupplies[TRANCHE_B],
-                _totalSupplies[TRANCHE_R],
-                oldSize
-            );
-            _refreshBalance(address(this), oldSize + 1);
-        } else {
-            // Lower rebalance
-            splitRatio = 0;
         }
+        uint256 oldSize = _rebalanceSize;
+        splitRatio = newSplitRatio;
+        _historicalSplitRatio[oldSize + 1] = newSplitRatio;
+        emit SplitRatioUpdated(newSplitRatio);
+        _rebalances[oldSize] = rebalance;
+        _rebalanceSize = oldSize + 1;
+        emit RebalanceTriggered(
+            oldSize,
+            day,
+            navSum,
+            navB,
+            navROrZero,
+            rebalance.ratioB2Q,
+            rebalance.ratioR2Q,
+            rebalance.ratioBR
+        );
+
+        (
+            _totalSupplies[TRANCHE_Q],
+            _totalSupplies[TRANCHE_B],
+            _totalSupplies[TRANCHE_R]
+        ) = doRebalance(
+            _totalSupplies[TRANCHE_Q],
+            _totalSupplies[TRANCHE_B],
+            _totalSupplies[TRANCHE_R],
+            oldSize
+        );
+        _refreshBalance(address(this), oldSize + 1);
     }
 
     function _updateTotalDebt(uint256 newTotalDebt) private {
@@ -935,6 +893,11 @@ contract FundV5 is
 
     modifier onlyCurrentVersion(uint256 version) {
         require(_rebalanceSize == version, "Only current version");
+        _;
+    }
+
+    modifier onlyNotFrozen() {
+        require(!frozen, "Frozen");
         _;
     }
 }

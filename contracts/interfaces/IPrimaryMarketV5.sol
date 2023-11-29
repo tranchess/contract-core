@@ -16,7 +16,7 @@ interface IPrimaryMarketV5 {
 
     function getSplitForB(uint256 minOutB) external view returns (uint256 inQ);
 
-    function getMerge(uint256 inB) external view returns (uint256 outQ, uint256 feeQ);
+    function getMerge(uint256 inB) external view returns (uint256 inR, uint256 outQ, uint256 feeQ);
 
     function getMergeForQ(uint256 minOutQ) external view returns (uint256 inB);
 

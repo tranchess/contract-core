@@ -209,18 +209,26 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
     /// @return inQ QUEEN amount that should be split
     function getSplitForB(uint256 minOutB) external view override returns (uint256 inQ) {
         uint256 splitRatio = IFundV5(fund).splitRatio();
-        return minOutB.mul(1e18).add(splitRatio.sub(1)).div(splitRatio);
+        return minOutB.divideDecimal(weightB).add(splitRatio.sub(1)).div(splitRatio);
     }
 
     /// @notice Calculate the result of a merge.
-    /// @param inB Spent BISHOP amount, which is also spent ROOK amount
+    /// @param inB Spent BISHOP amount
+    /// @return inR Spent ROOK amount
     /// @return outQ Received QUEEN amount
     /// @return feeQ QUEEN amount charged as merge fee
-    function getMerge(uint256 inB) public view override returns (uint256 outQ, uint256 feeQ) {
+    function getMerge(
+        uint256 inB
+    ) public view override returns (uint256 inR, uint256 outQ, uint256 feeQ) {
         uint256 splitRatio = IFundV5(fund).splitRatio();
         uint256 outQBeforeFee = inB.divideDecimal(splitRatio.mul(weightB));
         feeQ = outQBeforeFee.multiplyDecimal(mergeFeeRate);
         outQ = outQBeforeFee.sub(feeQ);
+        if (IFundV5(fund).frozen()) {
+            inR = 0;
+        } else {
+            inR = outQBeforeFee.multiplyDecimal(splitRatio);
+        }
     }
 
     /// @notice Calculate the amount of BISHOP and ROOK that can be merged into at least
@@ -334,14 +342,6 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
         _tokenUnderlying.safeTransfer(fund, underlying);
         emit Created(recipient, underlying, outQ);
-
-        // Call an optional hook in the strategy and ignore errors.
-        (bool success, ) = IFundV5(fund).strategy().call(
-            abi.encodeWithSignature("onPrimaryMarketCreate()")
-        );
-        if (!success) {
-            // ignore
-        }
     }
 
     /// @notice Redeem QUEEN to get underlying tokens back. Revert if there are still some
@@ -395,14 +395,6 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         require(underlying <= _tokenUnderlying.balanceOf(fund), "Not enough underlying in fund");
         IFundForPrimaryMarketV4(fund).primaryMarketTransferUnderlying(recipient, underlying, feeQ);
         emit Redeemed(recipient, inQ, underlying, feeQ);
-
-        // Call an optional hook in the strategy and ignore errors.
-        (bool success, ) = IFundV5(fund).strategy().call(
-            abi.encodeWithSignature("onPrimaryMarketRedeem()")
-        );
-        if (!success) {
-            // ignore
-        }
     }
 
     /// @notice Redeem QUEEN and wait in the redemption queue. Redeemed underlying tokens will
@@ -545,10 +537,11 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         uint256 inB,
         uint256 version
     ) external override returns (uint256 outQ) {
+        uint256 inR;
         uint256 feeQ;
-        (outQ, feeQ) = getMerge(inB);
+        (inR, outQ, feeQ) = getMerge(inB);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_B, msg.sender, inB, version);
-        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_R, msg.sender, inB, version);
+        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_R, msg.sender, inR, version);
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
         IFundForPrimaryMarketV4(fund).primaryMarketAddDebtAndFee(0, feeQ);
         emit Merged(recipient, outQ, inB, inB, feeQ);
