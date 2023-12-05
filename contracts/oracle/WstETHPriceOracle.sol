@@ -10,7 +10,6 @@ interface IWstETH {
 /// @title wstETH Price oracle
 /// @author Tranchess
 contract WstETHPriceOracle is ITwapOracleV2 {
-    /// @notice Chainlink aggregator used as the data source.
     IWstETH public immutable wstETH;
 
     constructor(address wstETH_) public {
