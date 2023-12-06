@@ -292,7 +292,7 @@ contract FundV5 is
     function extrapolateNav(
         uint256 price
     ) external view override returns (uint256 navSum, uint256 navB, uint256 navROrZero) {
-        uint256 settledDay = currentDay - 1 days;
+        uint256 settledDay = currentDay - 365 days;
         uint256 underlying = getTotalUnderlying();
         return
             _extrapolateNav(block.timestamp, settledDay, price, getEquivalentTotalB(), underlying);
@@ -652,7 +652,7 @@ contract FundV5 is
     function settle() external nonReentrant onlyNotFrozen {
         uint256 day = currentDay;
         require(day != 0, "Not initialized");
-        require(block.timestamp >= day + 365 days, "The current trading year not end yet");
+        require(block.timestamp >= day, "The current trading year does not end yet");
         uint256 price = twapOracle.getTwap(day);
         require(price != 0, "Underlying price for settlement is not ready yet");
 
@@ -668,6 +668,13 @@ contract FundV5 is
             equivalentTotalB,
             underlying
         );
+
+        // When the NAV of ROOK is zero, freeze and dissolve the fund
+        if (navR == 0) {
+            frozen = true;
+            emit Frozen();
+            return;
+        }
 
         uint256 newSplitRatio = splitRatio.multiplyDecimal(navSum) / 2;
         _triggerRebalance(day, navSum, navB, navR, newSplitRatio);
