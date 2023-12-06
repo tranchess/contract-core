@@ -227,17 +227,15 @@ contract FundV5 is
     /// @notice Equivalent BISHOP supply, as if all QUEEN are split.
     function getEquivalentTotalB() public view override returns (uint256) {
         return
-            _totalSupplies[TRANCHE_Q].multiplyDecimal(splitRatio.mul(WEIGHT_B)).add(
-                _totalSupplies[TRANCHE_B]
-            );
+            _totalSupplies[TRANCHE_Q]
+                .multiplyDecimal(splitRatio)
+                .add(_totalSupplies[TRANCHE_R])
+                .mul(WEIGHT_B);
     }
 
     /// @notice Equivalent QUEEN supply, as if all BISHOP and ROOK are merged.
     function getEquivalentTotalQ() public view override returns (uint256) {
-        return
-            _totalSupplies[TRANCHE_B].divideDecimal(splitRatio.mul(WEIGHT_B)).add(
-                _totalSupplies[TRANCHE_Q]
-            );
+        return _totalSupplies[TRANCHE_R].divideDecimal(splitRatio).add(_totalSupplies[TRANCHE_Q]);
     }
 
     /// @notice Return the rebalance matrix at a given index. A zero struct is returned
