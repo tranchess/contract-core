@@ -14,6 +14,7 @@ import "../utils/CoreUtility.sol";
 import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/IFundV5.sol";
 import "../interfaces/IFundForPrimaryMarketV4.sol";
+import "../interfaces/IFundForStrategyV2.sol";
 import "../interfaces/IShareV2.sol";
 import "../interfaces/ITwapOracleV2.sol";
 import "../interfaces/IVotingEscrow.sol";
@@ -23,6 +24,7 @@ import "./FundRolesV2.sol";
 contract FundV5 is
     IFundV5,
     IFundForPrimaryMarketV4,
+    IFundForStrategyV2,
     Ownable,
     ReentrancyGuard,
     FundRolesV2,
@@ -33,6 +35,8 @@ contract FundV5 is
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
+    event ProfitReported(uint256 profit, uint256 totalFee, uint256 totalFeeQ, uint256 strategyFeeQ);
+    event LossReported(uint256 loss);
     event TwapOracleUpdated(address newTwapOracle);
     event FeeCollectorUpdated(address newFeeCollector);
     event ActivityDelayTimeUpdated(uint256 delayTime);
@@ -112,6 +116,8 @@ contract FundV5 is
     /// @dev Amount of redemption underlying that the fund owes the primary market
     uint256 private _totalDebt;
 
+    uint256 private _strategyUnderlying;
+
     struct ConstructorParameters {
         address tokenUnderlying;
         uint256 underlyingDecimals;
@@ -119,6 +125,7 @@ contract FundV5 is
         address tokenB;
         address tokenR;
         address primaryMarket;
+        address strategy;
         address twapOracle;
         address feeCollector;
     }
@@ -128,7 +135,13 @@ contract FundV5 is
     )
         public
         Ownable()
-        FundRolesV2(params.tokenQ, params.tokenB, params.tokenR, params.primaryMarket, address(0))
+        FundRolesV2(
+            params.tokenQ,
+            params.tokenB,
+            params.tokenR,
+            params.primaryMarket,
+            params.strategy
+        )
     {
         tokenUnderlying = params.tokenUnderlying;
         require(params.underlyingDecimals <= 18, "Underlying decimals larger than 18");
@@ -141,7 +154,8 @@ contract FundV5 is
     function initialize(
         uint256 newSplitRatio,
         uint256 lastNavB,
-        uint256 lastNavR
+        uint256 lastNavR,
+        uint256 strategyUnderlying
     ) external onlyOwner {
         require(splitRatio == 0 && currentDay == 0, "Already initialized");
         require(newSplitRatio != 0 && lastNavB >= UNIT, "Invalid parameters");
@@ -154,6 +168,7 @@ contract FundV5 is
         require(lastYearPrice != 0, "Price not available"); // required to do the first creation
         _historicalNavB[lastYear] = lastNavB;
         _historicalNavR[lastYear] = lastNavR;
+        _strategyUnderlying = strategyUnderlying;
         emit Settled(lastYear, lastNavB, lastNavR, INTEREST_RATE);
         fundActivityStartTime = lastYear;
     }
@@ -207,6 +222,14 @@ contract FundV5 is
         return (_proposedPrimaryMarket, _proposedPrimaryMarketTimestamp);
     }
 
+    function strategy() external view override returns (address) {
+        return _strategy;
+    }
+
+    function strategyUpdateProposal() external view override returns (address, uint256) {
+        return (_proposedStrategy, _proposedStrategyTimestamp);
+    }
+
     /// @notice Return the status of the fund contract.
     /// @param timestamp Timestamp to assess
     /// @return True if the fund contract is active
@@ -216,7 +239,11 @@ contract FundV5 is
 
     function getTotalUnderlying() public view override returns (uint256) {
         uint256 hot = IERC20(tokenUnderlying).balanceOf(address(this));
-        return hot.sub(_totalDebt);
+        return hot.add(_strategyUnderlying).sub(_totalDebt);
+    }
+
+    function getStrategyUnderlying() external view override returns (uint256) {
+        return _strategyUnderlying;
     }
 
     /// @notice Get the amount of redemption underlying that the fund owes the primary market.
@@ -688,6 +715,16 @@ contract FundV5 is
         emit Settled(day, navB, navR, INTEREST_RATE);
     }
 
+    function transferToStrategy(uint256 amount) external override onlyStrategy {
+        _strategyUnderlying = _strategyUnderlying.add(amount);
+        IERC20(tokenUnderlying).safeTransfer(_strategy, amount);
+    }
+
+    function transferFromStrategy(uint256 amount) external override onlyStrategy {
+        _strategyUnderlying = _strategyUnderlying.sub(amount);
+        IERC20(tokenUnderlying).safeTransferFrom(_strategy, address(this), amount);
+    }
+
     function primaryMarketTransferUnderlying(
         address recipient,
         uint256 amount,
@@ -710,6 +747,27 @@ contract FundV5 is
         IERC20(tokenUnderlying).safeTransfer(msg.sender, amount);
     }
 
+    function reportProfit(
+        uint256 profit,
+        uint256 totalFee,
+        uint256 strategyFee
+    ) external override onlyStrategy returns (uint256 strategyFeeQ) {
+        require(profit >= totalFee && totalFee >= strategyFee, "Fee cannot exceed profit");
+        _strategyUnderlying = _strategyUnderlying.add(profit);
+        uint256 equivalentTotalQ = getEquivalentTotalQ();
+        uint256 totalUnderlyingAfterFee = getTotalUnderlying() - totalFee;
+        uint256 totalFeeQ = totalFee.mul(equivalentTotalQ).div(totalUnderlyingAfterFee);
+        strategyFeeQ = strategyFee.mul(equivalentTotalQ).div(totalUnderlyingAfterFee);
+        _mint(TRANCHE_Q, feeCollector, totalFeeQ.sub(strategyFeeQ));
+        _mint(TRANCHE_Q, msg.sender, strategyFeeQ);
+        emit ProfitReported(profit, totalFee, totalFeeQ, strategyFeeQ);
+    }
+
+    function reportLoss(uint256 loss) external override onlyStrategy {
+        _strategyUnderlying = _strategyUnderlying.sub(loss);
+        emit LossReported(loss);
+    }
+
     function proposePrimaryMarketUpdate(address newPrimaryMarket) external onlyOwner {
         _proposePrimaryMarketUpdate(newPrimaryMarket);
     }
@@ -720,6 +778,15 @@ contract FundV5 is
             "Cannot update primary market"
         );
         _applyPrimaryMarketUpdate(newPrimaryMarket);
+    }
+
+    function proposeStrategyUpdate(address newStrategy) external onlyOwner {
+        _proposeStrategyUpdate(newStrategy);
+    }
+
+    function applyStrategyUpdate(address newStrategy) external onlyOwner {
+        require(_totalDebt == 0, "Cannot update strategy with debt");
+        _applyStrategyUpdate(newStrategy);
     }
 
     function _updateTwapOracle(address newTwapOracle) private {

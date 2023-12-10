@@ -43,6 +43,10 @@ interface IFundV5 {
 
     function primaryMarketUpdateProposal() external view returns (address, uint256);
 
+    function strategy() external view returns (address);
+
+    function strategyUpdateProposal() external view returns (address, uint256);
+
     function underlyingDecimalMultiplier() external view returns (uint256);
 
     function twapOracle() external view returns (ITwapOracleV2);
@@ -159,6 +163,8 @@ interface IFundV5 {
     function shareApprove(address owner, address spender, uint256 amount) external;
 
     function getTotalUnderlying() external view returns (uint256);
+
+    function getStrategyUnderlying() external view returns (uint256);
 
     function getTotalDebt() external view returns (uint256);
 
