@@ -159,18 +159,18 @@ contract FundV5 is
     ) external onlyOwner {
         require(splitRatio == 0 && currentDay == 0, "Already initialized");
         require(newSplitRatio != 0 && lastNavB >= UNIT, "Invalid parameters");
-        currentDay = endOfDay(block.timestamp);
         splitRatio = newSplitRatio;
         _historicalSplitRatio[0] = newSplitRatio;
         emit SplitRatioUpdated(newSplitRatio);
-        uint256 lastYear = currentDay - 365 days;
-        uint256 lastYearPrice = twapOracle.getTwap(lastYear);
-        require(lastYearPrice != 0, "Price not available"); // required to do the first creation
-        _historicalNavB[lastYear] = lastNavB;
-        _historicalNavR[lastYear] = lastNavR;
+        uint256 lastDay = endOfDay(block.timestamp) - 1 days;
+        currentDay = lastDay + 365 days;
+        uint256 lastDayPrice = twapOracle.getTwap(lastDay);
+        require(lastDayPrice != 0, "Price not available"); // required to do the first creation
+        _historicalNavB[lastDay] = lastNavB;
+        _historicalNavR[lastDay] = lastNavR;
         _strategyUnderlying = strategyUnderlying;
-        emit Settled(lastYear, lastNavB, lastNavR, INTEREST_RATE);
-        fundActivityStartTime = lastYear;
+        emit Settled(lastDay, lastNavB, lastNavR, INTEREST_RATE);
+        fundActivityStartTime = lastDay;
     }
 
     /// @notice UTC time of a day when the fund settles.
