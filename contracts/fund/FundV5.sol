@@ -17,6 +17,7 @@ import "../interfaces/IFundForPrimaryMarketV4.sol";
 import "../interfaces/IFundForStrategyV2.sol";
 import "../interfaces/IShareV2.sol";
 import "../interfaces/ITwapOracleV2.sol";
+import "../interfaces/IAprOracle.sol";
 import "../interfaces/IVotingEscrow.sol";
 
 import "./FundRolesV2.sol";
@@ -38,6 +39,7 @@ contract FundV5 is
     event ProfitReported(uint256 profit, uint256 totalFee, uint256 totalFeeQ, uint256 strategyFeeQ);
     event LossReported(uint256 loss);
     event TwapOracleUpdated(address newTwapOracle);
+    event AprOracleUpdated(address newAprOracle);
     event FeeCollectorUpdated(address newFeeCollector);
     event ActivityDelayTimeUpdated(uint256 delayTime);
     event SplitRatioUpdated(uint256 newSplitRatio);
@@ -45,7 +47,7 @@ contract FundV5 is
     event Frozen();
 
     uint256 private constant UNIT = 1e18;
-    uint256 private constant INTEREST_RATE = 8219178082191780; // 3% yearly
+    uint256 private constant MAX_INTEREST_RATE = 0.2e18; // 20% daily
 
     uint256 public constant override WEIGHT_B = 9;
 
@@ -57,6 +59,9 @@ contract FundV5 is
 
     /// @notice TwapOracle address for the underlying asset.
     ITwapOracleV2 public override twapOracle;
+
+    /// @notice AprOracle address.
+    IAprOracle public aprOracle;
 
     /// @notice Fee Collector address.
     address public override feeCollector;
@@ -113,6 +118,12 @@ contract FundV5 is
     /// @dev Mapping of trading day => NAV of ROOK.
     mapping(uint256 => uint256) private _historicalNavR;
 
+    /// @notice Mapping of trading week => interest rate of BISHOP.
+    ///
+    ///         Key is the end timestamp of a trading day. Value is the interest rate captured
+    ///         after settlement of that day, which will be effective until the next settlement.
+    mapping(uint256 => uint256) public historicalInterestRate;
+
     /// @dev Amount of redemption underlying that the fund owes the primary market
     uint256 private _totalDebt;
 
@@ -127,6 +138,7 @@ contract FundV5 is
         address primaryMarket;
         address strategy;
         address twapOracle;
+        address aprOracle;
         address feeCollector;
     }
 
@@ -147,6 +159,7 @@ contract FundV5 is
         require(params.underlyingDecimals <= 18, "Underlying decimals larger than 18");
         underlyingDecimalMultiplier = 10 ** (18 - params.underlyingDecimals);
         _updateTwapOracle(params.twapOracle);
+        _updateAprOracle(params.aprOracle);
         _updateFeeCollector(params.feeCollector);
         _updateActivityDelayTime(30 minutes);
     }
@@ -169,7 +182,9 @@ contract FundV5 is
         _historicalNavB[lastDay] = lastNavB;
         _historicalNavR[lastDay] = lastNavR;
         _strategyUnderlying = strategyUnderlying;
-        emit Settled(lastDay, lastNavB, lastNavR, INTEREST_RATE);
+        uint256 lastInterestRate = _updateInterestRate(lastDay);
+        historicalInterestRate[lastDay] = lastInterestRate;
+        emit Settled(lastDay, lastNavB, lastNavR, lastInterestRate);
         fundActivityStartTime = lastDay;
     }
 
@@ -334,7 +349,7 @@ contract FundV5 is
         if (equivalentTotalB > 0) {
             navSum = price.mul(underlying.mul(underlyingDecimalMultiplier)).div(equivalentTotalB);
             navB = navB.multiplyDecimal(
-                INTEREST_RATE.mul(timestamp - settledDay).div(1 days).add(UNIT)
+                historicalInterestRate[settledDay].mul(timestamp - settledDay).div(1 days).add(UNIT)
             );
 
             navROrZero = navSum.divideDecimal(splitRatio) >= navB.mul(WEIGHT_B)
@@ -710,9 +725,11 @@ contract FundV5 is
 
         _historicalNavB[day] = navB;
         _historicalNavR[day] = navR;
+        uint256 interestRate = _updateInterestRate(day);
+        historicalInterestRate[day] = interestRate;
         currentDay = day + 365 days;
 
-        emit Settled(day, navB, navR, INTEREST_RATE);
+        emit Settled(day, navB, navR, interestRate);
     }
 
     function transferToStrategy(uint256 amount) external override onlyStrategy {
@@ -798,6 +815,15 @@ contract FundV5 is
         _updateTwapOracle(newTwapOracle);
     }
 
+    function _updateAprOracle(address newAprOracle) private {
+        aprOracle = IAprOracle(newAprOracle);
+        emit AprOracleUpdated(newAprOracle);
+    }
+
+    function updateAprOracle(address newAprOracle) external onlyOwner {
+        _updateAprOracle(newAprOracle);
+    }
+
     function _updateFeeCollector(address newFeeCollector) private {
         feeCollector = newFeeCollector;
         emit FeeCollectorUpdated(newFeeCollector);
@@ -872,6 +898,13 @@ contract FundV5 is
             oldSize
         );
         _refreshBalance(address(this), oldSize + 1);
+    }
+
+    function _updateInterestRate(uint256) private returns (uint256) {
+        uint256 rate = MAX_INTEREST_RATE.min(aprOracle.capture());
+        emit InterestRateUpdated(rate, 0);
+
+        return rate;
     }
 
     function _updateTotalDebt(uint256 newTotalDebt) private {
