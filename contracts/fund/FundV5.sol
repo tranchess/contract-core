@@ -118,6 +118,18 @@ contract FundV5 is
     /// @dev Mapping of trading day => NAV of ROOK.
     mapping(uint256 => uint256) private _historicalNavR;
 
+    /// @notice Mapping of trading day => equivalent BISHOP supply.
+    ///
+    ///         Key is the end timestamp of a trading day. Value is the total supply of BISHOP,
+    ///         as if all QUEEN are split.
+    mapping(uint256 => uint256) public override historicalEquivalentTotalB;
+
+    /// @notice Mapping of trading day => underlying assets in the fund.
+    ///
+    ///         Key is the end timestamp of a trading day. Value is the underlying assets in
+    ///         the fund after settlement of that trading day.
+    mapping(uint256 => uint256) public override historicalUnderlying;
+
     /// @notice Mapping of trading week => interest rate of BISHOP.
     ///
     ///         Key is the end timestamp of a trading day. Value is the interest rate captured
@@ -723,6 +735,8 @@ contract FundV5 is
         equivalentTotalB = getEquivalentTotalB();
         fundActivityStartTime = day + activityDelayTimeAfterRebalance;
 
+        historicalEquivalentTotalB[day] = equivalentTotalB;
+        historicalUnderlying[day] = underlying;
         _historicalNavB[day] = navB;
         _historicalNavR[day] = navR;
         uint256 interestRate = _updateInterestRate(day);

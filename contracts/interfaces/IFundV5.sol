@@ -116,6 +116,8 @@ interface IFundV5 {
 
     function getEquivalentTotalQ() external view returns (uint256);
 
+    function historicalEquivalentTotalB(uint256 timestamp) external view returns (uint256);
+
     function historicalNavs(uint256 timestamp) external view returns (uint256 navB, uint256 navR);
 
     function extrapolateNav(uint256 price) external view returns (uint256, uint256, uint256);
@@ -161,6 +163,8 @@ interface IFundV5 {
     ) external returns (uint256 newAllowance);
 
     function shareApprove(address owner, address spender, uint256 amount) external;
+
+    function historicalUnderlying(uint256 timestamp) external view returns (uint256);
 
     function getTotalUnderlying() external view returns (uint256);
 
