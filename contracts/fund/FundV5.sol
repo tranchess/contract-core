@@ -47,7 +47,7 @@ contract FundV5 is
     event Frozen();
 
     uint256 private constant UNIT = 1e18;
-    uint256 private constant MAX_INTEREST_RATE = 0.2e18; // 20% daily
+    uint256 private constant MAX_INTEREST_RATE = 0.001e18; // 0.1% daily
 
     uint256 public constant override WEIGHT_B = 9;
 
