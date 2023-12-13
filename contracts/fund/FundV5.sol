@@ -278,13 +278,14 @@ contract FundV5 is
         return _totalDebt;
     }
 
+    /// @notice Equivalent ROOK supply, as if all QUEEN are split.
+    function getEquivalentTotalR() public view override returns (uint256) {
+        return _totalSupplies[TRANCHE_Q].multiplyDecimal(splitRatio).add(_totalSupplies[TRANCHE_R]);
+    }
+
     /// @notice Equivalent BISHOP supply, as if all QUEEN are split.
     function getEquivalentTotalB() public view override returns (uint256) {
-        return
-            _totalSupplies[TRANCHE_Q]
-                .multiplyDecimal(splitRatio)
-                .add(_totalSupplies[TRANCHE_R])
-                .mul(WEIGHT_B);
+        return getEquivalentTotalR().mul(WEIGHT_B);
     }
 
     /// @notice Equivalent QUEEN supply, as if all BISHOP and ROOK are merged.
@@ -332,13 +333,13 @@ contract FundV5 is
     }
 
     /// @notice Estimate the current NAV of all tranches, considering underlying price change,
-    ///        and accrued interest since the previous settlement.
+    ///         and accrued interest since the previous settlement.
     ///
     ///         The extrapolation uses simple interest instead of daily compound interest in
     ///         calculating BISHOP's interest. There may be significant error
     ///         in the returned values when `timestamp` is far beyond the last settlement.
     /// @param price Price of the underlying asset (18 decimal places)
-    /// @return navSum Sum of the estimated NAV of BISHOP and ROOK
+    /// @return navSum Sum of navB * WEIGHT_B and the estimated NAV of ROOK
     /// @return navB Estimated NAV of BISHOP
     /// @return navROrZero Estimated NAV of ROOK, or zero if the NAV is negative
     function extrapolateNav(
@@ -347,26 +348,23 @@ contract FundV5 is
         uint256 settledDay = currentDay - 365 days;
         uint256 underlying = getTotalUnderlying();
         return
-            _extrapolateNav(block.timestamp, settledDay, price, getEquivalentTotalB(), underlying);
+            _extrapolateNav(block.timestamp, settledDay, price, getEquivalentTotalR(), underlying);
     }
 
     function _extrapolateNav(
         uint256 timestamp,
         uint256 settledDay,
         uint256 price,
-        uint256 equivalentTotalB,
+        uint256 equivalentTotalR,
         uint256 underlying
     ) private view returns (uint256 navSum, uint256 navB, uint256 navROrZero) {
         navB = _historicalNavB[settledDay];
-        if (equivalentTotalB > 0) {
-            navSum = price.mul(underlying.mul(underlyingDecimalMultiplier)).div(equivalentTotalB);
+        if (equivalentTotalR > 0) {
+            navSum = price.mul(underlying.mul(underlyingDecimalMultiplier)).div(equivalentTotalR);
             navB = navB.multiplyDecimal(
                 historicalInterestRate[settledDay].mul(timestamp - settledDay).div(1 days).add(UNIT)
             );
-
-            navROrZero = navSum.divideDecimal(splitRatio) >= navB.mul(WEIGHT_B)
-                ? navSum.divideDecimal(splitRatio) - navB.mul(WEIGHT_B)
-                : 0;
+            navROrZero = navSum >= navB.mul(WEIGHT_B) ? navSum - navB * WEIGHT_B : 0;
         } else {
             // If the fund is empty, use NAV in the last day
             navROrZero = _historicalNavR[settledDay];
@@ -711,31 +709,23 @@ contract FundV5 is
         IPrimaryMarketV3(_primaryMarket).settle(day);
 
         // Calculate NAV
-        uint256 equivalentTotalB = getEquivalentTotalB();
         uint256 underlying = getTotalUnderlying();
         (uint256 navSum, uint256 navB, uint256 navR) = _extrapolateNav(
             day,
             day - 365 days,
             price,
-            equivalentTotalB,
+            getEquivalentTotalR(),
             underlying
         );
+        require(navR > 0, "To be frozen");
 
-        // When the NAV of ROOK is zero, freeze and dissolve the fund
-        if (navR == 0) {
-            frozen = true;
-            emit Frozen();
-            return;
-        }
-
-        uint256 newSplitRatio = splitRatio.multiplyDecimal(navSum) / 2;
+        uint256 newSplitRatio = splitRatio.multiplyDecimal(navSum) / (WEIGHT_B + 1);
         _triggerRebalance(day, navSum, navB, navR, newSplitRatio);
         navB = UNIT;
         navR = UNIT;
-        equivalentTotalB = getEquivalentTotalB();
         fundActivityStartTime = day + activityDelayTimeAfterRebalance;
 
-        historicalEquivalentTotalB[day] = equivalentTotalB;
+        historicalEquivalentTotalB[day] = getEquivalentTotalB();
         historicalUnderlying[day] = underlying;
         _historicalNavB[day] = navB;
         _historicalNavR[day] = navR;
@@ -863,27 +853,17 @@ contract FundV5 is
     /// @dev Create a new rebalance that resets NAV of all tranches to 1. Total supplies are
     ///      rebalanced immediately.
     /// @param day Trading day that triggers this rebalance
-    /// @param navSum Sum of BISHOP and ROOK's NAV
     /// @param navB BISHOP's NAV before this rebalance
-    /// @param navROrZero ROOK's NAV before this rebalance or zero if the NAV is negative
+    /// @param navR ROOK's NAV before this rebalance
     /// @param newSplitRatio The new split ratio after this rebalance
     function _triggerRebalance(
         uint256 day,
         uint256 navSum,
         uint256 navB,
-        uint256 navROrZero,
+        uint256 navR,
         uint256 newSplitRatio
     ) private {
-        Rebalance memory rebalance;
-        if (navROrZero > navB) {
-            // Upper rebalance
-            rebalance = Rebalance({
-                ratioB2Q: (navB - UNIT).divideDecimal(newSplitRatio) / 2,
-                ratioR2Q: (navROrZero - UNIT).divideDecimal(newSplitRatio) / 2,
-                ratioBR: UNIT,
-                timestamp: block.timestamp
-            });
-        }
+        Rebalance memory rebalance = _calculateRebalance(navB, navR, newSplitRatio);
         uint256 oldSize = _rebalanceSize;
         splitRatio = newSplitRatio;
         _historicalSplitRatio[oldSize + 1] = newSplitRatio;
@@ -895,7 +875,7 @@ contract FundV5 is
             day,
             navSum,
             navB,
-            navROrZero,
+            navR,
             rebalance.ratioB2Q,
             rebalance.ratioR2Q,
             rebalance.ratioBR
@@ -912,6 +892,37 @@ contract FundV5 is
             oldSize
         );
         _refreshBalance(address(this), oldSize + 1);
+    }
+
+    /// @dev Create a new rebalance matrix that resets given NAVs to (1, 1).
+    /// @param navB BISHOP's NAV before the rebalance
+    /// @param navR ROOK's NAV before the rebalance
+    /// @param newSplitRatio The new split ratio after this rebalance
+    /// @return The rebalance matrix
+    function _calculateRebalance(
+        uint256 navB,
+        uint256 navR,
+        uint256 newSplitRatio
+    ) private view returns (Rebalance memory) {
+        uint256 ratioBR;
+        uint256 ratioB2Q;
+        uint256 ratioR2Q;
+        if (navR <= navB) {
+            ratioBR = navR;
+            ratioB2Q = (navB - navR).divideDecimal(newSplitRatio) / (WEIGHT_B + 1);
+            ratioR2Q = 0;
+        } else {
+            ratioBR = navB;
+            ratioB2Q = 0;
+            ratioR2Q = (navR - navB).divideDecimal(newSplitRatio) / (WEIGHT_B + 1);
+        }
+        return
+            Rebalance({
+                ratioB2Q: ratioB2Q,
+                ratioR2Q: ratioR2Q,
+                ratioBR: ratioBR,
+                timestamp: block.timestamp
+            });
     }
 
     function _updateInterestRate(uint256) private returns (uint256) {
