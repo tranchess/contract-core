@@ -81,19 +81,11 @@ contract WstETHPrimaryMarketRouter is IWstETHPrimaryMarketRouter, ITrancheIndexV
         uint256 version
     ) public override returns (uint256 outQ) {
         if (isWrapped) {
-            IERC20(_stETH).safeTransferFrom(
-                msg.sender,
-                address(this),
-                underlying
-            );
+            IERC20(_stETH).safeTransferFrom(msg.sender, address(this), underlying);
             underlying = IWstETH(_wstETH).wrap(underlying);
             IERC20(_wstETH).safeTransfer(address(primaryMarket), underlying);
         } else {
-            IERC20(_wstETH).safeTransferFrom(
-                msg.sender,
-                address(primaryMarket),
-                underlying
-            );
+            IERC20(_wstETH).safeTransferFrom(msg.sender, address(primaryMarket), underlying);
         }
 
         outQ = primaryMarket.create(recipient, minOutQ, version);
