@@ -2,10 +2,7 @@
 pragma solidity >=0.6.10 <0.8.0;
 
 import "../interfaces/ITwapOracleV2.sol";
-
-interface IWstETH {
-    function stEthPerToken() external view returns (uint256);
-}
+import "../interfaces/IWstETH.sol";
 
 /// @title wstETH Price oracle
 /// @author Tranchess
