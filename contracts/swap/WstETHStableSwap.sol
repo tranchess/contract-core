@@ -1,18 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 
-import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/ITrancheIndexV2.sol";
+import "../interfaces/IWstETH.sol";
 import "./StableSwapV3.sol";
 
-contract BishopStableSwapV3 is StableSwapV3, ITrancheIndexV2 {
+abstract contract WstETHStableSwap is StableSwapV3, ITrancheIndexV2 {
     event Rebalanced(uint256 base, uint256 quote, uint256 version);
+
+    address public immutable wstETH;
 
     uint256 public currentVersion;
 
     constructor(
         address lpToken_,
         address fund_,
+        uint256 baseTranche_,
         address quoteAddress_,
         uint256 quoteDecimals_,
         uint256 ampl_,
@@ -24,7 +27,7 @@ contract BishopStableSwapV3 is StableSwapV3, ITrancheIndexV2 {
         StableSwapV3(
             lpToken_,
             fund_,
-            TRANCHE_B,
+            baseTranche_,
             quoteAddress_,
             quoteDecimals_,
             ampl_,
@@ -33,6 +36,8 @@ contract BishopStableSwapV3 is StableSwapV3, ITrancheIndexV2 {
             adminFeeRate_
         )
     {
+        require(quoteAddress_ == IFundV3(fund_).tokenUnderlying());
+        wstETH = quoteAddress_;
         currentVersion = IFundV3(fund_).getRebalanceSize();
     }
 
@@ -84,6 +89,14 @@ contract BishopStableSwapV3 is StableSwapV3, ITrancheIndexV2 {
     function getOraclePrice() public view override returns (uint256) {
         uint256 price = fund.twapOracle().getLatest();
         (, uint256 navB, ) = fund.extrapolateNav(price);
-        return navB;
+        return navB.divideDecimal(IWstETH(wstETH).stEthPerToken());
     }
+
+    function _rebalanceBase(
+        uint256 oldBase,
+        uint256 fromVersion,
+        uint256 toVersion
+    ) internal view virtual returns (uint256 excessiveQ, uint256 newBase);
+
+    function _getBaseNav() internal view virtual returns (uint256);
 }
