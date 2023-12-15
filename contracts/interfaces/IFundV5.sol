@@ -4,7 +4,7 @@ pragma solidity >=0.6.10 <0.8.0;
 import "./IFundV3.sol";
 
 interface IFundV5 is IFundV3 {
-    function WEIGHT_B() external view returns (uint256);
+    function weightB() external view returns (uint256);
 
     function getEquivalentTotalR() external view returns (uint256);
 

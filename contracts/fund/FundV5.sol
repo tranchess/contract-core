@@ -49,7 +49,7 @@ contract FundV5 is
     uint256 private constant UNIT = 1e18;
     uint256 private constant MAX_INTEREST_RATE = 0.001e18; // 0.1% daily
 
-    uint256 public constant override WEIGHT_B = 9;
+    uint256 public immutable override weightB;
 
     /// @notice Address of the underlying token.
     address public immutable override tokenUnderlying;
@@ -142,6 +142,7 @@ contract FundV5 is
     uint256 private _strategyUnderlying;
 
     struct ConstructorParameters {
+        uint256 weightB;
         address tokenUnderlying;
         uint256 underlyingDecimals;
         address tokenQ;
@@ -167,6 +168,7 @@ contract FundV5 is
             params.strategy
         )
     {
+        weightB = params.weightB;
         tokenUnderlying = params.tokenUnderlying;
         require(params.underlyingDecimals <= 18, "Underlying decimals larger than 18");
         underlyingDecimalMultiplier = 10 ** (18 - params.underlyingDecimals);
@@ -285,7 +287,7 @@ contract FundV5 is
 
     /// @notice Equivalent BISHOP supply, as if all QUEEN are split.
     function getEquivalentTotalB() public view override returns (uint256) {
-        return getEquivalentTotalR().mul(WEIGHT_B);
+        return getEquivalentTotalR().mul(weightB);
     }
 
     /// @notice Equivalent QUEEN supply, as if all BISHOP and ROOK are merged.
@@ -339,7 +341,7 @@ contract FundV5 is
     ///         calculating BISHOP's interest. There may be significant error
     ///         in the returned values when `timestamp` is far beyond the last settlement.
     /// @param price Price of the underlying asset (18 decimal places)
-    /// @return navSum Sum of navB * WEIGHT_B and the estimated NAV of ROOK
+    /// @return navSum Sum of navB * weightB and the estimated NAV of ROOK
     /// @return navB Estimated NAV of BISHOP
     /// @return navROrZero Estimated NAV of ROOK, or zero if the NAV is negative
     function extrapolateNav(
@@ -364,11 +366,11 @@ contract FundV5 is
             navB = navB.multiplyDecimal(
                 historicalInterestRate[settledDay].mul(timestamp - settledDay).div(1 days).add(UNIT)
             );
-            navROrZero = navSum >= navB.mul(WEIGHT_B) ? navSum - navB * WEIGHT_B : 0;
+            navROrZero = navSum >= navB.mul(weightB) ? navSum - navB * weightB : 0;
         } else {
             // If the fund is empty, use NAV in the last day
             navROrZero = _historicalNavR[settledDay];
-            navSum = navB.mul(WEIGHT_B) + navROrZero;
+            navSum = navB.mul(weightB) + navROrZero;
         }
     }
 
@@ -719,7 +721,7 @@ contract FundV5 is
         );
         require(navR > 0, "To be frozen");
 
-        uint256 newSplitRatio = splitRatio.multiplyDecimal(navSum) / (WEIGHT_B + 1);
+        uint256 newSplitRatio = splitRatio.multiplyDecimal(navSum) / (weightB + 1);
         _triggerRebalance(day, navSum, navB, navR, newSplitRatio);
         navB = UNIT;
         navR = UNIT;
@@ -909,12 +911,12 @@ contract FundV5 is
         uint256 ratioR2Q;
         if (navR <= navB) {
             ratioBR = navR;
-            ratioB2Q = (navB - navR).divideDecimal(newSplitRatio) / (WEIGHT_B + 1);
+            ratioB2Q = (navB - navR).divideDecimal(newSplitRatio) / (weightB + 1);
             ratioR2Q = 0;
         } else {
             ratioBR = navB;
             ratioB2Q = 0;
-            ratioR2Q = (navR - navB).divideDecimal(newSplitRatio) / (WEIGHT_B + 1);
+            ratioR2Q = (navR - navB).divideDecimal(newSplitRatio) / (weightB + 1);
         }
         return
             Rebalance({

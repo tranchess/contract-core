@@ -91,7 +91,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         _updateRedemptionFeeRate(redemptionFeeRate_);
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
-        weightB = IFundV5(fund_).WEIGHT_B();
+        weightB = IFundV5(fund_).weightB();
         redemptionFlag = redemptionFlag_;
     }
 
