@@ -50,7 +50,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
 
     address public immutable override fund;
     bool public immutable redemptionFlag;
-    uint256 public immutable weightB;
+    uint256 private immutable _weightB;
     IERC20 private immutable _tokenUnderlying;
 
     uint256 public redemptionFeeRate;
@@ -91,7 +91,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         _updateRedemptionFeeRate(redemptionFeeRate_);
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
-        weightB = IFundV5(fund_).weightB();
+        _weightB = IFundV5(fund_).weightB();
         redemptionFlag = redemptionFlag_;
     }
 
@@ -110,7 +110,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
             uint256 underlyingPrice = IFundV5(fund).twapOracle().getTwap(settledDay);
             (uint256 navB, uint256 navR) = IFundV5(fund).historicalNavs(settledDay);
             outQ = outQ.mul(underlyingPrice).div(splitRatio).divideDecimal(
-                navB.mul(weightB).add(navR)
+                navB.mul(_weightB).add(navR)
             );
         } else {
             require(
@@ -200,7 +200,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
     /// @return outB Received BISHOP amount, which is also received ROOK amount
     function getSplit(uint256 inQ) public view override returns (uint256 outB, uint256 outR) {
         outR = inQ.multiplyDecimal(IFundV5(fund).splitRatio());
-        outB = outR.mul(weightB);
+        outB = outR.mul(_weightB);
     }
 
     /// @notice Calculate the amount of QUEEN that can be split into at least the given amount of
@@ -209,7 +209,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
     /// @return inQ QUEEN amount that should be split
     function getSplitForB(uint256 minOutB) external view override returns (uint256 inQ) {
         uint256 splitRatio = IFundV5(fund).splitRatio();
-        return minOutB.divideDecimal(weightB).add(splitRatio.sub(1)).div(splitRatio);
+        return minOutB.divideDecimal(_weightB).add(splitRatio.sub(1)).div(splitRatio);
     }
 
     /// @notice Calculate the result of a merge.
@@ -221,7 +221,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         uint256 inB
     ) public view override returns (uint256 inR, uint256 outQ, uint256 feeQ) {
         uint256 splitRatio = IFundV5(fund).splitRatio();
-        uint256 outQBeforeFee = inB.divideDecimal(splitRatio.mul(weightB));
+        uint256 outQBeforeFee = inB.divideDecimal(splitRatio.mul(_weightB));
         feeQ = outQBeforeFee.multiplyDecimal(mergeFeeRate);
         outQ = outQBeforeFee.sub(feeQ);
         if (IFundV5(fund).frozen()) {
@@ -252,7 +252,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         //     = minOutQ
         uint256 splitRatio = IFundV5(fund).splitRatio();
         uint256 outQBeforeFee = minOutQ.divideDecimal(1e18 - mergeFeeRate);
-        inB = outQBeforeFee.mul(splitRatio.mul(weightB)).add(1e18 - 1).div(1e18);
+        inB = outQBeforeFee.mul(splitRatio.mul(_weightB)).add(1e18 - 1).div(1e18);
     }
 
     /// @notice Return index of the first queued redemption that cannot be claimed now.
