@@ -16,8 +16,8 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    address public immutable wstETH; // Base
-    address public immutable stETH; // Quote
+    address public immutable wstETH;
+    address public immutable stETH;
 
     constructor(address wstETH_) public {
         wstETH = wstETH_;
