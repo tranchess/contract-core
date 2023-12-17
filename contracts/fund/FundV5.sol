@@ -50,6 +50,7 @@ contract FundV5 is
     uint256 private constant MAX_INTEREST_RATE = 0.001e18; // 0.1% daily
 
     uint256 public immutable override weightB;
+    uint256 public immutable settlementPeriod;
 
     /// @notice Address of the underlying token.
     address public immutable override tokenUnderlying;
@@ -143,6 +144,7 @@ contract FundV5 is
 
     struct ConstructorParameters {
         uint256 weightB;
+        uint256 settlementPeriod;
         address tokenUnderlying;
         uint256 underlyingDecimals;
         address tokenQ;
@@ -169,6 +171,8 @@ contract FundV5 is
         )
     {
         weightB = params.weightB;
+        require(params.settlementPeriod % 1 days == 0);
+        settlementPeriod = params.settlementPeriod;
         tokenUnderlying = params.tokenUnderlying;
         require(params.underlyingDecimals <= 18, "Underlying decimals larger than 18");
         underlyingDecimalMultiplier = 10 ** (18 - params.underlyingDecimals);
@@ -190,7 +194,7 @@ contract FundV5 is
         _historicalSplitRatio[0] = newSplitRatio;
         emit SplitRatioUpdated(newSplitRatio);
         uint256 lastDay = endOfDay(block.timestamp) - 1 days;
-        currentDay = lastDay + 365 days;
+        currentDay = lastDay + settlementPeriod;
         uint256 lastDayPrice = twapOracle.getTwap(lastDay);
         require(lastDayPrice != 0, "Price not available"); // required to do the first creation
         _historicalNavB[lastDay] = lastNavB;
@@ -316,6 +320,10 @@ contract FundV5 is
         return _rebalanceSize;
     }
 
+    function getSettledDay() public view override returns (uint256) {
+        return currentDay - settlementPeriod;
+    }
+
     /// @notice Return split ratio at a given version.
     ///         Zero is returned if `version` is invalid.
     /// @param version Rebalance version
@@ -347,7 +355,7 @@ contract FundV5 is
     function extrapolateNav(
         uint256 price
     ) external view override returns (uint256 navSum, uint256 navB, uint256 navROrZero) {
-        uint256 settledDay = currentDay - 365 days;
+        uint256 settledDay = getSettledDay();
         uint256 underlying = getTotalUnderlying();
         return
             _extrapolateNav(block.timestamp, settledDay, price, getEquivalentTotalR(), underlying);
@@ -714,7 +722,7 @@ contract FundV5 is
         uint256 underlying = getTotalUnderlying();
         (uint256 navSum, uint256 navB, uint256 navR) = _extrapolateNav(
             day,
-            day - 365 days,
+            day - settlementPeriod,
             price,
             getEquivalentTotalR(),
             underlying
@@ -733,7 +741,7 @@ contract FundV5 is
         _historicalNavR[day] = navR;
         uint256 interestRate = _updateInterestRate(day);
         historicalInterestRate[day] = interestRate;
-        currentDay = day + 365 days;
+        currentDay = day + settlementPeriod;
 
         emit Settled(day, navB, navR, interestRate);
     }

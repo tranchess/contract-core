@@ -87,7 +87,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         bool redemptionFlag_
     ) public Ownable() {
         fund = fund_;
-        _tokenUnderlying = IERC20(IFundV5(fund_).tokenUnderlying());
+        _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
         _updateRedemptionFeeRate(redemptionFeeRate_);
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
@@ -99,16 +99,16 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
     /// @param underlying Underlying amount spent for the creation
     /// @return outQ Created QUEEN amount
     function getCreation(uint256 underlying) public view override returns (uint256 outQ) {
-        uint256 fundUnderlying = IFundV5(fund).getTotalUnderlying();
-        uint256 fundEquivalentTotalQ = IFundV5(fund).getEquivalentTotalQ();
+        uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
+        uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
         require(fundUnderlying.add(underlying) <= fundCap, "Exceed fund cap");
         if (fundEquivalentTotalQ == 0) {
-            outQ = underlying.mul(IFundV5(fund).underlyingDecimalMultiplier());
-            uint256 splitRatio = IFundV5(fund).splitRatio();
+            outQ = underlying.mul(IFundV3(fund).underlyingDecimalMultiplier());
+            uint256 splitRatio = IFundV3(fund).splitRatio();
             require(splitRatio != 0, "Fund is not initialized");
-            uint256 settledDay = IFundV5(fund).currentDay() - 1 days;
-            uint256 underlyingPrice = IFundV5(fund).twapOracle().getTwap(settledDay);
-            (uint256 navB, uint256 navR) = IFundV5(fund).historicalNavs(settledDay);
+            uint256 settledDay = IFundV5(fund).getSettledDay();
+            uint256 underlyingPrice = IFundV3(fund).twapOracle().getTwap(settledDay);
+            (uint256 navB, uint256 navR) = IFundV3(fund).historicalNavs(settledDay);
             outQ = outQ.mul(underlyingPrice).div(splitRatio).divideDecimal(
                 navB.mul(_weightB).add(navR)
             );
@@ -121,33 +121,9 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         }
     }
 
-    /// @notice Calculate the amount of underlying tokens to create at least the given QUEEN amount.
-    ///         This only works with non-empty fund for simplicity.
-    /// @param minOutQ Minimum received QUEEN amount
-    /// @return underlying Underlying amount that should be used for creation
-    function getCreationForQ(uint256 minOutQ) external view override returns (uint256 underlying) {
-        // Assume:
-        //   minOutQ * fundUnderlying = a * fundEquivalentTotalQ - b
-        // where a and b are integers and 0 <= b < fundEquivalentTotalQ
-        // Then
-        //   underlying = a
-        //   getCreation(underlying)
-        //     = floor(a * fundEquivalentTotalQ / fundUnderlying)
-        //    >= floor((a * fundEquivalentTotalQ - b) / fundUnderlying)
-        //     = minOutQ
-        //   getCreation(underlying - 1)
-        //     = floor((a * fundEquivalentTotalQ - fundEquivalentTotalQ) / fundUnderlying)
-        //     < (a * fundEquivalentTotalQ - b) / fundUnderlying
-        //     = minOutQ
-        uint256 fundUnderlying = IFundV5(fund).getTotalUnderlying();
-        uint256 fundEquivalentTotalQ = IFundV5(fund).getEquivalentTotalQ();
-        require(fundEquivalentTotalQ > 0, "Cannot calculate creation for empty fund");
-        return minOutQ.mul(fundUnderlying).add(fundEquivalentTotalQ - 1).div(fundEquivalentTotalQ);
-    }
-
     function _getRedemption(uint256 inQ) private view returns (uint256 underlying) {
-        uint256 fundUnderlying = IFundV5(fund).getTotalUnderlying();
-        uint256 fundEquivalentTotalQ = IFundV5(fund).getEquivalentTotalQ();
+        uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
+        uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
         underlying = inQ.mul(fundUnderlying).div(fundEquivalentTotalQ);
     }
 
@@ -162,54 +138,13 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         underlying = _getRedemption(inQ - feeQ);
     }
 
-    /// @notice Calculate the amount of QUEEN that can be redeemed for at least the given amount
-    ///         of underlying tokens.
-    /// @dev The return value may not be the minimum solution due to rounding errors.
-    /// @param minUnderlying Minimum received underlying amount
-    /// @return inQ QUEEN amount that should be redeemed
-    function getRedemptionForUnderlying(
-        uint256 minUnderlying
-    ) external view override returns (uint256 inQ) {
-        // Assume:
-        //   minUnderlying * fundEquivalentTotalQ = a * fundUnderlying - b
-        //   a * 1e18 = c * (1e18 - redemptionFeeRate) + d
-        // where
-        //   a, b, c, d are integers
-        //   0 <= b < fundUnderlying
-        //   0 <= d < 1e18 - redemeptionFeeRate
-        // Then
-        //   inQAfterFee = a
-        //   inQ = c
-        //   getRedemption(inQ).underlying
-        //     = floor((c - floor(c * redemptionFeeRate / 1e18)) * fundUnderlying / fundEquivalentTotalQ)
-        //     = floor(ceil(c * (1e18 - redemptionFeeRate) / 1e18) * fundUnderlying / fundEquivalentTotalQ)
-        //     = floor(((c * (1e18 - redemptionFeeRate) + d) / 1e18) * fundUnderlying / fundEquivalentTotalQ)
-        //     = floor(a * fundUnderlying / fundEquivalentTotalQ)
-        //     => floor((a * fundUnderlying - b) / fundEquivalentTotalQ)
-        //     = minUnderlying
-        uint256 fundUnderlying = IFundV5(fund).getTotalUnderlying();
-        uint256 fundEquivalentTotalQ = IFundV5(fund).getEquivalentTotalQ();
-        uint256 inQAfterFee = minUnderlying.mul(fundEquivalentTotalQ).add(fundUnderlying - 1).div(
-            fundUnderlying
-        );
-        return inQAfterFee.divideDecimal(1e18 - redemptionFeeRate);
-    }
-
     /// @notice Calculate the result of a split.
     /// @param inQ QUEEN amount to be split
-    /// @return outB Received BISHOP amount, which is also received ROOK amount
+    /// @return outB Received BISHOP amount
+    /// @return outR Received ROOK amount
     function getSplit(uint256 inQ) public view override returns (uint256 outB, uint256 outR) {
         outR = inQ.multiplyDecimal(IFundV5(fund).splitRatio());
         outB = outR.mul(_weightB);
-    }
-
-    /// @notice Calculate the amount of QUEEN that can be split into at least the given amount of
-    ///         BISHOP and ROOK.
-    /// @param minOutB Received BISHOP amount, which is also received ROOK amount
-    /// @return inQ QUEEN amount that should be split
-    function getSplitForB(uint256 minOutB) external view override returns (uint256 inQ) {
-        uint256 splitRatio = IFundV5(fund).splitRatio();
-        return minOutB.divideDecimal(_weightB).add(splitRatio.sub(1)).div(splitRatio);
     }
 
     /// @notice Calculate the result of a merge.
@@ -229,30 +164,6 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         } else {
             inR = outQBeforeFee.multiplyDecimal(splitRatio);
         }
-    }
-
-    /// @notice Calculate the amount of BISHOP and ROOK that can be merged into at least
-    ///      the given amount of QUEEN.
-    /// @dev The return value may not be the minimum solution due to rounding errors.
-    /// @param minOutQ Minimum received QUEEN amount
-    /// @return inB BISHOP amount that should be merged, which is also spent ROOK amount
-    function getMergeForQ(uint256 minOutQ) external view override returns (uint256 inB) {
-        // Assume:
-        //   minOutQ * 1e18 = a * (1e18 - mergeFeeRate) + b
-        //   c = ceil(a * splitRatio / 1e18)
-        // where a and b are integers and 0 <= b < 1e18 - mergeFeeRate
-        // Then
-        //   outQBeforeFee = a
-        //   inB = c
-        //   getMerge(inB).outQ
-        //     = c * 1e18 / splitRatio - floor(c * 1e18 / splitRatio * mergeFeeRate / 1e18)
-        //     = ceil(c * 1e18 / splitRatio * (1e18 - mergeFeeRate) / 1e18)
-        //    >= ceil(a * (1e18 - mergeFeeRate) / 1e18)
-        //     = (a * (1e18 - mergeFeeRate) + b) / 1e18         // because b < 1e18
-        //     = minOutQ
-        uint256 splitRatio = IFundV5(fund).splitRatio();
-        uint256 outQBeforeFee = minOutQ.divideDecimal(1e18 - mergeFeeRate);
-        inB = outQBeforeFee.mul(splitRatio.mul(_weightB)).add(1e18 - 1).div(1e18);
     }
 
     /// @notice Return index of the first queued redemption that cannot be claimed now.
