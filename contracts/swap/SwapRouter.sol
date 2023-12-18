@@ -8,12 +8,21 @@ import "../interfaces/ISwapRouter.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "../fund/ShareStaking.sol";
 import "../interfaces/IWrappedERC20.sol";
+import "../interfaces/IWstETH.sol";
 
 /// @title Tranchess Swap Router
 /// @notice Router for stateless execution of swaps against Tranchess stable swaps
 contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
+
+    address public immutable wstETH;
+    address public immutable stETH;
+
+    constructor(address wstETH_) public {
+        wstETH = wstETH_;
+        stETH = IWstETH(wstETH_).stETH();
+    }
 
     event SwapAdded(address addr0, address addr1, address swap);
 
@@ -55,6 +64,9 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
         uint256 deadline
     ) external payable override checkDeadline(deadline) {
         IStableSwap swap = getSwap(baseAddress, quoteAddress);
+        if (quoteAddress == stETH) {
+            swap = getSwap(baseAddress, wstETH);
+        }
         require(address(swap) != address(0), "Unknown swap");
 
         swap.fund().trancheTransferFrom(
@@ -68,6 +80,10 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
             require(msg.value == quoteIn); // sanity check
             IWrappedERC20(quoteAddress).deposit{value: quoteIn}();
             IERC20(quoteAddress).safeTransfer(address(swap), quoteIn);
+        } else if (quoteAddress == stETH) {
+            IERC20(stETH).safeTransferFrom(msg.sender, address(this), quoteIn);
+            quoteIn = IWstETH(wstETH).wrap(quoteIn);
+            IERC20(wstETH).safeTransfer(address(swap), quoteIn);
         } else {
             IERC20(quoteAddress).safeTransferFrom(msg.sender, address(swap), quoteIn);
         }
