@@ -703,6 +703,27 @@ contract FundV5 is
         IShareV2(_getShare(tranche)).fundEmitApproval(owner, spender, amount);
     }
 
+    /// @notice Freeze up the fund when ROOK nav falls below zero. This function is meant for
+    ///         emergency use only, and can be called by anyone.
+    function freeze() external {
+        require(!frozen, "Already frozen");
+        uint256 day = currentDay;
+        require(day != 0, "Not initialized");
+        uint256 price = twapOracle.getLatest();
+        // Calculate NAV
+        uint256 underlying = getTotalUnderlying();
+        (uint256 navSum, uint256 navB, uint256 navR) = _extrapolateNav(
+            day,
+            day - settlementPeriod,
+            price,
+            getEquivalentTotalR(),
+            underlying
+        );
+        require(navR == 0, "Not to be frozen");
+        frozen = true;
+        emit Frozen();
+    }
+
     /// @notice Settle the current trading day. Settlement includes the following changes
     ///         to the fund.
     ///
