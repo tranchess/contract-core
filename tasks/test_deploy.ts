@@ -68,6 +68,10 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         underlying: mockAddresses.mockBusd,
         adminFeeRate: "0.5",
     });
+    await hre.run("deploy_fee_distributor", {
+        underlying: mockAddresses.mockWstEth,
+        adminFeeRate: "0.5",
+    });
     await hre.run("deploy_fund", {
         underlyingSymbol: "BTC",
         quoteSymbol: "BUSD",
@@ -110,6 +114,18 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         }),
         fundInitializationParams: JSON.stringify({
             newSplitRatio: "500",
+            lastNavB: "1",
+            lastNavR: "1",
+        }),
+    });
+
+    await hre.run("deploy_fund_wsteth", {
+        underlying: mockAddresses.mockWstEth,
+        redemptionFeeRate: "0.0035",
+        mergeFeeRate: "0.0045",
+        bishopApr: "0.03",
+        fundInitializationParams: JSON.stringify({
+            newSplitRatio: "0.1",
             lastNavB: "1",
             lastNavR: "1",
         }),
