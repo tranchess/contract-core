@@ -183,6 +183,7 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
     console.log();
     console.log("[+] Deploying swap router");
     await hre.run("deploy_swap_router", {
+        wsteth: mockAddresses.mockWstEth,
         queenSwaps: "WBNB",
         bishopSwaps: "BTC,ETH,WBNB",
     });

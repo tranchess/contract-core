@@ -10,6 +10,7 @@ export interface SwapRouterAddresses extends Addresses {
 }
 
 task("deploy_swap_router", "Deploy swap routers contracts")
+    .addParam("wsteth", "wstETH address")
     .addParam("queenSwaps", "Comma-separated fund underlying symbols for QueenStableSwaps")
     .addParam("bishopSwaps", "Comma-separated fund underlying symbols for BishopStableSwaps")
     .setAction(async function (args, hre) {
@@ -25,6 +26,8 @@ task("deploy_swap_router", "Deploy swap routers contracts")
         for (const bishopSwap of bishopSwaps) {
             assert.match(bishopSwap, /^[a-zA-Z]+$/, "Invalid symbol");
         }
+        const wstETH = await ethers.getContractAt("ERC20", args.wsteth);
+        assert.strictEqual(await wstETH.symbol(), "wstETH");
 
         const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
 
@@ -45,7 +48,7 @@ task("deploy_swap_router", "Deploy swap routers contracts")
         }
 
         const SwapRouter = await ethers.getContractFactory("SwapRouter");
-        const swapRouter = await SwapRouter.deploy();
+        const swapRouter = await SwapRouter.deploy(wstETH.address);
         console.log(`SwapRouter: ${swapRouter.address}`);
 
         for (const swapAddresses of swapAddressesList) {
