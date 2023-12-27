@@ -72,7 +72,7 @@ contract FundV5 is
     ///         and ends at the same time of the next day (exclusive).
     uint256 public override currentDay;
 
-    /// @notice The amount of BISHOP received by splitting one QUEEN.
+    /// @notice The amount of ROOK received by splitting one QUEEN.
     ///         This ratio changes on every rebalance.
     uint256 public override splitRatio;
 
