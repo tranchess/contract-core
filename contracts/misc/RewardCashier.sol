@@ -2,6 +2,7 @@
 pragma solidity >=0.6.0 <0.8.0;
 pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
@@ -10,6 +11,7 @@ import "../utils/SafeDecimalMath.sol";
 contract RewardCashier is Ownable {
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
+    using SafeERC20 for IERC20;
 
     address public immutable token;
     uint256 public immutable deadline;
@@ -46,7 +48,7 @@ contract RewardCashier is Ownable {
         }
 
         nextClaimableVersion[msg.sender] = versions[versions.length - 1] + 1;
-        IERC20(token).transfer(msg.sender, reward);
+        IERC20(token).safeTransfer(msg.sender, reward);
         return reward;
     }
 
@@ -62,6 +64,6 @@ contract RewardCashier is Ownable {
 
     function drain() external onlyOwner {
         require(block.timestamp >= deadline);
-        IERC20(token).transfer(owner(), IERC20(token).balanceOf(address(this)));
+        IERC20(token).safeTransfer(owner(), IERC20(token).balanceOf(address(this)));
     }
 }
