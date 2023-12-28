@@ -10,9 +10,10 @@ export interface SwapRouterAddresses extends Addresses {
 }
 
 task("deploy_swap_router", "Deploy swap routers contracts")
-    .addParam("wsteth", "wstETH address")
+    .addParam("wstWrappingSwap", "WstETHWrappingSwap address")
     .addParam("queenSwaps", "Comma-separated fund underlying symbols for QueenStableSwaps")
     .addParam("bishopSwaps", "Comma-separated fund underlying symbols for BishopStableSwaps")
+    .addParam("rookSwaps", "Comma-separated fund underlying symbols for BishopStableSwaps")
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
         const { ethers } = hre;
@@ -26,8 +27,19 @@ task("deploy_swap_router", "Deploy swap routers contracts")
         for (const bishopSwap of bishopSwaps) {
             assert.match(bishopSwap, /^[a-zA-Z]+$/, "Invalid symbol");
         }
-        const wstETH = await ethers.getContractAt("ERC20", args.wsteth);
-        assert.strictEqual(await wstETH.symbol(), "wstETH");
+        const rookSwaps: string[] = args.rookSwaps.split(",").filter(Boolean);
+        for (const rookSwap of rookSwaps) {
+            assert.match(rookSwap, /^[a-zA-Z]+$/, "Invalid symbol");
+        }
+
+        const wstETHWrappingSwap = await ethers.getContractAt(
+            "WstETHWrappingSwap",
+            args.wstWrappingSwap
+        );
+        const wstETHAddress = await wstETHWrappingSwap.wstETH();
+        const stETHAddress = await wstETHWrappingSwap.stETH();
+        const wstETH = await ethers.getContractAt("IWstETH", wstETHAddress);
+        assert.strictEqual(await wstETH.stETH(), stETHAddress);
 
         const governanceAddresses = loadAddressFile<GovernanceAddresses>(hre, "governance");
 
@@ -46,11 +58,19 @@ task("deploy_swap_router", "Deploy swap routers contracts")
             );
             swapAddressesList.push(bishopSwapAddresses);
         }
+        for (const rookSwap of rookSwaps) {
+            const rookSwapAddresses = loadAddressFile<StableSwapAddresses>(
+                hre,
+                `rook_stable_swap_${rookSwap.toLowerCase()}`
+            );
+            swapAddressesList.push(rookSwapAddresses);
+        }
 
         const SwapRouter = await ethers.getContractFactory("SwapRouter");
         const swapRouter = await SwapRouter.deploy(wstETH.address);
         console.log(`SwapRouter: ${swapRouter.address}`);
 
+        await swapRouter.addSwap(wstETHAddress, stETHAddress, wstETHWrappingSwap.address);
         for (const swapAddresses of swapAddressesList) {
             const { base, baseSymbol, quote, quoteSymbol, stableSwap } = swapAddresses;
             console.log(`Adding ${baseSymbol}-${quoteSymbol} to the swap router`);
