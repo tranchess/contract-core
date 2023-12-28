@@ -12,6 +12,8 @@ export interface MockAddresses extends Addresses {
     mockWbnb: string;
     mockUsdc: string;
     mockBusd: string;
+    mockStEth: string;
+    mockWstEth: string;
     mockUniswapV2Pair: string;
 }
 
@@ -109,6 +111,23 @@ task("deploy_mock", "Deploy mock contracts")
             mockWethAddress = mockWeth.address;
         }
 
+        let mockStEthAddress = "";
+        let mockWstEthAddress = "";
+        if (args.silent || keyInYNStrict("Deploy MockStEth and MockWstEth?", { guide: true })) {
+            const MockToken = await ethers.getContractFactory("MockToken");
+            const mockStEth = await MockToken.deploy("Mock stETH", "stETH", 18);
+            console.log(`MockStEth: ${mockStEth.address}`);
+            const MockWstETH = await ethers.getContractFactory("MockWstETH");
+            const mockWstEth = await MockWstETH.deploy(mockStEth.address);
+            await mockWstEth.update(parseEther("1"));
+            console.log(`MockWstEth: ${mockWstEth.address}`);
+            mockStEthAddress = mockStEth.address;
+            mockWstEthAddress = mockWstEth.address;
+            await mockStEth.mint(deployer.address, parseEther("2000000"));
+            await mockStEth.approve(mockWstEth.address, parseEther("1000000"));
+            await mockWstEth.wrap(parseEther("1000000"));
+        }
+
         let mockUniswapV2PairAddress = "";
         if (args.silent || keyInYNStrict("Deploy MockUniswapV2Pair?", { guide: true })) {
             const MockUniswapV2Pair = await ethers.getContractAt(
@@ -136,6 +155,8 @@ task("deploy_mock", "Deploy mock contracts")
             mockWbnb: mockWbnbAddress,
             mockUsdc: mockUsdcAddress,
             mockBusd: mockBusdAddress,
+            mockStEth: mockStEthAddress,
+            mockWstEth: mockWstEthAddress,
             mockUniswapV2Pair: mockUniswapV2PairAddress,
         };
         saveAddressFile(hre, "mock", addresses);

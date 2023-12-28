@@ -172,8 +172,10 @@ describe("FlashSwapRouter", function () {
             0
         );
 
+        const wstETH = await deployMockForName(owner, "IWstETH");
+        await wstETH.mock.stETH.returns(ethers.constants.AddressZero);
         const SwapRouter = await ethers.getContractFactory("SwapRouter");
-        const swapRouter = await SwapRouter.connect(owner).deploy();
+        const swapRouter = await SwapRouter.connect(owner).deploy(wstETH.address);
         await swapRouter.addSwap(shareB.address, usdc.address, stableSwap.address);
         const MockExternalRouter = await ethers.getContractFactory("MockExternalRouter");
         const externalRouter = await MockExternalRouter.connect(owner).deploy();
