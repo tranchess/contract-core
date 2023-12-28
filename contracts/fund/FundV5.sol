@@ -713,7 +713,7 @@ contract FundV5 is
         // Calculate NAV
         uint256 underlying = getTotalUnderlying();
         (uint256 navSum, uint256 navB, uint256 navR) = _extrapolateNav(
-            day,
+            block.timestamp,
             day - settlementPeriod,
             price,
             getEquivalentTotalR(),
