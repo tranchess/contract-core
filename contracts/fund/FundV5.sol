@@ -712,7 +712,7 @@ contract FundV5 is
         uint256 price = twapOracle.getLatest();
         // Calculate NAV
         uint256 underlying = getTotalUnderlying();
-        (uint256 navSum, uint256 navB, uint256 navR) = _extrapolateNav(
+        (, , uint256 navR) = _extrapolateNav(
             block.timestamp,
             day - settlementPeriod,
             price,
