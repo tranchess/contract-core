@@ -30,12 +30,12 @@ contract WstETHPrimaryMarketRouter is ITrancheIndexV2 {
 
     function create(
         address recipient,
-        bool isWrapped,
+        bool needWrap,
         uint256 underlying,
         uint256 minOutQ,
         uint256 version
     ) public returns (uint256 outQ) {
-        if (isWrapped) {
+        if (needWrap) {
             IERC20(_stETH).safeTransferFrom(msg.sender, address(this), underlying);
             underlying = IWstETH(_wstETH).wrap(underlying);
             IERC20(_wstETH).safeTransfer(address(primaryMarket), underlying);
@@ -48,12 +48,12 @@ contract WstETHPrimaryMarketRouter is ITrancheIndexV2 {
 
     function createAndSplit(
         uint256 underlying,
-        bool isWrapped,
+        bool needWrap,
         uint256 minOutQ,
         uint256 version
     ) external {
         // Create QUEEN
-        uint256 outQ = create(address(this), isWrapped, underlying, minOutQ, version);
+        uint256 outQ = create(address(this), needWrap, underlying, minOutQ, version);
 
         // Split QUEEN into BISHOP and ROOK
         (uint256 outB, uint256 outR) = primaryMarket.split(address(this), outQ, version);

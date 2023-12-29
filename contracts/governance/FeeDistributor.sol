@@ -301,6 +301,7 @@ contract FeeDistributor is CoreUtility, Ownable {
     }
 
     function updateAdminFeeRate(uint256 newAdminFeeRate) external onlyOwner {
+        checkpoint();
         _updateAdminFeeRate(newAdminFeeRate);
     }
 

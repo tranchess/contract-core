@@ -72,7 +72,7 @@ contract FundV5 is
     ///         and ends at the same time of the next day (exclusive).
     uint256 public override currentDay;
 
-    /// @notice The amount of BISHOP received by splitting one QUEEN.
+    /// @notice The amount of ROOK received by splitting one QUEEN.
     ///         This ratio changes on every rebalance.
     uint256 public override splitRatio;
 
@@ -701,6 +701,27 @@ contract FundV5 is
         require(spender != address(0), "ERC20: approve to the zero address");
         _allowances[owner][spender][tranche] = amount;
         IShareV2(_getShare(tranche)).fundEmitApproval(owner, spender, amount);
+    }
+
+    /// @notice Freeze up the fund when ROOK nav falls below zero. This function is meant for
+    ///         emergency use only, and can be called by anyone.
+    function freeze() external {
+        require(!frozen, "Already frozen");
+        uint256 day = currentDay;
+        require(day != 0, "Not initialized");
+        uint256 price = twapOracle.getLatest();
+        // Calculate NAV
+        uint256 underlying = getTotalUnderlying();
+        (, , uint256 navR) = _extrapolateNav(
+            block.timestamp,
+            day - settlementPeriod,
+            price,
+            getEquivalentTotalR(),
+            underlying
+        );
+        require(navR == 0, "Not to be frozen");
+        frozen = true;
+        emit Frozen();
     }
 
     /// @notice Settle the current trading day. Settlement includes the following changes

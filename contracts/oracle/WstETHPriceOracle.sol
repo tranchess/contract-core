@@ -18,7 +18,8 @@ contract WstETHPriceOracle is ITwapOracleV2 {
         return wstETH.stEthPerToken();
     }
 
-    /// @notice Return the latest price with 18 decimal places.
+    /// @notice For wstETH price oracle, we keep the `getTwap` interface
+    ///         compatible but it only returns the latest price.
     function getTwap(uint256) external view override returns (uint256) {
         return wstETH.stEthPerToken();
     }
