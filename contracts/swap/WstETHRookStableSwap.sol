@@ -3,7 +3,7 @@ pragma solidity >=0.6.10 <0.8.0;
 
 import "./WstETHStableSwap.sol";
 
-abstract contract WstETHRookStableSwap is WstETHStableSwap {
+contract WstETHRookStableSwap is WstETHStableSwap {
     event Rebalanced(uint256 base, uint256 quote, uint256 version);
 
     constructor(
