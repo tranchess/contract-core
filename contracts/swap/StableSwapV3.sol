@@ -161,7 +161,7 @@ abstract contract StableSwapV3 is IStableSwap, Ownable, ReentrancyGuard, Managed
 
     function feeRate() external view returns (uint256) {
         uint256 version = fund.getRebalanceSize();
-        uint256 rebalanceTimestamp = fund.getRebalanceTimestamp(version - 1); // underflow is desired
+        uint256 rebalanceTimestamp = version == 0 ? 0 : fund.getRebalanceTimestamp(version - 1);
         return _getFeeRate(rebalanceTimestamp);
     }
 

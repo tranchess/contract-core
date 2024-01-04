@@ -59,7 +59,9 @@ abstract contract WstETHStableSwap is StableSwapV3, ITrancheIndexV2 {
             result.base = baseBalance;
             return (result, 0, 0, 0, 0);
         }
-        result.rebalanceTimestamp = fund.getRebalanceTimestamp(latestVersion - 1); // underflow is desired
+        result.rebalanceTimestamp = latestVersion == 0
+            ? 0
+            : fund.getRebalanceTimestamp(latestVersion - 1);
         (excessiveQ, result.base, ) = fund.batchRebalance(
             0,
             baseBalance,
