@@ -82,6 +82,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
             IERC20(quoteAddress).safeTransfer(address(swap), quoteIn);
         } else if (quoteAddress == stETH) {
             IERC20(stETH).safeTransferFrom(msg.sender, address(this), quoteIn);
+            IERC20(stETH).approve(wstETH, quoteIn);
             quoteIn = IWstETH(wstETH).wrap(quoteIn);
             IERC20(wstETH).safeTransfer(address(swap), quoteIn);
         } else {
