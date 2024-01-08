@@ -16,6 +16,7 @@ import "../interfaces/IFundV5.sol";
 import "../interfaces/IFundForPrimaryMarketV4.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "../interfaces/IWrappedERC20.sol";
+import "../interfaces/IWstETH.sol";
 
 contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, Ownable {
     event Created(address indexed account, uint256 underlying, uint256 outQ);
@@ -291,6 +292,25 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         require(success, "Transfer failed");
     }
 
+    /// @notice Redeem QUEEN to get stETH back. The underlying must be wstETH.
+    ///         Revert if there are still some queued redemptions that cannot be claimed now.
+    /// @param recipient Address that will receive redeemed underlying tokens
+    /// @param inQ Spent QUEEN amount
+    /// @param minStETH Minimum amount of stETH to be received
+    /// @param version The latest rebalance version
+    /// @return stETHAmount Received underlying amount
+    function redeemAndUnwrapWstETH(
+        address recipient,
+        uint256 inQ,
+        uint256 minStETH,
+        uint256 version
+    ) external override nonReentrant returns (uint256 stETHAmount) {
+        uint256 underlying = _redeem(address(this), inQ, 0, version);
+        stETHAmount = IWstETH(address(_tokenUnderlying)).unwrap(underlying);
+        require(stETHAmount >= minStETH && stETHAmount > 0, "Min underlying redeemed");
+        IERC20(IWstETH(address(_tokenUnderlying)).stETH()).safeTransfer(recipient, stETHAmount);
+    }
+
     function _redeem(
         address recipient,
         uint256 inQ,
@@ -402,6 +422,20 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         IWrappedERC20(address(_tokenUnderlying)).withdraw(underlying);
         (bool success, ) = account.call{value: underlying}("");
         require(success, "Transfer failed");
+    }
+
+    /// @notice Claim stETH of queued redemptions. The underlying must be wstETH.
+    ///         All these redemptions must belong to the same account.
+    /// @param account Recipient of the redemptions
+    /// @param indices Indices of the redemptions in the queue, which must be in increasing order
+    /// @return stETHAmount Total claimed stETH amount
+    function claimRedemptionsAndUnwrapWstETH(
+        address account,
+        uint256[] calldata indices
+    ) external override nonReentrant returns (uint256 stETHAmount) {
+        uint256 underlying = _claimRedemptions(account, indices);
+        stETHAmount = IWstETH(address(_tokenUnderlying)).unwrap(underlying);
+        IERC20(IWstETH(address(_tokenUnderlying)).stETH()).safeTransfer(account, stETHAmount);
     }
 
     function _claimRedemptions(
