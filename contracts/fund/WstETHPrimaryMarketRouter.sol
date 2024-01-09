@@ -37,6 +37,7 @@ contract WstETHPrimaryMarketRouter is ITrancheIndexV2 {
     ) public returns (uint256 outQ) {
         if (needWrap) {
             IERC20(_stETH).safeTransferFrom(msg.sender, address(this), underlying);
+            IERC20(_stETH).approve(_wstETH, underlying);
             underlying = IWstETH(_wstETH).wrap(underlying);
             IERC20(_wstETH).safeTransfer(address(primaryMarket), underlying);
         } else {

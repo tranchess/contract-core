@@ -42,6 +42,7 @@ contract WstETHWrappingSwap is IStableSwap {
         bytes calldata
     ) external override returns (uint256 realBaseOut) {
         uint256 quoteIn = IERC20(stETH).balanceOf(address(this));
+        IERC20(stETH).approve(wstETH, quoteIn);
         realBaseOut = IWstETH(wstETH).wrap(quoteIn);
         IERC20(wstETH).safeTransfer(recipient, realBaseOut);
     }

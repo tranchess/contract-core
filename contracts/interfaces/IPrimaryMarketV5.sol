@@ -34,6 +34,13 @@ interface IPrimaryMarketV5 {
         uint256 version
     ) external returns (uint256 underlying);
 
+    function redeemAndUnwrapWstETH(
+        address recipient,
+        uint256 inQ,
+        uint256 minStETH,
+        uint256 version
+    ) external returns (uint256 stETHAmount);
+
     function queueRedemption(
         address recipient,
         uint256 inQ,
@@ -50,6 +57,11 @@ interface IPrimaryMarketV5 {
         address account,
         uint256[] calldata indices
     ) external returns (uint256 underlying);
+
+    function claimRedemptionsAndUnwrapWstETH(
+        address account,
+        uint256[] calldata indices
+    ) external returns (uint256 stETHAmount);
 
     function split(
         address recipient,
