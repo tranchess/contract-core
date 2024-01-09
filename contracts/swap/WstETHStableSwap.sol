@@ -89,9 +89,8 @@ abstract contract WstETHStableSwap is StableSwapV3, ITrancheIndexV2 {
     }
 
     function getOraclePrice() public view override returns (uint256) {
-        uint256 price = fund.twapOracle().getLatest();
-        (, uint256 navB, ) = fund.extrapolateNav(price);
-        return navB.divideDecimal(IWstETH(wstETH).stEthPerToken());
+        uint256 baseNav = _getBaseNav();
+        return baseNav.divideDecimal(IWstETH(wstETH).stEthPerToken());
     }
 
     function _rebalanceBase(
