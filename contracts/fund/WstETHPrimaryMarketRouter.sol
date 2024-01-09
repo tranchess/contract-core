@@ -48,18 +48,13 @@ contract WstETHPrimaryMarketRouter is ITrancheIndexV2 {
     }
 
     function createAndSplit(
-        uint256 underlying,
+        address recipient,
         bool needWrap,
+        uint256 underlying,
         uint256 minOutQ,
         uint256 version
-    ) external {
-        // Create QUEEN
+    ) external returns (uint256 outB, uint256 outR) {
         uint256 outQ = create(address(this), needWrap, underlying, minOutQ, version);
-
-        // Split QUEEN into BISHOP and ROOK
-        (uint256 outB, uint256 outR) = primaryMarket.split(address(this), outQ, version);
-
-        fund.trancheTransfer(TRANCHE_B, msg.sender, outB, version);
-        fund.trancheTransfer(TRANCHE_R, msg.sender, outR, version);
+        (outB, outR) = primaryMarket.split(recipient, outQ, version);
     }
 }
