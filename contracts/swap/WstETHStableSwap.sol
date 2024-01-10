@@ -41,6 +41,37 @@ abstract contract WstETHStableSwap is StableSwapV3, ITrancheIndexV2 {
         currentVersion = IFundV3(fund_).getRebalanceSize();
     }
 
+    /// @dev Remove liquidity proportionally and unwrap wstETH.
+    /// @param lpIn Exact amount of LP token to burn
+    /// @param minBaseOut Least amount of base asset to withdraw
+    /// @param minStETHOut Least amount of stETH to withdraw
+    function removeLiquidityUnwrapWstETH(
+        uint256 version,
+        uint256 lpIn,
+        uint256 minBaseOut,
+        uint256 minStETHOut
+    ) external nonReentrant checkVersion(version) returns (uint256 baseOut, uint256 stETHOut) {
+        uint256 quoteOut;
+        (baseOut, quoteOut) = _removeLiquidity(version, lpIn, minBaseOut, 0);
+        stETHOut = IWstETH(wstETH).unwrap(quoteOut);
+        require(stETHOut >= minStETHOut, "Insufficient output");
+        IERC20(IWstETH(wstETH).stETH()).safeTransfer(msg.sender, stETHOut);
+    }
+
+    /// @dev Remove quote liquidity only and unwrap wstETH.
+    /// @param lpIn Exact amount of LP token to burn
+    /// @param minStETHOut Least amount of stETH to withdraw
+    function removeQuoteLiquidityUnwrapWstETH(
+        uint256 version,
+        uint256 lpIn,
+        uint256 minStETHOut
+    ) external nonReentrant checkVersion(version) whenNotPaused returns (uint256 stETHOut) {
+        uint256 quoteOut = _removeQuoteLiquidity(version, lpIn, 0);
+        stETHOut = IWstETH(wstETH).unwrap(quoteOut);
+        require(stETHOut >= minStETHOut, "Insufficient output");
+        IERC20(IWstETH(wstETH).stETH()).safeTransfer(msg.sender, stETHOut);
+    }
+
     /// @dev Make sure the user-specified version is the latest rebalance version.
     function _checkVersion(uint256 version) internal view override {
         require(version == fund.getRebalanceSize(), "Obsolete rebalance version");
