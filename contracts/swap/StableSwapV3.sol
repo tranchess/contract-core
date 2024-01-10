@@ -475,7 +475,7 @@ abstract contract StableSwapV3 is IStableSwap, Ownable, ReentrancyGuard, Managed
         uint256 lpIn,
         uint256 minBaseOut,
         uint256 minQuoteOut
-    ) private returns (uint256 baseOut, uint256 quoteOut) {
+    ) internal returns (uint256 baseOut, uint256 quoteOut) {
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         RebalanceResult memory old = _handleRebalance(version);
         baseOut = old.base.mul(lpIn).div(lpSupply);
@@ -569,7 +569,7 @@ abstract contract StableSwapV3 is IStableSwap, Ownable, ReentrancyGuard, Managed
         uint256 version,
         uint256 lpIn,
         uint256 minQuoteOut
-    ) private returns (uint256 quoteOut) {
+    ) internal returns (uint256 quoteOut) {
         RebalanceResult memory old = _handleRebalance(version);
         uint256 lpSupply = IERC20(lpToken).totalSupply();
         uint256 ampl = getAmpl();
