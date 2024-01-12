@@ -5,6 +5,7 @@ import type { GovernanceAddresses } from "./deploy_governance";
 import type { FeeDistrubtorAddresses } from "./deploy_fee_distributor";
 import { updateHreSigner } from "./signers";
 import { BigNumber } from "ethers";
+import { waitForContract } from "./utils";
 
 export interface FundAddresses extends Addresses {
     underlyingSymbol: string;
@@ -63,10 +64,12 @@ task("deploy_fund_wsteth", "Deploy fund contracts for wstETH")
         const WstETHPriceOracle = await ethers.getContractFactory("WstETHPriceOracle");
         const twapOracle = await WstETHPriceOracle.deploy(underlyingToken.address);
         console.log(`TwapOracle: ${twapOracle.address}`);
+        await waitForContract(hre, twapOracle.address);
 
         const ConstAprOracle = await ethers.getContractFactory("ConstAprOracle");
         const aprOracle = await ConstAprOracle.deploy(bishopApr.div(365));
         console.log(`AprOracle: ${aprOracle.address}`);
+        await waitForContract(hre, aprOracle.address);
 
         // +0 ShareQ
         // +1 ShareB
@@ -90,6 +93,7 @@ task("deploy_fund_wsteth", "Deploy fund contracts for wstETH")
         const Share = await ethers.getContractFactory("ShareV2");
         const shareQ = await Share.deploy("Tranchess wstETH QUEEN", "wstQUEEN", fundAddress, 0);
         console.log(`ShareQ: ${shareQ.address}`);
+        await waitForContract(hre, shareQ.address);
 
         const shareB = await Share.deploy(
             "Tranchess wstETH stable YETH",
@@ -98,9 +102,11 @@ task("deploy_fund_wsteth", "Deploy fund contracts for wstETH")
             1
         );
         console.log(`ShareB: ${shareB.address}`);
+        await waitForContract(hre, shareB.address);
 
         const shareR = await Share.deploy("Tranchess wstETH turbo YETH", "turYETH", fundAddress, 2);
         console.log(`ShareR: ${shareR.address}`);
+        await waitForContract(hre, shareR.address);
 
         const Fund = await ethers.getContractFactory("FundV5");
         const fund = await Fund.deploy([
@@ -120,6 +126,7 @@ task("deploy_fund_wsteth", "Deploy fund contracts for wstETH")
         ]);
         assert.strictEqual(fund.address, fundAddress);
         console.log(`Fund: ${fund.address}`);
+        await waitForContract(hre, fund.address);
 
         const redemptionFeeRate = parseEther(args.redemptionFeeRate);
         const mergeFeeRate = parseEther(args.mergeFeeRate);
@@ -134,6 +141,7 @@ task("deploy_fund_wsteth", "Deploy fund contracts for wstETH")
         );
         assert.strictEqual(primaryMarket.address, primaryMarketAddress);
         console.log(`PrimaryMarket: ${primaryMarket.address}`);
+        await waitForContract(hre, primaryMarket.address);
 
         const FeeConverter = await ethers.getContractFactory("FeeConverter");
         const feeConverter = await FeeConverter.deploy(
@@ -142,26 +150,30 @@ task("deploy_fund_wsteth", "Deploy fund contracts for wstETH")
         );
         assert.strictEqual(feeConverter.address, feeConverterAddress);
         console.log(`FeeConverter: ${feeConverter.address}`);
+        await waitForContract(hre, feeConverter.address);
 
         const WstETHPrimaryMarketRouter = await ethers.getContractFactory(
             "WstETHPrimaryMarketRouter"
         );
         const primaryMarketRouter = await WstETHPrimaryMarketRouter.deploy(primaryMarket.address);
         console.log(`PrimaryMarketRouter: ${primaryMarketRouter.address}`);
+        await waitForContract(hre, primaryMarketRouter.address);
 
         console.log(
             `Initializing fund with ${fundNewSplitRatio}, ${fundLastNavB}, ${fundLastNavR}`
         );
-        await fund.initialize(fundNewSplitRatio, fundLastNavB, fundLastNavR, 0);
+        await (await fund.initialize(fundNewSplitRatio, fundLastNavB, fundLastNavR, 0)).wait();
 
         console.log("Transfering PrimaryMarket's ownership to TimelockController");
-        await primaryMarket.transferOwnership(governanceAddresses.timelockController);
+        await (
+            await primaryMarket.transferOwnership(governanceAddresses.timelockController)
+        ).wait();
 
         console.log("Transfering Fund's ownership to TimelockController");
-        await fund.transferOwnership(governanceAddresses.timelockController);
+        await (await fund.transferOwnership(governanceAddresses.timelockController)).wait();
 
         console.log("Transfering ConstAprOracle's ownership to TimelockController");
-        await aprOracle.transferOwnership(governanceAddresses.timelockController);
+        await (await aprOracle.transferOwnership(governanceAddresses.timelockController)).wait();
 
         const addresses: FundAddresses = {
             ...newAddresses(hre),

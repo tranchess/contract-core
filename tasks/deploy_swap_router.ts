@@ -4,6 +4,7 @@ import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./add
 import type { GovernanceAddresses } from "./deploy_governance";
 import { updateHreSigner } from "./signers";
 import { StableSwapAddresses } from "./deploy_stable_swap";
+import { waitForContract } from "./utils";
 
 export interface SwapRouterAddresses extends Addresses {
     swapRouter: string;
@@ -69,16 +70,19 @@ task("deploy_swap_router", "Deploy swap routers contracts")
         const SwapRouter = await ethers.getContractFactory("SwapRouter");
         const swapRouter = await SwapRouter.deploy(wstETH.address);
         console.log(`SwapRouter: ${swapRouter.address}`);
+        await waitForContract(hre, swapRouter.address);
 
-        await swapRouter.addSwap(wstETHAddress, stETHAddress, wstETHWrappingSwap.address);
+        await (
+            await swapRouter.addSwap(wstETHAddress, stETHAddress, wstETHWrappingSwap.address)
+        ).wait();
         for (const swapAddresses of swapAddressesList) {
             const { base, baseSymbol, quote, quoteSymbol, stableSwap } = swapAddresses;
             console.log(`Adding ${baseSymbol}-${quoteSymbol} to the swap router`);
-            await swapRouter.addSwap(base, quote, stableSwap);
+            await (await swapRouter.addSwap(base, quote, stableSwap)).wait();
         }
 
         console.log("Transfering ownership to TimelockController");
-        await swapRouter.transferOwnership(governanceAddresses.timelockController);
+        await (await swapRouter.transferOwnership(governanceAddresses.timelockController)).wait();
 
         const addresses: SwapRouterAddresses = {
             ...newAddresses(hre),
