@@ -3,6 +3,7 @@ pragma solidity >=0.6.10 <0.8.0;
 
 import "../interfaces/IAprOracle.sol";
 import "../interfaces/IFundV3.sol";
+import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "../fund/ShareStaking.sol";
 
@@ -28,6 +29,8 @@ import "../fund/ShareStaking.sol";
 // benefits, which is basically next to zero.
 
 contract BscAprOracleProxy is IAprOracle, ITrancheIndexV2 {
+    // Under extreme circumstances, there might not be enough amount of token to deposit;
+    // we could always transfer more QUEEN to resolve the issue.
     uint256 public constant DEPOSIT_AMOUNT = 1e15;
     IAprOracle public immutable aprOracle;
     IFundV3 public immutable fund;
@@ -40,25 +43,18 @@ contract BscAprOracleProxy is IAprOracle, ITrancheIndexV2 {
         fund = fund_;
         shareStaking = shareStaking_;
         currentVersion = fund_.getRebalanceSize();
-
-        // Approve max BISHOP and ROOK to ShareStaking
-        fund_.trancheApprove(
-            TRANCHE_B,
-            address(shareStaking_),
-            type(uint256).max,
-            fund_.getRebalanceSize()
-        );
-        fund_.trancheApprove(
-            TRANCHE_R,
-            address(shareStaking_),
-            type(uint256).max,
-            fund_.getRebalanceSize()
-        );
+        _approveMax(fund_, address(shareStaking_));
     }
 
     function capture() external override returns (uint256 dailyRate) {
         uint256 newVersion = fund.getRebalanceSize();
         if (newVersion != currentVersion) {
+            uint256 amountQ = fund.trancheBalanceOf(TRANCHE_Q, address(this));
+            if (amountQ > 0) {
+                IPrimaryMarketV3 primaryMarket = IPrimaryMarketV3(fund.primaryMarket());
+                primaryMarket.split(address(this), amountQ, newVersion);
+                _approveMax(fund, address(shareStaking));
+            }
             currentVersion = newVersion;
             uint256 oldStakingQ = shareStaking.totalSupply(TRANCHE_Q);
             shareStaking.deposit(TRANCHE_B, DEPOSIT_AMOUNT, address(this), newVersion);
@@ -69,5 +65,11 @@ contract BscAprOracleProxy is IAprOracle, ITrancheIndexV2 {
             shareStaking.withdraw(TRANCHE_R, DEPOSIT_AMOUNT, newVersion);
         }
         return aprOracle.capture();
+    }
+
+    function _approveMax(IFundV3 fund_, address spender) private {
+        // Approve max BISHOP and ROOK to ShareStaking
+        fund_.trancheApprove(TRANCHE_B, spender, type(uint256).max, fund_.getRebalanceSize());
+        fund_.trancheApprove(TRANCHE_R, spender, type(uint256).max, fund_.getRebalanceSize());
     }
 }
