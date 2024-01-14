@@ -276,6 +276,9 @@ describe("checkpointBypassAttack", function () {
         it("Should block settlement if upper rebalance triggered", async function () {
             const price = parseEther("1510");
             await twapOracle.mock.getTwap.withArgs(startDay + DAY).returns(price);
+            await primaryMarket.mock.split
+                .withArgs(aprOracleProxy.address, parseEther("0.3376158741695355"), 1)
+                .returns(0);
             await setAutomine(false);
             await staking.claimRewards(user2.address);
             await setAutomine(true);
@@ -298,6 +301,9 @@ describe("checkpointBypassAttack", function () {
         it("Should block settlement if lower rebalance triggered", async function () {
             const price = parseEther("750");
             await twapOracle.mock.getTwap.withArgs(startDay + DAY).returns(price);
+            await primaryMarket.mock.split
+                .withArgs(aprOracleProxy.address, parseEther("0.3362685736853845"), 1)
+                .returns(0);
             // Supply enough BISHOP and ROOK to shareStaking to enable the attack
             await fund.trancheTransfer(TRANCHE_B, staking.address, parseEther("0.8"), 0);
             await fund.trancheTransfer(TRANCHE_R, staking.address, parseEther("0.8"), 0);
