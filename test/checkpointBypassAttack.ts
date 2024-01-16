@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { BigNumberish, Contract, Wallet } from "ethers";
+import { Contract, Wallet } from "ethers";
 import type { Fixture, MockContract, MockProvider } from "ethereum-waffle";
 import { waffle, ethers } from "hardhat";
 const { loadFixture } = waffle;
@@ -32,7 +32,7 @@ describe("checkpointBypassAttack", function () {
         readonly shareQ: MockContract;
         readonly shareB: MockContract;
         readonly shareR: MockContract;
-        readonly primaryMarket: MockContract;
+        readonly primaryMarket: Contract;
         readonly aprOracleProxy: Contract;
         readonly staking: Contract;
         readonly fund: Contract;
@@ -47,7 +47,7 @@ describe("checkpointBypassAttack", function () {
     let owner: Wallet;
     let twapOracle: MockContract;
     let btc: Contract;
-    let primaryMarket: MockContract;
+    let primaryMarket: Contract;
     let aprOracleProxy: Contract;
     let staking: Contract;
     let fund: Contract;
@@ -93,9 +93,11 @@ describe("checkpointBypassAttack", function () {
             await share.mock.fundEmitTransfer.returns();
             await share.mock.fundEmitApproval.returns();
         }
-        const primaryMarket = await deployMockForName(owner, "IPrimaryMarketV3");
-        await primaryMarket.mock.settle.returns();
 
+        const primaryMarketAddress = ethers.utils.getContractAddress({
+            from: owner.address,
+            nonce: (await owner.getTransactionCount("pending")) + 1,
+        });
         const Fund = await ethers.getContractFactory("FundV4");
         const fund = await Fund.connect(owner).deploy([
             btc.address,
@@ -103,7 +105,7 @@ describe("checkpointBypassAttack", function () {
             shareQ.address,
             shareB.address,
             shareR.address,
-            primaryMarket.address,
+            primaryMarketAddress,
             ethers.constants.AddressZero,
             0,
             UPPER_REBALANCE_THRESHOLD,
@@ -113,6 +115,16 @@ describe("checkpointBypassAttack", function () {
             interestRateBallot.address,
             feeCollector.address,
         ]);
+        const PrimaryMarket = await ethers.getContractFactory("PrimaryMarketV4");
+        const primaryMarket = await PrimaryMarket.connect(owner).deploy(
+            fund.address,
+            0,
+            0,
+            parseEther("1000000"),
+            false
+        );
+        expect(primaryMarket.address).to.equal(primaryMarketAddress);
+
         await fund.initialize(parseEther("500"), parseEther("1"), parseEther("1"), 0);
 
         const chessSchedule = await deployMockForName(owner, "IChessSchedule");
@@ -150,13 +162,13 @@ describe("checkpointBypassAttack", function () {
             startDay,
             startTimestamp,
             twapOracle,
-            btc,
+            btc: btc.connect(user1),
             aprOracle,
             interestRateBallot,
             shareQ,
             shareB,
             shareR,
-            primaryMarket,
+            primaryMarket: primaryMarket.connect(user1),
             aprOracleProxy,
             staking: staking.connect(user1),
             fund: fund.connect(user1),
@@ -166,23 +178,6 @@ describe("checkpointBypassAttack", function () {
     async function advanceOneDayAndSettle() {
         await advanceBlockAtTime((await fund.currentDay()).toNumber());
         await fund.settle();
-    }
-
-    async function pmCreate(
-        user: Wallet,
-        inBtc: BigNumberish,
-        outQ: BigNumberish,
-        version?: number
-    ): Promise<void> {
-        await btc.connect(user).transfer(fund.address, inBtc);
-        await primaryMarket.call(
-            fund,
-            "primaryMarketMint",
-            TRANCHE_Q,
-            user.address,
-            outQ,
-            version ?? 0
-        );
     }
 
     before(function () {
@@ -211,49 +206,12 @@ describe("checkpointBypassAttack", function () {
                 .connect(owner)
                 .updateDailyProtocolFeeRate(parseEther("0.0001").mul(DAILY_PROTOCOL_FEE_BPS));
             // Create 10 QUEEN with 10 BTC on the first day.
-            await pmCreate(user1, parseBtc("10"), parseEther("10"));
+            await btc.transfer(primaryMarket.address, parseBtc("10"));
+            await primaryMarket.create(user1.address, 0, 0);
             await twapOracle.mock.getTwap.withArgs(startDay).returns(parseEther("1000"));
             await advanceOneDayAndSettle();
-            await primaryMarket.call(
-                fund,
-                "primaryMarketBurn",
-                TRANCHE_Q,
-                user1.address,
-                parseEther("3"),
-                0
-            );
-            await primaryMarket.call(
-                fund,
-                "primaryMarketMint",
-                TRANCHE_B,
-                aprOracleProxy.address,
-                parseEther("500"),
-                0
-            );
-            await primaryMarket.call(
-                fund,
-                "primaryMarketMint",
-                TRANCHE_R,
-                aprOracleProxy.address,
-                parseEther("500"),
-                0
-            );
-            await primaryMarket.call(
-                fund,
-                "primaryMarketMint",
-                TRANCHE_B,
-                user1.address,
-                parseEther("1000"),
-                0
-            );
-            await primaryMarket.call(
-                fund,
-                "primaryMarketMint",
-                TRANCHE_R,
-                user1.address,
-                parseEther("1000"),
-                0
-            );
+            await primaryMarket.split(aprOracleProxy.address, parseEther("1"), 0);
+            await primaryMarket.split(user1.address, parseEther("2"), 0);
             await fund.trancheApprove(TRANCHE_Q, staking.address, parseEther("0.5"), 0);
             await fund.trancheApprove(TRANCHE_B, staking.address, parseEther("0.5"), 0);
             await fund.trancheApprove(TRANCHE_R, staking.address, parseEther("0.5"), 0);
@@ -305,6 +263,18 @@ describe("checkpointBypassAttack", function () {
             await staking.claimRewards(user2.address);
             await setAutomine(true);
             await expect(fund.settle()).to.be.revertedWith("Rebalance check failed");
+            expect(await fund.getRebalanceSize()).to.equal(0);
+            await fund.settle();
+            expect(await fund.getRebalanceSize()).to.equal(1);
+        });
+
+        it("Should block settlement if extreme lower rebalance triggered", async function () {
+            const price = parseEther("250");
+            await twapOracle.mock.getTwap.withArgs(startDay + DAY).returns(price);
+            await setAutomine(false);
+            await staking.claimRewards(user2.address);
+            await setAutomine(true);
+            await expect(fund.settle()).to.be.revertedWith("SafeMath: subtraction overflow");
             expect(await fund.getRebalanceSize()).to.equal(0);
             await fund.settle();
             expect(await fund.getRebalanceSize()).to.equal(1);
