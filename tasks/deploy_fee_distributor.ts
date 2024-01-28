@@ -3,6 +3,7 @@ import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./add
 import type { GovernanceAddresses } from "./deploy_governance";
 import { GOVERNANCE_CONFIG } from "../config";
 import { updateHreSigner } from "./signers";
+import { waitForContract } from "./utils";
 
 export interface FeeDistrubtorAddresses extends Addresses {
     underlying: string;
@@ -34,9 +35,12 @@ task("deploy_fee_distributor", "Deploy fund contracts")
             adminFeeRate
         );
         console.log(`FeeDistributor: ${feeDistributor.address}`);
+        await waitForContract(hre, feeDistributor.address);
 
         console.log("Transfering ownership to TimelockController");
-        await feeDistributor.transferOwnership(governanceAddresses.timelockController);
+        await (
+            await feeDistributor.transferOwnership(governanceAddresses.timelockController)
+        ).wait();
 
         const addresses: FeeDistrubtorAddresses = {
             ...newAddresses(hre),

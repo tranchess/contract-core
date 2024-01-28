@@ -2,6 +2,7 @@ import { task } from "hardhat/config";
 import { keyInYNStrict } from "readline-sync";
 import { Addresses, saveAddressFile, newAddresses } from "./address_file";
 import { updateHreSigner } from "./signers";
+import { waitForContract } from "./utils";
 
 export interface MockAddresses extends Addresses {
     mockAprOracle: string;
@@ -116,16 +117,18 @@ task("deploy_mock", "Deploy mock contracts")
         if (args.silent || keyInYNStrict("Deploy MockStEth and MockWstEth?", { guide: true })) {
             const MockToken = await ethers.getContractFactory("MockToken");
             const mockStEth = await MockToken.deploy("Mock stETH", "stETH", 18);
+            await waitForContract(hre, mockStEth.address);
             console.log(`MockStEth: ${mockStEth.address}`);
             const MockWstETH = await ethers.getContractFactory("MockWstETH");
             const mockWstEth = await MockWstETH.deploy(mockStEth.address);
-            await mockWstEth.update(parseEther("1"));
+            await waitForContract(hre, mockWstEth.address);
+            await (await mockWstEth.update(parseEther("1"))).wait();
             console.log(`MockWstEth: ${mockWstEth.address}`);
             mockStEthAddress = mockStEth.address;
             mockWstEthAddress = mockWstEth.address;
-            await mockStEth.mint(deployer.address, parseEther("2000000"));
-            await mockStEth.approve(mockWstEth.address, parseEther("1000000"));
-            await mockWstEth.wrap(parseEther("1000000"));
+            await (await mockStEth.mint(deployer.address, parseEther("2000000"))).wait();
+            await (await mockStEth.approve(mockWstEth.address, parseEther("1000000"))).wait();
+            await (await mockWstEth.wrap(parseEther("1000000"))).wait();
         }
 
         let mockUniswapV2PairAddress = "";
