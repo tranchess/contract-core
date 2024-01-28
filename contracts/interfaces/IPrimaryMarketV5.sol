@@ -6,11 +6,19 @@ interface IPrimaryMarketV5 {
 
     function getCreation(uint256 underlying) external view returns (uint256 outQ);
 
+    function getCreationForQ(uint256 minOutQ) external view returns (uint256 underlying);
+
     function getRedemption(uint256 inQ) external view returns (uint256 underlying, uint256 fee);
 
-    function getSplit(uint256 inQ) external view returns (uint256 outB, uint256 outQ);
+    function getSplit(uint256 inQ) external view returns (uint256 outB, uint256 outR);
+
+    function getSplitForR(uint256 minOutR) external view returns (uint256 inQ, uint256 outB);
 
     function getMerge(uint256 inB) external view returns (uint256 inR, uint256 outQ, uint256 feeQ);
+
+    function getMergeForR(
+        uint256 inR
+    ) external view returns (uint256 inB, uint256 outQ, uint256 feeQ);
 
     function canBeRemovedFromFund() external view returns (bool);
 
