@@ -49,6 +49,9 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         uint256 quoteAmount = tranchessPair.getQuoteOut(outB);
         // Calculate the user's portion of the payment to Tranchess swap
         quoteDelta = totalQuoteAmount.sub(quoteAmount);
+        if (needWrap) {
+            quoteDelta = IWstETH(tokenQuote).getStETHByWstETH(quoteDelta).add(1);
+        }
         // Calculate creation of borrowed underlying for QUEEN
         uint256 outQ = IStableSwapCoreInternalRevertExpected(queenSwapOrPrimaryMarketRouter)
             .getBaseOut(totalQuoteAmount);
@@ -59,6 +62,7 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
     /// @dev Only meant for an off-chain client to call with eth_call.
     function getSellR(
         IFundV5 fund,
+        bool needUnwrap,
         address queenSwapOrPrimaryMarketRouter,
         address tokenQuote,
         uint256 inR
@@ -74,6 +78,9 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         ).getQuoteOut(outQ);
         // Calculate the rest of quote asset to user
         quoteDelta = totalQuoteAmount.sub(quoteAmount);
+        if (needUnwrap) {
+            quoteDelta = IWstETH(tokenQuote).getStETHByWstETH(quoteDelta);
+        }
     }
 
     function buyR(
@@ -152,6 +159,8 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
             require(resultAmount >= minQuote, "Insufficient output");
             IERC20(tokenQuote).safeTransfer(recipient, resultAmount);
         }
+        uint256 weightB = fund.weightB();
+        emit SwapRook(recipient, inB.div(weightB), 0, 0, resultAmount);
     }
 
     function tranchessSwapCallback(
@@ -172,29 +181,26 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
             "Tranchess Pair check failed"
         );
         if (baseOut > 0) {
-            uint256 resultAmount;
-            {
-                require(quoteOut == 0, "Unidirectional check failed");
-                uint256 quoteAmount = IStableSwap(msg.sender).getQuoteIn(baseOut);
-                // Merge BISHOP and ROOK into QUEEN
-                uint256 outQ = IPrimaryMarketV5(fund.primaryMarket()).merge(
-                    queenSwapOrPrimaryMarketRouter,
-                    baseOut,
-                    version
-                );
-                // Redeem or swap QUEEN for underlying
-                uint256 underlyingAmount = IStableSwapCoreInternalRevertExpected(
-                    queenSwapOrPrimaryMarketRouter
-                ).getQuoteOut(outQ);
-                uint256 totalQuoteAmount = IStableSwapCoreInternalRevertExpected(
-                    queenSwapOrPrimaryMarketRouter
-                ).sell(version, underlyingAmount, address(this), "");
-                // Send back quote asset to tranchess swap
-                IERC20(tokenQuote).safeTransfer(msg.sender, quoteAmount);
-                resultAmount = IERC20(tokenQuote).balanceOf(address(this));
-            }
-            uint256 weightB = fund.weightB();
-            emit SwapRook(recipient, baseOut.div(weightB), 0, 0, resultAmount);
+            require(quoteOut == 0, "Unidirectional check failed");
+            uint256 quoteAmount = IStableSwap(msg.sender).getQuoteIn(baseOut);
+            // Merge BISHOP and ROOK into QUEEN
+            uint256 outQ = IPrimaryMarketV5(fund.primaryMarket()).merge(
+                queenSwapOrPrimaryMarketRouter,
+                baseOut,
+                version
+            );
+            // Redeem or swap QUEEN for underlying
+            uint256 underlyingAmount = IStableSwapCoreInternalRevertExpected(
+                queenSwapOrPrimaryMarketRouter
+            ).getQuoteOut(outQ);
+            IStableSwapCoreInternalRevertExpected(queenSwapOrPrimaryMarketRouter).sell(
+                version,
+                underlyingAmount,
+                address(this),
+                ""
+            );
+            // Send back quote asset to tranchess swap
+            IERC20(tokenQuote).safeTransfer(msg.sender, quoteAmount);
         } else {
             address tokenUnderlying = fund.tokenUnderlying();
             // Create or swap borrowed underlying for QUEEN
