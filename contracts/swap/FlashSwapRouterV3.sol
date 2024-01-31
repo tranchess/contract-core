@@ -122,6 +122,7 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
 
     function sellR(
         IFundV5 fund,
+        bool needUnwrap,
         address queenSwapOrPrimaryMarketRouter,
         uint256 minQuote,
         address recipient,
@@ -141,6 +142,16 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
             version
         );
         tranchessRouter.getSwap(fund.tokenB(), tokenQuote).buy(version, inB, address(this), data);
+        // Send the rest of quote asset to user
+        uint256 resultAmount = IERC20(tokenQuote).balanceOf(address(this));
+        if (needUnwrap) {
+            uint256 unwrappedAmount = IWstETH(tokenQuote).unwrap(resultAmount);
+            require(unwrappedAmount >= minQuote, "Insufficient output");
+            IERC20(IWstETH(tokenQuote).stETH()).safeTransfer(recipient, unwrappedAmount);
+        } else {
+            require(resultAmount >= minQuote, "Insufficient output");
+            IERC20(tokenQuote).safeTransfer(recipient, resultAmount);
+        }
     }
 
     function tranchessSwapCallback(
@@ -180,10 +191,7 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
                 ).sell(version, underlyingAmount, address(this), "");
                 // Send back quote asset to tranchess swap
                 IERC20(tokenQuote).safeTransfer(msg.sender, quoteAmount);
-                // Send the rest of quote asset to user
-                resultAmount = totalQuoteAmount.sub(quoteAmount);
-                require(resultAmount >= expectQuoteAmount, "Insufficient output");
-                IERC20(tokenQuote).safeTransfer(recipient, resultAmount);
+                resultAmount = IERC20(tokenQuote).balanceOf(address(this));
             }
             uint256 weightB = fund.weightB();
             emit SwapRook(recipient, baseOut.div(weightB), 0, 0, resultAmount);

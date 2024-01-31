@@ -329,6 +329,7 @@ describe("FlashSwapRouterV3", function () {
             await expect(
                 flashSwapRouter.sellR(
                     fund.address,
+                    false,
                     primaryMarketRouter.address,
                     0,
                     addr2,
@@ -344,12 +345,35 @@ describe("FlashSwapRouterV3", function () {
             expect(diffWstETH).to.be.closeTo(outWstETH, outWstETH.div(10000));
         });
 
+        it("Should transfer unwrapped quote and ROOK tokens", async function () {
+            const outStETH = outWstETH.mul(INIT_PRICE).div(UNIT);
+            await fund.connect(owner).trancheTransfer(TRANCHE_R, addr1, inR, 0);
+            await fund.trancheApprove(TRANCHE_R, flashSwapRouter.address, inR, 0);
+            await expect(
+                flashSwapRouter.sellR(
+                    fund.address,
+                    true,
+                    primaryMarketRouter.address,
+                    0,
+                    addr2,
+                    wsteth.address,
+                    0,
+                    inR
+                )
+            )
+                .to.emit(flashSwapRouter, "SwapRook")
+                .withArgs(addr2, inR, 0, 0, outWstETH.sub(1));
+            expect(await fund.trancheBalanceOf(TRANCHE_R, addr1)).to.equal(0);
+            expect(await steth.balanceOf(addr2)).to.be.closeTo(outStETH, outStETH.div(10000));
+        });
+
         it("Should check minimum output", async function () {
             await fund.connect(owner).trancheTransfer(TRANCHE_R, addr1, inR, 0);
             await fund.trancheApprove(TRANCHE_R, flashSwapRouter.address, inR, 0);
             await expect(
                 flashSwapRouter.sellR(
                     fund.address,
+                    false,
                     primaryMarketRouter.address,
                     outWstETH.mul(2),
                     addr2,
