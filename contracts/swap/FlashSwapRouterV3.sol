@@ -10,6 +10,7 @@ import "../interfaces/IFundV5.sol";
 import "../interfaces/IPrimaryMarketV5.sol";
 import "../interfaces/ISwapRouter.sol";
 import "../interfaces/ITrancheIndexV2.sol";
+import "../interfaces/IWstETH.sol";
 
 /// @title Tranchess Flash Swap Router
 /// @notice Router for stateless execution of flash swaps against Tranchess stable swaps
@@ -34,6 +35,7 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
     /// @dev Only meant for an off-chain client to call with eth_call.
     function getBuyR(
         IFundV5 fund,
+        bool needWrap,
         address queenSwapOrPrimaryMarketRouter,
         address tokenQuote,
         uint256 outR
@@ -76,6 +78,7 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
 
     function buyR(
         IFundV5 fund,
+        bool needWrap,
         address queenSwapOrPrimaryMarketRouter,
         uint256 maxQuote,
         address recipient,
@@ -94,8 +97,18 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         uint256 quoteAmount = tranchessPair.getQuoteOut(outB);
         // Send the user's portion of the payment to Tranchess swap
         uint256 resultAmount = totalQuoteAmount.sub(quoteAmount);
-        require(resultAmount <= maxQuote, "Excessive input");
-        IERC20(tokenQuote).safeTransferFrom(msg.sender, address(this), resultAmount);
+        if (needWrap) {
+            address stETH = IWstETH(tokenQuote).stETH();
+            uint256 unwrappedAmount = IWstETH(tokenQuote).getStETHByWstETH(resultAmount).add(1);
+            require(unwrappedAmount <= maxQuote, "Excessive input");
+            IERC20(stETH).safeTransferFrom(msg.sender, address(this), unwrappedAmount);
+            IERC20(stETH).approve(tokenQuote, unwrappedAmount);
+            resultAmount = IWstETH(tokenQuote).wrap(unwrappedAmount);
+            totalQuoteAmount = quoteAmount.add(resultAmount);
+        } else {
+            require(resultAmount <= maxQuote, "Excessive input");
+            IERC20(tokenQuote).safeTransferFrom(msg.sender, address(this), resultAmount);
+        }
         bytes memory data = abi.encode(
             fund,
             queenSwapOrPrimaryMarketRouter,

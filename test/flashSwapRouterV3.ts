@@ -35,6 +35,7 @@ describe("FlashSwapRouterV3", function () {
 
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
+        readonly steth: Contract;
         readonly wsteth: Contract;
         readonly fund: Contract;
         readonly stableSwap: Contract;
@@ -50,6 +51,7 @@ describe("FlashSwapRouterV3", function () {
     let owner: Wallet;
     let addr1: string;
     let addr2: string;
+    let steth: Contract;
     let wsteth: Contract;
     let fund: Contract;
     let stableSwap: Contract;
@@ -66,7 +68,7 @@ describe("FlashSwapRouterV3", function () {
 
         const MockStETH = await ethers.getContractFactory("MockToken");
         const steth = await MockStETH.connect(owner).deploy("stETH", "stETH", 18);
-        await steth.mint(user1.address, USER_STETH);
+        await steth.mint(user1.address, USER_STETH.mul(2));
         await steth.mint(user2.address, USER_STETH);
 
         const MockWstETH = await ethers.getContractFactory("MockWstETH");
@@ -175,6 +177,7 @@ describe("FlashSwapRouterV3", function () {
         await wsteth.connect(user2).approve(primaryMarketRouter.address, USER_STETH);
         await wsteth.connect(user1).approve(flashSwapRouter.address, USER_STETH);
         await wsteth.connect(user2).approve(flashSwapRouter.address, USER_STETH);
+        await steth.connect(user1).approve(flashSwapRouter.address, USER_STETH);
 
         // Add initial liquidity
         const initQ = LP_B.mul(UNIT).div(INIT_SPLIT_RATIO);
@@ -203,6 +206,7 @@ describe("FlashSwapRouterV3", function () {
 
         return {
             wallets: { user1, user2, owner },
+            steth,
             wsteth,
             fund: fund.connect(user1),
             stableSwap: stableSwap.connect(user1),
@@ -222,6 +226,7 @@ describe("FlashSwapRouterV3", function () {
         owner = fixtureData.wallets.owner;
         addr1 = user1.address;
         addr2 = user2.address;
+        steth = fixtureData.steth;
         wsteth = fixtureData.wsteth;
         fund = fixtureData.fund;
         stableSwap = fixtureData.stableSwap;
@@ -245,6 +250,7 @@ describe("FlashSwapRouterV3", function () {
             await expect(
                 flashSwapRouter.buyR(
                     fund.address,
+                    false,
                     primaryMarketRouter.address,
                     USER_STETH,
                     addr2,
@@ -260,10 +266,32 @@ describe("FlashSwapRouterV3", function () {
             expect(spentWstETH).to.be.closeTo(inWstETH, inWstETH.div(10000));
         });
 
+        it("Should transfer unwrapped quote and ROOK tokens", async function () {
+            const inStETH = inWstETH.mul(INIT_PRICE).div(UNIT);
+            await expect(
+                flashSwapRouter.buyR(
+                    fund.address,
+                    true,
+                    primaryMarketRouter.address,
+                    USER_STETH,
+                    addr2,
+                    wsteth.address,
+                    0,
+                    outR
+                )
+            )
+                .to.emit(flashSwapRouter, "SwapRook")
+                .withArgs(addr2, 0, inWstETH.add(1), outR, 0);
+            expect(await fund.trancheBalanceOf(TRANCHE_R, addr2)).to.equal(outR);
+            const spentStETH = USER_STETH.sub(await steth.balanceOf(addr1));
+            expect(spentStETH).to.be.closeTo(inStETH, inStETH.div(10000));
+        });
+
         it("Should check maximum input", async function () {
             await expect(
                 flashSwapRouter.buyR(
                     fund.address,
+                    false,
                     primaryMarketRouter.address,
                     inWstETH.div(2),
                     addr2,
