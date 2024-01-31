@@ -163,6 +163,39 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         underlying = _getRedemption(inQ - feeQ);
     }
 
+    /// @notice Calculate the amount of QUEEN that can be redeemed for at least the given amount
+    ///         of underlying tokens.
+    /// @dev The return value may not be the minimum solution due to rounding errors.
+    /// @param minUnderlying Minimum received underlying amount
+    /// @return inQ QUEEN amount that should be redeemed
+    function getRedemptionForUnderlying(
+        uint256 minUnderlying
+    ) external view override returns (uint256 inQ) {
+        // Assume:
+        //   minUnderlying * fundEquivalentTotalQ = a * fundUnderlying - b
+        //   a * 1e18 = c * (1e18 - redemptionFeeRate) + d
+        // where
+        //   a, b, c, d are integers
+        //   0 <= b < fundUnderlying
+        //   0 <= d < 1e18 - redemeptionFeeRate
+        // Then
+        //   inQAfterFee = a
+        //   inQ = c
+        //   getRedemption(inQ).underlying
+        //     = floor((c - floor(c * redemptionFeeRate / 1e18)) * fundUnderlying / fundEquivalentTotalQ)
+        //     = floor(ceil(c * (1e18 - redemptionFeeRate) / 1e18) * fundUnderlying / fundEquivalentTotalQ)
+        //     = floor(((c * (1e18 - redemptionFeeRate) + d) / 1e18) * fundUnderlying / fundEquivalentTotalQ)
+        //     = floor(a * fundUnderlying / fundEquivalentTotalQ)
+        //     => floor((a * fundUnderlying - b) / fundEquivalentTotalQ)
+        //     = minUnderlying
+        uint256 fundUnderlying = IFundV3(fund).getTotalUnderlying();
+        uint256 fundEquivalentTotalQ = IFundV3(fund).getEquivalentTotalQ();
+        uint256 inQAfterFee = minUnderlying.mul(fundEquivalentTotalQ).add(fundUnderlying - 1).div(
+            fundUnderlying
+        );
+        return inQAfterFee.divideDecimal(1e18 - redemptionFeeRate);
+    }
+
     /// @notice Calculate the result of a split.
     /// @param inQ QUEEN amount to be split
     /// @return outB Received BISHOP amount

@@ -9,8 +9,9 @@ import "../interfaces/IPrimaryMarketV5.sol";
 import "../interfaces/IFundV3.sol";
 import "../interfaces/IWstETH.sol";
 import "../interfaces/ITrancheIndexV2.sol";
+import "../interfaces/IStableSwap.sol";
 
-contract WstETHPrimaryMarketRouter is ITrancheIndexV2 {
+contract WstETHPrimaryMarketRouter is IStableSwapCore, ITrancheIndexV2 {
     using SafeERC20 for IERC20;
 
     IPrimaryMarketV5 public immutable primaryMarket;
@@ -26,6 +27,51 @@ contract WstETHPrimaryMarketRouter is ITrancheIndexV2 {
         _wstETH = fund_.tokenUnderlying();
         _stETH = IWstETH(fund_.tokenUnderlying()).stETH();
         _tokenB = fund_.tokenB();
+    }
+
+    /// @dev Get redemption with StableSwap getQuoteOut interface.
+    function getQuoteOut(uint256 baseIn) external view override returns (uint256 quoteOut) {
+        (quoteOut, ) = primaryMarket.getRedemption(baseIn);
+    }
+
+    /// @dev Get creation for QUEEN with StableSwap getQuoteIn interface.
+    function getQuoteIn(uint256 baseOut) external view override returns (uint256 quoteIn) {
+        quoteIn = primaryMarket.getCreationForQ(baseOut);
+    }
+
+    /// @dev Get creation with StableSwap getBaseOut interface.
+    function getBaseOut(uint256 quoteIn) external view override returns (uint256 baseOut) {
+        baseOut = primaryMarket.getCreation(quoteIn);
+    }
+
+    /// @dev Get redemption for underlying with StableSwap getBaseIn interface.
+    function getBaseIn(uint256 quoteOut) external view override returns (uint256 baseIn) {
+        baseIn = primaryMarket.getRedemptionForUnderlying(quoteOut);
+    }
+
+    /// @dev Create QUEEN with StableSwap buy interface.
+    ///      Underlying should have already been sent to this contract
+    function buy(
+        uint256 version,
+        uint256 baseOut,
+        address recipient,
+        bytes calldata
+    ) external override returns (uint256 realBaseOut) {
+        uint256 routerQuoteBalance = IERC20(_wstETH).balanceOf(address(this));
+        IERC20(_wstETH).safeTransfer(address(primaryMarket), routerQuoteBalance);
+        realBaseOut = primaryMarket.create(recipient, baseOut, version);
+    }
+
+    /// @dev Redeem QUEEN with StableSwap sell interface.
+    ///      QUEEN should have already been sent to this contract
+    function sell(
+        uint256 version,
+        uint256 quoteOut,
+        address recipient,
+        bytes calldata
+    ) external override returns (uint256 realQuoteOut) {
+        uint256 routerBaseBalance = fund.trancheBalanceOf(TRANCHE_Q, address(this));
+        realQuoteOut = primaryMarket.redeem(recipient, routerBaseBalance, quoteOut, version);
     }
 
     function create(

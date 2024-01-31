@@ -159,9 +159,12 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
                     version
                 );
                 // Redeem or swap QUEEN for underlying
+                uint256 underlyingAmount = IStableSwapCoreInternalRevertExpected(
+                    queenSwapOrPrimaryMarketRouter
+                ).getQuoteOut(outQ);
                 uint256 totalQuoteAmount = IStableSwapCoreInternalRevertExpected(
                     queenSwapOrPrimaryMarketRouter
-                ).sell(version, 0, address(this), "");
+                ).sell(version, underlyingAmount, address(this), "");
                 // Send back quote asset to tranchess swap
                 IERC20(tokenQuote).safeTransfer(msg.sender, quoteAmount);
                 // Send the rest of quote asset to user

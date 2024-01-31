@@ -118,7 +118,7 @@ describe("FlashSwapRouterV3", function () {
             BigNumber.from(1).shl(256).sub(1),
             true
         );
-        const PrimaryMarketRouter = await ethers.getContractFactory("PrimaryMarketRouter");
+        const PrimaryMarketRouter = await ethers.getContractFactory("WstETHPrimaryMarketRouter");
         const primaryMarketRouter = await PrimaryMarketRouter.connect(owner).deploy(
             primaryMarket.address
         );
@@ -183,7 +183,7 @@ describe("FlashSwapRouterV3", function () {
         await steth.approve(wsteth.address, initWstETH);
         await wsteth.wrap(initWstETH);
         await wsteth.approve(primaryMarketRouter.address, initWstETH);
-        await primaryMarketRouter.create(owner.address, initWstETH, 0, 0);
+        await primaryMarketRouter.create(owner.address, false, initWstETH, 0, 0);
         await primaryMarket.split(owner.address, initQ, 0);
         await fund.trancheApprove(TRANCHE_B, swapRouter.address, LP_B, 0);
         await steth.mint(owner.address, LP_STETH);

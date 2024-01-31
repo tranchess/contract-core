@@ -10,6 +10,8 @@ interface IPrimaryMarketV5 {
 
     function getRedemption(uint256 inQ) external view returns (uint256 underlying, uint256 fee);
 
+    function getRedemptionForUnderlying(uint256 minUnderlying) external view returns (uint256 inQ);
+
     function getSplit(uint256 inQ) external view returns (uint256 outB, uint256 outR);
 
     function getSplitForR(uint256 minOutR) external view returns (uint256 inQ, uint256 outB);
