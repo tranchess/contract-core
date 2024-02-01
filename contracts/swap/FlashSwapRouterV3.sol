@@ -69,7 +69,7 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
     ) external returns (uint256 quoteDelta, uint256 rookDelta) {
         rookDelta = inR;
         // Calculate merge result of BISHOP and ROOK into QUEEN
-        (uint256 inB, uint256 outQ, ) = IPrimaryMarketV5(fund.primaryMarket()).getMergeForR(inR);
+        (uint256 inB, uint256 outQ, ) = IPrimaryMarketV5(fund.primaryMarket()).getMergeByR(inR);
         uint256 quoteAmount = IStableSwap(tranchessRouter.getSwap(fund.tokenB(), tokenQuote))
             .getQuoteIn(inB);
         // Calculate the redemption from QUEEN to underlying
@@ -138,7 +138,7 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
         uint256 inR
     ) external {
         // Calculate merge result of BISHOP and ROOK into QUEEN
-        (uint256 inB, , ) = IPrimaryMarketV5(fund.primaryMarket()).getMergeForR(inR);
+        (uint256 inB, , ) = IPrimaryMarketV5(fund.primaryMarket()).getMergeByR(inR);
         // Send the user's ROOK to this router
         fund.trancheTransferFrom(TRANCHE_R, msg.sender, address(this), inR, version);
         bytes memory data = abi.encode(

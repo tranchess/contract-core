@@ -242,9 +242,10 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
     /// @return inB Spent BISHOP amount
     /// @return outQ Received QUEEN amount
     /// @return feeQ QUEEN amount charged as merge fee
-    function getMergeForR(
+    function getMergeByR(
         uint256 inR
     ) public view override returns (uint256 inB, uint256 outQ, uint256 feeQ) {
+        require(!IFundV5(fund).frozen(), "Fund frozen");
         inB = inR.mul(_weightB);
         uint256 splitRatio = IFundV5(fund).splitRatio();
         uint256 outQBeforeFee = inR.divideDecimal(splitRatio);

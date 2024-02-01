@@ -18,7 +18,7 @@ interface IPrimaryMarketV5 {
 
     function getMerge(uint256 inB) external view returns (uint256 inR, uint256 outQ, uint256 feeQ);
 
-    function getMergeForR(
+    function getMergeByR(
         uint256 inR
     ) external view returns (uint256 inB, uint256 outQ, uint256 feeQ);
 
