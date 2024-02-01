@@ -159,8 +159,7 @@ contract FlashSwapRouterV3 is ITranchessSwapCallee, ITrancheIndexV2, Ownable {
             require(resultAmount >= minQuote, "Insufficient output");
             IERC20(tokenQuote).safeTransfer(recipient, resultAmount);
         }
-        uint256 weightB = fund.weightB();
-        emit SwapRook(recipient, inB.div(weightB), 0, 0, resultAmount);
+        emit SwapRook(recipient, inR, 0, 0, resultAmount);
     }
 
     function tranchessSwapCallback(
