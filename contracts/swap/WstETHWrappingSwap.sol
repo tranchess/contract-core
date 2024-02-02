@@ -3,12 +3,14 @@ pragma solidity >=0.6.10 <0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/math/SafeMath.sol";
 import "../interfaces/IStableSwap.sol";
 import "../interfaces/IWstETH.sol";
 import "../utils/SafeDecimalMath.sol";
 
 contract WstETHWrappingSwap is IStableSwap {
     using SafeERC20 for IERC20;
+    using SafeMath for uint256;
     using SafeDecimalMath for uint256;
 
     address public immutable wstETH; // Base
@@ -24,7 +26,7 @@ contract WstETHWrappingSwap is IStableSwap {
     }
 
     function getQuoteIn(uint256 baseOut) external view override returns (uint256 quoteIn) {
-        quoteIn = IWstETH(wstETH).getStETHByWstETH(baseOut);
+        quoteIn = IWstETH(wstETH).getStETHByWstETH(baseOut).add(1);
     }
 
     function getBaseOut(uint256 quoteIn) external view override returns (uint256 baseOut) {
@@ -32,7 +34,7 @@ contract WstETHWrappingSwap is IStableSwap {
     }
 
     function getBaseIn(uint256 quoteOut) external view override returns (uint256 baseIn) {
-        baseIn = IWstETH(wstETH).getWstETHByStETH(quoteOut);
+        baseIn = IWstETH(wstETH).getWstETHByStETH(quoteOut).add(1);
     }
 
     function buy(
