@@ -68,6 +68,10 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         underlying: mockAddresses.mockBusd,
         adminFeeRate: "0.5",
     });
+    await hre.run("deploy_fee_distributor", {
+        underlying: mockAddresses.mockWstEth,
+        adminFeeRate: "0.5",
+    });
     await hre.run("deploy_fund", {
         underlyingSymbol: "BTC",
         quoteSymbol: "BUSD",
@@ -110,6 +114,18 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         }),
         fundInitializationParams: JSON.stringify({
             newSplitRatio: "500",
+            lastNavB: "1",
+            lastNavR: "1",
+        }),
+    });
+
+    await hre.run("deploy_fund_wsteth", {
+        underlying: mockAddresses.mockWstEth,
+        redemptionFeeRate: "0.0035",
+        mergeFeeRate: "0.0045",
+        bishopApr: "0.03",
+        fundInitializationParams: JSON.stringify({
+            newSplitRatio: "0.1",
             lastNavB: "1",
             lastNavR: "1",
         }),
@@ -179,12 +195,29 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
             rewardStartTimestamp: "0",
         });
     }
+    await hre.run("deploy_stable_swap_wsteth", {
+        kind: "Bishop",
+        ampl: "200",
+        feeRate: "0.02",
+        adminFeeRate: "0.4",
+    });
+    await hre.run("deploy_stable_swap_wsteth", {
+        kind: "Rook",
+        ampl: "10",
+        feeRate: "0.1",
+        adminFeeRate: "0.4",
+    });
+    const WstETHWrappingSwap = await ethers.getContractFactory("WstETHWrappingSwap");
+    const wstETHWrappingSwap = await WstETHWrappingSwap.deploy(mockAddresses.mockWstEth);
+    console.log(`WstETHWrappingSwap: ${wstETHWrappingSwap.address}`);
 
     console.log();
     console.log("[+] Deploying swap router");
     await hre.run("deploy_swap_router", {
+        wstWrappingSwap: wstETHWrappingSwap.address,
         queenSwaps: "WBNB",
-        bishopSwaps: "BTC,ETH,WBNB",
+        bishopSwaps: "BTC,ETH,WBNB,wstETH",
+        rookSwaps: "wstETH",
     });
 
     console.log();
