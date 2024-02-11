@@ -116,8 +116,10 @@ describe("BishopStableSwap", function () {
         await usdc.mint(stableSwap.address, INIT_USDC);
         await stableSwap.addLiquidity(0, user1.address);
 
+        const wstETH = await deployMockForName(owner, "IWstETH");
+        await wstETH.mock.stETH.returns(ethers.constants.AddressZero);
         const SwapRouter = await ethers.getContractFactory("SwapRouter");
-        const swapRouter = await SwapRouter.connect(owner).deploy();
+        const swapRouter = await SwapRouter.connect(owner).deploy(wstETH.address);
         await swapRouter.addSwap(tokenB.address, usdc.address, stableSwap.address);
 
         return {
