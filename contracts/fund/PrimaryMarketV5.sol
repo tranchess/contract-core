@@ -575,7 +575,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_R, msg.sender, inR, version);
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
         IFundForPrimaryMarketV4(fund).primaryMarketAddDebtAndFee(0, feeQ);
-        emit Merged(recipient, outQ, inB, inB, feeQ);
+        emit Merged(recipient, outQ, inB, inR, feeQ);
     }
 
     /// @dev Nothing to do for daily fund settlement.
