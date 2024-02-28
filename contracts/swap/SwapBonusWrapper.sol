@@ -13,12 +13,10 @@ contract SwapBonusWrapper is Ownable {
     using SafeERC20 for IERC20;
 
     address public immutable swapBonus;
-    address public immutable admin;
     address public immutable bonusToken;
 
-    constructor(address swapBonus_, address admin_) public {
+    constructor(address swapBonus_) public {
         swapBonus = swapBonus_;
-        admin = admin_;
         bonusToken = SwapBonus(swapBonus_).bonusToken();
     }
 
@@ -30,6 +28,6 @@ contract SwapBonusWrapper is Ownable {
     }
 
     function transferOwnershipToAdmin() external onlyOwner {
-        SwapBonus(swapBonus).transferOwnership(admin);
+        SwapBonus(swapBonus).transferOwnership(owner());
     }
 }
