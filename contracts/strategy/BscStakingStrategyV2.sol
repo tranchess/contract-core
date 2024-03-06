@@ -48,6 +48,8 @@ interface IStakeCredit {
 
     function getPooledBNB(address account) external view returns (uint256);
 
+    function lockedBNBs(address delegator, uint256 number) external view returns (uint256);
+
     function unbondSequence(address delegator) external view returns (uint256);
 
     function unbondRequest(
@@ -92,9 +94,14 @@ contract BscStakingStrategyV2 is Ownable {
         updateOperators(operatorIndices);
     }
 
-    function isEnoughToWithdraw(uint256 amount) external view returns (bool) {
+    function getWithdrawalCapacity()
+        external
+        view
+        returns (uint256 pendingAmount, uint256 withdrawalCapacity)
+    {
         for (uint256 i = 0; i < operators.length; i++) {
-            // Skip if there are at least one ongoing request
+            pendingAmount = pendingAmount.add(credits[i].lockedBNBs(address(this), 0));
+            // Skip if there is an ongoing request
             uint256 unbondSequence = credits[i].unbondSequence(address(this));
             if (
                 credits[i].unbondRequest(address(this), unbondSequence).unlockTime >=
@@ -103,12 +110,8 @@ contract BscStakingStrategyV2 is Ownable {
                 continue;
             }
             uint256 stakes = credits[i].getPooledBNB(address(this));
-            if (stakes >= amount) {
-                return true;
-            }
-            amount = amount - stakes;
+            withdrawalCapacity = withdrawalCapacity.add(stakes);
         }
-        return false;
     }
 
     function deposit(uint256 amount) external onlyPrimaryMarket {
