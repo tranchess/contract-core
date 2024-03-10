@@ -104,8 +104,8 @@ contract BscStakingStrategyV2 is Ownable {
             // Skip if there is an ongoing request
             uint256 unbondSequence = credits[i].unbondSequence(address(this));
             if (
-                credits[i].unbondRequest(address(this), unbondSequence).unlockTime >=
-                block.timestamp
+                block.timestamp <
+                credits[i].unbondRequest(address(this), unbondSequence).unlockTime
             ) {
                 continue;
             }
@@ -136,8 +136,8 @@ contract BscStakingStrategyV2 is Ownable {
             // Skip if there are at least one ongoing request
             uint256 unbondSequence = credits[i].unbondSequence(address(this));
             if (
-                credits[i].unbondRequest(address(this), unbondSequence).unlockTime >=
-                block.timestamp
+                block.timestamp <
+                credits[i].unbondRequest(address(this), unbondSequence).unlockTime
             ) {
                 continue;
             }
