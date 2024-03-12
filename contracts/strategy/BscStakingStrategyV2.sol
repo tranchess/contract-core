@@ -4,6 +4,7 @@ pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
@@ -23,6 +24,8 @@ interface IStakeHub {
         external
         view
         returns (address[] memory operatorAddrs, address[] memory creditAddrs, uint256 totalLength);
+
+    function minDelegationBNBChange() external view returns (uint256);
 
     function delegate(address operatorAddress, bool delegateVotePower) external payable;
 
@@ -62,9 +65,7 @@ interface IStakeCredit is IERC20 {
 }
 
 contract BscStakingStrategyV2 is OwnableUpgradeable {
-    /// @dev Reserved storage slots for future base contract upgrades
-    uint256[32] private _reservedSlots;
-
+    using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using SafeERC20 for IWrappedERC20;
@@ -105,7 +106,7 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     }
 
     function getWithdrawalCapacity()
-        external
+        public
         view
         returns (uint256 pendingAmount, uint256 withdrawalCapacity)
     {
@@ -123,9 +124,18 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         }
     }
 
-    function deposit(uint256 amount) external onlyPrimaryMarket {
-        require(credits.length > 0, "No stake credit");
+    /// @notice Deposit underlying tokens from the fund to the STAKE_HUB contract.
+    function deposit() external {
+        uint256 fundBalance = IWrappedERC20(_tokenUnderlying).balanceOf(fund);
+        uint256 strategyBalance = IERC20(_tokenUnderlying).balanceOf(address(this));
+        uint256 fundDebt = IFundV3(fund).getTotalDebt();
+        uint256 amount = fundBalance.add(strategyBalance).add(address(this).balance).sub(fundDebt);
+        // Deposit only if more than min delegation amount
+        if (amount < STAKE_HUB.minDelegationBNBChange()) {
+            return;
+        }
         // Find the operator with least deposits
+        require(credits.length > 0, "No stake credit");
         uint256 minStake = type(uint256).max;
         address nextOperator = address(0);
         for (uint256 i = 0; i < operators.length; i++) {
@@ -136,12 +146,25 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
             }
         }
         // Deposit to the operator
-        IFundForStrategy(fund).transferToStrategy(amount);
-        _unwrap(amount);
+        IFundForStrategy(fund).transferToStrategy(fundBalance.sub(fundDebt));
+        _unwrap(IERC20(_tokenUnderlying).balanceOf(address(this)));
         STAKE_HUB.delegate{value: amount}(nextOperator, true);
     }
 
-    function withdraw(uint256 amount) external onlyPrimaryMarket {
+    /// @notice Withdraw underlying tokens from the STAKE_HUB contract.
+    function withdraw() external {
+        // Calculate the total debt owed
+        uint256 fundDebt = IFundV3(fund).getTotalDebt();
+        // Calculate the current total underlying in possession
+        (uint256 pendingAmount, uint256 withdrawalCapacity) = getWithdrawalCapacity();
+        uint256 fundBalance = IERC20(_tokenUnderlying).balanceOf(fund);
+        uint256 strategyBalance = IERC20(_tokenUnderlying).balanceOf(address(this));
+        uint256 totalBalance = fundBalance.add(strategyBalance).add(pendingAmount);
+        // Withdraw only if owe more debt
+        if (fundDebt <= totalBalance) {
+            return;
+        }
+        uint256 amount = withdrawalCapacity.min(fundDebt - totalBalance);
         for (uint256 i = 0; i < operators.length; i++) {
             // Skip if there are at least one ongoing request
             uint256 unbondSequence = credits[i].unbondSequence(address(this));
