@@ -5,7 +5,7 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 import "../utils/SafeDecimalMath.sol";
 
@@ -61,7 +61,10 @@ interface IStakeCredit is IERC20 {
     ) external view returns (UnbondRequest memory);
 }
 
-contract BscStakingStrategyV2 is Ownable {
+contract BscStakingStrategyV2 is OwnableUpgradeable {
+    /// @dev Reserved storage slots for future base contract upgrades
+    uint256[32] private _reservedSlots;
+
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using SafeERC20 for IWrappedERC20;
@@ -87,13 +90,16 @@ contract BscStakingStrategyV2 is Ownable {
     /// @notice Fraction of profit that goes to the fund's fee collector.
     uint256 public performanceFeeRate;
 
-    constructor(
-        address fund_,
-        uint256 performanceFeeRate_,
-        uint256[] memory operatorIndices
-    ) public {
+    constructor(address fund_) public {
         fund = fund_;
         _tokenUnderlying = IFundV3(fund_).tokenUnderlying();
+    }
+
+    function initialize(
+        uint256 performanceFeeRate_,
+        uint256[] memory operatorIndices
+    ) external initializer {
+        __Ownable_init();
         performanceFeeRate = performanceFeeRate_;
         updateOperators(operatorIndices);
     }
