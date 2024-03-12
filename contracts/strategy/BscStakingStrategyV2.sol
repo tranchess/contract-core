@@ -3,6 +3,7 @@ pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -37,7 +38,7 @@ interface IStakeHub {
     function claim(address operatorAddresses, uint256 requestNumbers) external;
 }
 
-interface IStakeCredit {
+interface IStakeCredit is IERC20 {
     struct UnbondRequest {
         uint256 shares;
         uint256 bnbAmount;
@@ -47,6 +48,8 @@ interface IStakeCredit {
     function claimableUnbondRequest(address delegator) external view returns (uint256);
 
     function getPooledBNB(address account) external view returns (uint256);
+
+    function getSharesByPooledBNB(uint256 bnbAmount) external view returns (uint256);
 
     function lockedBNBs(address delegator, uint256 number) external view returns (uint256);
 
@@ -64,6 +67,7 @@ contract BscStakingStrategyV2 is Ownable {
     using SafeERC20 for IWrappedERC20;
 
     event ValidatorsUpdated(uint256[] operatorIndices);
+    event Received(address from, uint256 amount);
 
     IStakeHub public STAKE_HUB;
 
@@ -104,8 +108,7 @@ contract BscStakingStrategyV2 is Ownable {
             // Skip if there is an ongoing request
             uint256 unbondSequence = credits[i].unbondSequence(address(this));
             if (
-                block.timestamp <
-                credits[i].unbondRequest(address(this), unbondSequence).unlockTime
+                block.timestamp < credits[i].unbondRequest(address(this), unbondSequence).unlockTime
             ) {
                 continue;
             }
@@ -115,9 +118,10 @@ contract BscStakingStrategyV2 is Ownable {
     }
 
     function deposit(uint256 amount) external onlyPrimaryMarket {
+        require(credits.length > 0, "No stake credit");
         // Find the operator with least deposits
-        uint256 minStake = credits[0].getPooledBNB(address(this));
-        address nextOperator = operators[0];
+        uint256 minStake = type(uint256).max;
+        address nextOperator = address(0);
         for (uint256 i = 0; i < operators.length; i++) {
             uint256 temp = credits[i].getPooledBNB(address(this));
             if (temp < minStake) {
@@ -136,19 +140,18 @@ contract BscStakingStrategyV2 is Ownable {
             // Skip if there are at least one ongoing request
             uint256 unbondSequence = credits[i].unbondSequence(address(this));
             if (
-                block.timestamp <
-                credits[i].unbondRequest(address(this), unbondSequence).unlockTime
+                block.timestamp < credits[i].unbondRequest(address(this), unbondSequence).unlockTime
             ) {
                 continue;
             }
             // Undelegate until fulfilling the user's request
             uint256 stakes = credits[i].getPooledBNB(address(this));
             if (stakes >= amount) {
-                STAKE_HUB.undelegate(operators[i], amount);
+                STAKE_HUB.undelegate(operators[i], credits[i].getSharesByPooledBNB(amount));
                 return;
             }
             amount = amount - stakes;
-            STAKE_HUB.undelegate(operators[i], stakes);
+            STAKE_HUB.undelegate(operators[i], credits[i].balanceOf(address(this)));
         }
         revert("Not enough to withdraw");
     }
@@ -207,6 +210,11 @@ contract BscStakingStrategyV2 is Ownable {
             uint256 performanceFee = (amount - oldDrawdown).multiplyDecimal(performanceFeeRate);
             IFundForStrategy(fund).reportProfit(amount, performanceFee);
         }
+    }
+
+    /// @notice Receive cross-chain transfer from the staker.
+    receive() external payable {
+        emit Received(msg.sender, msg.value);
     }
 
     function updateOperators(uint256[] memory operatorIndices) public onlyOwner {
