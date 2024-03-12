@@ -85,9 +85,6 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     ///         only when this value is zero.
     uint256 public currentDrawdown;
 
-    /// @notice The last trading day when a reporter reports daily profit.
-    uint256 public reportedDay;
-
     /// @notice Fraction of profit that goes to the fund's fee collector.
     uint256 public performanceFeeRate;
 
@@ -211,16 +208,26 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         STAKE_HUB.redelegate(srcValidator, dstValidator, shares, delegateVotePower);
     }
 
+    /// @notice Report profit to the fund.
+    function reportProfit() external {
+        uint256 strategyUnderlying = IFundV3(fund).getStrategyUnderlying();
+        uint256 newStrategyUnderlying = 0;
+        for (uint256 i = 0; i < credits.length; i++) {
+            newStrategyUnderlying = newStrategyUnderlying.add(
+                credits[i].getPooledBNB(address(this))
+            );
+        }
+        _reportProfit(newStrategyUnderlying.sub(strategyUnderlying));
+    }
+
     /// @notice Report profit to the fund by the owner.
     function reportProfit(uint256 amount) external onlyOwner {
-        reportedDay = IFundV3(fund).currentDay();
         _reportProfit(amount);
     }
 
     /// @notice Report loss to the fund. Performance fee will not be charged until
     ///         the current drawdown is covered.
     function reportLoss(uint256 amount) external onlyOwner {
-        reportedDay = IFundV3(fund).currentDay();
         currentDrawdown = currentDrawdown.add(amount);
         IFundForStrategy(fund).reportLoss(amount);
     }
