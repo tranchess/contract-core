@@ -2,7 +2,6 @@
 pragma solidity >=0.6.10 <0.8.0;
 pragma experimental ABIEncoderV2;
 
-import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
@@ -16,7 +15,6 @@ import "../interfaces/IFundV3.sol";
 import "../interfaces/IFundForPrimaryMarketV3.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "../interfaces/IWrappedERC20.sol";
-import "./BscStakingStrategyV2.sol";
 
 contract BnbPrimaryMarket is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, Ownable {
     event Created(address indexed account, uint256 underlying, uint256 outQ);
@@ -36,7 +34,6 @@ contract BnbPrimaryMarket is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2,
     event RedemptionFeeRateUpdated(uint256 newRedemptionFeeRate);
     event MergeFeeRateUpdated(uint256 newMergeFeeRate);
 
-    using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
@@ -328,7 +325,6 @@ contract BnbPrimaryMarket is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2,
         require(outQ >= minOutQ && outQ > 0, "Min QUEEN created");
         IFundForPrimaryMarketV3(fund).primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
         _tokenUnderlying.safeTransfer(fund, underlying);
-        BscStakingStrategyV2(IFundV3(fund).strategy()).deposit(underlying);
         emit Created(recipient, underlying, outQ);
     }
 
@@ -535,24 +531,8 @@ contract BnbPrimaryMarket is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2,
         emit Merged(recipient, outQ, inB, inB, feeUnderlying);
     }
 
-    /// @dev Undelegate BNB for daily fund settlement.
-    function settle(uint256) external override onlyFund {
-        address strategy = IFundV3(fund).strategy();
-        // Calculate the total debt owed
-        uint256 totalDebt = IFundV3(fund).getTotalDebt();
-        // Calculate the current total underlying in possession
-        (uint256 pendingAmount, uint256 withdrawalCapacity) = BscStakingStrategyV2(strategy)
-            .getWithdrawalCapacity();
-        uint256 fundUnderlying = _tokenUnderlying.balanceOf(fund);
-        uint256 strategyUnderlying = _tokenUnderlying.balanceOf(strategy);
-        uint256 totalInPossession = fundUnderlying.add(strategyUnderlying).add(pendingAmount);
-        // Withdraw if owe more debt
-        if (totalDebt > totalInPossession) {
-            BscStakingStrategyV2(strategy).withdraw(
-                withdrawalCapacity.min(totalDebt - totalInPossession)
-            );
-        }
-    }
+    /// @dev Nothing to do for daily fund settlement.
+    function settle(uint256 day) external override onlyFund {}
 
     function _updateFundCap(uint256 newCap) private {
         fundCap = newCap;
