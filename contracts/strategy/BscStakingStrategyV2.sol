@@ -17,13 +17,9 @@ import "../interfaces/IWrappedERC20.sol";
 interface IStakeHub {
     function unbondPeriod() external view returns (uint256);
 
-    function getValidators(
-        uint256 offset,
-        uint256 limit
-    )
-        external
-        view
-        returns (address[] memory operatorAddrs, address[] memory creditAddrs, uint256 totalLength);
+    function getValidatorCreditContract(
+        address operatorAddress
+    ) external view returns (address creditContract);
 
     function minDelegationBNBChange() external view returns (uint256);
 
@@ -70,7 +66,7 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     using SafeDecimalMath for uint256;
     using SafeERC20 for IWrappedERC20;
 
-    event ValidatorsUpdated(uint256[] operatorIndices);
+    event ValidatorsUpdated(address[] newOperators);
     event Received(address from, uint256 amount);
 
     IStakeHub public STAKE_HUB;
@@ -95,11 +91,11 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
 
     function initialize(
         uint256 performanceFeeRate_,
-        uint256[] memory operatorIndices
+        address[] memory operators_
     ) external initializer {
         __Ownable_init();
         performanceFeeRate = performanceFeeRate_;
-        updateOperators(operatorIndices);
+        updateOperators(operators_);
     }
 
     function getWithdrawalCapacity()
@@ -253,17 +249,17 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         emit Received(msg.sender, msg.value);
     }
 
-    function updateOperators(uint256[] memory operatorIndices) public onlyOwner {
-        require(operatorIndices.length > 0);
+    function updateOperators(address[] memory newOperators) public onlyOwner {
+        require(newOperators.length > 0);
         delete operators;
         delete credits;
-        for (uint256 i = 0; i < operatorIndices.length; i++) {
-            (address[] memory operatorAddrs, address[] memory creditAddrs, ) = STAKE_HUB
-                .getValidators(operatorIndices[i], 1);
-            operators.push(operatorAddrs[0]);
-            credits.push(IStakeCredit(creditAddrs[0]));
+        for (uint256 i = 0; i < newOperators.length; i++) {
+            address credit = STAKE_HUB.getValidatorCreditContract(newOperators[i]);
+            assert(credit != address(0));
+            operators.push(newOperators[i]);
+            credits.push(IStakeCredit(credit));
         }
-        emit ValidatorsUpdated(operatorIndices);
+        emit ValidatorsUpdated(newOperators);
     }
 
     /// @dev Convert BNB into WBNB
@@ -274,10 +270,5 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     /// @dev Convert WBNB into BNB
     function _unwrap(uint256 amount) private {
         IWrappedERC20(_tokenUnderlying).withdraw(amount);
-    }
-
-    modifier onlyPrimaryMarket() {
-        require(msg.sender == IFundV3(fund).primaryMarket(), "Only fund can deposit");
-        _;
     }
 }
