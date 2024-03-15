@@ -220,12 +220,16 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     }
 
     /// @notice Report profit to the fund by the owner.
+    ///         Note that despite posing risk in frontrunning, the trace amount of
+    ///         gain/loss reported is considered negligible
     function reportProfit(uint256 amount) external onlyOwner {
         _reportProfit(amount);
     }
 
     /// @notice Report loss to the fund. Performance fee will not be charged until
     ///         the current drawdown is covered.
+    ///         Note that despite posing risk in frontrunning, the trace amount of
+    ///         gain/loss reported is considered negligible
     function reportLoss(uint256 amount) external onlyOwner {
         currentDrawdown = currentDrawdown.add(amount);
         IFundForStrategy(fund).reportLoss(amount);
