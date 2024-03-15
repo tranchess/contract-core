@@ -61,6 +61,9 @@ interface IStakeCredit is IERC20 {
 }
 
 contract BscStakingStrategyV2 is OwnableUpgradeable {
+    /// @dev Reserved storage slots for future base contract upgrades
+    uint256[32] private _reservedSlots;
+
     using Math for uint256;
     using SafeMath for uint256;
     using SafeDecimalMath for uint256;
