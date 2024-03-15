@@ -254,6 +254,18 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
 
     function updateOperators(address[] memory newOperators) public onlyOwner {
         require(newOperators.length > 0);
+        // Pick out non-empty operators
+        uint256 size = 0;
+        address[] memory nonemptyOperators = new address[](operators.length);
+        for (uint256 i = 0; i < operators.length; i++) {
+            uint256 amount = credits[i].lockedBNBs(address(this), 0).add(
+                credits[i].getPooledBNB(address(this))
+            );
+            if (amount > 0) {
+                nonemptyOperators[size++] = operators[i];
+            }
+        }
+        // Add new operators
         delete operators;
         delete credits;
         for (uint256 i = 0; i < newOperators.length; i++) {
@@ -262,7 +274,26 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
             operators.push(newOperators[i]);
             credits.push(IStakeCredit(credit));
         }
+        // Check if all non-empty operators are in the new operators
+        for (uint256 i = 0; i < size; i++) {
+            require(
+                _validatorExist(nonemptyOperators[i], newOperators),
+                "Deleting non-empty operators"
+            );
+        }
         emit ValidatorsUpdated(newOperators);
+    }
+
+    function _validatorExist(
+        address nonemptyOperator,
+        address[] memory newOperators
+    ) private pure returns (bool) {
+        for (uint256 i = 0; i < newOperators.length; i++) {
+            if (nonemptyOperator == newOperators[i]) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// @dev Convert BNB into WBNB
