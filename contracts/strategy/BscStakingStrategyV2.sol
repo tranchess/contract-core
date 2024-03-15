@@ -72,8 +72,7 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     event ValidatorsUpdated(address[] newOperators);
     event Received(address from, uint256 amount);
 
-    IStakeHub public STAKE_HUB;
-
+    IStakeHub public immutable STAKE_HUB;
     address public immutable fund;
     address private immutable _tokenUnderlying;
 
@@ -87,7 +86,8 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     /// @notice Fraction of profit that goes to the fund's fee collector.
     uint256 public performanceFeeRate;
 
-    constructor(address fund_) public {
+    constructor(address STAKE_HUB_, address fund_) public {
+        STAKE_HUB = IStakeHub(STAKE_HUB_);
         fund = fund_;
         _tokenUnderlying = IFundV3(fund_).tokenUnderlying();
     }
@@ -144,7 +144,7 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         // Deposit to the operator
         IFundForStrategy(fund).transferToStrategy(fundBalance.sub(fundDebt));
         _unwrap(IERC20(_tokenUnderlying).balanceOf(address(this)));
-        STAKE_HUB.delegate{value: amount}(nextOperator, true);
+        STAKE_HUB.delegate{value: amount}(nextOperator, false);
     }
 
     /// @notice Withdraw underlying tokens from the STAKE_HUB contract.
