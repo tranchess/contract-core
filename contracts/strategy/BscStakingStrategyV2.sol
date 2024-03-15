@@ -108,9 +108,12 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         uint256 totalHotBalance = fundBalance.add(strategyBalance).add(address(this).balance);
 
         if (totalHotBalance > fundDebt) {
-            // Deposit
-            IFundForStrategy(fund).transferToStrategy(fundBalance);
-            _deposit(totalHotBalance - fundDebt);
+            uint256 amount = totalHotBalance - fundDebt;
+            // Deposit only if more than min delegation amount
+            if (amount >= STAKE_HUB.minDelegationBNBChange()) {
+                IFundForStrategy(fund).transferToStrategy(fundBalance);
+                _deposit(amount);
+            }
         } else {
             // Withdraw
             uint256 pendingAmount = getPendingAmount();
@@ -147,10 +150,6 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     }
 
     function _deposit(uint256 amount) private {
-        // Deposit only if more than min delegation amount
-        if (amount < STAKE_HUB.minDelegationBNBChange()) {
-            return;
-        }
         // Find the operator with least deposits
         require(credits.length > 0, "No stake credit");
         uint256 minStake = type(uint256).max;
