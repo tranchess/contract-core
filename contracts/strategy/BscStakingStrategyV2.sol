@@ -91,11 +91,7 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         updateOperators(operators_);
     }
 
-    function getPendingAmount()
-        public
-        view
-        returns (uint256 pendingAmount)
-    {
+    function getPendingAmount() public view returns (uint256 pendingAmount) {
         for (uint256 i = 0; i < operators.length; i++) {
             pendingAmount = pendingAmount.add(credits[i].lockedBNBs(address(this), 0));
         }
