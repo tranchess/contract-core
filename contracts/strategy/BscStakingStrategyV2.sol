@@ -15,8 +15,6 @@ import "../interfaces/IFundForStrategy.sol";
 import "../interfaces/IWrappedERC20.sol";
 
 interface IStakeHub {
-    function unbondPeriod() external view returns (uint256);
-
     function getValidatorCreditContract(
         address operatorAddress
     ) external view returns (address creditContract);
@@ -38,12 +36,6 @@ interface IStakeHub {
 }
 
 interface IStakeCredit is IERC20 {
-    struct UnbondRequest {
-        uint256 shares;
-        uint256 bnbAmount;
-        uint256 unlockTime;
-    }
-
     function claimableUnbondRequest(address delegator) external view returns (uint256);
 
     function getPooledBNB(address account) external view returns (uint256);
@@ -51,13 +43,6 @@ interface IStakeCredit is IERC20 {
     function getSharesByPooledBNB(uint256 bnbAmount) external view returns (uint256);
 
     function lockedBNBs(address delegator, uint256 number) external view returns (uint256);
-
-    function unbondSequence(address delegator) external view returns (uint256);
-
-    function unbondRequest(
-        address delegator,
-        uint256 _index
-    ) external view returns (UnbondRequest memory);
 }
 
 contract BscStakingStrategyV2 is OwnableUpgradeable {
@@ -72,6 +57,8 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     event ValidatorsUpdated(address[] newOperators);
     event Received(address from, uint256 amount);
 
+    uint256 public constant PROCESS_COOLDOWN = 3 hours;
+
     IStakeHub public immutable STAKE_HUB;
     address public immutable fund;
     address private immutable _tokenUnderlying;
@@ -85,6 +72,9 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
 
     /// @notice Fraction of profit that goes to the fund's fee collector.
     uint256 public performanceFeeRate;
+
+    /// @notice The last process timestamp.
+    uint256 public lastTimestamp;
 
     constructor(address STAKE_HUB_, address fund_) public {
         STAKE_HUB = IStakeHub(STAKE_HUB_);
@@ -101,87 +91,49 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         updateOperators(operators_);
     }
 
-    function getWithdrawalCapacity()
+    function getPendingAmount()
         public
         view
-        returns (uint256 pendingAmount, uint256 withdrawalCapacity)
+        returns (uint256 pendingAmount)
     {
         for (uint256 i = 0; i < operators.length; i++) {
             pendingAmount = pendingAmount.add(credits[i].lockedBNBs(address(this), 0));
-            // Skip if there is an ongoing request
-            uint256 unbondSequence = credits[i].unbondSequence(address(this));
-            if (
-                block.timestamp < credits[i].unbondRequest(address(this), unbondSequence).unlockTime
-            ) {
-                continue;
-            }
-            uint256 stakes = credits[i].getPooledBNB(address(this));
-            withdrawalCapacity = withdrawalCapacity.add(stakes);
         }
     }
 
-    /// @notice Deposit underlying tokens from the fund to the STAKE_HUB contract.
-    function deposit() external {
+    /// @notice Process contract's strategy.
+    function process() external {
+        require(lastTimestamp + PROCESS_COOLDOWN < block.timestamp, "Process not yet");
+        lastTimestamp = block.timestamp;
+
         uint256 fundBalance = IWrappedERC20(_tokenUnderlying).balanceOf(fund);
         uint256 strategyBalance = IERC20(_tokenUnderlying).balanceOf(address(this));
         uint256 fundDebt = IFundV3(fund).getTotalDebt();
-        uint256 amount = fundBalance.add(strategyBalance).add(address(this).balance).sub(fundDebt);
-        // Deposit only if more than min delegation amount
-        if (amount < STAKE_HUB.minDelegationBNBChange()) {
-            return;
-        }
-        // Find the operator with least deposits
-        require(credits.length > 0, "No stake credit");
-        uint256 minStake = type(uint256).max;
-        address nextOperator = address(0);
-        for (uint256 i = 0; i < operators.length; i++) {
-            uint256 temp = credits[i].getPooledBNB(address(this));
-            if (temp < minStake) {
-                minStake = temp;
-                nextOperator = operators[i];
-            }
-        }
-        // Deposit to the operator
-        IFundForStrategy(fund).transferToStrategy(fundBalance.sub(fundDebt));
-        _unwrap(IERC20(_tokenUnderlying).balanceOf(address(this)));
-        STAKE_HUB.delegate{value: amount}(nextOperator, false);
-    }
+        uint256 totalHotBalance = fundBalance.add(strategyBalance).add(address(this).balance);
 
-    /// @notice Withdraw underlying tokens from the STAKE_HUB contract.
-    function withdraw() external {
-        // Calculate the total debt owed
-        uint256 fundDebt = IFundV3(fund).getTotalDebt();
-        // Calculate the current total underlying in possession
-        (uint256 pendingAmount, uint256 withdrawalCapacity) = getWithdrawalCapacity();
-        uint256 fundBalance = IERC20(_tokenUnderlying).balanceOf(fund);
-        uint256 strategyBalance = IERC20(_tokenUnderlying).balanceOf(address(this));
-        uint256 totalBalance = fundBalance.add(strategyBalance).add(pendingAmount);
-        // Withdraw only if owe more debt
-        if (fundDebt <= totalBalance) {
-            return;
-        }
-        uint256 amount = withdrawalCapacity.min(fundDebt - totalBalance);
-        for (uint256 i = 0; i < operators.length; i++) {
-            // Skip if there are at least one ongoing request
-            uint256 unbondSequence = credits[i].unbondSequence(address(this));
-            if (
-                block.timestamp < credits[i].unbondRequest(address(this), unbondSequence).unlockTime
-            ) {
-                continue;
+        if (totalHotBalance > fundDebt) {
+            // Deposit
+            IFundForStrategy(fund).transferToStrategy(fundBalance);
+            _deposit(totalHotBalance - fundDebt);
+        } else {
+            // Withdraw
+            uint256 pendingAmount = getPendingAmount();
+            uint256 totalBalance = totalHotBalance.add(pendingAmount);
+            if (totalBalance < fundDebt) {
+                _withdraw(fundDebt - totalBalance);
             }
-            // Undelegate until fulfilling the user's request
-            uint256 stakes = credits[i].getPooledBNB(address(this));
-            if (stakes >= amount) {
-                STAKE_HUB.undelegate(operators[i], credits[i].getSharesByPooledBNB(amount));
-                return;
-            }
-            amount = amount - stakes;
-            STAKE_HUB.undelegate(operators[i], credits[i].balanceOf(address(this)));
         }
-        revert("Not enough to withdraw");
-    }
 
-    function claim() external {
+        // Report profit
+        uint256 strategyUnderlying = IFundV3(fund).getStrategyUnderlying();
+        uint256 newStrategyUnderlying = strategyBalance.add(address(this).balance);
+        for (uint256 i = 0; i < credits.length; i++) {
+            newStrategyUnderlying = newStrategyUnderlying.add(_totalBNB(credits[i]));
+        }
+        if (newStrategyUnderlying > strategyUnderlying) {
+            _reportProfit(newStrategyUnderlying - strategyUnderlying);
+        }
+
         // Claim all claimable requests
         for (uint256 i = 0; i < operators.length; i++) {
             uint256 requestNumber = credits[i].claimableUnbondRequest(address(this));
@@ -198,6 +150,45 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         }
     }
 
+    function _deposit(uint256 amount) private {
+        // Deposit only if more than min delegation amount
+        if (amount < STAKE_HUB.minDelegationBNBChange()) {
+            return;
+        }
+        // Find the operator with least deposits
+        require(credits.length > 0, "No stake credit");
+        uint256 minStake = type(uint256).max;
+        address nextOperator = address(0);
+        for (uint256 i = 0; i < operators.length; i++) {
+            uint256 temp = credits[i].getPooledBNB(address(this));
+            if (temp < minStake) {
+                minStake = temp;
+                nextOperator = operators[i];
+            }
+        }
+        // Deposit to the operator
+        _unwrap(IERC20(_tokenUnderlying).balanceOf(address(this)));
+        STAKE_HUB.delegate{value: amount}(nextOperator, false);
+    }
+
+    function _withdraw(uint256 amount) private {
+        for (uint256 i = 0; i < operators.length; i++) {
+            // Undelegate until fulfilling the user's request
+            uint256 stakes = credits[i].getPooledBNB(address(this));
+            if (stakes >= amount) {
+                STAKE_HUB.undelegate(operators[i], credits[i].getSharesByPooledBNB(amount));
+                return;
+            }
+            amount = amount - stakes;
+            STAKE_HUB.undelegate(operators[i], credits[i].balanceOf(address(this)));
+        }
+        revert("Not enough to withdraw");
+    }
+
+    function _totalBNB(IStakeCredit credit) private view returns (uint256) {
+        return credit.lockedBNBs(address(this), 0).add(credit.getPooledBNB(address(this)));
+    }
+
     function redelegate(
         address srcValidator,
         address dstValidator,
@@ -205,18 +196,6 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         bool delegateVotePower
     ) external onlyOwner {
         STAKE_HUB.redelegate(srcValidator, dstValidator, shares, delegateVotePower);
-    }
-
-    /// @notice Report profit to the fund.
-    function reportProfit() external {
-        uint256 strategyUnderlying = IFundV3(fund).getStrategyUnderlying();
-        uint256 newStrategyUnderlying = 0;
-        for (uint256 i = 0; i < credits.length; i++) {
-            newStrategyUnderlying = newStrategyUnderlying.add(
-                credits[i].getPooledBNB(address(this))
-            );
-        }
-        _reportProfit(newStrategyUnderlying.sub(strategyUnderlying));
     }
 
     /// @notice Report profit to the fund by the owner.
@@ -262,9 +241,7 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         uint256 size = 0;
         address[] memory nonemptyOperators = new address[](operators.length);
         for (uint256 i = 0; i < operators.length; i++) {
-            uint256 amount = credits[i].lockedBNBs(address(this), 0).add(
-                credits[i].getPooledBNB(address(this))
-            );
+            uint256 amount = _totalBNB(credits[i]);
             if (amount > 0) {
                 nonemptyOperators[size++] = operators[i];
             }
