@@ -213,6 +213,8 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         uint256 shares,
         bool delegateVotePower
     ) external onlyOwner {
+        require(_validatorExist(srcValidator, _operators), "Only exist validator");
+        require(_validatorExist(dstValidator, _operators), "Only exist validator");
         STAKE_HUB.redelegate(srcValidator, dstValidator, shares, delegateVotePower);
     }
 
@@ -265,16 +267,17 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
 
     function updateOperators(address[] memory newOperators) public onlyOwner {
         require(newOperators.length > 0);
-        // Pick out non-empty _operators
-        uint256 size = 0;
-        address[] memory nonemptyOperators = new address[](_operators.length);
+        // Check if all non-empty operators are in the newOperators
         for (uint256 i = 0; i < _operators.length; i++) {
             uint256 amount = _totalBNB(_credits[i]);
             if (amount > 0) {
-                nonemptyOperators[size++] = _operators[i];
+                require(
+                    _validatorExist(_operators[i], newOperators),
+                    "Deleting non-empty operators"
+                );
             }
         }
-        // Add new _operators
+        // Add new operators
         delete _operators;
         delete _credits;
         for (uint256 i = 0; i < newOperators.length; i++) {
@@ -282,13 +285,6 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
             assert(credit != address(0));
             _operators.push(newOperators[i]);
             _credits.push(IStakeCredit(credit));
-        }
-        // Check if all non-empty _operators are in the new _operators
-        for (uint256 i = 0; i < size; i++) {
-            require(
-                _validatorExist(nonemptyOperators[i], newOperators),
-                "Deleting non-empty _operators"
-            );
         }
         emit ValidatorsUpdated(newOperators);
     }
