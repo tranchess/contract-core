@@ -146,7 +146,9 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
             uint256 amount = totalHotBalance - fundDebt;
             // Deposit only if more than min delegation amount
             if (amount >= STAKE_HUB.minDelegationBNBChange()) {
-                IFundForStrategy(fund).transferToStrategy(fundBalance);
+                if (fundBalance > fundDebt) {
+                    IFundForStrategy(fund).transferToStrategy(fundBalance - fundDebt);
+                }
                 _deposit(amount);
             }
         } else {
@@ -189,7 +191,11 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
             // Undelegate until fulfilling the user's request
             uint256 stakes = _credits[i].getPooledBNB(address(this));
             if (stakes >= amount) {
-                STAKE_HUB.undelegate(_operators[i], _credits[i].getSharesByPooledBNB(amount));
+                uint256 withdrawAmount = _credits[i].getSharesByPooledBNB(amount) + 1;
+                STAKE_HUB.undelegate(
+                    _operators[i],
+                    withdrawAmount.min(_credits[i].balanceOf(address(this)))
+                );
                 return;
             }
             amount = amount - stakes;
@@ -275,11 +281,11 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     }
 
     function _validatorExist(
-        address nonemptyOperator,
+        address operator,
         address[] memory newOperators
     ) private pure returns (bool) {
         for (uint256 i = 0; i < newOperators.length; i++) {
-            if (nonemptyOperator == newOperators[i]) {
+            if (operator == newOperators[i]) {
                 return true;
             }
         }
