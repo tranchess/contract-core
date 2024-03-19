@@ -313,6 +313,7 @@ contract VotingEscrowV4 is
             newAmount,
             lockedBalance.unlockTime
         );
+        require(newAmount > 0, "Full lock transfer not allowed");
         locked[msg.sender].amount = newAmount;
 
         // Deposit CHESS to CHESS pool
@@ -330,13 +331,6 @@ contract VotingEscrowV4 is
 
         if (callback != address(0)) {
             IVotingEscrowCallback(callback).syncWithVotingEscrow(msg.sender);
-        }
-
-        // Unlock time can only be reset after the callback is invoked, because some veCHESS-related
-        // contracts won't refresh the user's locked balance in `syncWithVotingEscrow()` if
-        // unlock time is zero.
-        if (newAmount == 0) {
-            locked[msg.sender].unlockTime = 0;
         }
 
         emit AmountDecreased(msg.sender, amount);
