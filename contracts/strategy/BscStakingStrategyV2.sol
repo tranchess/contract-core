@@ -112,13 +112,38 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         }
     }
 
-    /// @notice Process contract's strategy.
+    /// @notice Process contract's strategy, which includes the following steps:
+    ///         1. Claim unbond requests
+    ///         2. Report profit
+    ///         3. Deposit / withdraw
+    ///         4. Transfer to fund
     function process() external {
         require(lastTimestamp + PROCESS_COOLDOWN < block.timestamp, "Process not yet");
         lastTimestamp = block.timestamp;
 
-        uint256 fundBalance = IWrappedERC20(_tokenUnderlying).balanceOf(fund);
+        // Claim all claimable requests
+        for (uint256 i = 0; i < _operators.length; i++) {
+            uint256 requestNumber = _credits[i].claimableUnbondRequest(address(this));
+            if (requestNumber > 0) {
+                STAKE_HUB.claim(_operators[i], requestNumber);
+            }
+        }
+
+        // Report profit
+        uint256 strategyUnderlying = IFundV3(fund).getStrategyUnderlying();
         uint256 strategyBalance = IERC20(_tokenUnderlying).balanceOf(address(this));
+        uint256 newStrategyUnderlying = strategyBalance.add(address(this).balance);
+        for (uint256 i = 0; i < _credits.length; i++) {
+            newStrategyUnderlying = newStrategyUnderlying.add(_totalBNB(_credits[i]));
+        }
+        if (newStrategyUnderlying > strategyUnderlying) {
+            _reportProfit(newStrategyUnderlying - strategyUnderlying);
+        } else if (newStrategyUnderlying < strategyUnderlying) {
+            /// @dev This should never happen, but just in case
+            _reportLoss(strategyUnderlying - newStrategyUnderlying);
+        }
+
+        uint256 fundBalance = IWrappedERC20(_tokenUnderlying).balanceOf(fund);
         uint256 fundDebt = IFundV3(fund).getTotalDebt();
         uint256 totalHotBalance = fundBalance.add(strategyBalance).add(address(this).balance);
 
@@ -138,23 +163,6 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
             }
         }
 
-        // Report profit
-        uint256 strategyUnderlying = IFundV3(fund).getStrategyUnderlying();
-        uint256 newStrategyUnderlying = strategyBalance.add(address(this).balance);
-        for (uint256 i = 0; i < _credits.length; i++) {
-            newStrategyUnderlying = newStrategyUnderlying.add(_totalBNB(_credits[i]));
-        }
-        if (newStrategyUnderlying > strategyUnderlying) {
-            _reportProfit(newStrategyUnderlying - strategyUnderlying);
-        }
-
-        // Claim all claimable requests
-        for (uint256 i = 0; i < _operators.length; i++) {
-            uint256 requestNumber = _credits[i].claimableUnbondRequest(address(this));
-            if (requestNumber > 0) {
-                STAKE_HUB.claim(_operators[i], requestNumber);
-            }
-        }
         // Wrap to WBNB
         _wrap(address(this).balance);
         uint256 amount = IWrappedERC20(_tokenUnderlying).balanceOf(address(this));
@@ -220,8 +228,7 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     ///         Note that despite posing risk in frontrunning, the trace amount of
     ///         gain/loss reported is considered negligible
     function reportLoss(uint256 amount) external onlyOwner {
-        currentDrawdown = currentDrawdown.add(amount);
-        IFundForStrategy(fund).reportLoss(amount);
+        _reportLoss(amount);
     }
 
     /// @dev Report profit and performance fee to the fund. Performance fee is charged only when
@@ -238,6 +245,12 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
             uint256 performanceFee = (amount - oldDrawdown).multiplyDecimal(performanceFeeRate);
             IFundForStrategy(fund).reportProfit(amount, performanceFee);
         }
+    }
+
+    /// @dev Report loss to the fund.
+    function _reportLoss(uint256 amount) private {
+        currentDrawdown = currentDrawdown.add(amount);
+        IFundForStrategy(fund).reportLoss(amount);
     }
 
     /// @notice Receive cross-chain transfer from the staker.
