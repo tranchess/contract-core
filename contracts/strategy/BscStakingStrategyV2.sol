@@ -63,8 +63,8 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     address public immutable fund;
     address private immutable _tokenUnderlying;
 
-    address[] public operators;
-    IStakeCredit[] public credits;
+    address[] private _operators;
+    IStakeCredit[] private _credits;
 
     /// @notice Amount of underlying lost since the last peak. Performance fee is charged
     ///         only when this value is zero.
@@ -92,8 +92,22 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     }
 
     function getPendingAmount() public view returns (uint256 pendingAmount) {
-        for (uint256 i = 0; i < operators.length; i++) {
-            pendingAmount = pendingAmount.add(credits[i].lockedBNBs(address(this), 0));
+        for (uint256 i = 0; i < _operators.length; i++) {
+            pendingAmount = pendingAmount.add(_credits[i].lockedBNBs(address(this), 0));
+        }
+    }
+
+    function getOperators() external view returns (address[] memory operators) {
+        operators = new address[](_operators.length);
+        for (uint256 i = 0; i < _operators.length; i++) {
+            operators[i] = _operators[i];
+        }
+    }
+
+    function getCredits() external view returns (IStakeCredit[] memory credits) {
+        credits = new IStakeCredit[](_credits.length);
+        for (uint256 i = 0; i < _credits.length; i++) {
+            credits[i] = _credits[i];
         }
     }
 
@@ -126,18 +140,18 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         // Report profit
         uint256 strategyUnderlying = IFundV3(fund).getStrategyUnderlying();
         uint256 newStrategyUnderlying = strategyBalance.add(address(this).balance);
-        for (uint256 i = 0; i < credits.length; i++) {
-            newStrategyUnderlying = newStrategyUnderlying.add(_totalBNB(credits[i]));
+        for (uint256 i = 0; i < _credits.length; i++) {
+            newStrategyUnderlying = newStrategyUnderlying.add(_totalBNB(_credits[i]));
         }
         if (newStrategyUnderlying > strategyUnderlying) {
             _reportProfit(newStrategyUnderlying - strategyUnderlying);
         }
 
         // Claim all claimable requests
-        for (uint256 i = 0; i < operators.length; i++) {
-            uint256 requestNumber = credits[i].claimableUnbondRequest(address(this));
+        for (uint256 i = 0; i < _operators.length; i++) {
+            uint256 requestNumber = _credits[i].claimableUnbondRequest(address(this));
             if (requestNumber > 0) {
-                STAKE_HUB.claim(operators[i], requestNumber);
+                STAKE_HUB.claim(_operators[i], requestNumber);
             }
         }
         // Wrap to WBNB
@@ -151,14 +165,14 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
 
     function _deposit(uint256 amount) private {
         // Find the operator with least deposits
-        require(credits.length > 0, "No stake credit");
+        require(_credits.length > 0, "No stake credit");
         uint256 minStake = type(uint256).max;
         address nextOperator = address(0);
-        for (uint256 i = 0; i < operators.length; i++) {
-            uint256 temp = credits[i].getPooledBNB(address(this));
+        for (uint256 i = 0; i < _operators.length; i++) {
+            uint256 temp = _credits[i].getPooledBNB(address(this));
             if (temp < minStake) {
                 minStake = temp;
-                nextOperator = operators[i];
+                nextOperator = _operators[i];
             }
         }
         // Deposit to the operator
@@ -167,15 +181,15 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     }
 
     function _withdraw(uint256 amount) private {
-        for (uint256 i = 0; i < operators.length; i++) {
+        for (uint256 i = 0; i < _operators.length; i++) {
             // Undelegate until fulfilling the user's request
-            uint256 stakes = credits[i].getPooledBNB(address(this));
+            uint256 stakes = _credits[i].getPooledBNB(address(this));
             if (stakes >= amount) {
-                STAKE_HUB.undelegate(operators[i], credits[i].getSharesByPooledBNB(amount));
+                STAKE_HUB.undelegate(_operators[i], _credits[i].getSharesByPooledBNB(amount));
                 return;
             }
             amount = amount - stakes;
-            STAKE_HUB.undelegate(operators[i], credits[i].balanceOf(address(this)));
+            STAKE_HUB.undelegate(_operators[i], _credits[i].balanceOf(address(this)));
         }
         revert("Not enough to withdraw");
     }
@@ -232,29 +246,29 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
 
     function updateOperators(address[] memory newOperators) public onlyOwner {
         require(newOperators.length > 0);
-        // Pick out non-empty operators
+        // Pick out non-empty _operators
         uint256 size = 0;
-        address[] memory nonemptyOperators = new address[](operators.length);
-        for (uint256 i = 0; i < operators.length; i++) {
-            uint256 amount = _totalBNB(credits[i]);
+        address[] memory nonemptyOperators = new address[](_operators.length);
+        for (uint256 i = 0; i < _operators.length; i++) {
+            uint256 amount = _totalBNB(_credits[i]);
             if (amount > 0) {
-                nonemptyOperators[size++] = operators[i];
+                nonemptyOperators[size++] = _operators[i];
             }
         }
-        // Add new operators
-        delete operators;
-        delete credits;
+        // Add new _operators
+        delete _operators;
+        delete _credits;
         for (uint256 i = 0; i < newOperators.length; i++) {
             address credit = STAKE_HUB.getValidatorCreditContract(newOperators[i]);
             assert(credit != address(0));
-            operators.push(newOperators[i]);
-            credits.push(IStakeCredit(credit));
+            _operators.push(newOperators[i]);
+            _credits.push(IStakeCredit(credit));
         }
-        // Check if all non-empty operators are in the new operators
+        // Check if all non-empty _operators are in the new _operators
         for (uint256 i = 0; i < size; i++) {
             require(
                 _validatorExist(nonemptyOperators[i], newOperators),
-                "Deleting non-empty operators"
+                "Deleting non-empty _operators"
             );
         }
         emit ValidatorsUpdated(newOperators);
