@@ -54,6 +54,7 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     using SafeDecimalMath for uint256;
     using SafeERC20 for IWrappedERC20;
 
+    event PerformanceFeeUpdated(uint256 newFee);
     event ValidatorsUpdated(address[] newOperators);
     event Received(address from, uint256 amount);
 
@@ -88,7 +89,7 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         address[] memory operators_
     ) external initializer {
         __Ownable_init();
-        performanceFeeRate = performanceFeeRate_;
+        _updatePerformanceFeeRate(performanceFeeRate_);
         updateOperators(operators_);
     }
 
@@ -98,18 +99,12 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         }
     }
 
-    function getOperators() external view returns (address[] memory operators) {
-        operators = new address[](_operators.length);
-        for (uint256 i = 0; i < _operators.length; i++) {
-            operators[i] = _operators[i];
-        }
+    function getOperators() external view returns (address[] memory) {
+        return _operators;
     }
 
-    function getCredits() external view returns (IStakeCredit[] memory credits) {
-        credits = new IStakeCredit[](_credits.length);
-        for (uint256 i = 0; i < _credits.length; i++) {
-            credits[i] = _credits[i];
-        }
+    function getCredits() external view returns (IStakeCredit[] memory) {
+        return _credits;
     }
 
     /// @notice Process contract's strategy, which includes the following steps:
@@ -246,8 +241,13 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     }
 
     function updatePerformanceFeeRate(uint256 newRate) external onlyOwner {
+        _updatePerformanceFeeRate(newRate);
+    }
+
+    function _updatePerformanceFeeRate(uint256 newRate) private {
         require(newRate <= MAX_PERFORMANCE_FEE_RATE);
         performanceFeeRate = newRate;
+        emit PerformanceFeeUpdated(newRate);
     }
 
     function updateOperators(address[] memory newOperators) public onlyOwner {
