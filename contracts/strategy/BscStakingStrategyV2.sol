@@ -57,7 +57,7 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     event ValidatorsUpdated(address[] newOperators);
     event Received(address from, uint256 amount);
 
-    uint256 public constant PROCESS_COOLDOWN = 3 hours;
+    uint256 public constant PROCESS_COOLDOWN = 12 hours;
 
     IStakeHub public immutable STAKE_HUB;
     address public immutable fund;
