@@ -313,6 +313,7 @@ contract VotingEscrowV4 is
             newAmount,
             lockedBalance.unlockTime
         );
+        require(newAmount > 0, "Full lock transfer not allowed");
         locked[msg.sender].amount = newAmount;
 
         // Deposit CHESS to CHESS pool
