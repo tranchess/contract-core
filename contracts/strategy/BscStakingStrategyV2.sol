@@ -58,6 +58,7 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     event Received(address from, uint256 amount);
 
     uint256 public constant PROCESS_COOLDOWN = 12 hours;
+    uint256 private constant MAX_PERFORMANCE_FEE_RATE = 0.5e18;
 
     IStakeHub public immutable STAKE_HUB;
     address public immutable fund;
@@ -242,6 +243,11 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     /// @notice Receive cross-chain transfer from the staker.
     receive() external payable {
         emit Received(msg.sender, msg.value);
+    }
+
+    function updatePerformanceFeeRate(uint256 newRate) external onlyOwner {
+        require(newRate <= MAX_PERFORMANCE_FEE_RATE);
+        performanceFeeRate = newRate;
     }
 
     function updateOperators(address[] memory newOperators) public onlyOwner {
