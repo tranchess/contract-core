@@ -112,6 +112,10 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     ///         2. Report profit
     ///         3. Deposit / withdraw
     ///         4. Transfer to fund
+    /// This function will affect the creation/redemption ratio. Frontrunning this
+    /// transaction could potentially yield better creation/redemption results.
+    /// However, considering the daily earnings from BNB staking are not significant,
+    /// we believe this margin of error is acceptable.
     function process() external {
         require(lastTimestamp + PROCESS_COOLDOWN < block.timestamp, "Process not yet");
         lastTimestamp = block.timestamp;
@@ -294,11 +298,13 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
 
     /// @dev Convert BNB into WBNB
     function _wrap(uint256 amount) private {
+        if (amount == 0) return;
         IWrappedERC20(_tokenUnderlying).deposit{value: amount}();
     }
 
     /// @dev Convert WBNB into BNB
     function _unwrap(uint256 amount) private {
+        if (amount == 0) return;
         IWrappedERC20(_tokenUnderlying).withdraw(amount);
     }
 }
