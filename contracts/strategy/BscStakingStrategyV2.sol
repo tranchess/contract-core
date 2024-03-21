@@ -84,13 +84,9 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         _tokenUnderlying = IFundV3(fund_).tokenUnderlying();
     }
 
-    function initialize(
-        uint256 performanceFeeRate_,
-        address[] memory operators_
-    ) external initializer {
+    function initialize(uint256 performanceFeeRate_) external initializer {
         __Ownable_init();
         _updatePerformanceFeeRate(performanceFeeRate_);
-        updateOperators(operators_);
     }
 
     function getPendingAmount() public view returns (uint256 pendingAmount) {
@@ -306,5 +302,13 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     function _unwrap(uint256 amount) private {
         if (amount == 0) return;
         IWrappedERC20(_tokenUnderlying).withdraw(amount);
+    }
+
+    function pause() public onlyOwner {
+        lastTimestamp = type(uint256).max / 2;
+    }
+
+    function unpause() public onlyOwner {
+        lastTimestamp = 0;
     }
 }
