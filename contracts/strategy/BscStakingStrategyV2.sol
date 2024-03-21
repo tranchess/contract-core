@@ -32,7 +32,7 @@ interface IStakeHub {
         bool delegateVotePower
     ) external;
 
-    function claim(address operatorAddresses, uint256 requestNumbers) external;
+    function claim(address operatorAddress, uint256 requestNumber) external;
 }
 
 interface IStakeCredit is IERC20 {
@@ -54,7 +54,7 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     using SafeDecimalMath for uint256;
     using SafeERC20 for IWrappedERC20;
 
-    event PerformanceFeeUpdated(uint256 newFee);
+    event PerformanceFeeRateUpdated(uint256 newRate);
     event ValidatorsUpdated(address[] newOperators);
     event Received(address from, uint256 amount);
 
@@ -94,7 +94,7 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     }
 
     function getPendingAmount() public view returns (uint256 pendingAmount) {
-        for (uint256 i = 0; i < _operators.length; i++) {
+        for (uint256 i = 0; i < _credits.length; i++) {
             pendingAmount = pendingAmount.add(_credits[i].lockedBNBs(address(this), 0));
         }
     }
@@ -257,7 +257,7 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
     function _updatePerformanceFeeRate(uint256 newRate) private {
         require(newRate <= MAX_PERFORMANCE_FEE_RATE);
         performanceFeeRate = newRate;
-        emit PerformanceFeeUpdated(newRate);
+        emit PerformanceFeeRateUpdated(newRate);
     }
 
     function updateOperators(address[] memory newOperators) public onlyOwner {
