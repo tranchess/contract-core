@@ -56,15 +56,18 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
 
     event PerformanceFeeRateUpdated(uint256 newRate);
     event ValidatorsUpdated(address[] newOperators);
+    event BufferRatioUpdated(uint256 newRatio);
     event Received(address from, uint256 amount);
 
     uint256 public constant PROCESS_COOLDOWN = 12 hours;
     uint256 private constant MAX_PERFORMANCE_FEE_RATE = 0.5e18;
+    uint256 private constant MAX_BUFFER_RATIO = 1e18;
 
     IStakeHub public immutable STAKE_HUB;
     address public immutable fund;
     address private immutable _tokenUnderlying;
 
+    uint256 public bufferRatio;
     address[] private _operators;
     IStakeCredit[] private _credits;
 
@@ -128,25 +131,27 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         uint256 strategyBalance = IERC20(_tokenUnderlying).balanceOf(address(this));
         _report(strategyBalance);
 
+        // Deposit or withdraw
         uint256 fundBalance = IWrappedERC20(_tokenUnderlying).balanceOf(fund);
         uint256 fundDebt = IFundV3(fund).getTotalDebt();
         uint256 totalHotBalance = fundBalance.add(strategyBalance).add(address(this).balance);
-
+        uint256 totalUnderlying = IFundV3(fund).getTotalUnderlying();
+        uint256 bufferSize = totalUnderlying.multiplyDecimal(bufferRatio);
         if (totalHotBalance > fundDebt) {
             uint256 amount = totalHotBalance - fundDebt;
-            // Deposit only if more than min delegation amount
-            if (amount >= STAKE_HUB.minDelegationBNBChange()) {
-                if (fundBalance > fundDebt) {
-                    IFundForStrategy(fund).transferToStrategy(fundBalance - fundDebt);
+            // Deposit only if more than both min delegation amount and buffer size
+            if (amount >= STAKE_HUB.minDelegationBNBChange() && amount >= bufferSize) {
+                if (fundBalance > bufferSize.add(fundDebt)) {
+                    IFundForStrategy(fund).transferToStrategy(fundBalance - bufferSize - fundDebt);
                 }
-                _deposit(amount);
+                _deposit(amount - bufferSize);
             }
         } else {
             // Withdraw
+            uint256 amount = fundDebt - totalHotBalance;
             uint256 pendingAmount = getPendingAmount();
-            uint256 totalBalance = totalHotBalance.add(pendingAmount);
-            if (totalBalance < fundDebt) {
-                _withdraw(fundDebt - totalBalance);
+            if (pendingAmount < amount.add(bufferSize)) {
+                _withdraw(amount + bufferSize - pendingAmount);
             }
         }
 
@@ -154,6 +159,10 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         _transferToFund();
     }
 
+    /// @notice This function will affect the creation/redemption ratio. Frontrunning
+    /// this transaction could potentially yield better creation/redemption results.
+    /// However, considering the daily earnings from BNB staking are not significant,
+    /// we believe this margin of error is acceptable.
     function report() external onlyOwner {
         uint256 strategyBalance = IERC20(_tokenUnderlying).balanceOf(address(this));
         _report(strategyBalance);
@@ -297,6 +306,12 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         emit ValidatorsUpdated(newOperators);
     }
 
+    function updateBufferRatio(uint256 newRatio) external onlyOwner {
+        require(newRatio <= MAX_BUFFER_RATIO);
+        bufferRatio = newRatio;
+        emit BufferRatioUpdated(newRatio);
+    }
+
     function _validatorExist(
         address operator,
         address[] memory newOperators
@@ -321,11 +336,11 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         IWrappedERC20(_tokenUnderlying).withdraw(amount);
     }
 
-    function pause() public onlyOwner {
+    function pause() external onlyOwner {
         lastTimestamp = type(uint256).max / 2;
     }
 
-    function unpause() public onlyOwner {
+    function unpause() external onlyOwner {
         lastTimestamp = 0;
     }
 }
