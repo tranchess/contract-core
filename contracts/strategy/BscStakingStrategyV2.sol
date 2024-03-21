@@ -124,19 +124,9 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
             }
         }
 
-        // Report profit
-        uint256 strategyUnderlying = IFundV3(fund).getStrategyUnderlying();
+        // Report the gain and loss
         uint256 strategyBalance = IERC20(_tokenUnderlying).balanceOf(address(this));
-        uint256 newStrategyUnderlying = strategyBalance.add(address(this).balance);
-        for (uint256 i = 0; i < _credits.length; i++) {
-            newStrategyUnderlying = newStrategyUnderlying.add(_totalBNB(_credits[i]));
-        }
-        if (newStrategyUnderlying > strategyUnderlying) {
-            _reportProfit(newStrategyUnderlying - strategyUnderlying);
-        } else if (newStrategyUnderlying < strategyUnderlying) {
-            /// @dev This should never happen, but just in case
-            _reportLoss(strategyUnderlying - newStrategyUnderlying);
-        }
+        _report(strategyBalance);
 
         uint256 fundBalance = IWrappedERC20(_tokenUnderlying).balanceOf(fund);
         uint256 fundDebt = IFundV3(fund).getTotalDebt();
@@ -160,7 +150,34 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
             }
         }
 
-        // Wrap to WBNB
+        // Transfer to Fund
+        _transferToFund();
+    }
+
+    function report() external onlyOwner {
+        uint256 strategyBalance = IERC20(_tokenUnderlying).balanceOf(address(this));
+        _report(strategyBalance);
+    }
+
+    function transferToFund() external onlyOwner {
+        _transferToFund();
+    }
+
+    function _report(uint256 strategyBalance) private {
+        uint256 strategyUnderlying = IFundV3(fund).getStrategyUnderlying();
+        uint256 newStrategyUnderlying = strategyBalance.add(address(this).balance);
+        for (uint256 i = 0; i < _credits.length; i++) {
+            newStrategyUnderlying = newStrategyUnderlying.add(_totalBNB(_credits[i]));
+        }
+        if (newStrategyUnderlying > strategyUnderlying) {
+            _reportProfit(newStrategyUnderlying - strategyUnderlying);
+        } else if (newStrategyUnderlying < strategyUnderlying) {
+            /// @dev This should never happen, but just in case
+            _reportLoss(strategyUnderlying - newStrategyUnderlying);
+        }
+    }
+
+    function _transferToFund() private {
         _wrap(address(this).balance);
         uint256 amount = IWrappedERC20(_tokenUnderlying).balanceOf(address(this));
         if (amount > 0) {
