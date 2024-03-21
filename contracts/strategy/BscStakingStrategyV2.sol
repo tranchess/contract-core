@@ -106,15 +106,15 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         return _credits;
     }
 
-    /// @notice Process contract's strategy, which includes the following steps:
+    /// @dev Process contract's strategy, which includes the following steps:
     ///         1. Claim unbond requests
     ///         2. Report profit
     ///         3. Deposit / withdraw
     ///         4. Transfer to fund
-    /// This function will affect the creation/redemption ratio. Frontrunning this
-    /// transaction could potentially yield better creation/redemption results.
-    /// However, considering the daily earnings from BNB staking are not significant,
-    /// we believe this margin of error is acceptable.
+    ///      This function will affect the creation/redemption ratio. Frontrunning this
+    ///      transaction could potentially yield better creation/redemption results.
+    ///      However, considering the daily earnings from BNB staking are not significant,
+    ///      we believe this margin of error is acceptable.
     function process() external {
         require(lastTimestamp + PROCESS_COOLDOWN < block.timestamp, "Process not yet");
         lastTimestamp = block.timestamp;
@@ -159,10 +159,10 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         _transferToFund();
     }
 
-    /// @notice This function will affect the creation/redemption ratio. Frontrunning
-    /// this transaction could potentially yield better creation/redemption results.
-    /// However, considering the daily earnings from BNB staking are not significant,
-    /// we believe this margin of error is acceptable.
+    /// @dev This function will affect the creation/redemption ratio. Frontrunning this
+    ///      transaction could potentially yield better creation/redemption results.
+    ///      However, considering the daily earnings from BNB staking are not significant,
+    ///      we believe this margin of error is acceptable.
     function report() external onlyOwner {
         uint256 strategyBalance = IERC20(_tokenUnderlying).balanceOf(address(this));
         _report(strategyBalance);
@@ -227,7 +227,6 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
             amount = amount - stakes;
             STAKE_HUB.undelegate(_operators[i], _credits[i].balanceOf(address(this)));
         }
-        revert("Not enough to withdraw");
     }
 
     function _totalBNB(IStakeCredit credit) private view returns (uint256) {
