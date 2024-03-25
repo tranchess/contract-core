@@ -130,10 +130,12 @@ task("deploy_fund", "Deploy fund contracts")
         // if (upgradeTimestamp > 0) {
         //   +5 UpgradeTool
         //   +6 PrimaryMarket
-        //   +7 Strategy
+        //   +7 Strategy impl
+        //   +8 Strategy
         // } else {
         //   +5 PrimaryMarket
-        //   +6 Strategy
+        //   +6 Strategy impl
+        //   +7 Strategy
         // }
         const fundAddress = ethers.utils.getContractAddress({
             from: deployer.address,
@@ -145,7 +147,7 @@ task("deploy_fund", "Deploy fund contracts")
         });
         let strategyAddress = ethers.constants.AddressZero;
         if (strategyName !== "NONE") {
-            const nonce = upgradeTimestamp > 0 ? 7 : 6;
+            const nonce = upgradeTimestamp > 0 ? 8 : 7;
             strategyAddress = ethers.utils.getContractAddress({
                 from: deployer.address,
                 nonce: (await deployer.getTransactionCount("pending")) + nonce,
