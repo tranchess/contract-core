@@ -70,7 +70,7 @@ describe("BishopStableSwapV2", function () {
 
         const chessSchedule = await deployMockForName(owner, "ChessSchedule");
         await chessSchedule.mock.getRate.returns(UNIT);
-        const chessController = await deployMockForName(owner, "ChessControllerV5");
+        const chessController = await deployMockForName(owner, "ChessControllerV6");
         await chessController.mock.getFundRelativeWeight.returns(UNIT);
         const votingEscrow = await deployMockForName(owner, "IVotingEscrow");
         await votingEscrow.mock.balanceOf.returns(0);

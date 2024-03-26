@@ -14,7 +14,6 @@ task("deploy_swap_router", "Deploy swap routers contracts")
     .addParam("wstWrappingSwap", "WstETHWrappingSwap address")
     .addParam("queenSwaps", "Comma-separated fund underlying symbols for QueenStableSwaps")
     .addParam("bishopSwaps", "Comma-separated fund underlying symbols for BishopStableSwaps")
-    .addParam("rookSwaps", "Comma-separated fund underlying symbols for BishopStableSwaps")
     .setAction(async function (args, hre) {
         await updateHreSigner(hre);
         const { ethers } = hre;
@@ -27,10 +26,6 @@ task("deploy_swap_router", "Deploy swap routers contracts")
         const bishopSwaps: string[] = args.bishopSwaps.split(",").filter(Boolean);
         for (const bishopSwap of bishopSwaps) {
             assert.match(bishopSwap, /^[a-zA-Z]+$/, "Invalid symbol");
-        }
-        const rookSwaps: string[] = args.rookSwaps.split(",").filter(Boolean);
-        for (const rookSwap of rookSwaps) {
-            assert.match(rookSwap, /^[a-zA-Z]+$/, "Invalid symbol");
         }
 
         const wstETHWrappingSwap = await ethers.getContractAt(
@@ -58,13 +53,6 @@ task("deploy_swap_router", "Deploy swap routers contracts")
                 `bishop_stable_swap_${bishopSwap.toLowerCase()}`
             );
             swapAddressesList.push(bishopSwapAddresses);
-        }
-        for (const rookSwap of rookSwaps) {
-            const rookSwapAddresses = loadAddressFile<StableSwapAddresses>(
-                hre,
-                `rook_stable_swap_${rookSwap.toLowerCase()}`
-            );
-            swapAddressesList.push(rookSwapAddresses);
         }
 
         const SwapRouter = await ethers.getContractFactory("SwapRouter");

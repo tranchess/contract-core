@@ -201,12 +201,6 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         feeRate: "0.02",
         adminFeeRate: "0.4",
     });
-    await hre.run("deploy_stable_swap_wsteth", {
-        kind: "Rook",
-        ampl: "10",
-        feeRate: "0.1",
-        adminFeeRate: "0.4",
-    });
     const WstETHWrappingSwap = await ethers.getContractFactory("WstETHWrappingSwap");
     const wstETHWrappingSwap = await WstETHWrappingSwap.deploy(mockAddresses.mockWstEth);
     console.log(`WstETHWrappingSwap: ${wstETHWrappingSwap.address}`);
@@ -217,7 +211,6 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         wstWrappingSwap: wstETHWrappingSwap.address,
         queenSwaps: "WBNB",
         bishopSwaps: "BTC,ETH,WBNB,wstETH",
-        rookSwaps: "wstETH",
     });
 
     console.log();
