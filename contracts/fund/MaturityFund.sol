@@ -790,37 +790,6 @@ contract MaturityFund is
         _updateFeeCollector(newFeeCollector);
     }
 
-    /// @dev Create a new rebalance matrix that resets given NAVs to (1, 1).
-    /// @param navB BISHOP's NAV before the rebalance
-    /// @param navR ROOK's NAV before the rebalance
-    /// @param newSplitRatio The new split ratio after this rebalance
-    /// @return The rebalance matrix
-    function _calculateRebalance(
-        uint256 navB,
-        uint256 navR,
-        uint256 newSplitRatio
-    ) private view returns (Rebalance memory) {
-        uint256 ratioBR;
-        uint256 ratioB2Q;
-        uint256 ratioR2Q;
-        if (navR <= navB) {
-            ratioBR = navR;
-            ratioB2Q = (navB - navR).divideDecimal(newSplitRatio) / (weightB + 1);
-            ratioR2Q = 0;
-        } else {
-            ratioBR = navB;
-            ratioB2Q = 0;
-            ratioR2Q = (navR - navB).divideDecimal(newSplitRatio) / (weightB + 1);
-        }
-        return
-            Rebalance({
-                ratioB2Q: ratioB2Q,
-                ratioR2Q: ratioR2Q,
-                ratioBR: ratioBR,
-                timestamp: block.timestamp
-            });
-    }
-
     function _updateInterestRate(uint256) private returns (uint256) {
         uint256 rate = MAX_INTEREST_RATE.min(aprOracle.capture());
         emit InterestRateUpdated(rate, 0);
