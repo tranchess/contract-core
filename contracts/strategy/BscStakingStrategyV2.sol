@@ -216,6 +216,9 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         for (uint256 i = 0; i < _operators.length; i++) {
             // Undelegate until fulfilling the user's request
             uint256 stakes = _credits[i].getPooledBNB(address(this));
+            if (stakes == 0) {
+                continue;
+            }
             if (stakes >= amount) {
                 uint256 withdrawAmount = _credits[i].getSharesByPooledBNB(amount) + 1;
                 STAKE_HUB.undelegate(
