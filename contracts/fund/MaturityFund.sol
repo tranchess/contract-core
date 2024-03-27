@@ -38,6 +38,7 @@ contract MaturityFund is
     event AprOracleUpdated(address newAprOracle);
     event FeeCollectorUpdated(address newFeeCollector);
     event SplitRatioUpdated(uint256 newSplitRatio);
+    event TotalDebtUpdated(uint256 newTotalDebt);
     event Frozen();
 
     uint256 private constant UNIT = 1e18;
@@ -126,6 +127,11 @@ contract MaturityFund is
     ///         after settlement of that day, which will be effective until the next settlement.
     mapping(uint256 => uint256) public historicalInterestRate;
 
+    /// @dev Amount of redemption underlying that the fund owes the primary market
+    uint256 private _totalDebt;
+
+    uint256 private _strategyUnderlying;
+
     struct ConstructorParameters {
         uint256 weightB;
         uint256 settlementPeriod;
@@ -174,6 +180,7 @@ contract MaturityFund is
         require(lastDayPrice != 0, "Price not available"); // required to do the first creation
         _historicalNavB[lastDay] = lastNavB;
         _historicalNavR[lastDay] = lastNavR;
+        _strategyUnderlying = 0;
         uint256 lastInterestRate = _updateInterestRate(lastDay);
         historicalInterestRate[lastDay] = lastInterestRate;
         emit Settled(lastDay, lastNavB, lastNavR, lastInterestRate);
@@ -228,13 +235,31 @@ contract MaturityFund is
         return (_proposedPrimaryMarket, _proposedPrimaryMarketTimestamp);
     }
 
+    function strategy() external view override returns (address) {
+        return _strategy;
+    }
+
+    function strategyUpdateProposal() external view override returns (address, uint256) {
+        return (_proposedStrategy, _proposedStrategyTimestamp);
+    }
+
     /// @notice Return the status of the fund contract.
     function isFundActive(uint256) public view override returns (bool) {
         return true;
     }
 
     function getTotalUnderlying() public view override returns (uint256) {
-        return IERC20(tokenUnderlying).balanceOf(address(this));
+        uint256 hot = IERC20(tokenUnderlying).balanceOf(address(this));
+        return hot.add(_strategyUnderlying).sub(_totalDebt);
+    }
+
+    function getStrategyUnderlying() external view override returns (uint256) {
+        return _strategyUnderlying;
+    }
+
+    /// @notice Get the amount of redemption underlying that the fund owes the primary market.
+    function getTotalDebt() external view override returns (uint256) {
+        return _totalDebt;
     }
 
     /// @notice Equivalent ROOK supply, as if all QUEEN are split.
@@ -704,6 +729,19 @@ contract MaturityFund is
         _mint(TRANCHE_Q, feeCollector, feeQ);
     }
 
+    function primaryMarketAddDebtAndFee(
+        uint256 amount,
+        uint256 feeQ
+    ) external override onlyPrimaryMarket {
+        _mint(TRANCHE_Q, feeCollector, feeQ);
+        _updateTotalDebt(_totalDebt.add(amount));
+    }
+
+    function primaryMarketPayDebt(uint256 amount) external override onlyPrimaryMarket {
+        _updateTotalDebt(_totalDebt.sub(amount));
+        IERC20(tokenUnderlying).safeTransfer(msg.sender, amount);
+    }
+
     function proposePrimaryMarketUpdate(address newPrimaryMarket) external onlyOwner {
         _proposePrimaryMarketUpdate(newPrimaryMarket);
     }
@@ -714,6 +752,15 @@ contract MaturityFund is
             "Cannot update primary market"
         );
         _applyPrimaryMarketUpdate(newPrimaryMarket);
+    }
+
+    function proposeStrategyUpdate(address newStrategy) external onlyOwner {
+        _proposeStrategyUpdate(newStrategy);
+    }
+
+    function applyStrategyUpdate(address newStrategy) external onlyOwner {
+        require(_totalDebt == 0, "Cannot update strategy with debt");
+        _applyStrategyUpdate(newStrategy);
     }
 
     function _updateTwapOracle(address newTwapOracle) private {
@@ -779,6 +826,11 @@ contract MaturityFund is
         emit InterestRateUpdated(rate, 0);
 
         return rate;
+    }
+
+    function _updateTotalDebt(uint256 newTotalDebt) private {
+        _totalDebt = newTotalDebt;
+        emit TotalDebtUpdated(newTotalDebt);
     }
 
     /// @dev Transform share balance to a given rebalance version, or to the latest version
@@ -878,22 +930,4 @@ contract MaturityFund is
     function fundActivityStartTime() external view override returns (uint256) {
         return 0;
     }
-
-    function getStrategyUnderlying() external view override returns (uint256) {
-        return 0;
-    }
-
-    function getTotalDebt() external view override returns (uint256) {
-        return 0;
-    }
-
-    function primaryMarketAddDebtAndFee(uint256, uint256) external override {}
-
-    function primaryMarketPayDebt(uint256) external override {}
-
-    function strategy() external view override returns (address) {
-        return address(0);
-    }
-
-    function strategyUpdateProposal() external view override returns (address, uint256) {}
 }
