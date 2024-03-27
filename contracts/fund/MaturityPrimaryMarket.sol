@@ -19,6 +19,13 @@ import "../interfaces/ITrancheIndexV2.sol";
 contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, Ownable {
     event Created(address indexed account, uint256 underlying, uint256 outQ);
     event Redeemed(address indexed account, uint256 inQ, uint256 underlying, uint256 feeQ);
+    event RedeemedBR(
+        address indexed account,
+        uint256 inB,
+        uint256 inR,
+        uint256 underlying,
+        uint256 feeQ
+    );
     event Split(address indexed account, uint256 inQ, uint256 outB, uint256 outR);
     event Merged(
         address indexed account,
@@ -293,7 +300,7 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
         uint256 minUnderlying,
         uint256 version
     ) external nonReentrant allowRedemption returns (uint256 underlying) {
-        require(IFundV5(fund).frozen(), "Fund frozen");
+        require(IFundV5(fund).frozen(), "Fund not frozen");
         underlying = getRedemptionBR(inB, inR);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_B, msg.sender, inB, version);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_R, msg.sender, inR, version);
@@ -301,7 +308,7 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
         // Redundant check for user-friendly revert message.
         require(underlying <= _tokenUnderlying.balanceOf(fund), "Not enough underlying in fund");
         IFundForPrimaryMarketV4(fund).primaryMarketTransferUnderlying(recipient, underlying, 0);
-        emit Redeemed(recipient, inR, underlying, 0);
+        emit RedeemedBR(recipient, inB, inR, underlying, 0);
     }
 
     function redeemAndUnwrap(
@@ -383,31 +390,38 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
     }
 
     function queueRedemption(
-        address recipient,
-        uint256 inQ,
-        uint256 minUnderlying,
-        uint256 version
-    ) external override returns (uint256 underlying, uint256 index) {}
+        address,
+        uint256,
+        uint256,
+        uint256
+    ) external override returns (uint256, uint256) {
+        revert("Not Supported");
+    }
 
-    function claimRedemptions(
-        address account,
-        uint256[] calldata indices
-    ) external override returns (uint256 underlying) {}
+    function claimRedemptions(address, uint256[] calldata) external override returns (uint256) {
+        revert("Not Supported");
+    }
 
     function claimRedemptionsAndUnwrap(
-        address account,
-        uint256[] calldata indices
-    ) external override returns (uint256 underlying) {}
+        address,
+        uint256[] calldata
+    ) external override returns (uint256) {
+        revert("Not Supported");
+    }
 
     function claimRedemptionsAndUnwrapWstETH(
-        address account,
-        uint256[] calldata indices
-    ) external override returns (uint256 stETHAmount) {}
+        address,
+        uint256[] calldata
+    ) external override returns (uint256) {
+        revert("Not Supported");
+    }
 
     function redeemAndUnwrapWstETH(
-        address recipient,
-        uint256 inQ,
-        uint256 minStETH,
-        uint256 version
-    ) external override returns (uint256 stETHAmount) {}
+        address,
+        uint256,
+        uint256,
+        uint256
+    ) external override returns (uint256) {
+        revert("Not Supported");
+    }
 }
