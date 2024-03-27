@@ -221,7 +221,6 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
     function getMerge(
         uint256 inB
     ) public view override returns (uint256 inR, uint256 outQ, uint256 feeQ) {
-        require(!IFundV5(fund).frozen(), "Fund frozen");
         uint256 splitRatio = IFundV5(fund).splitRatio();
         uint256 outQBeforeFee = inB.divideDecimal(splitRatio.mul(_weightB));
         feeQ = outQBeforeFee.multiplyDecimal(mergeFeeRate);
@@ -237,7 +236,6 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
     function getMergeByR(
         uint256 inR
     ) public view override returns (uint256 inB, uint256 outQ, uint256 feeQ) {
-        require(!IFundV5(fund).frozen(), "Fund frozen");
         inB = inR.mul(_weightB);
         uint256 splitRatio = IFundV5(fund).splitRatio();
         uint256 outQBeforeFee = inR.divideDecimal(splitRatio);
@@ -261,7 +259,7 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
         address recipient,
         uint256 minOutQ,
         uint256 version
-    ) external override nonReentrant returns (uint256 outQ) {
+    ) external override nonReentrant whenFundActive returns (uint256 outQ) {
         uint256 underlying = _tokenUnderlying.balanceOf(address(this));
         outQ = getCreation(underlying);
         require(outQ >= minOutQ && outQ > 0, "Min QUEEN created");
@@ -299,8 +297,7 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
         uint256 inR,
         uint256 minUnderlying,
         uint256 version
-    ) external nonReentrant allowRedemption returns (uint256 underlying) {
-        require(IFundV5(fund).frozen(), "Fund not frozen");
+    ) external nonReentrant allowRedemption whenFundFrozen returns (uint256 underlying) {
         underlying = getRedemptionBR(inB, inR);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_B, msg.sender, inB, version);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_R, msg.sender, inR, version);
@@ -324,7 +321,7 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
         address recipient,
         uint256 inQ,
         uint256 version
-    ) external override returns (uint256 outB, uint256 outR) {
+    ) external override whenFundActive returns (uint256 outB, uint256 outR) {
         (outB, outR) = getSplit(inQ);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_B, recipient, outB, version);
@@ -336,7 +333,7 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
         address recipient,
         uint256 inB,
         uint256 version
-    ) external override returns (uint256 outQ) {
+    ) external override whenFundActive returns (uint256 outQ) {
         uint256 inR;
         uint256 feeQ;
         (inR, outQ, feeQ) = getMerge(inB);
@@ -386,6 +383,16 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
 
     modifier allowRedemption() {
         require(redemptionFlag, "Redemption N/A");
+        _;
+    }
+
+    modifier whenFundFrozen() {
+        require(IFundV5(fund).frozen(), "Fund not frozen");
+        _;
+    }
+
+    modifier whenFundActive() {
+        require(!IFundV5(fund).frozen(), "Fund frozen");
         _;
     }
 
