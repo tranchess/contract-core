@@ -347,7 +347,7 @@ contract MaturityFund is
         uint256 underlying
     ) private view returns (uint256 navSum, uint256 navB, uint256 navROrZero) {
         navB = _historicalNavB[settledDay];
-        if (equivalentTotalR > 0) {
+        if (!frozen && equivalentTotalR > 0) {
             navSum = price.mul(underlying.mul(underlyingDecimalMultiplier)).div(equivalentTotalR);
             navB = navB.multiplyDecimal(
                 historicalInterestRate[settledDay].mul(timestamp - settledDay).div(1 days).add(UNIT)
