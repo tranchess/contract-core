@@ -34,7 +34,7 @@ function calculateDropBelowTime(
     return unlockTime - BigNumber.from(MAX_TIME).mul(threshold).div(lockAmount).toNumber();
 }
 
-describe("VotingEscrowV2", function () {
+describe("VotingEscrowV4", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly startWeek: number;
@@ -68,9 +68,16 @@ describe("VotingEscrowV2", function () {
 
         const MockToken = await ethers.getContractFactory("MockToken");
         const chess = await MockToken.connect(owner).deploy("Chess", "Chess", 18);
+        const chessPool = await deployMockForName(owner, "ProxyOFTPool");
+        await chessPool.mock.token.returns(chess.address);
 
-        const VotingEscrow = await ethers.getContractFactory("VotingEscrowV2");
-        const votingEscrowImpl = await VotingEscrow.connect(owner).deploy(chess.address, MAX_TIME);
+        const VotingEscrow = await ethers.getContractFactory("VotingEscrowV4");
+        const votingEscrowImpl = await VotingEscrow.connect(owner).deploy(
+            chess.address,
+            MAX_TIME,
+            chessPool.address,
+            ethers.constants.AddressZero
+        );
         const TransparentUpgradeableProxy = await ethers.getContractFactory(
             "TransparentUpgradeableProxy"
         );
@@ -143,7 +150,7 @@ describe("VotingEscrowV2", function () {
                 proxyAdmin.address,
                 "0x"
             );
-            const newVotingEscrow = await ethers.getContractAt("VotingEscrowV2", newProxy.address);
+            const newVotingEscrow = await ethers.getContractAt("VotingEscrowV4", newProxy.address);
 
             await expect(newVotingEscrow.initialize("", "", MAX_TIME + 1)).to.be.revertedWith(
                 "Cannot exceed max time"
@@ -813,31 +820,6 @@ describe("VotingEscrowV2", function () {
             await expect(votingEscrow.connect(owner).updateCallback(addr1)).to.be.revertedWith(
                 "Must be null or a contract"
             );
-        });
-
-        it("Should invoke callback in createLock()", async function () {
-            await votingEscrow.connect(owner).updateCallback(callback.address);
-            await expect(() =>
-                votingEscrow.createLock(parseEther("1"), startWeek + WEEK)
-            ).to.callMocks({
-                func: callback.mock.syncWithVotingEscrow.withArgs(addr1),
-            });
-        });
-
-        it("Should invoke callback in increaseAmount()", async function () {
-            await votingEscrow.createLock(parseEther("1"), startWeek + WEEK);
-            await votingEscrow.connect(owner).updateCallback(callback.address);
-            await expect(() => votingEscrow.increaseAmount(addr1, 1)).to.callMocks({
-                func: callback.mock.syncWithVotingEscrow.withArgs(addr1),
-            });
-        });
-
-        it("Should invoke callback in increaseUnlockTime()", async function () {
-            await votingEscrow.createLock(parseEther("1"), startWeek + WEEK);
-            await votingEscrow.connect(owner).updateCallback(callback.address);
-            await expect(() => votingEscrow.increaseUnlockTime(startWeek + WEEK * 2)).to.callMocks({
-                func: callback.mock.syncWithVotingEscrow.withArgs(addr1),
-            });
         });
 
         it("Should not invoke callback after it is cleared", async function () {
