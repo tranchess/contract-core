@@ -152,10 +152,21 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
         underlying = _getRedemption(inQ - feeQ);
     }
 
+    /// @notice Calculate the result of a redemption using BISHOP and ROOK.
+    ///         Q = B / splitRatio * navB  / navSum
+    ///         Q = R / splitRatio * navR  / navSum
+    /// @param inB Spent BISHOP amount
+    /// @param inR Spent ROOK amount
+    /// @return underlying Redeemed underlying amount
     function getRedemptionBR(uint256 inB, uint256 inR) public view returns (uint256 underlying) {
         uint256 lastDay = IFundV5(fund).currentDay() - IFundV5(fund).settlementPeriod();
         (uint256 navB, uint256 navR) = IFundV5(fund).historicalNavs(lastDay);
-        underlying = inB.multiplyDecimal(navB).add(inR.multiplyDecimal(navR));
+        uint256 navSum = navB.mul(_weightB).add(navR);
+        uint256 splitRatio = IFundV3(fund).splitRatio();
+        uint256 amountQFromB = inB.mul(navB).div(navSum).divideDecimal(splitRatio);
+        uint256 amountQFromR = inR.mul(navR).div(navSum).divideDecimal(splitRatio);
+        // Calculate the equivalent underlying amount.
+        underlying = _getRedemption(amountQFromB.add(amountQFromR));
     }
 
     /// @notice Calculate the amount of QUEEN that can be redeemed for at least the given amount
