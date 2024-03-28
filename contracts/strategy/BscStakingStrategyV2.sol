@@ -139,8 +139,8 @@ contract BscStakingStrategyV2 is OwnableUpgradeable {
         uint256 bufferSize = totalUnderlying.multiplyDecimal(bufferRatio);
         if (totalHotBalance > fundDebt) {
             uint256 amount = totalHotBalance - fundDebt;
-            // Deposit only if more than both min delegation amount and buffer size
-            if (amount >= STAKE_HUB.minDelegationBNBChange() && amount >= bufferSize) {
+            // Deposit only if enough delegation amount after buffer size
+            if (amount >= bufferSize && amount - bufferSize >= STAKE_HUB.minDelegationBNBChange()) {
                 if (fundBalance > bufferSize.add(fundDebt)) {
                     IFundForStrategy(fund).transferToStrategy(fundBalance - bufferSize - fundDebt);
                 }
