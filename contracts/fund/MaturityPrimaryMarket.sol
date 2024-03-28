@@ -27,13 +27,7 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
         uint256 feeQ
     );
     event Split(address indexed account, uint256 inQ, uint256 outB, uint256 outR);
-    event Merged(
-        address indexed account,
-        uint256 outQ,
-        uint256 inB,
-        uint256 inR,
-        uint256 feeQ
-    );
+    event Merged(address indexed account, uint256 outQ, uint256 inB, uint256 inR, uint256 feeQ);
     event RedemptionQueued(address indexed account, uint256 index, uint256 underlying);
     event RedemptionPopped(uint256 count, uint256 newHead, uint256 requiredUnderlying);
     event RedemptionClaimed(address indexed account, uint256 index, uint256 underlying);
@@ -159,8 +153,8 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
     /// @param inR Spent ROOK amount
     /// @return underlying Redeemed underlying amount
     function getRedemptionBR(uint256 inB, uint256 inR) public view returns (uint256 underlying) {
-        uint256 lastDay = IFundV5(fund).currentDay() - IFundV5(fund).settlementPeriod();
-        (uint256 navB, uint256 navR) = IFundV5(fund).historicalNavs(lastDay);
+        uint256 settledDay = IFundV5(fund).getSettledDay();
+        (uint256 navB, uint256 navR) = IFundV5(fund).historicalNavs(settledDay);
         uint256 navSum = navB.mul(_weightB).add(navR);
         uint256 splitRatio = IFundV3(fund).splitRatio();
         uint256 amountQFromB = inB.mul(navB).div(navSum).divideDecimal(splitRatio);

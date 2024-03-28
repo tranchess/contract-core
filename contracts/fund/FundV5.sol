@@ -50,7 +50,7 @@ contract FundV5 is
     uint256 private constant MAX_INTEREST_RATE = 0.001e18; // 0.1% daily
 
     uint256 public immutable override weightB;
-    uint256 public immutable override settlementPeriod;
+    uint256 public immutable settlementPeriod;
 
     /// @notice Address of the underlying token.
     address public immutable override tokenUnderlying;

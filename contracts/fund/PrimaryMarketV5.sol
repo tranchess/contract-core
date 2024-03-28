@@ -22,13 +22,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
     event Created(address indexed account, uint256 underlying, uint256 outQ);
     event Redeemed(address indexed account, uint256 inQ, uint256 underlying, uint256 feeQ);
     event Split(address indexed account, uint256 inQ, uint256 outB, uint256 outR);
-    event Merged(
-        address indexed account,
-        uint256 outQ,
-        uint256 inB,
-        uint256 inR,
-        uint256 feeQ
-    );
+    event Merged(address indexed account, uint256 outQ, uint256 inB, uint256 inR, uint256 feeQ);
     event RedemptionQueued(address indexed account, uint256 index, uint256 underlying);
     event RedemptionPopped(uint256 count, uint256 newHead, uint256 requiredUnderlying);
     event RedemptionClaimed(address indexed account, uint256 index, uint256 underlying);
