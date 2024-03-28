@@ -32,7 +32,7 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
         uint256 outQ,
         uint256 inB,
         uint256 inR,
-        uint256 feeUnderlying
+        uint256 feeQ
     );
     event RedemptionQueued(address indexed account, uint256 index, uint256 underlying);
     event RedemptionPopped(uint256 count, uint256 newHead, uint256 requiredUnderlying);
@@ -153,8 +153,8 @@ contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheInd
     }
 
     /// @notice Calculate the result of a redemption using BISHOP and ROOK.
-    ///         Q = B / splitRatio * navB  / navSum
-    ///         Q = R / splitRatio * navR  / navSum
+    ///         Q = B / splitRatio * navB / navSum
+    ///         Q = R / splitRatio * navR / navSum
     /// @param inB Spent BISHOP amount
     /// @param inR Spent ROOK amount
     /// @return underlying Redeemed underlying amount
