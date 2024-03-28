@@ -14,6 +14,7 @@ import "../utils/CoreUtility.sol";
 import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/IFundV5.sol";
 import "../interfaces/IFundForPrimaryMarketV4.sol";
+import "../interfaces/IFundForStrategyV2.sol";
 import "../interfaces/IShareV2.sol";
 import "../interfaces/ITwapOracleV2.sol";
 import "../interfaces/IAprOracle.sol";
@@ -24,6 +25,7 @@ import "./FundRolesV2.sol";
 contract MaturityFund is
     IFundV5,
     IFundForPrimaryMarketV4,
+    IFundForStrategyV2,
     Ownable,
     ReentrancyGuard,
     FundRolesV2,
@@ -34,6 +36,8 @@ contract MaturityFund is
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
+    event ProfitReported(uint256 profit, uint256 totalFee, uint256 totalFeeQ, uint256 strategyFeeQ);
+    event LossReported(uint256 loss);
     event TwapOracleUpdated(address newTwapOracle);
     event AprOracleUpdated(address newAprOracle);
     event FeeCollectorUpdated(address newFeeCollector);
@@ -141,6 +145,7 @@ contract MaturityFund is
         address tokenB;
         address tokenR;
         address primaryMarket;
+        address strategy;
         address twapOracle;
         address aprOracle;
         address feeCollector;
@@ -151,7 +156,13 @@ contract MaturityFund is
     )
         public
         Ownable()
-        FundRolesV2(params.tokenQ, params.tokenB, params.tokenR, params.primaryMarket, address(0))
+        FundRolesV2(
+            params.tokenQ,
+            params.tokenB,
+            params.tokenR,
+            params.primaryMarket,
+            params.strategy
+        )
     {
         weightB = params.weightB;
         require(params.settlementPeriod % 1 days == 0);
@@ -167,7 +178,8 @@ contract MaturityFund is
     function initialize(
         uint256 newSplitRatio,
         uint256 lastNavB,
-        uint256 lastNavR
+        uint256 lastNavR,
+        uint256 strategyUnderlying
     ) external onlyOwner {
         require(splitRatio == 0 && currentDay == 0, "Already initialized");
         require(newSplitRatio != 0 && lastNavB >= UNIT, "Invalid parameters");
@@ -180,7 +192,7 @@ contract MaturityFund is
         require(lastDayPrice != 0, "Price not available"); // required to do the first creation
         _historicalNavB[lastDay] = lastNavB;
         _historicalNavR[lastDay] = lastNavR;
-        _strategyUnderlying = 0;
+        _strategyUnderlying = strategyUnderlying;
         uint256 lastInterestRate = _updateInterestRate(lastDay);
         historicalInterestRate[lastDay] = lastInterestRate;
         emit Settled(lastDay, lastNavB, lastNavR, lastInterestRate);
@@ -720,6 +732,16 @@ contract MaturityFund is
         emit Frozen();
     }
 
+    function transferToStrategy(uint256 amount) external override onlyStrategy {
+        _strategyUnderlying = _strategyUnderlying.add(amount);
+        IERC20(tokenUnderlying).safeTransfer(_strategy, amount);
+    }
+
+    function transferFromStrategy(uint256 amount) external override onlyStrategy {
+        _strategyUnderlying = _strategyUnderlying.sub(amount);
+        IERC20(tokenUnderlying).safeTransferFrom(_strategy, address(this), amount);
+    }
+
     function primaryMarketTransferUnderlying(
         address recipient,
         uint256 amount,
@@ -740,6 +762,27 @@ contract MaturityFund is
     function primaryMarketPayDebt(uint256 amount) external override onlyPrimaryMarket {
         _updateTotalDebt(_totalDebt.sub(amount));
         IERC20(tokenUnderlying).safeTransfer(msg.sender, amount);
+    }
+
+    function reportProfit(
+        uint256 profit,
+        uint256 totalFee,
+        uint256 strategyFee
+    ) external override onlyStrategy returns (uint256 strategyFeeQ) {
+        require(profit >= totalFee && totalFee >= strategyFee, "Fee cannot exceed profit");
+        _strategyUnderlying = _strategyUnderlying.add(profit);
+        uint256 equivalentTotalQ = getEquivalentTotalQ();
+        uint256 totalUnderlyingAfterFee = getTotalUnderlying() - totalFee;
+        uint256 totalFeeQ = totalFee.mul(equivalentTotalQ).div(totalUnderlyingAfterFee);
+        strategyFeeQ = strategyFee.mul(equivalentTotalQ).div(totalUnderlyingAfterFee);
+        _mint(TRANCHE_Q, feeCollector, totalFeeQ.sub(strategyFeeQ));
+        _mint(TRANCHE_Q, msg.sender, strategyFeeQ);
+        emit ProfitReported(profit, totalFee, totalFeeQ, strategyFeeQ);
+    }
+
+    function reportLoss(uint256 loss) external override onlyStrategy {
+        _strategyUnderlying = _strategyUnderlying.sub(loss);
+        emit LossReported(loss);
     }
 
     function proposePrimaryMarketUpdate(address newPrimaryMarket) external onlyOwner {
