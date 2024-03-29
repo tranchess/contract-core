@@ -29,6 +29,7 @@ import "./tasks/deploy_stable_swap_wsteth";
 import "./tasks/deploy_sub_governance";
 import "./tasks/deploy_swap_router";
 import "./tasks/deploy_flash_swap_router";
+import "./tasks/deploy_flash_swap_router_v3";
 import "./tasks/deploy_data_aggregator";
 import "./tasks/dev_deploy_lz";
 import "./tasks/dev_deploy_curve";
