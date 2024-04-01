@@ -7,6 +7,7 @@ import type { ChessControllerImplAddresses } from "./deploy_chess_controller_imp
 import type { ChessPoolAddresses } from "./deploy_chess_pool";
 import { GOVERNANCE_CONFIG } from "../config";
 import { updateHreSigner } from "./signers";
+import { waitForContract } from "./utils";
 
 task("deploy_sub_governance", "Deploy sub chain governance contracts")
     .addParam("mainLzChainId", "Main LayerZero chain ID")
@@ -28,6 +29,7 @@ task("deploy_sub_governance", "Deploy sub chain governance contracts")
             [GOVERNANCE_CONFIG.TREASURY || deployer.address]
         );
         console.log(`TimelockController: ${timelockController.address}`);
+        await waitForContract(hre, timelockController.address);
 
         const TransparentUpgradeableProxy = await ethers.getContractFactory(
             "TransparentUpgradeableProxy"
@@ -35,6 +37,7 @@ task("deploy_sub_governance", "Deploy sub chain governance contracts")
         const ProxyAdmin = await ethers.getContractFactory("ProxyAdmin");
         const proxyAdmin = await ProxyAdmin.deploy();
         console.log(`ProxyAdmin: ${proxyAdmin.address}`);
+        await waitForContract(hre, proxyAdmin.address);
 
         const Chess = await ethers.getContractFactory("AnyswapChess");
         const chess = await Chess.deploy(
@@ -43,6 +46,7 @@ task("deploy_sub_governance", "Deploy sub chain governance contracts")
             parseEther(GOVERNANCE_CONFIG.CHESS_TOTAL_SUPPLY)
         );
         console.log(`Chess: ${chess.address}`);
+        await waitForContract(hre, chess.address);
 
         await hre.run("deploy_chess_pool", {
             chess: chess.address,
@@ -77,6 +81,7 @@ task("deploy_sub_governance", "Deploy sub chain governance contracts")
         );
         const votingEscrow = VotingEscrow.attach(votingEscrowProxy.address);
         console.log(`VotingEscrow: ${votingEscrow.address}`);
+        await waitForContract(hre, votingEscrowProxy.address);
 
         const InterestRateBallot = await ethers.getContractFactory("InterestRateBallotV3");
         const interestRateBallot = await InterestRateBallot.deploy(
@@ -84,6 +89,7 @@ task("deploy_sub_governance", "Deploy sub chain governance contracts")
             { gasLimit: 2e6 } // Gas estimation may fail
         );
         console.log(`InterestRateBallot: ${interestRateBallot.address}`);
+        await waitForContract(hre, interestRateBallot.address);
 
         await hre.run("deploy_controller_ballot", { votingEscrow: votingEscrow.address });
         const controllerBallotAddresses = loadAddressFile<ControllerBallotAddresses>(
@@ -122,6 +128,7 @@ task("deploy_sub_governance", "Deploy sub chain governance contracts")
         );
         const chessController = ChessController.attach(chessControllerProxy.address);
         console.log(`ChessController: ${chessController.address}`);
+        await waitForContract(hre, chessControllerProxy.address);
 
         const ChessSubSchedule = await ethers.getContractFactory("ChessSubSchedule");
         const chessSubScheduleImpl = await ChessSubSchedule.deploy(
@@ -131,6 +138,7 @@ task("deploy_sub_governance", "Deploy sub chain governance contracts")
             GOVERNANCE_CONFIG.LZ_ENDPOINT
         );
         console.log(`ChessSubSchedule implementation: ${chessSubScheduleImpl.address}`);
+        await waitForContract(hre, chessSubScheduleImpl.address);
 
         const initTx = await chessSubScheduleImpl.populateTransaction.initialize();
         const chessSubScheduleProxy = await TransparentUpgradeableProxy.deploy(
@@ -141,21 +149,24 @@ task("deploy_sub_governance", "Deploy sub chain governance contracts")
         );
         const chessSubSchedule = ChessSubSchedule.attach(chessSubScheduleProxy.address);
         console.log(`ChessSubSchedule: ${chessSubSchedule.address}`);
+        await waitForContract(hre, chessSubScheduleProxy.address);
 
         console.log("Set ChessSubSchedule's trusted remote address");
-        await chessSubSchedule.setTrustedRemoteAddress(mainLzChainId, mainChainRelayer);
+        await (
+            await chessSubSchedule.setTrustedRemoteAddress(mainLzChainId, mainChainRelayer)
+        ).wait();
 
         console.log("Set VotingEscrow, ChessSubSchedule to be CHESS minters");
-        await chessPool.addMinter(votingEscrow.address);
-        await chessPool.addMinter(chessSubSchedule.address);
-        await chess.addMinter(timelockController.address);
-        await chessPool.addMinter(timelockController.address);
+        await (await chessPool.addMinter(votingEscrow.address)).wait();
+        await (await chessPool.addMinter(chessSubSchedule.address)).wait();
+        await (await chess.addMinter(timelockController.address)).wait();
+        await (await chessPool.addMinter(timelockController.address)).wait();
 
         console.log("Transfering ownership to TimelockController");
-        await chess.transferOwnership(timelockController.address);
-        await proxyAdmin.transferOwnership(timelockController.address);
-        await chessPool.transferOwnership(timelockController.address);
-        await votingEscrow.transferOwnership(timelockController.address);
+        await (await chess.transferOwnership(timelockController.address)).wait();
+        await (await proxyAdmin.transferOwnership(timelockController.address)).wait();
+        await (await chessPool.transferOwnership(timelockController.address)).wait();
+        await (await votingEscrow.transferOwnership(timelockController.address)).wait();
 
         const addresses: GovernanceAddresses = {
             ...newAddresses(hre),
