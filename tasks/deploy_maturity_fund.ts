@@ -25,6 +25,7 @@ export interface FundAddresses extends Addresses {
 task("deploy_maturity_fund", "Deploy MaturityFund contracts")
     .addParam("underlying", "Underlying token address")
     .addParam("shareSymbols", "Symbols of share tokens")
+    .addParam("maturityDays", "Maturity days")
     .addParam("redemptionFeeRate", "Primary market redemption fee rate")
     .addParam("mergeFeeRate", "Primary market merge fee rate")
     .addParam("bishopApr", "Initial annual interest rate")
@@ -51,6 +52,9 @@ task("deploy_maturity_fund", "Deploy MaturityFund contracts")
             assert.match(symbol, /^[a-zA-Z]+$/, "Invalid symbol");
         }
         assert.ok(shareSymbols.length == 3, "Share symbol count is not 3");
+
+        const maturityDays = parseInt(args.maturityDays);
+        assert.ok(maturityDays > 0 && maturityDays <= 365 * 10, "Invalid maturity days");
 
         const bishopApr = parseEther(args.bishopApr);
         assert.ok(bishopApr.lt(parseEther("1")) && bishopApr.gt(0), "Invalid bishop APR");
@@ -128,7 +132,7 @@ task("deploy_maturity_fund", "Deploy MaturityFund contracts")
         const Fund = await ethers.getContractFactory("MaturityFund");
         const fund = await Fund.deploy([
             9,
-            86400 * 365, // 1 year
+            86400 * maturityDays,
             underlyingToken.address,
             underlyingDecimals,
             shareQ.address,
