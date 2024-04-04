@@ -131,6 +131,20 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         }),
     });
 
+    await hre.run("deploy_maturity_fund", {
+        underlying: mockAddresses.mockBusd,
+        shareSymbols: "maturityQ,maturityB,maturityR",
+        maturityDays: "180",
+        redemptionFeeRate: "0.0035",
+        mergeFeeRate: "0.0045",
+        bishopApr: "0.03",
+        fundInitializationParams: JSON.stringify({
+            newSplitRatio: "0.1",
+            lastNavB: "1",
+            lastNavR: "1",
+        }),
+    });
+
     console.log();
     console.log("[+] Deploying misc contracts");
     await hre.run("deploy_misc", {
@@ -201,12 +215,6 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         feeRate: "0.02",
         adminFeeRate: "0.4",
     });
-    await hre.run("deploy_stable_swap_wsteth", {
-        kind: "Rook",
-        ampl: "10",
-        feeRate: "0.1",
-        adminFeeRate: "0.4",
-    });
     const WstETHWrappingSwap = await ethers.getContractFactory("WstETHWrappingSwap");
     const wstETHWrappingSwap = await WstETHWrappingSwap.deploy(mockAddresses.mockWstEth);
     console.log(`WstETHWrappingSwap: ${wstETHWrappingSwap.address}`);
@@ -217,7 +225,6 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
         wstWrappingSwap: wstETHWrappingSwap.address,
         queenSwaps: "WBNB",
         bishopSwaps: "BTC,ETH,WBNB,wstETH",
-        rookSwaps: "wstETH",
     });
 
     console.log();
