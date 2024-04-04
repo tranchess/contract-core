@@ -11,14 +11,13 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../utils/SafeDecimalMath.sol";
 
-import "../interfaces/IPrimaryMarketV5.sol";
-import "../interfaces/IFundV5.sol";
+import "../interfaces/IPrimaryMarketV3.sol";
+import "../interfaces/IFundV3.sol";
 import "../interfaces/IFundForPrimaryMarketV4.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "../interfaces/IWrappedERC20.sol";
-import "../interfaces/IWstETH.sol";
 
-contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, Ownable {
+contract PrimaryMarketV4 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, Ownable {
     event Created(address indexed account, uint256 underlying, uint256 outQ);
     event Redeemed(address indexed account, uint256 inQ, uint256 underlying, uint256 feeQ);
     event Split(address indexed account, uint256 inQ, uint256 outB, uint256 outR);
@@ -51,7 +50,6 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
 
     address public immutable override fund;
     bool public immutable redemptionFlag;
-    uint256 private immutable _weightB;
     IERC20 private immutable _tokenUnderlying;
 
     uint256 public redemptionFeeRate;
@@ -92,7 +90,6 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         _updateRedemptionFeeRate(redemptionFeeRate_);
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
-        _weightB = IFundV5(fund_).weightB();
         redemptionFlag = redemptionFlag_;
     }
 
@@ -107,12 +104,10 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
             outQ = underlying.mul(IFundV3(fund).underlyingDecimalMultiplier());
             uint256 splitRatio = IFundV3(fund).splitRatio();
             require(splitRatio != 0, "Fund is not initialized");
-            uint256 settledDay = IFundV5(fund).getSettledDay();
+            uint256 settledDay = IFundV3(fund).currentDay() - 1 days;
             uint256 underlyingPrice = IFundV3(fund).twapOracle().getTwap(settledDay);
             (uint256 navB, uint256 navR) = IFundV3(fund).historicalNavs(settledDay);
-            outQ = outQ.mul(underlyingPrice).div(splitRatio).divideDecimal(
-                navB.mul(_weightB).add(navR)
-            );
+            outQ = outQ.mul(underlyingPrice).div(splitRatio).divideDecimal(navB.add(navR));
         } else {
             require(
                 fundUnderlying != 0,
@@ -198,59 +193,51 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
 
     /// @notice Calculate the result of a split.
     /// @param inQ QUEEN amount to be split
-    /// @return outB Received BISHOP amount
-    /// @return outR Received ROOK amount
-    function getSplit(uint256 inQ) public view override returns (uint256 outB, uint256 outR) {
-        outR = inQ.multiplyDecimal(IFundV5(fund).splitRatio());
-        outB = outR.mul(_weightB);
+    /// @return outB Received BISHOP amount, which is also received ROOK amount
+    function getSplit(uint256 inQ) public view override returns (uint256 outB) {
+        return inQ.multiplyDecimal(IFundV3(fund).splitRatio());
     }
 
     /// @notice Calculate the amount of QUEEN that can be split into at least the given amount of
     ///         BISHOP and ROOK.
-    /// @param minOutR Received ROOK amount
+    /// @param minOutB Received BISHOP amount, which is also received ROOK amount
     /// @return inQ QUEEN amount that should be split
-    /// @return outB Received BISHOP amount
-    function getSplitForR(
-        uint256 minOutR
-    ) external view override returns (uint256 inQ, uint256 outB) {
+    function getSplitForB(uint256 minOutB) external view override returns (uint256 inQ) {
         uint256 splitRatio = IFundV3(fund).splitRatio();
-        outB = minOutR.mul(_weightB);
-        inQ = minOutR.mul(1e18).add(splitRatio.sub(1)).div(splitRatio);
+        return minOutB.mul(1e18).add(splitRatio.sub(1)).div(splitRatio);
     }
 
     /// @notice Calculate the result of a merge.
-    /// @param inB Spent BISHOP amount
-    /// @return inR Spent ROOK amount
+    /// @param inB Spent BISHOP amount, which is also spent ROOK amount
     /// @return outQ Received QUEEN amount
     /// @return feeQ QUEEN amount charged as merge fee
-    function getMerge(
-        uint256 inB
-    ) public view override returns (uint256 inR, uint256 outQ, uint256 feeQ) {
-        uint256 splitRatio = IFundV5(fund).splitRatio();
-        uint256 outQBeforeFee = inB.divideDecimal(splitRatio.mul(_weightB));
+    function getMerge(uint256 inB) public view override returns (uint256 outQ, uint256 feeQ) {
+        uint256 outQBeforeFee = inB.divideDecimal(IFundV3(fund).splitRatio());
         feeQ = outQBeforeFee.multiplyDecimal(mergeFeeRate);
         outQ = outQBeforeFee.sub(feeQ);
-        if (IFundV5(fund).frozen()) {
-            inR = 0;
-        } else {
-            inR = outQBeforeFee.multiplyDecimal(splitRatio);
-        }
     }
 
-    /// @notice Calculate the result of a merge using ROOK.
-    /// @param inR Spent ROOK amount
-    /// @return inB Spent BISHOP amount
-    /// @return outQ Received QUEEN amount
-    /// @return feeQ QUEEN amount charged as merge fee
-    function getMergeByR(
-        uint256 inR
-    ) public view override returns (uint256 inB, uint256 outQ, uint256 feeQ) {
-        require(!IFundV5(fund).frozen(), "Fund frozen");
-        inB = inR.mul(_weightB);
-        uint256 splitRatio = IFundV5(fund).splitRatio();
-        uint256 outQBeforeFee = inR.divideDecimal(splitRatio);
-        feeQ = outQBeforeFee.multiplyDecimal(mergeFeeRate);
-        outQ = outQBeforeFee.sub(feeQ);
+    /// @notice Calculate the amount of BISHOP and ROOK that can be merged into at least
+    ///      the given amount of QUEEN.
+    /// @dev The return value may not be the minimum solution due to rounding errors.
+    /// @param minOutQ Minimum received QUEEN amount
+    /// @return inB BISHOP amount that should be merged, which is also spent ROOK amount
+    function getMergeForQ(uint256 minOutQ) external view override returns (uint256 inB) {
+        // Assume:
+        //   minOutQ * 1e18 = a * (1e18 - mergeFeeRate) + b
+        //   c = ceil(a * splitRatio / 1e18)
+        // where a and b are integers and 0 <= b < 1e18 - mergeFeeRate
+        // Then
+        //   outQBeforeFee = a
+        //   inB = c
+        //   getMerge(inB).outQ
+        //     = c * 1e18 / splitRatio - floor(c * 1e18 / splitRatio * mergeFeeRate / 1e18)
+        //     = ceil(c * 1e18 / splitRatio * (1e18 - mergeFeeRate) / 1e18)
+        //    >= ceil(a * (1e18 - mergeFeeRate) / 1e18)
+        //     = (a * (1e18 - mergeFeeRate) + b) / 1e18         // because b < 1e18
+        //     = minOutQ
+        uint256 outQBeforeFee = minOutQ.divideDecimal(1e18 - mergeFeeRate);
+        inB = outQBeforeFee.mul(IFundV3(fund).splitRatio()).add(1e18 - 1).div(1e18);
     }
 
     /// @notice Return index of the first queued redemption that cannot be claimed now.
@@ -340,6 +327,14 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
         _tokenUnderlying.safeTransfer(fund, underlying);
         emit Created(recipient, underlying, outQ);
+
+        // Call an optional hook in the strategy and ignore errors.
+        (bool success, ) = IFundV3(fund).strategy().call(
+            abi.encodeWithSignature("onPrimaryMarketCreate()")
+        );
+        if (!success) {
+            // ignore
+        }
     }
 
     /// @notice Redeem QUEEN to get underlying tokens back. Revert if there are still some
@@ -378,25 +373,6 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         require(success, "Transfer failed");
     }
 
-    /// @notice Redeem QUEEN to get stETH back. The underlying must be wstETH.
-    ///         Revert if there are still some queued redemptions that cannot be claimed now.
-    /// @param recipient Address that will receive redeemed underlying tokens
-    /// @param inQ Spent QUEEN amount
-    /// @param minStETH Minimum amount of stETH to be received
-    /// @param version The latest rebalance version
-    /// @return stETHAmount Received underlying amount
-    function redeemAndUnwrapWstETH(
-        address recipient,
-        uint256 inQ,
-        uint256 minStETH,
-        uint256 version
-    ) external override nonReentrant returns (uint256 stETHAmount) {
-        uint256 underlying = _redeem(address(this), inQ, 0, version);
-        stETHAmount = IWstETH(address(_tokenUnderlying)).unwrap(underlying);
-        require(stETHAmount >= minStETH && stETHAmount > 0, "Min underlying redeemed");
-        IERC20(IWstETH(address(_tokenUnderlying)).stETH()).safeTransfer(recipient, stETHAmount);
-    }
-
     function _redeem(
         address recipient,
         uint256 inQ,
@@ -412,6 +388,14 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         require(underlying <= _tokenUnderlying.balanceOf(fund), "Not enough underlying in fund");
         IFundForPrimaryMarketV4(fund).primaryMarketTransferUnderlying(recipient, underlying, feeQ);
         emit Redeemed(recipient, inQ, underlying, feeQ);
+
+        // Call an optional hook in the strategy and ignore errors.
+        (bool success, ) = IFundV3(fund).strategy().call(
+            abi.encodeWithSignature("onPrimaryMarketRedeem()")
+        );
+        if (!success) {
+            // ignore
+        }
     }
 
     /// @notice Redeem QUEEN and wait in the redemption queue. Redeemed underlying tokens will
@@ -510,20 +494,6 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         require(success, "Transfer failed");
     }
 
-    /// @notice Claim stETH of queued redemptions. The underlying must be wstETH.
-    ///         All these redemptions must belong to the same account.
-    /// @param account Recipient of the redemptions
-    /// @param indices Indices of the redemptions in the queue, which must be in increasing order
-    /// @return stETHAmount Total claimed stETH amount
-    function claimRedemptionsAndUnwrapWstETH(
-        address account,
-        uint256[] calldata indices
-    ) external override nonReentrant returns (uint256 stETHAmount) {
-        uint256 underlying = _claimRedemptions(account, indices);
-        stETHAmount = IWstETH(address(_tokenUnderlying)).unwrap(underlying);
-        IERC20(IWstETH(address(_tokenUnderlying)).stETH()).safeTransfer(account, stETHAmount);
-    }
-
     function _claimRedemptions(
         address account,
         uint256[] calldata indices
@@ -555,12 +525,12 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         address recipient,
         uint256 inQ,
         uint256 version
-    ) external override returns (uint256 outB, uint256 outR) {
-        (outB, outR) = getSplit(inQ);
+    ) external override returns (uint256 outB) {
+        outB = getSplit(inQ);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_B, recipient, outB, version);
-        IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_R, recipient, outR, version);
-        emit Split(recipient, inQ, outB, outR);
+        IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_R, recipient, outB, version);
+        emit Split(recipient, inQ, outB, outB);
     }
 
     function merge(
@@ -568,11 +538,10 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         uint256 inB,
         uint256 version
     ) external override returns (uint256 outQ) {
-        uint256 inR;
         uint256 feeQ;
-        (inR, outQ, feeQ) = getMerge(inB);
+        (outQ, feeQ) = getMerge(inB);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_B, msg.sender, inB, version);
-        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_R, msg.sender, inR, version);
+        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_R, msg.sender, inB, version);
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
         IFundForPrimaryMarketV4(fund).primaryMarketAddDebtAndFee(0, feeQ);
         emit Merged(recipient, outQ, inB, inB, feeQ);

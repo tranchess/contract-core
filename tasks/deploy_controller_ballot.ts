@@ -5,7 +5,6 @@ import type { GovernanceAddresses } from "./deploy_governance";
 import type { FundAddresses } from "./deploy_fund";
 import type { StableSwapAddresses } from "./deploy_stable_swap";
 import { updateHreSigner } from "./signers";
-import { waitForContract } from "./utils";
 
 export interface ControllerBallotAddresses extends Addresses {
     controllerBallot: string;
@@ -34,7 +33,6 @@ task("deploy_controller_ballot", "Deploy ControllerBallot")
         const ControllerBallot = await ethers.getContractFactory("ControllerBallotV2");
         const controllerBallot = await ControllerBallot.deploy(votingEscrowAddress);
         console.log(`ControllerBallot: ${controllerBallot.address}`);
-        await waitForContract(hre, controllerBallot.address);
 
         for (const symbol of symbols) {
             const fundAddresses = loadAddressFile<FundAddresses>(
@@ -43,19 +41,19 @@ task("deploy_controller_ballot", "Deploy ControllerBallot")
             );
             if (fundAddresses.shareStaking) {
                 console.log(`Adding ${symbol} staking`);
-                await (await controllerBallot.addPool(fundAddresses.shareStaking)).wait();
+                await controllerBallot.addPool(fundAddresses.shareStaking);
             }
             console.log(`Adding ${symbol} BISHOP stable swap's liquidity gauge`);
             const stableSwapAddresses = loadAddressFile<StableSwapAddresses>(
                 hre,
                 `bishop_stable_swap_${symbol.toLowerCase()}`
             );
-            await (await controllerBallot.addPool(stableSwapAddresses.liquidityGauge)).wait();
+            await controllerBallot.addPool(stableSwapAddresses.liquidityGauge);
         }
 
         if (timelockControllerAddress) {
             console.log("Transfering ownership to TimelockController");
-            await (await controllerBallot.transferOwnership(timelockControllerAddress)).wait();
+            await controllerBallot.transferOwnership(timelockControllerAddress);
         } else {
             console.log("NOTE: Please transfer ownership of ControllerBallot to Timelock later");
         }

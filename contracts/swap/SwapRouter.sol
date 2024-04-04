@@ -21,7 +21,7 @@ contract SwapRouter is ISwapRouter, ITrancheIndexV2, Ownable {
 
     constructor(address wstETH_) public {
         wstETH = wstETH_;
-        stETH = wstETH_ == address(0) ? address(0) : IWstETH(wstETH_).stETH();
+        stETH = IWstETH(wstETH_).stETH();
     }
 
     event SwapAdded(address addr0, address addr1, address swap);

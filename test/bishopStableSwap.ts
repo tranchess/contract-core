@@ -28,7 +28,7 @@ const INIT_B = parseEther("100000");
 const INIT_USDC = parseUsdc("100000");
 const INIT_LP = parseEther("200000");
 
-describe("BishopStableSwapV2", function () {
+describe("BishopStableSwap", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
         readonly usdc: Contract;
@@ -83,7 +83,7 @@ describe("BishopStableSwapV2", function () {
             from: owner.address,
             nonce: (await owner.getTransactionCount("pending")) + 1,
         });
-        const StableSwap = await ethers.getContractFactory("BishopStableSwapV2");
+        const StableSwap = await ethers.getContractFactory("BishopStableSwap");
         const stableSwap = await StableSwap.connect(owner).deploy(
             lpTokenAddress,
             fund.address,

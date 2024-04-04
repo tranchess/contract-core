@@ -94,7 +94,7 @@ describe("LiquidityGauge", function () {
 
         const MockToken = await ethers.getContractFactory("MockToken");
         const usdc = await MockToken.connect(owner).deploy("USD Coin", "USDC", 6);
-        const swap = await deployMockForName(owner, "BishopStableSwapV2");
+        const swap = await deployMockForName(owner, "BishopStableSwap");
         await swap.mock.quoteAddress.returns(usdc.address);
         const fund = await deployMockForName(owner, "IFundV3");
 

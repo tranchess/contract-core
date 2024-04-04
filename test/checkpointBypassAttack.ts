@@ -115,12 +115,13 @@ describe("checkpointBypassAttack", function () {
             interestRateBallot.address,
             feeCollector.address,
         ]);
-        const PrimaryMarket = await ethers.getContractFactory("PrimaryMarketV3");
+        const PrimaryMarket = await ethers.getContractFactory("PrimaryMarketV4");
         const primaryMarket = await PrimaryMarket.connect(owner).deploy(
             fund.address,
             0,
             0,
-            parseEther("1000000")
+            parseEther("1000000"),
+            false
         );
         expect(primaryMarket.address).to.equal(primaryMarketAddress);
 

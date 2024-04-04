@@ -292,7 +292,7 @@ task("deploy_fund", "Deploy fund contracts")
         }
 
         const controllerBallot = await ethers.getContractAt(
-            "ControllerBallotV2",
+            "ControllerBallot",
             governanceAddresses.controllerBallot
         );
         if ((await controllerBallot.owner()) === (await controllerBallot.signer.getAddress())) {

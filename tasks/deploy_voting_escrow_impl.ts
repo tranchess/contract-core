@@ -3,7 +3,6 @@ import { GOVERNANCE_CONFIG } from "../config";
 import { Addresses, loadAddressFile, newAddresses, saveAddressFile } from "./address_file";
 import type { GovernanceAddresses } from "./deploy_governance";
 import { updateHreSigner } from "./signers";
-import { waitForContract } from "./utils";
 
 export interface VotingEscrowImplAddresses extends Addresses {
     votingEscrowImpl: string;
@@ -30,11 +29,10 @@ task("deploy_voting_escrow_impl", "Deploy VotingEscrow implementation")
             GOVERNANCE_CONFIG.LZ_ENDPOINT
         );
         console.log(`VotingEscrow implementation: ${votingEscrowImpl.address}`);
-        await waitForContract(hre, votingEscrowImpl.address);
 
         console.log("Making VotingEscrow implementation unusable without proxy");
         await (await votingEscrowImpl.initialize("", "", 0)).wait();
-        await (await votingEscrowImpl.renounceOwnership()).wait();
+        await votingEscrowImpl.renounceOwnership();
 
         const addresses: VotingEscrowImplAddresses = {
             ...newAddresses(hre),

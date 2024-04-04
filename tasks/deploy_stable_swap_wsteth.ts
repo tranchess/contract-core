@@ -36,7 +36,7 @@ task("deploy_stable_swap_wsteth", "Deploy stable swap contracts for wstETH")
         await hre.run("compile");
 
         assert.match(args.kind, /^Bishop|Rook$/, "Invalid kind");
-        const kind: "Bishop" = args.kind;
+        const kind: "Bishop" | "Rook" = args.kind;
 
         const fundAddresses = loadAddressFile<FundAddresses>(hre, "fund_wsteth");
         const feeDistributorAddresses = loadAddressFile<FeeDistrubtorAddresses>(
@@ -58,6 +58,10 @@ task("deploy_stable_swap_wsteth", "Deploy stable swap contracts for wstETH")
         switch (kind) {
             case "Bishop": {
                 base = await ethers.getContractAt("ERC20", fundAddresses.shareB);
+                break;
+            }
+            case "Rook": {
+                base = await ethers.getContractAt("ERC20", fundAddresses.shareR);
                 break;
             }
         }
@@ -93,6 +97,22 @@ task("deploy_stable_swap_wsteth", "Deploy stable swap contracts for wstETH")
                     "WstETHBishopStableSwap"
                 );
                 stableSwap = await WstETHBishopStableSwap.deploy(
+                    liquidityGaugeAddress,
+                    fundAddresses.fund,
+                    quote.address,
+                    quoteDecimals,
+                    ampl,
+                    feeDistributorAddresses.feeDistributor,
+                    feeRate,
+                    adminFeeRate
+                );
+                break;
+            }
+            case "Rook": {
+                const WstETHRookStableSwap = await ethers.getContractFactory(
+                    "WstETHRookStableSwap"
+                );
+                stableSwap = await WstETHRookStableSwap.deploy(
                     liquidityGaugeAddress,
                     fundAddresses.fund,
                     quote.address,

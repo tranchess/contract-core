@@ -16,11 +16,11 @@ import "../utils/ManagedPausable.sol";
 import "../interfaces/IVotingEscrow.sol";
 import "../utils/ProxyUtility.sol";
 
-import "../layerzero/UpgradeableNonblockingLzApp.sol";
-import "../layerzero/ProxyOFTPool.sol";
-import "../layerzero/interfaces/IOFTCore.sol";
+import "../anyswap/AnyCallAppBase.sol";
+import "../anyswap/AnyswapChessPool.sol";
+import "../interfaces/IAnyswapV6ERC20.sol";
 
-contract VotingEscrowV4 is
+contract VotingEscrowV3 is
     IVotingEscrow,
     OwnableUpgradeable,
     ReentrancyGuard,
@@ -28,10 +28,10 @@ contract VotingEscrowV4 is
     VotingEscrowCheckpoint,
     ManagedPausable,
     ProxyUtility,
-    UpgradeableNonblockingLzApp
+    AnyCallAppBase
 {
     /// @dev Reserved storage slots for future base contract upgrades
-    uint256[24] private _reservedSlots;
+    uint256[29] private _reservedSlots;
 
     using Math for uint256;
     using SafeMath for uint256;
@@ -49,7 +49,7 @@ contract VotingEscrowV4 is
 
     event CrossChainSent(
         address indexed account,
-        uint256 toLzChainID,
+        uint256 toChainID,
         uint256 amount,
         uint256 unlockTime
     );
@@ -70,8 +70,8 @@ contract VotingEscrowV4 is
 
     address public immutable override token;
 
-    /// @notice Address of ChessPool.
-    address public immutable chessPool;
+    /// @notice Address of AnyswapChessPool (on BNB Chain) or AnyswapChess (on other chains).
+    address public immutable anyswapChess;
 
     string public name;
     string public symbol;
@@ -104,19 +104,17 @@ contract VotingEscrowV4 is
     /// @notice Start timestamp of the trading week in which the last checkpoint is made
     uint256 public checkpointWeek;
 
-    /// @dev [Obsolete] Mapping of chain ID => VotingEscrow address on that chain
-    mapping(uint256 => address) private _obsolete_crossChainVotingEscrows;
+    /// @notice Mapping of chain ID => VotingEscrow address on that chain
+    mapping(uint256 => address) public crossChainVotingEscrows;
 
     constructor(
         address token_,
         uint256 maxTime_,
-        address chessPool_,
-        address endpoint_
-    ) public VotingEscrowCheckpoint(maxTime_) UpgradeableNonblockingLzApp(endpoint_) {
+        address anyswapChess_,
+        address anyCallProxy_
+    ) public VotingEscrowCheckpoint(maxTime_) AnyCallAppBase(anyCallProxy_, true, true) {
         token = token_;
-        chessPool = chessPool_;
-        address chess = IOFTCore(chessPool_).token();
-        require(token_ == chess);
+        anyswapChess = anyswapChess_;
     }
 
     /// @dev Initialize the contract. The contract is designed to be used with OpenZeppelin's
@@ -290,14 +288,13 @@ contract VotingEscrowV4 is
 
     /// @notice Transfer locked CHESS to the VotingEscrow on another chain. User should pay cross
     ///         chain fee in native currency (e.g. ETH on Ethereum) when calling this function.
-    ///         Exact fee amount can be queried from the LayerZero Endpoint contract, i.e.
-    ///         `ILayerZeroEndpoint(thisContract.lzEndpoint()).estimateFees`.
+    ///         Exact fee amount can be queried from the AnyCall proxy contract, i.e.
+    ///         `IAnyCallV6Proxy(thisContract.anyCallProxy()).calcSrcFees(thisContract, toChainID, 96)`.
     /// @param amount Amount of locked CHESS
-    /// @param toLzChainID Target chain ID
+    /// @param toChainID Target chain ID
     function veChessCrossChain(
         uint256 amount,
-        uint16 toLzChainID,
-        bytes memory adapterParams
+        uint256 toChainID
     ) external payable nonReentrant whenNotPaused {
         LockedBalance memory lockedBalance = locked[msg.sender];
         require(amount > 0, "Zero value");
@@ -315,18 +312,20 @@ contract VotingEscrowV4 is
         );
         locked[msg.sender].amount = newAmount;
 
-        // Deposit CHESS to CHESS pool
-        IERC20(token).safeTransfer(chessPool, amount);
+        // Deposit CHESS to AnySwap pool
+        address underlying = IAnyswapV6ERC20(anyswapChess).underlying();
+        if (underlying != address(0)) {
+            // anyswapChess is an AnyswapChessPool contract
+            require(token == underlying);
+            IERC20(token).safeTransfer(anyswapChess, amount);
+        } else {
+            // anyswapChess is an AnyswapChess contract
+            IAnyswapV6ERC20(anyswapChess).burn(address(this), amount);
+        }
 
-        _checkGasLimit(toLzChainID, 0 /*type*/, adapterParams, 0 /*extraGas*/);
-        _lzSend(
-            toLzChainID,
-            abi.encode(msg.sender, amount, lockedBalance.unlockTime),
-            msg.sender == tx.origin ? msg.sender : payable(owner()), // To avoid reentrancy
-            address(0x0),
-            adapterParams,
-            msg.value
-        );
+        address to = crossChainVotingEscrows[toChainID];
+        require(to != address(0), "Unknown chain ID");
+        _anyCall(to, toChainID, abi.encode(msg.sender, amount, lockedBalance.unlockTime));
 
         if (callback != address(0)) {
             IVotingEscrowCallback(callback).syncWithVotingEscrow(msg.sender);
@@ -340,16 +339,22 @@ contract VotingEscrowV4 is
         }
 
         emit AmountDecreased(msg.sender, amount);
-        emit CrossChainSent(msg.sender, toLzChainID, amount, lockedBalance.unlockTime);
+        emit CrossChainSent(msg.sender, toChainID, amount, lockedBalance.unlockTime);
+    }
+
+    function _checkAnyExecuteFrom(
+        address from,
+        uint256 fromChainID
+    ) internal override returns (bool) {
+        return from == crossChainVotingEscrows[fromChainID];
+    }
+
+    function _checkAnyFallbackTo(address to, uint256 fromChainID) internal override returns (bool) {
+        return to == crossChainVotingEscrows[fromChainID];
     }
 
     /// @dev Receive cross chain veCHESS transfer.
-    function _nonblockingLzReceive(
-        uint16 fromChainID,
-        bytes memory,
-        uint64,
-        bytes memory data
-    ) internal override {
+    function _anyExecute(uint256 fromChainID, bytes calldata data) internal override {
         (address account, uint256 amount, uint256 unlockTime) = abi.decode(
             data,
             (address, uint256, uint256)
@@ -357,11 +362,21 @@ contract VotingEscrowV4 is
         _receiveCrossChain(account, amount, unlockTime, fromChainID);
     }
 
+    /// @dev When `veChessCrossChain` failed, this function is called by the anyCall proxy
+    ///      to add locked CHESS back to the account.
+    function _anyFallback(bytes memory data) internal override {
+        (address account, uint256 amount, uint256 unlockTime) = abi.decode(
+            data,
+            (address, uint256, uint256)
+        );
+        _receiveCrossChain(account, amount, unlockTime, 0);
+    }
+
     function _receiveCrossChain(
         address account,
         uint256 amount,
         uint256 unlockTime,
-        uint16 fromChainID
+        uint256 fromChainID
     ) private nonReentrant {
         require(
             unlockTime + 1 weeks == _endOfWeek(unlockTime),
@@ -389,9 +404,16 @@ contract VotingEscrowV4 is
         locked[account].amount = newAmount;
         locked[account].unlockTime = newUnlockTime;
 
-        // Withdraw CHESS from CHESS pool
-        ProxyOFTPool(chessPool).withdrawUnderlying(amount);
-
+        // Withdraw CHESS from AnySwap pool
+        address underlying = IAnyswapV6ERC20(anyswapChess).underlying();
+        if (underlying != address(0)) {
+            // anyswapChess is an AnyswapChessPool contract
+            require(token == underlying);
+            AnyswapChessPool(anyswapChess).withdrawUnderlying(amount);
+        } else {
+            // anyswapChess is an AnyswapChess contract
+            IAnyswapV6ERC20(anyswapChess).mint(address(this), amount);
+        }
         emit AmountIncreased(account, amount);
         if (newUnlockTime != lockedBalance.unlockTime) {
             emit UnlockTimeIncreased(account, newUnlockTime);
@@ -413,6 +435,14 @@ contract VotingEscrowV4 is
             "Must be null or a contract"
         );
         callback = newCallback;
+    }
+
+    function updateCrossChainVotingEscrow(
+        uint256 chainID,
+        address votingEscrow
+    ) external onlyOwner {
+        crossChainVotingEscrows[chainID] = votingEscrow;
+        emit CrossChainVotingEscrowUpdated(chainID, votingEscrow);
     }
 
     function _assertNotContract() private view {
