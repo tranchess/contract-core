@@ -7,6 +7,7 @@ import { updateHreSigner } from "./signers";
 import { BigNumber, Contract } from "ethers";
 import { FundAddresses } from "./deploy_fund";
 import { FeeDistrubtorAddresses } from "./deploy_fee_distributor";
+import { waitForContract } from "./utils";
 
 export interface StableSwapAddresses extends Addresses {
     kind: string;
@@ -99,6 +100,7 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
         const SwapBonus = await ethers.getContractFactory("SwapBonus");
         const swapBonus = await SwapBonus.deploy(liquidityGaugeAddress, bonus.address);
         console.log(`SwapBonus: ${swapBonus.address}`);
+        await waitForContract(hre, swapBonus.address);
 
         let stableSwap: Contract;
         switch (kind) {
@@ -132,6 +134,7 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
             }
         }
         console.log(`StableSwap: ${stableSwap.address}`);
+        await waitForContract(hre, stableSwap.address);
 
         const chessSchedule = await ethers.getContractAt(
             "ChessSchedule",
@@ -150,6 +153,7 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
             swapBonus.address
         );
         console.log(`LiquidityGauge: ${liquidityGauge.address}`);
+        await waitForContract(hre, liquidityGauge.address);
 
         if (kind == "Bishop") {
             const controllerBallot = await ethers.getContractAt(
@@ -158,7 +162,7 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
             );
             if ((await controllerBallot.owner()) === deployer.address) {
                 console.log("Adding LiquidityGauge to ControllerBallot");
-                await controllerBallot.addPool(liquidityGauge.address);
+                await (await controllerBallot.addPool(liquidityGauge.address)).wait();
                 console.log(
                     "NOTE: Please transfer ownership of ControllerBallot to Timelock later"
                 );
@@ -172,7 +176,7 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
             );
             if ((await chessSchedule.owner()) === deployer.address) {
                 console.log("Adding LiquidityGauge to ChessSchedule's minter list");
-                await chessSchedule.addMinter(liquidityGauge.address);
+                await (await chessSchedule.addMinter(liquidityGauge.address)).wait();
                 console.log("NOTE: Please transfer ownership of ChessSchedule to Timelock later");
             } else {
                 console.log("NOTE: Please add LiquidityGauge to ChessSchedule's minter list");
@@ -180,11 +184,11 @@ task("deploy_stable_swap", "Deploy stable swap contracts")
         }
 
         console.log("Transfering StableSwap's ownership to TimelockController");
-        await stableSwap.transferOwnership(governanceAddresses.timelockController);
+        await (await stableSwap.transferOwnership(governanceAddresses.timelockController)).wait();
         if (GOVERNANCE_CONFIG.TREASURY) {
             console.log("Transfering StableSwap's pauser and SwapBonus's ownership to treasury");
-            await stableSwap.transferPauserRole(GOVERNANCE_CONFIG.TREASURY);
-            await swapBonus.transferOwnership(GOVERNANCE_CONFIG.TREASURY);
+            await (await stableSwap.transferPauserRole(GOVERNANCE_CONFIG.TREASURY)).wait();
+            await (await swapBonus.transferOwnership(GOVERNANCE_CONFIG.TREASURY)).wait();
         } else {
             console.log(
                 "NOTE: Please transfer StableSwap's pauser and SwapBonus's ownership to treasury"

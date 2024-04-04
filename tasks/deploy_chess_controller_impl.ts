@@ -3,6 +3,7 @@ import { endOfWeek } from "../config";
 import { Addresses, saveAddressFile, loadAddressFile, newAddresses } from "./address_file";
 import type { ControllerBallotAddresses } from "./deploy_controller_ballot";
 import { updateHreSigner } from "./signers";
+import { waitForContract } from "./utils";
 
 export interface ChessControllerImplAddresses extends Addresses {
     chessControllerImpl: string;
@@ -29,6 +30,7 @@ task("deploy_chess_controller_impl", "Deploy ChessControllerV4 implementation")
             controllerBallotAddress
         );
         console.log(`ChessController implementation: ${chessControllerImpl.address}`);
+        await waitForContract(hre, chessControllerImpl.address);
 
         const addresses: ChessControllerImplAddresses = {
             ...newAddresses(hre),

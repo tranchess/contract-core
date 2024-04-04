@@ -15,12 +15,17 @@ import "../interfaces/IPrimaryMarketV5.sol";
 import "../interfaces/IFundV5.sol";
 import "../interfaces/IFundForPrimaryMarketV4.sol";
 import "../interfaces/ITrancheIndexV2.sol";
-import "../interfaces/IWrappedERC20.sol";
-import "../interfaces/IWstETH.sol";
 
-contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, Ownable {
+contract MaturityPrimaryMarket is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, Ownable {
     event Created(address indexed account, uint256 underlying, uint256 outQ);
     event Redeemed(address indexed account, uint256 inQ, uint256 underlying, uint256 feeQ);
+    event RedeemedBR(
+        address indexed account,
+        uint256 inB,
+        uint256 inR,
+        uint256 underlying,
+        uint256 feeQ
+    );
     event Split(address indexed account, uint256 inQ, uint256 outB, uint256 outR);
     event Merged(address indexed account, uint256 outQ, uint256 inB, uint256 inR, uint256 feeQ);
     event RedemptionQueued(address indexed account, uint256 index, uint256 underlying);
@@ -57,22 +62,6 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
     ///
     ///      Set it to uint(-1) to skip the check and save gas.
     uint256 public fundCap;
-
-    /// @notice Queue of redemptions that cannot be claimed yet. Key is a sequential index
-    ///         starting from zero. Value is a tuple of user address, redeemed underlying and
-    ///         prefix sum before this entry.
-    mapping(uint256 => QueuedRedemption) public queuedRedemptions;
-
-    /// @notice Total underlying tokens of claimable queued redemptions.
-    uint256 public claimableUnderlying;
-
-    /// @notice Index of the redemption queue head. All redemptions with index smaller than
-    ///         this value can be claimed now.
-    uint256 public redemptionQueueHead;
-
-    /// @notice Index of the redemption following the last entry of the queue. The next queued
-    ///         redemption will be written at this index.
-    uint256 public redemptionQueueTail;
 
     constructor(
         address fund_,
@@ -157,6 +146,23 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         underlying = _getRedemption(inQ - feeQ);
     }
 
+    /// @notice Calculate the result of a redemption using BISHOP and ROOK.
+    ///         Q = B / splitRatio * navB / navSum
+    ///         Q = R / splitRatio * navR / navSum
+    /// @param inB Spent BISHOP amount
+    /// @param inR Spent ROOK amount
+    /// @return underlying Redeemed underlying amount
+    function getRedemptionBR(uint256 inB, uint256 inR) public view returns (uint256 underlying) {
+        uint256 settledDay = IFundV5(fund).getSettledDay();
+        (uint256 navB, uint256 navR) = IFundV5(fund).historicalNavs(settledDay);
+        uint256 navSum = navB.mul(_weightB).add(navR);
+        uint256 splitRatio = IFundV3(fund).splitRatio();
+        uint256 amountQFromB = inB.mul(navB).div(navSum).divideDecimal(splitRatio);
+        uint256 amountQFromR = inR.mul(navR).div(navSum).divideDecimal(splitRatio);
+        // Calculate the equivalent underlying amount.
+        underlying = _getRedemption(amountQFromB.add(amountQFromR));
+    }
+
     /// @notice Calculate the amount of QUEEN that can be redeemed for at least the given amount
     ///         of underlying tokens.
     /// @dev The return value may not be the minimum solution due to rounding errors.
@@ -224,11 +230,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         uint256 outQBeforeFee = inB.divideDecimal(splitRatio.mul(_weightB));
         feeQ = outQBeforeFee.multiplyDecimal(mergeFeeRate);
         outQ = outQBeforeFee.sub(feeQ);
-        if (IFundV5(fund).frozen()) {
-            inR = 0;
-        } else {
-            inR = outQBeforeFee.multiplyDecimal(splitRatio);
-        }
+        inR = outQBeforeFee.multiplyDecimal(splitRatio);
     }
 
     /// @notice Calculate the result of a merge using ROOK.
@@ -239,7 +241,6 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
     function getMergeByR(
         uint256 inR
     ) public view override returns (uint256 inB, uint256 outQ, uint256 feeQ) {
-        require(!IFundV5(fund).frozen(), "Fund frozen");
         inB = inR.mul(_weightB);
         uint256 splitRatio = IFundV5(fund).splitRatio();
         uint256 outQBeforeFee = inR.divideDecimal(splitRatio);
@@ -247,73 +248,9 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         outQ = outQBeforeFee.sub(feeQ);
     }
 
-    /// @notice Return index of the first queued redemption that cannot be claimed now.
-    ///         Users can use this function to determine which indices can be passed to
-    ///         `claimRedemptions()`.
-    /// @return Index of the first redemption that cannot be claimed now
-    function getNewRedemptionQueueHead() external view returns (uint256) {
-        uint256 available = _tokenUnderlying.balanceOf(fund);
-        uint256 l = redemptionQueueHead;
-        uint256 r = redemptionQueueTail;
-        uint256 startPrefixSum = queuedRedemptions[l].previousPrefixSum;
-        // overflow is desired
-        if (queuedRedemptions[r].previousPrefixSum - startPrefixSum <= available) {
-            return r;
-        }
-        // Iteration count is bounded by log2(tail - head), which is at most 256.
-        while (l + 1 < r) {
-            uint256 m = (l + r) / 2;
-            if (queuedRedemptions[m].previousPrefixSum - startPrefixSum <= available) {
-                l = m;
-            } else {
-                r = m;
-            }
-        }
-        return l;
-    }
-
-    /// @notice Search in the redemption queue.
-    /// @param account Owner of the redemptions, or zero address to return all redemptions
-    /// @param startIndex Redemption index where the search starts, or zero to start from the head
-    /// @param maxIterationCount Maximum number of redemptions to be scanned, or zero for no limit
-    /// @return indices Indices of found redemptions
-    /// @return underlying Total underlying of found redemptions
-    function getQueuedRedemptions(
-        address account,
-        uint256 startIndex,
-        uint256 maxIterationCount
-    ) external view returns (uint256[] memory indices, uint256 underlying) {
-        uint256 head = redemptionQueueHead;
-        uint256 tail = redemptionQueueTail;
-        if (startIndex == 0) {
-            startIndex = head;
-        } else {
-            require(startIndex >= head && startIndex <= tail, "startIndex out of bound");
-        }
-        uint256 endIndex = tail;
-        if (maxIterationCount != 0 && tail - startIndex > maxIterationCount) {
-            endIndex = startIndex + maxIterationCount;
-        }
-        indices = new uint256[](endIndex - startIndex);
-        uint256 count = 0;
-        for (uint256 i = startIndex; i < endIndex; i++) {
-            if (account == address(0) || queuedRedemptions[i].account == account) {
-                indices[count] = i;
-                underlying += queuedRedemptions[i].underlying;
-                count++;
-            }
-        }
-        if (count != endIndex - startIndex) {
-            // Shrink the array
-            assembly {
-                mstore(indices, count)
-            }
-        }
-    }
-
     /// @notice Return whether the fund can change its primary market to another contract.
     function canBeRemovedFromFund() external view override returns (bool) {
-        return redemptionQueueHead == redemptionQueueTail;
+        return true;
     }
 
     /// @notice Create QUEEN using underlying tokens. This function should be called by
@@ -327,8 +264,8 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         address recipient,
         uint256 minOutQ,
         uint256 version
-    ) external override nonReentrant returns (uint256 outQ) {
-        uint256 underlying = _tokenUnderlying.balanceOf(address(this)).sub(claimableUnderlying);
+    ) external override nonReentrant whenFundActive returns (uint256 outQ) {
+        uint256 underlying = _tokenUnderlying.balanceOf(address(this));
         outQ = getCreation(underlying);
         require(outQ >= minOutQ && outQ > 0, "Min QUEEN created");
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_Q, recipient, outQ, version);
@@ -348,59 +285,10 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         uint256 inQ,
         uint256 minUnderlying,
         uint256 version
-    ) external override nonReentrant returns (uint256 underlying) {
-        underlying = _redeem(recipient, inQ, minUnderlying, version);
-    }
-
-    /// @notice Redeem QUEEN to get native currency back. The underlying must be wrapped token
-    ///         of the native currency. Revert if there are still some queued redemptions that
-    ///         cannot be claimed now.
-    /// @param recipient Address that will receive redeemed underlying tokens
-    /// @param inQ Spent QUEEN amount
-    /// @param minUnderlying Minimum amount of underlying tokens to be received
-    /// @param version The latest rebalance version
-    /// @return underlying Received underlying amount
-    function redeemAndUnwrap(
-        address recipient,
-        uint256 inQ,
-        uint256 minUnderlying,
-        uint256 version
-    ) external override nonReentrant returns (uint256 underlying) {
-        underlying = _redeem(address(this), inQ, minUnderlying, version);
-        IWrappedERC20(address(_tokenUnderlying)).withdraw(underlying);
-        (bool success, ) = recipient.call{value: underlying}("");
-        require(success, "Transfer failed");
-    }
-
-    /// @notice Redeem QUEEN to get stETH back. The underlying must be wstETH.
-    ///         Revert if there are still some queued redemptions that cannot be claimed now.
-    /// @param recipient Address that will receive redeemed underlying tokens
-    /// @param inQ Spent QUEEN amount
-    /// @param minStETH Minimum amount of stETH to be received
-    /// @param version The latest rebalance version
-    /// @return stETHAmount Received underlying amount
-    function redeemAndUnwrapWstETH(
-        address recipient,
-        uint256 inQ,
-        uint256 minStETH,
-        uint256 version
-    ) external override nonReentrant returns (uint256 stETHAmount) {
-        uint256 underlying = _redeem(address(this), inQ, 0, version);
-        stETHAmount = IWstETH(address(_tokenUnderlying)).unwrap(underlying);
-        require(stETHAmount >= minStETH && stETHAmount > 0, "Min underlying redeemed");
-        IERC20(IWstETH(address(_tokenUnderlying)).stETH()).safeTransfer(recipient, stETHAmount);
-    }
-
-    function _redeem(
-        address recipient,
-        uint256 inQ,
-        uint256 minUnderlying,
-        uint256 version
-    ) private allowRedemption returns (uint256 underlying) {
+    ) external override nonReentrant allowRedemption returns (uint256 underlying) {
         uint256 feeQ;
         (underlying, feeQ) = getRedemption(inQ);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
-        _popRedemptionQueue(0);
         require(underlying >= minUnderlying && underlying > 0, "Min underlying redeemed");
         // Redundant check for user-friendly revert message.
         require(underlying <= _tokenUnderlying.balanceOf(fund), "Not enough underlying in fund");
@@ -408,148 +296,37 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         emit Redeemed(recipient, inQ, underlying, feeQ);
     }
 
-    /// @notice Redeem QUEEN and wait in the redemption queue. Redeemed underlying tokens will
-    ///         be claimable when the fund has enough balance to pay this redemption and all
-    ///         previous ones in the queue.
-    /// @param recipient Address that will receive redeemed underlying tokens
-    /// @param inQ Spent QUEEN amount
-    /// @param minUnderlying Minimum amount of underlying tokens to be received
-    /// @param version The latest rebalance version
-    /// @return underlying Received underlying amount
-    /// @return index Index of the queued redemption
-    function queueRedemption(
+    function redeemBR(
         address recipient,
-        uint256 inQ,
+        uint256 inB,
+        uint256 inR,
         uint256 minUnderlying,
         uint256 version
-    ) external override nonReentrant allowRedemption returns (uint256 underlying, uint256 index) {
-        uint256 feeQ;
-        (underlying, feeQ) = getRedemption(inQ);
-        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
+    ) external nonReentrant allowRedemption whenFundFrozen returns (uint256 underlying) {
+        underlying = getRedemptionBR(inB, inR);
+        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_B, msg.sender, inB, version);
+        IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_R, msg.sender, inR, version);
         require(underlying >= minUnderlying && underlying > 0, "Min underlying redeemed");
-        index = redemptionQueueTail;
-        QueuedRedemption storage newRedemption = queuedRedemptions[index];
-        newRedemption.account = recipient;
-        newRedemption.underlying = underlying;
-        // overflow is desired
-        queuedRedemptions[index + 1].previousPrefixSum =
-            newRedemption.previousPrefixSum +
-            underlying;
-        redemptionQueueTail = index + 1;
-        IFundForPrimaryMarketV4(fund).primaryMarketAddDebtAndFee(underlying, feeQ);
-        emit Redeemed(recipient, inQ, underlying, feeQ);
-        emit RedemptionQueued(recipient, index, underlying);
-    }
-
-    /// @notice Remove a given number of redemptions from the front of the redemption queue and
-    ///         fetch underlying tokens of these redemptions from the fund. Revert if the fund
-    ///         cannot pay these redemptions now.
-    /// @param count The number of redemptions to be removed, or zero to completely empty the queue
-    function popRedemptionQueue(uint256 count) external nonReentrant {
-        _popRedemptionQueue(count);
-    }
-
-    function _popRedemptionQueue(uint256 count) private {
-        uint256 oldHead = redemptionQueueHead;
-        uint256 oldTail = redemptionQueueTail;
-        uint256 newHead;
-        if (count == 0) {
-            if (oldHead == oldTail) {
-                return;
-            }
-            newHead = oldTail;
-        } else {
-            newHead = oldHead.add(count);
-            require(newHead <= oldTail, "Redemption queue out of bound");
-        }
-        // overflow is desired
-        uint256 requiredUnderlying = queuedRedemptions[newHead].previousPrefixSum -
-            queuedRedemptions[oldHead].previousPrefixSum;
         // Redundant check for user-friendly revert message.
-        require(
-            requiredUnderlying <= _tokenUnderlying.balanceOf(fund),
-            "Not enough underlying in fund"
-        );
-        claimableUnderlying = claimableUnderlying.add(requiredUnderlying);
-        IFundForPrimaryMarketV4(fund).primaryMarketPayDebt(requiredUnderlying);
-        redemptionQueueHead = newHead;
-        emit RedemptionPopped(newHead - oldHead, newHead, requiredUnderlying);
+        require(underlying <= _tokenUnderlying.balanceOf(fund), "Not enough underlying in fund");
+        IFundForPrimaryMarketV4(fund).primaryMarketTransferUnderlying(recipient, underlying, 0);
+        emit RedeemedBR(recipient, inB, inR, underlying, 0);
     }
 
-    /// @notice Claim underlying tokens of queued redemptions. All these redemptions must
-    ///         belong to the same account.
-    /// @param account Recipient of the redemptions
-    /// @param indices Indices of the redemptions in the queue, which must be in increasing order
-    /// @return underlying Total claimed underlying amount
-    function claimRedemptions(
-        address account,
-        uint256[] calldata indices
-    ) external override nonReentrant returns (uint256 underlying) {
-        underlying = _claimRedemptions(account, indices);
-        _tokenUnderlying.safeTransfer(account, underlying);
-    }
-
-    /// @notice Claim native currency of queued redemptions. The underlying must be wrapped token
-    ///         of the native currency. All these redemptions must belong to the same account.
-    /// @param account Recipient of the redemptions
-    /// @param indices Indices of the redemptions in the queue, which must be in increasing order
-    /// @return underlying Total claimed underlying amount
-    function claimRedemptionsAndUnwrap(
-        address account,
-        uint256[] calldata indices
-    ) external override nonReentrant returns (uint256 underlying) {
-        underlying = _claimRedemptions(account, indices);
-        IWrappedERC20(address(_tokenUnderlying)).withdraw(underlying);
-        (bool success, ) = account.call{value: underlying}("");
-        require(success, "Transfer failed");
-    }
-
-    /// @notice Claim stETH of queued redemptions. The underlying must be wstETH.
-    ///         All these redemptions must belong to the same account.
-    /// @param account Recipient of the redemptions
-    /// @param indices Indices of the redemptions in the queue, which must be in increasing order
-    /// @return stETHAmount Total claimed stETH amount
-    function claimRedemptionsAndUnwrapWstETH(
-        address account,
-        uint256[] calldata indices
-    ) external override nonReentrant returns (uint256 stETHAmount) {
-        uint256 underlying = _claimRedemptions(account, indices);
-        stETHAmount = IWstETH(address(_tokenUnderlying)).unwrap(underlying);
-        IERC20(IWstETH(address(_tokenUnderlying)).stETH()).safeTransfer(account, stETHAmount);
-    }
-
-    function _claimRedemptions(
-        address account,
-        uint256[] calldata indices
-    ) private returns (uint256 underlying) {
-        uint256 count = indices.length;
-        if (count == 0) {
-            return 0;
-        }
-        uint256 head = redemptionQueueHead;
-        if (indices[count - 1] >= head) {
-            _popRedemptionQueue(indices[count - 1] - head + 1);
-        }
-        for (uint256 i = 0; i < count; i++) {
-            require(i == 0 || indices[i] > indices[i - 1], "Indices out of order");
-            QueuedRedemption storage redemption = queuedRedemptions[indices[i]];
-            uint256 redemptionUnderlying = redemption.underlying;
-            require(
-                redemption.account == account && redemptionUnderlying != 0,
-                "Invalid redemption index"
-            );
-            underlying = underlying.add(redemptionUnderlying);
-            emit RedemptionClaimed(account, indices[i], redemptionUnderlying);
-            delete queuedRedemptions[indices[i]];
-        }
-        claimableUnderlying = claimableUnderlying.sub(underlying);
+    function redeemAndUnwrap(
+        address,
+        uint256,
+        uint256,
+        uint256
+    ) external override returns (uint256) {
+        revert("Not Supported");
     }
 
     function split(
         address recipient,
         uint256 inQ,
         uint256 version
-    ) external override returns (uint256 outB, uint256 outR) {
+    ) external override whenFundActive returns (uint256 outB, uint256 outR) {
         (outB, outR) = getSplit(inQ);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_B, recipient, outB, version);
@@ -561,7 +338,7 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         address recipient,
         uint256 inB,
         uint256 version
-    ) external override returns (uint256 outQ) {
+    ) external override whenFundActive returns (uint256 outQ) {
         uint256 inR;
         uint256 feeQ;
         (inR, outQ, feeQ) = getMerge(inB);
@@ -604,9 +381,6 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
         _updateMergeFeeRate(newMergeFeeRate);
     }
 
-    /// @notice Receive unwrapped transfer from the wrapped token.
-    receive() external payable {}
-
     modifier onlyFund() {
         require(msg.sender == fund, "Only fund");
         _;
@@ -615,5 +389,51 @@ contract PrimaryMarketV5 is IPrimaryMarketV5, ReentrancyGuard, ITrancheIndexV2, 
     modifier allowRedemption() {
         require(redemptionFlag, "Redemption N/A");
         _;
+    }
+
+    modifier whenFundFrozen() {
+        require(IFundV5(fund).frozen(), "Fund not frozen");
+        _;
+    }
+
+    modifier whenFundActive() {
+        require(!IFundV5(fund).frozen(), "Fund frozen");
+        _;
+    }
+
+    function queueRedemption(
+        address,
+        uint256,
+        uint256,
+        uint256
+    ) external override returns (uint256, uint256) {
+        revert("Not Supported");
+    }
+
+    function claimRedemptions(address, uint256[] calldata) external override returns (uint256) {
+        revert("Not Supported");
+    }
+
+    function claimRedemptionsAndUnwrap(
+        address,
+        uint256[] calldata
+    ) external override returns (uint256) {
+        revert("Not Supported");
+    }
+
+    function claimRedemptionsAndUnwrapWstETH(
+        address,
+        uint256[] calldata
+    ) external override returns (uint256) {
+        revert("Not Supported");
+    }
+
+    function redeemAndUnwrapWstETH(
+        address,
+        uint256,
+        uint256,
+        uint256
+    ) external override returns (uint256) {
+        revert("Not Supported");
     }
 }
