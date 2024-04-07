@@ -275,18 +275,33 @@ contract MaturityFund is
     }
 
     /// @notice Equivalent ROOK supply, as if all QUEEN are split.
-    function getEquivalentTotalR() public view override returns (uint256) {
+    function getEquivalentTotalR() public view override onlyNotFrozen returns (uint256) {
         return _totalSupplies[TRANCHE_Q].multiplyDecimal(splitRatio).add(_totalSupplies[TRANCHE_R]);
     }
 
     /// @notice Equivalent BISHOP supply, as if all QUEEN are split.
-    function getEquivalentTotalB() public view override returns (uint256) {
+    function getEquivalentTotalB() public view override onlyNotFrozen returns (uint256) {
         return getEquivalentTotalR().mul(weightB);
     }
 
     /// @notice Equivalent QUEEN supply, as if all BISHOP and ROOK are merged.
     function getEquivalentTotalQ() public view override returns (uint256) {
-        return _totalSupplies[TRANCHE_R].divideDecimal(splitRatio).add(_totalSupplies[TRANCHE_Q]);
+        if (!frozen) {
+            return
+                _totalSupplies[TRANCHE_R].divideDecimal(splitRatio).add(_totalSupplies[TRANCHE_Q]);
+        } else {
+            uint256 settledDay = getSettledDay();
+            uint256 navB = _historicalNavB[settledDay];
+            uint256 navR = _historicalNavR[settledDay];
+            uint256 navSum = navB.mul(weightB).add(navR);
+            uint256 amountQFromB = _totalSupplies[TRANCHE_B].mul(navB).div(navSum).divideDecimal(
+                splitRatio
+            );
+            uint256 amountQFromR = _totalSupplies[TRANCHE_R].mul(navR).div(navSum).divideDecimal(
+                splitRatio
+            );
+            return _totalSupplies[TRANCHE_Q].add(amountQFromB).add(amountQFromR);
+        }
     }
 
     /// @notice Return the rebalance matrix at a given index. A zero struct is returned
