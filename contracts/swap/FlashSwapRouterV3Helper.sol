@@ -11,8 +11,12 @@ contract FlashSwapRouterV3Helper {
     }
 
     /// @dev Only meant for an off-chain client to call with eth_call.
-    ///      When inQuote does not increase monotonically with outR,
-    ///      this function does not guarantee to return the optimal solution.
+    ///      This function uses binary search to find the maximum `outR` in the range `[minOutR, maxOutR)`
+    ///      such that `getBuyR(outR).quoteDelta <= inQuote`. When `inQuote` does not increase monotonically
+    ///      with `outR`, this function does not guarantee to return the optimal solution.
+    ///
+    ///      Although `FlashSwapRouterV3.getBuyR` is not a view function, it typically does not alter any
+    ///      contract state. However, this function fails when `FlashSwapRouterV3.getBuyR` does modify some state.
     function getBuyRFromQuote(
         IFundV5 fund,
         bool needWrap,
