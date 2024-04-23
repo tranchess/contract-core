@@ -24,9 +24,10 @@ contract FlashSwapRouterV3Helper {
         address tokenQuote,
         uint256 minOutR,
         uint256 maxOutR,
+        uint256 precision,
         uint256 inQuote
     ) external returns (uint256 outR) {
-        while (minOutR < maxOutR - 1) {
+        while (minOutR + precision < maxOutR) {
             uint256 midOutR = minOutR / 2 + maxOutR / 2;
             (bool success, bytes memory data) = address(flashSwapRouter).call(
                 abi.encodeWithSelector(
