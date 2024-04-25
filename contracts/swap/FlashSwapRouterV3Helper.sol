@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity >=0.6.10 <0.8.0;
 
+import "@openzeppelin/contracts/math/SafeMath.sol";
+
 import "./FlashSwapRouterV3.sol";
 
 contract FlashSwapRouterV3Helper {
+    using SafeMath for uint256;
+
     FlashSwapRouterV3 public immutable flashSwapRouter;
 
     constructor(address flashSwapRouter_) public {
@@ -24,9 +28,10 @@ contract FlashSwapRouterV3Helper {
         address tokenQuote,
         uint256 minOutR,
         uint256 maxOutR,
+        uint256 precision,
         uint256 inQuote
     ) external returns (uint256 outR) {
-        while (minOutR < maxOutR - 1) {
+        while (minOutR.add(precision) < maxOutR) {
             uint256 midOutR = minOutR / 2 + maxOutR / 2;
             (bool success, bytes memory data) = address(flashSwapRouter).call(
                 abi.encodeWithSelector(
