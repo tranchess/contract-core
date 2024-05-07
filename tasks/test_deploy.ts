@@ -132,6 +132,7 @@ task("test_deploy", "Run all deployment scripts on a temp Hardhat node", async (
 
     await hre.run("deploy_maturity_fund", {
         underlying: mockAddresses.mockBusd,
+        shareNames: "Maturity QUEEN,Maturity BISHOP,Maturity ROOK",
         shareSymbols: "maturityQ,maturityB,maturityR",
         maturityDays: "180",
         redemptionFeeRate: "0.0035",
