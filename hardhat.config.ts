@@ -17,7 +17,6 @@ import "./tasks/deploy_fund";
 import "./tasks/deploy_fund_eth";
 import "./tasks/deploy_fund_wsteth";
 import "./tasks/deploy_governance";
-import "./tasks/deploy_liquidity_gauge_curve";
 import "./tasks/deploy_maturity_fund";
 import "./tasks/deploy_misc";
 import "./tasks/deploy_mock";
