@@ -30,13 +30,6 @@ contract LiquidityGaugeV3 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
     using SafeDecimalMath for uint256;
     using SafeERC20 for IERC20;
 
-    struct Distribution {
-        uint256 amountQ;
-        uint256 amountB;
-        uint256 amountR;
-        uint256 quoteAmount;
-    }
-
     uint256 private constant MAX_ITERATIONS = 500;
     uint256 private constant MAX_BOOSTING_FACTOR = 3e18;
     uint256 private constant MAX_BOOSTING_FACTOR_MINUS_ONE = MAX_BOOSTING_FACTOR - 1e18;
@@ -52,12 +45,6 @@ contract LiquidityGaugeV3 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
 
     uint256 private _workingSupply;
     mapping(address => uint256) private _workingBalances;
-
-    uint256 public latestVersion;
-    mapping(uint256 => Distribution) public distributions;
-    mapping(uint256 => uint256) public distributionTotalSupplies;
-    mapping(address => Distribution) public userDistributions;
-    mapping(address => uint256) public userVersions;
 
     uint256 private _chessIntegral;
     uint256 private _chessIntegralTimestamp;
@@ -164,21 +151,24 @@ contract LiquidityGaugeV3 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
             uint256 quoteAmount
         )
     {
-        return _checkpoint(account, balanceOf(account), _workingBalances[account], _workingSupply);
+        (chessAmount, bonusAmount) = _checkpoint(
+            account,
+            balanceOf(account),
+            _workingBalances[account],
+            _workingSupply
+        );
     }
 
     function claimRewards(address account) external override {
         uint256 balance = balanceOf(account);
         uint256 oldWorkingBalance = _workingBalances[account];
         uint256 oldWorkingSupply = _workingSupply;
-        (
-            uint256 chessAmount,
-            uint256 bonusAmount,
-            uint256 amountQ,
-            uint256 amountB,
-            uint256 amountR,
-            uint256 quoteAmount
-        ) = _checkpoint(account, balance, oldWorkingBalance, oldWorkingSupply);
+        (uint256 chessAmount, uint256 bonusAmount) = _checkpoint(
+            account,
+            balance,
+            oldWorkingBalance,
+            oldWorkingSupply
+        );
         _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, balance);
 
         if (chessAmount != 0) {
@@ -188,22 +178,6 @@ contract LiquidityGaugeV3 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
         if (bonusAmount != 0) {
             _bonusToken.safeTransfer(account, bonusAmount);
             delete _claimableBonus[account];
-        }
-        if (amountQ != 0 || amountB != 0 || amountR != 0 || quoteAmount != 0) {
-            uint256 version = latestVersion;
-            if (amountQ != 0) {
-                fund.trancheTransfer(TRANCHE_Q, account, amountQ, version);
-            }
-            if (amountB != 0) {
-                fund.trancheTransfer(TRANCHE_B, account, amountB, version);
-            }
-            if (amountR != 0) {
-                fund.trancheTransfer(TRANCHE_R, account, amountR, version);
-            }
-            if (quoteAmount != 0) {
-                _quoteToken.safeTransfer(account, quoteAmount);
-            }
-            delete userDistributions[account];
         }
     }
 
@@ -221,14 +195,8 @@ contract LiquidityGaugeV3 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
         uint256 amountR,
         uint256 quoteAmount,
         uint256 version
-    ) external override onlyStableSwap {
-        // Update global state
-        distributions[version].amountQ = amountQ;
-        distributions[version].amountB = amountB;
-        distributions[version].amountR = amountR;
-        distributions[version].quoteAmount = quoteAmount;
-        distributionTotalSupplies[version] = totalSupply();
-        latestVersion = version;
+    ) external override {
+        revert("Not implemented");
     }
 
     function _updateWorkingBalance(
@@ -258,20 +226,9 @@ contract LiquidityGaugeV3 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
         uint256 balance,
         uint256 weight,
         uint256 totalWeight
-    )
-        private
-        returns (
-            uint256 chessAmount,
-            uint256 bonusAmount,
-            uint256 amountQ,
-            uint256 amountB,
-            uint256 amountR,
-            uint256 quoteAmount
-        )
-    {
+    ) private returns (uint256 chessAmount, uint256 bonusAmount) {
         chessAmount = _chessCheckpoint(account, weight, totalWeight);
         bonusAmount = _bonusCheckpoint(account, weight, totalWeight);
-        (amountQ, amountB, amountR, quoteAmount) = _distributionCheckpoint(account, balance);
     }
 
     function _chessCheckpoint(
@@ -344,41 +301,5 @@ contract LiquidityGaugeV3 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
         );
         _claimableBonus[account] = amount;
         _bonusUserIntegral[account] = integral;
-    }
-
-    function _distributionCheckpoint(
-        address account,
-        uint256 balance
-    ) private returns (uint256 amountQ, uint256 amountB, uint256 amountR, uint256 quoteAmount) {
-        uint256 version = userVersions[account];
-        uint256 newVersion = latestVersion;
-
-        // Update per-user state
-        Distribution storage userDist = userDistributions[account];
-        amountQ = userDist.amountQ;
-        amountB = userDist.amountB;
-        amountR = userDist.amountR;
-        quoteAmount = userDist.quoteAmount;
-        if (version == newVersion) {
-            return (amountQ, amountB, amountR, quoteAmount);
-        }
-        for (uint256 i = version; i < newVersion; i++) {
-            if (amountQ != 0 || amountB != 0 || amountR != 0) {
-                (amountQ, amountB, amountR) = fund.doRebalance(amountQ, amountB, amountR, i);
-            }
-            Distribution storage dist = distributions[i + 1];
-            uint256 distTotalSupply = distributionTotalSupplies[i + 1];
-            if (distTotalSupply != 0) {
-                amountQ = amountQ.add(dist.amountQ.mul(balance).div(distTotalSupply));
-                amountB = amountB.add(dist.amountB.mul(balance).div(distTotalSupply));
-                amountR = amountR.add(dist.amountR.mul(balance).div(distTotalSupply));
-                quoteAmount = quoteAmount.add(dist.quoteAmount.mul(balance).div(distTotalSupply));
-            }
-        }
-        userDist.amountQ = amountQ;
-        userDist.amountB = amountB;
-        userDist.amountR = amountR;
-        userDist.quoteAmount = quoteAmount;
-        userVersions[account] = newVersion;
     }
 }

@@ -7,9 +7,6 @@ const { parseEther, parseUnits } = ethers.utils;
 const parseUsdc = (value: string) => parseUnits(value, 6);
 import { deployMockForName } from "./mock";
 import {
-    TRANCHE_Q,
-    TRANCHE_B,
-    TRANCHE_R,
     WEEK,
     FixtureWalletMap,
     advanceBlockAtTime,
@@ -58,7 +55,6 @@ const WORKING_SUPPLY = USER1_WORKING_BALANCE.add(USER2_WORKING_BALANCE);
 describe("LiquidityGaugeV3", function () {
     interface FixtureData {
         readonly wallets: FixtureWalletMap;
-        readonly fund: MockContract;
         readonly swap: MockContract;
         readonly chessSchedule: MockContract;
         readonly votingEscrow: MockContract;
@@ -75,7 +71,6 @@ describe("LiquidityGaugeV3", function () {
     let owner: Wallet;
     let addr1: string;
     let addr2: string;
-    let fund: MockContract;
     let swap: MockContract;
     let chessSchedule: MockContract;
     let votingEscrow: MockContract;
@@ -131,7 +126,6 @@ describe("LiquidityGaugeV3", function () {
 
         return {
             wallets: { user1, user2, owner },
-            fund,
             swap,
             chessSchedule,
             votingEscrow,
@@ -152,7 +146,6 @@ describe("LiquidityGaugeV3", function () {
         owner = fixtureData.wallets.owner;
         addr1 = user1.address;
         addr2 = user2.address;
-        fund = fixtureData.fund;
         swap = fixtureData.swap;
         chessSchedule = fixtureData.chessSchedule;
         votingEscrow = fixtureData.votingEscrow;
@@ -486,138 +479,6 @@ describe("LiquidityGaugeV3", function () {
             await setNextBlockTime(rewardStartTimestamp + 7000);
             await liquidityGauge.claimRewards(addr2);
             expect(await usdc.balanceOf(addr2)).to.equal(rate2.mul(1000).add(newRate2.mul(4000)));
-        });
-    });
-
-    describe("Distribution checkpoint", function () {
-        const distQ1 = parseEther("1");
-        const distB1 = parseEther("2");
-        const distR1 = parseEther("3");
-        const distU1 = parseUsdc("4");
-
-        beforeEach(async function () {
-            // Distribution uses balances instead of working balances.
-            // Update working balances so that they do not equal to balances.
-            await votingEscrow.mock.balanceOf.withArgs(addr1).returns(USER1_VE);
-            await votingEscrow.mock.balanceOf.withArgs(addr2).returns(USER2_VE);
-            await votingEscrow.mock.totalSupply.returns(TOTAL_VE);
-            await liquidityGauge.syncWithVotingEscrow(addr1);
-            await liquidityGauge.syncWithVotingEscrow(addr2);
-            await swap.call(liquidityGauge, "distribute", distQ1, distB1, distR1, distU1, 1);
-        });
-
-        it("Should only be called by stable swap", async function () {
-            await expect(liquidityGauge.distribute(0, 0, 0, 0, 1)).to.be.revertedWith(
-                "Only stable swap"
-            );
-        });
-
-        it("Should distribute based on LP distribution", async function () {
-            await liquidityGauge.syncWithVotingEscrow(addr1);
-            expect(await liquidityGauge.latestVersion()).to.equal(1);
-            const dist = await liquidityGauge.distributions(1);
-            expect(dist.amountQ).to.equal(distQ1);
-            expect(dist.amountB).to.equal(distB1);
-            expect(dist.amountR).to.equal(distR1);
-            expect(dist.quoteAmount).to.equal(distU1);
-            const userDist = await liquidityGauge.userDistributions(addr1);
-            expect(userDist.amountQ).to.equal(distQ1.mul(USER1_LP).div(TOTAL_LP));
-            expect(userDist.amountB).to.equal(distB1.mul(USER1_LP).div(TOTAL_LP));
-            expect(userDist.amountR).to.equal(distR1.mul(USER1_LP).div(TOTAL_LP));
-            expect(userDist.quoteAmount).to.equal(distU1.mul(USER1_LP).div(TOTAL_LP));
-            expect(await liquidityGauge.userVersions(addr1)).to.equal(1);
-        });
-
-        it("Should accumulate distributions over rebalances", async function () {
-            await liquidityGauge.syncWithVotingEscrow(addr1);
-            const distQ2 = parseEther("10");
-            const distB2 = parseEther("20");
-            const distR2 = parseEther("30");
-            const distU2 = parseUsdc("40");
-            await swap.call(liquidityGauge, "distribute", distQ2, distB2, distR2, distU2, 2);
-            const distQ3 = parseEther("100");
-            const distB3 = parseEther("200");
-            const distR3 = parseEther("300");
-            const distU3 = parseUsdc("400");
-            await swap.call(liquidityGauge, "distribute", distQ3, distB3, distR3, distU3, 3);
-
-            await expect(() =>
-                swap.call(liquidityGauge, "mint", user1.address, USER1_LP.mul(100))
-            ).to.callMocks(
-                {
-                    func: fund.mock.doRebalance.withArgs(
-                        distQ1.mul(USER1_LP).div(TOTAL_LP),
-                        distB1.mul(USER1_LP).div(TOTAL_LP),
-                        distR1.mul(USER1_LP).div(TOTAL_LP),
-                        1
-                    ),
-                    rets: [parseEther("4"), parseEther("5"), parseEther("6")],
-                },
-                {
-                    func: fund.mock.doRebalance.withArgs(
-                        distQ2.mul(USER1_LP).div(TOTAL_LP).add(parseEther("4")),
-                        distB2.mul(USER1_LP).div(TOTAL_LP).add(parseEther("5")),
-                        distR2.mul(USER1_LP).div(TOTAL_LP).add(parseEther("6")),
-                        2
-                    ),
-                    rets: [parseEther("40"), parseEther("50"), parseEther("60")],
-                }
-            );
-
-            expect(await liquidityGauge.latestVersion()).to.equal(3);
-            const userDist = await liquidityGauge.userDistributions(addr1);
-            expect(userDist.amountQ).to.equal(
-                distQ3.mul(USER1_LP).div(TOTAL_LP).add(parseEther("40"))
-            );
-            expect(userDist.amountB).to.equal(
-                distB3.mul(USER1_LP).div(TOTAL_LP).add(parseEther("50"))
-            );
-            expect(userDist.amountR).to.equal(
-                distR3.mul(USER1_LP).div(TOTAL_LP).add(parseEther("60"))
-            );
-            expect(userDist.quoteAmount).to.equal(
-                distU1.add(distU2).add(distU3).mul(USER1_LP).div(TOTAL_LP)
-            );
-            expect(await liquidityGauge.userVersions(addr1)).to.equal(3);
-        });
-
-        it("Should transfer tokens on claimRewards()", async function () {
-            await usdc.mint(liquidityGauge.address, parseUsdc("4"));
-            const amountQ = distQ1.mul(USER1_LP).div(TOTAL_LP);
-            const amountB = distB1.mul(USER1_LP).div(TOTAL_LP);
-            const amountR = distR1.mul(USER1_LP).div(TOTAL_LP);
-            await expect(() => liquidityGauge.claimRewards(addr1)).to.callMocks(
-                {
-                    func: fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, amountQ, 1),
-                },
-                {
-                    func: fund.mock.trancheTransfer.withArgs(TRANCHE_B, addr1, amountB, 1),
-                },
-                {
-                    func: fund.mock.trancheTransfer.withArgs(TRANCHE_R, addr1, amountR, 1),
-                }
-            );
-            expect(await usdc.balanceOf(addr1)).to.equal(distU1.mul(USER1_LP).div(TOTAL_LP));
-        });
-
-        it("Should transfer tokens on claimRewards() after checkpoint", async function () {
-            await usdc.mint(liquidityGauge.address, parseUsdc("4"));
-            const amountQ = distQ1.mul(USER1_LP).div(TOTAL_LP);
-            const amountB = distB1.mul(USER1_LP).div(TOTAL_LP);
-            const amountR = distR1.mul(USER1_LP).div(TOTAL_LP);
-            await liquidityGauge.claimableRewards(addr1);
-            await expect(() => liquidityGauge.claimRewards(addr1)).to.callMocks(
-                {
-                    func: fund.mock.trancheTransfer.withArgs(TRANCHE_Q, addr1, amountQ, 1),
-                },
-                {
-                    func: fund.mock.trancheTransfer.withArgs(TRANCHE_B, addr1, amountB, 1),
-                },
-                {
-                    func: fund.mock.trancheTransfer.withArgs(TRANCHE_R, addr1, amountR, 1),
-                }
-            );
-            expect(await usdc.balanceOf(addr1)).to.equal(distU1.mul(USER1_LP).div(TOTAL_LP));
         });
     });
 });
