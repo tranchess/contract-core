@@ -42,7 +42,7 @@ task("deploy_stable_swap_maturity", "Deploy stable swap contracts for MaturityFu
         const kind: "Queen" | "Bishop" = args.kind;
 
         const underlyingSymbol: string = args.underlyingSymbol;
-        assert.match(underlyingSymbol, /^[a-zA-Z]+$/, "Invalid symbol");
+        assert.match(underlyingSymbol, /^[a-zA-Z0-9.]+$/, "Invalid symbol");
 
         const quote = await ethers.getContractAt("ERC20", args.quote);
         const quoteSymbol = await quote.symbol();

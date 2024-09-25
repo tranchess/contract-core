@@ -45,17 +45,17 @@ task("deploy_maturity_fund", "Deploy MaturityFund contracts")
         const underlyingToken = await ethers.getContractAt("ERC20", underlyingAddress);
         const underlyingDecimals = await underlyingToken.decimals();
         const underlyingSymbol: string = await underlyingToken.symbol();
-        assert.match(underlyingSymbol, /^[a-zA-Z]+$/, "Invalid symbol");
+        assert.match(underlyingSymbol, /^[a-zA-Z0-9.]+$/, "Invalid symbol");
         console.log(`Underlying: ${underlyingToken.address}`);
 
         const shareSymbols: string[] = args.shareSymbols.split(",").filter(Boolean);
         for (const symbol of shareSymbols) {
-            assert.match(symbol, /^[a-zA-Z]+$/, "Invalid symbol");
+            assert.match(symbol, /^[a-zA-Z0-9.]+$/, "Invalid symbol");
         }
         assert.ok(shareSymbols.length == 3, "Share symbol count is not 3");
         const shareNames: string[] = args.shareNames.split(",").filter(Boolean);
         for (const name of shareNames) {
-            assert.match(name, /^[a-zA-Z ]+$/, "Invalid name");
+            assert.match(name, /^[a-zA-Z0-9. ]+$/, "Invalid name");
         }
         assert.ok(shareNames.length == 3, "Share name count is not 3");
 
