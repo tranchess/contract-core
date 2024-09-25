@@ -24,6 +24,7 @@ import "./tasks/deploy_mock_twap_oracle";
 import "./tasks/deploy_vesting";
 import "./tasks/deploy_voting_escrow_impl";
 import "./tasks/deploy_stable_swap";
+import "./tasks/deploy_stable_swap_maturity";
 import "./tasks/deploy_stable_swap_wsteth";
 import "./tasks/deploy_sub_governance";
 import "./tasks/deploy_swap_router";
