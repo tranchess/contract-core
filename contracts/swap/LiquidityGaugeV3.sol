@@ -92,41 +92,32 @@ contract LiquidityGaugeV3 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
     function mint(address account, uint256 amount) external override onlyStableSwap {
         uint256 oldWorkingBalance = _workingBalances[account];
         uint256 oldWorkingSupply = _workingSupply;
-        uint256 oldBalance = balanceOf(account);
-        _checkpoint(account, oldBalance, oldWorkingBalance, oldWorkingSupply);
+        _checkpoint(account, oldWorkingBalance, oldWorkingSupply);
 
         _mint(account, amount);
-        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, oldBalance.add(amount));
+        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, balanceOf(account));
     }
 
     function burnFrom(address account, uint256 amount) external override onlyStableSwap {
         uint256 oldWorkingBalance = _workingBalances[account];
         uint256 oldWorkingSupply = _workingSupply;
-        uint256 oldBalance = balanceOf(account);
-        _checkpoint(account, oldBalance, oldWorkingBalance, oldWorkingSupply);
+        _checkpoint(account, oldWorkingBalance, oldWorkingSupply);
 
         _burn(account, amount);
-        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, oldBalance.sub(amount));
+        _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, balanceOf(account));
     }
 
     function _transfer(address from, address to, uint256 amount) internal override {
         uint256 oldWorkingBalanceFrom = _workingBalances[from];
         uint256 oldWorkingBalanceTo = _workingBalances[to];
-        uint256 oldBalanceFrom = balanceOf(from);
-        uint256 oldBalanceTo = balanceOf(to);
         uint256 oldWorkingSupply = _workingSupply;
-        _checkpoint(from, oldBalanceFrom, oldWorkingBalanceFrom, oldWorkingSupply);
-        _checkpoint(to, oldBalanceTo, oldWorkingBalanceTo, oldWorkingSupply);
+        _checkpoint(from, oldWorkingBalanceFrom, oldWorkingSupply);
+        _checkpoint(to, oldWorkingBalanceTo, oldWorkingSupply);
 
         super._transfer(from, to, amount);
 
-        _updateWorkingBalance(
-            from,
-            oldWorkingBalanceFrom,
-            oldWorkingSupply,
-            oldBalanceFrom.sub(amount)
-        );
-        _updateWorkingBalance(to, oldWorkingBalanceTo, oldWorkingSupply, oldBalanceTo.add(amount));
+        _updateWorkingBalance(from, oldWorkingBalanceFrom, oldWorkingSupply, balanceOf(from));
+        _updateWorkingBalance(to, oldWorkingBalanceTo, oldWorkingSupply, balanceOf(to));
     }
 
     function workingBalanceOf(address account) external view override returns (uint256) {
@@ -142,18 +133,10 @@ contract LiquidityGaugeV3 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
     )
         external
         override
-        returns (
-            uint256 chessAmount,
-            uint256 bonusAmount,
-            uint256 amountQ,
-            uint256 amountB,
-            uint256 amountR,
-            uint256 quoteAmount
-        )
+        returns (uint256 chessAmount, uint256 bonusAmount, uint256, uint256, uint256, uint256)
     {
         (chessAmount, bonusAmount) = _checkpoint(
             account,
-            balanceOf(account),
             _workingBalances[account],
             _workingSupply
         );
@@ -165,7 +148,6 @@ contract LiquidityGaugeV3 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
         uint256 oldWorkingSupply = _workingSupply;
         (uint256 chessAmount, uint256 bonusAmount) = _checkpoint(
             account,
-            balance,
             oldWorkingBalance,
             oldWorkingSupply
         );
@@ -185,17 +167,11 @@ contract LiquidityGaugeV3 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
         uint256 balance = balanceOf(account);
         uint256 oldWorkingBalance = _workingBalances[account];
         uint256 oldWorkingSupply = _workingSupply;
-        _checkpoint(account, balance, oldWorkingBalance, oldWorkingSupply);
+        _checkpoint(account, oldWorkingBalance, oldWorkingSupply);
         _updateWorkingBalance(account, oldWorkingBalance, oldWorkingSupply, balance);
     }
 
-    function distribute(
-        uint256 amountQ,
-        uint256 amountB,
-        uint256 amountR,
-        uint256 quoteAmount,
-        uint256 version
-    ) external override {
+    function distribute(uint256, uint256, uint256, uint256, uint256) external override {
         revert("Not implemented");
     }
 
@@ -223,7 +199,6 @@ contract LiquidityGaugeV3 is ILiquidityGauge, ITrancheIndexV2, CoreUtility, ERC2
 
     function _checkpoint(
         address account,
-        uint256 balance,
         uint256 weight,
         uint256 totalWeight
     ) private returns (uint256 chessAmount, uint256 bonusAmount) {
