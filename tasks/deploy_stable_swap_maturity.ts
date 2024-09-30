@@ -27,6 +27,7 @@ export interface StableSwapAddresses extends Addresses {
 task("deploy_stable_swap_maturity", "Deploy stable swap contracts for MaturityFund")
     .addParam("kind", "Queen or Bishop stable swap")
     .addParam("underlyingSymbol", "Underlying token symbol of the swap")
+    .addParam("lpSymbol", "LP token symbol")
     .addParam("quote", "Quote token address")
     .addParam("bonus", "Bonus token address")
     .addParam("ampl", "The ampl of the swap")
@@ -43,6 +44,8 @@ task("deploy_stable_swap_maturity", "Deploy stable swap contracts for MaturityFu
 
         const underlyingSymbol: string = args.underlyingSymbol;
         assert.match(underlyingSymbol, /^[a-zA-Z0-9.]+$/, "Invalid symbol");
+        const lpSymbol: string = args.lpSymbol;
+        assert.match(lpSymbol, /^[a-zA-Z0-9.]+$/, "Invalid LP symbol");
 
         const quote = await ethers.getContractAt("ERC20", args.quote);
         const quoteSymbol = await quote.symbol();
@@ -139,7 +142,7 @@ task("deploy_stable_swap_maturity", "Deploy stable swap contracts for MaturityFu
         const LiquidityGauge = await ethers.getContractFactory("LiquidityGaugeV3");
         const liquidityGauge = await LiquidityGauge.deploy(
             `Tranchess ${baseSymbol}-${quoteSymbol}`,
-            `${baseSymbol}LP`,
+            lpSymbol,
             stableSwap.address,
             chessSchedule.address,
             governanceAddresses.chessController,
