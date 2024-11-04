@@ -84,7 +84,7 @@ const config: HardhatUserConfig = {
         excludeContracts: ["test/", "utils/", "misc/"],
     },
     abiExporter: {
-        path: "./artifacts/abi",
+        path: "./exported_abi",
         runOnCompile: true,
         clear: true,
     },
