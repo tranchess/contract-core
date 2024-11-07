@@ -10,6 +10,7 @@
 /cache/
 /artifacts/
 /deployed_addresses/
+/exported_abi/
 /coverage/
 /coverage.json
 /.env
