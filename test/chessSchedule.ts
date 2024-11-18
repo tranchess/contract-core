@@ -216,7 +216,22 @@ const CUMULATIVE_SUPPLY_SCHEDULE: BigNumber[] = [
     parseEther("113954507"),
     parseEther("114303526"),
     parseEther("114652545"),
-    parseEther("114973035"),
+    parseEther("115001563"),
+    parseEther("115350582"),
+    parseEther("115699601"),
+    parseEther("116048619"),
+    parseEther("116397638"),
+    parseEther("116746657"),
+    parseEther("117095675"),
+    parseEther("117444694"),
+    parseEther("117793713"),
+    parseEther("118142731"),
+    parseEther("118491750"),
+    parseEther("118840769"),
+    parseEther("119189787"),
+    parseEther("119538806"),
+    parseEther("119887825"),
+    parseEther("120000000"),
 ];
 
 const WEEKLY_SUPPLY_SCHEDULE: BigNumber[] = [];
