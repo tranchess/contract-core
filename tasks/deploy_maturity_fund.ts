@@ -25,6 +25,7 @@ export interface FundAddresses extends Addresses {
 task("deploy_maturity_fund", "Deploy MaturityFund contracts")
     .addParam("underlying", "Underlying token address")
     .addParam("shareSymbols", "Symbols of share tokens")
+    .addParam("shareNames", "Names of share tokens")
     .addParam("maturityDays", "Maturity days")
     .addParam("redemptionFeeRate", "Primary market redemption fee rate")
     .addParam("mergeFeeRate", "Primary market merge fee rate")
@@ -44,14 +45,19 @@ task("deploy_maturity_fund", "Deploy MaturityFund contracts")
         const underlyingToken = await ethers.getContractAt("ERC20", underlyingAddress);
         const underlyingDecimals = await underlyingToken.decimals();
         const underlyingSymbol: string = await underlyingToken.symbol();
-        assert.match(underlyingSymbol, /^[a-zA-Z]+$/, "Invalid symbol");
+        assert.match(underlyingSymbol, /^[a-zA-Z0-9.]+$/, "Invalid symbol");
         console.log(`Underlying: ${underlyingToken.address}`);
 
         const shareSymbols: string[] = args.shareSymbols.split(",").filter(Boolean);
         for (const symbol of shareSymbols) {
-            assert.match(symbol, /^[a-zA-Z]+$/, "Invalid symbol");
+            assert.match(symbol, /^[a-zA-Z0-9.]+$/, "Invalid symbol");
         }
         assert.ok(shareSymbols.length == 3, "Share symbol count is not 3");
+        const shareNames: string[] = args.shareNames.split(",").filter(Boolean);
+        for (const name of shareNames) {
+            assert.match(name, /^[a-zA-Z0-9. ]+$/, "Invalid name");
+        }
+        assert.ok(shareNames.length == 3, "Share name count is not 3");
 
         const maturityDays = parseInt(args.maturityDays);
         assert.ok(maturityDays > 0 && maturityDays <= 365 * 10, "Invalid maturity days");
@@ -102,30 +108,15 @@ task("deploy_maturity_fund", "Deploy MaturityFund contracts")
         });
 
         const Share = await ethers.getContractFactory("ShareV2");
-        const shareQ = await Share.deploy(
-            `Tranchess ${underlyingSymbol} QUEEN`,
-            `${shareSymbols[0]}`,
-            fundAddress,
-            0
-        );
+        const shareQ = await Share.deploy(shareNames[0], shareSymbols[0], fundAddress, 0);
         console.log(`ShareQ: ${shareQ.address}`);
         await waitForContract(hre, shareQ.address);
 
-        const shareB = await Share.deploy(
-            `Tranchess ${underlyingSymbol} stable YSTONE`,
-            `${shareSymbols[1]}`,
-            fundAddress,
-            1
-        );
+        const shareB = await Share.deploy(shareNames[1], shareSymbols[1], fundAddress, 1);
         console.log(`ShareB: ${shareB.address}`);
         await waitForContract(hre, shareB.address);
 
-        const shareR = await Share.deploy(
-            `Tranchess ${underlyingSymbol} turbo YSTONE`,
-            `${shareSymbols[2]}`,
-            fundAddress,
-            2
-        );
+        const shareR = await Share.deploy(shareNames[2], shareSymbols[2], fundAddress, 2);
         console.log(`ShareR: ${shareR.address}`);
         await waitForContract(hre, shareR.address);
 

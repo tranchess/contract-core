@@ -17,7 +17,6 @@ import "./tasks/deploy_fund";
 import "./tasks/deploy_fund_eth";
 import "./tasks/deploy_fund_wsteth";
 import "./tasks/deploy_governance";
-import "./tasks/deploy_liquidity_gauge_curve";
 import "./tasks/deploy_maturity_fund";
 import "./tasks/deploy_misc";
 import "./tasks/deploy_mock";
@@ -25,6 +24,7 @@ import "./tasks/deploy_mock_twap_oracle";
 import "./tasks/deploy_vesting";
 import "./tasks/deploy_voting_escrow_impl";
 import "./tasks/deploy_stable_swap";
+import "./tasks/deploy_stable_swap_maturity";
 import "./tasks/deploy_stable_swap_wsteth";
 import "./tasks/deploy_sub_governance";
 import "./tasks/deploy_swap_router";
@@ -39,6 +39,7 @@ import "./tasks/dev_redemption_nft_metadata";
 import "./tasks/test_deploy";
 import { ETH_RPC, ETH_CHAIN_ID, DEPLOYER_PK, DEPLOYER_HD_PATH, ETHERSCAN_API_KEY } from "./config";
 import "hardhat-gas-reporter";
+import "hardhat-abi-exporter";
 
 const networks: NetworksUserConfig = {
     hardhat: {
@@ -81,6 +82,11 @@ const config: HardhatUserConfig = {
     gasReporter: {
         enabled: process.env.REPORT_GAS ? true : false,
         excludeContracts: ["test/", "utils/", "misc/"],
+    },
+    abiExporter: {
+        path: "./exported_abi",
+        runOnCompile: true,
+        clear: true,
     },
 };
 export default config;
