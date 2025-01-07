@@ -9,17 +9,14 @@ contract CrossChainWrappedToken is ERC20, NonblockingLzApp {
     event CrossChainUnwrapping(address account, uint256 amount);
 
     uint16 public immutable subLzChainID;
-    address public immutable feeDistributor;
 
     constructor(
         string memory name_,
         string memory symbol_,
         uint16 subLzChainID_,
-        address endpoint_,
-        address feeDistributor_
+        address endpoint_
     ) public ERC20(name_, symbol_) NonblockingLzApp(endpoint_) {
         subLzChainID = subLzChainID_;
-        feeDistributor = feeDistributor_;
     }
 
     function unwrap(address to, uint256 amount, bytes memory adapterParams) external payable {
@@ -46,7 +43,7 @@ contract CrossChainWrappedToken is ERC20, NonblockingLzApp {
         bytes memory data
     ) internal override {
         uint256 amount = abi.decode(data, (uint256));
-        _mint(feeDistributor, amount);
+        _mint(owner(), amount);
         emit CrossChainWrapped(amount);
     }
 }
