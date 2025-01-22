@@ -59,6 +59,7 @@ describe("PrimaryMarketV4", function () {
             parseEther("0.0001").mul(REDEMPTION_FEE_BPS),
             parseEther("0.0001").mul(MERGE_FEE_BPS),
             BigNumber.from(1).shl(256).sub(1),
+            true,
             true
         );
 
@@ -932,6 +933,7 @@ describe("PrimaryMarketV4", function () {
                 parseEther("0.0001").mul(REDEMPTION_FEE_BPS),
                 parseEther("0.0001").mul(MERGE_FEE_BPS),
                 BigNumber.from(1).shl(256).sub(1),
+                true,
                 true
             );
             primaryMarket = primaryMarket.connect(user1);

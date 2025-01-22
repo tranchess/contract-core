@@ -50,6 +50,7 @@ contract PrimaryMarketV4 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
 
     address public immutable override fund;
     bool public immutable redemptionFlag;
+    bool public immutable splitFlag;
     IERC20 private immutable _tokenUnderlying;
 
     uint256 public redemptionFeeRate;
@@ -83,7 +84,8 @@ contract PrimaryMarketV4 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         uint256 redemptionFeeRate_,
         uint256 mergeFeeRate_,
         uint256 fundCap_,
-        bool redemptionFlag_
+        bool redemptionFlag_,
+        bool splitFlag_
     ) public Ownable() {
         fund = fund_;
         _tokenUnderlying = IERC20(IFundV3(fund_).tokenUnderlying());
@@ -91,6 +93,7 @@ contract PrimaryMarketV4 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         _updateMergeFeeRate(mergeFeeRate_);
         _updateFundCap(fundCap_);
         redemptionFlag = redemptionFlag_;
+        splitFlag = splitFlag_;
     }
 
     /// @notice Calculate the result of a creation.
@@ -525,7 +528,7 @@ contract PrimaryMarketV4 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
         address recipient,
         uint256 inQ,
         uint256 version
-    ) external override returns (uint256 outB) {
+    ) external override allowSplit returns (uint256 outB) {
         outB = getSplit(inQ);
         IFundForPrimaryMarketV4(fund).primaryMarketBurn(TRANCHE_Q, msg.sender, inQ, version);
         IFundForPrimaryMarketV4(fund).primaryMarketMint(TRANCHE_B, recipient, outB, version);
@@ -589,6 +592,11 @@ contract PrimaryMarketV4 is IPrimaryMarketV3, ReentrancyGuard, ITrancheIndexV2, 
 
     modifier allowRedemption() {
         require(redemptionFlag, "Redemption N/A");
+        _;
+    }
+
+    modifier allowSplit() {
+        require(splitFlag, "Split N/A");
         _;
     }
 }
