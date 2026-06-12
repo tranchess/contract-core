@@ -14,6 +14,7 @@ import "../interfaces/IFundV3.sol";
 import "../interfaces/IPrimaryMarketV3.sol";
 import "../interfaces/ITrancheIndexV2.sol";
 import "../interfaces/ITwapOracleV2.sol";
+import "../interfaces/IWrappedERC20.sol";
 import "../utils/CoreUtility.sol";
 
 interface IFundV3WindDownAprOracle {
@@ -181,7 +182,7 @@ contract FundV3WindDown is
     }
 
     // IPrimaryMarketV3 state-changing implementation. Legacy operations are
-    // intentionally blocked; users exit through redeemAll().
+    // intentionally blocked; users exit through redeemAll() or redeemAllAndUnwrap().
 
     function create(address, uint256, uint256) external override returns (uint256) {
         revert("Wind down");
@@ -337,11 +338,43 @@ contract FundV3WindDown is
         address recipient,
         uint256 minUnderlying
     ) external nonReentrant returns (uint256 underlying) {
+        (uint256 inQ, uint256 inB, uint256 inR, uint256 underlying_) = _burnRedeemAll(
+            minUnderlying
+        );
+        underlying = underlying_;
+
+        IFundForPrimaryMarketV3(fund).primaryMarketTransferUnderlying(recipient, underlying, 0);
+
+        emit RedeemedAll(msg.sender, recipient, inQ, inB, inR, underlying);
+    }
+
+    function redeemAllAndUnwrap(
+        address recipient,
+        uint256 minUnderlying
+    ) external nonReentrant returns (uint256 underlying) {
+        (uint256 inQ, uint256 inB, uint256 inR, uint256 underlying_) = _burnRedeemAll(
+            minUnderlying
+        );
+        underlying = underlying_;
+
+        IFundForPrimaryMarketV3(fund).primaryMarketTransferUnderlying(address(this), underlying, 0);
+        IWrappedERC20(IFundV3(fund).tokenUnderlying()).withdraw(underlying);
+        (bool success, ) = recipient.call{value: underlying}("");
+        require(success, "Transfer failed");
+
+        emit RedeemedAll(msg.sender, recipient, inQ, inB, inR, underlying);
+    }
+
+    // Internal helpers.
+
+    function _burnRedeemAll(
+        uint256 minUnderlying
+    ) private returns (uint256 inQ, uint256 inB, uint256 inR, uint256 underlying) {
         require(active, "Not active");
 
         IFundV3 fundContract = IFundV3(fund);
         uint256 version = fundContract.getRebalanceSize();
-        (uint256 inQ, uint256 inB, uint256 inR) = fundContract.trancheAllBalanceOf(msg.sender);
+        (inQ, inB, inR) = fundContract.trancheAllBalanceOf(msg.sender);
         underlying = _getUnderlying(inQ, inB, inR);
         require(underlying >= minUnderlying && underlying > 0, "Min underlying redeemed");
 
@@ -355,12 +388,7 @@ contract FundV3WindDown is
         if (inR > 0) {
             fundForPrimaryMarket.primaryMarketBurn(TRANCHE_R, msg.sender, inR, version);
         }
-        fundForPrimaryMarket.primaryMarketTransferUnderlying(recipient, underlying, 0);
-
-        emit RedeemedAll(msg.sender, recipient, inQ, inB, inR, underlying);
     }
-
-    // Internal helpers.
 
     function _checkFundReady(IFundV3 fundContract) private view {
         require(fundContract.primaryMarket() == address(this), "Not primary market");
@@ -395,4 +423,6 @@ contract FundV3WindDown is
     function _endOfDay(uint256 timestamp) private pure returns (uint256) {
         return ((timestamp.add(1 days) - SETTLEMENT_TIME) / 1 days) * 1 days + SETTLEMENT_TIME;
     }
+
+    receive() external payable {}
 }

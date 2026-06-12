@@ -50,6 +50,7 @@ describe("FundV3WindDown", function () {
     let delayedSettlementFixture: Fixture<IntegrationFixtureData>;
     let gapIntegrationFixture: Fixture<IntegrationFixtureData>;
     let rebalanceIntegrationFixture: Fixture<IntegrationFixtureData>;
+    let wrappedIntegrationFixture: Fixture<IntegrationFixtureData>;
 
     async function deployBasicFixture(
         _wallets: Wallet[],
@@ -82,7 +83,8 @@ describe("FundV3WindDown", function () {
     async function deployPendingIntegrationFixture(
         provider: MockProvider,
         settlementPrice: BigNumber = parseEther("1"),
-        freezeDayDelay: number = 0
+        freezeDayDelay: number = 0,
+        wrappedUnderlying: boolean = false
     ): Promise<IntegrationFixtureData> {
         const [user1, user2, owner, feeCollector] = provider.getWallets();
         const now = (await ethers.provider.getBlock("latest")).timestamp;
@@ -110,8 +112,14 @@ describe("FundV3WindDown", function () {
         await oldPrimaryMarket.mock.settle.returns();
         await oldPrimaryMarket.mock.canBeRemovedFromFund.returns(true);
 
-        const MockToken = await ethers.getContractFactory("MockToken");
-        const tokenUnderlying = await MockToken.connect(owner).deploy("Mock BTCB", "BTCB", 18);
+        let tokenUnderlying: Contract;
+        if (wrappedUnderlying) {
+            const MockWrappedToken = await ethers.getContractFactory("MockWrappedToken");
+            tokenUnderlying = await MockWrappedToken.connect(owner).deploy("Wrapped BNB", "WBNB");
+        } else {
+            const MockToken = await ethers.getContractFactory("MockToken");
+            tokenUnderlying = await MockToken.connect(owner).deploy("Mock BTCB", "BTCB", 18);
+        }
 
         const Fund = await ethers.getContractFactory("FundV3");
         const fund = await Fund.connect(owner).deploy([
@@ -136,7 +144,12 @@ describe("FundV3WindDown", function () {
         const WindDown = await ethers.getContractFactory("FundV3WindDown");
         const windDown = await WindDown.connect(owner).deploy(fund.address, freezeDay);
 
-        await tokenUnderlying.mint(fund.address, parseEther("90"));
+        if (wrappedUnderlying) {
+            await tokenUnderlying.connect(owner).deposit({ value: parseEther("90") });
+            await tokenUnderlying.connect(owner).transfer(fund.address, parseEther("90"));
+        } else {
+            await tokenUnderlying.mint(fund.address, parseEther("90"));
+        }
         await oldPrimaryMarket.call(
             fund,
             "primaryMarketMint",
@@ -279,12 +292,28 @@ describe("FundV3WindDown", function () {
         return data;
     }
 
+    async function deployWrappedIntegrationFixture(
+        _wallets: Wallet[],
+        provider: MockProvider
+    ): Promise<IntegrationFixtureData> {
+        const data = await deployPendingIntegrationFixture(provider, parseEther("1"), 0, true);
+
+        await advanceBlockAtTime(data.freezeDay + 1);
+        await data.fund.settle();
+
+        await advanceBlockAtTime(data.freezeDay + ROLE_UPDATE_MIN_DELAY + 1);
+        await data.fund.connect(data.wallets.owner).applyPrimaryMarketUpdate(data.windDown.address);
+
+        return data;
+    }
+
     before(function () {
         basicFixture = deployBasicFixture;
         integrationFixture = deployIntegrationFixture;
         delayedSettlementFixture = deployDelayedSettlementFixture;
         gapIntegrationFixture = deployGapIntegrationFixture;
         rebalanceIntegrationFixture = deployRebalanceIntegrationFixture;
+        wrappedIntegrationFixture = deployWrappedIntegrationFixture;
     });
 
     describe("constructor", function () {
@@ -682,11 +711,20 @@ describe("FundV3WindDown", function () {
             await expect(windDown.connect(user1).redeemAll(user2.address, 0)).to.be.revertedWith(
                 "Not active"
             );
+            await expect(
+                windDown.connect(user1).redeemAllAndUnwrap(user2.address, 0)
+            ).to.be.revertedWith("Not active");
 
             await expect(windDown.activate()).to.emit(windDown, "Activated");
             expect(await windDown.active()).to.equal(true);
             await expect(windDown.deactivate()).to.emit(windDown, "Deactivated");
             expect(await windDown.active()).to.equal(false);
+            await expect(windDown.connect(user1).redeemAll(user2.address, 0)).to.be.revertedWith(
+                "Not active"
+            );
+            await expect(
+                windDown.connect(user1).redeemAllAndUnwrap(user2.address, 0)
+            ).to.be.revertedWith("Not active");
         });
 
         it("Should reject activation when fund balance cannot cover outstanding redemptions", async function () {
@@ -739,6 +777,45 @@ describe("FundV3WindDown", function () {
             expect(await fund.trancheTotalSupply(TRANCHE_Q)).to.equal(0);
             expect(await fund.trancheTotalSupply(TRANCHE_B)).to.equal(0);
             expect(await fund.trancheTotalSupply(TRANCHE_R)).to.equal(0);
+            expect(await windDown.getRedeemAll(user1.address)).to.equal(0);
+        });
+
+        it("Should redeem all latest-version Q/B/R and unwrap native underlying", async function () {
+            const { wallets, tokenUnderlying, fund, windDown } = await loadFixture(
+                wrappedIntegrationFixture
+            );
+            const { user1, user2 } = wallets;
+            const expectedUnderlying = parseEther("90");
+
+            await windDown.initialize();
+            await windDown.activate();
+
+            expect(
+                await windDown
+                    .connect(user1)
+                    .callStatic.redeemAllAndUnwrap(user2.address, expectedUnderlying)
+            ).to.equal(expectedUnderlying);
+
+            const user2BalanceBefore = await ethers.provider.getBalance(user2.address);
+            const tx = await windDown
+                .connect(user1)
+                .redeemAllAndUnwrap(user2.address, expectedUnderlying);
+            await expect(tx)
+                .to.emit(windDown, "RedeemedAll")
+                .withArgs(
+                    user1.address,
+                    user2.address,
+                    parseEther("10"),
+                    parseEther("20"),
+                    parseEther("20"),
+                    expectedUnderlying
+                );
+
+            expect(await ethers.provider.getBalance(user2.address)).to.equal(
+                user2BalanceBefore.add(expectedUnderlying)
+            );
+            expect(await tokenUnderlying.balanceOf(fund.address)).to.equal(0);
+            expect(await tokenUnderlying.balanceOf(windDown.address)).to.equal(0);
             expect(await windDown.getRedeemAll(user1.address)).to.equal(0);
         });
 
